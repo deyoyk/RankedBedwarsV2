@@ -1,0 +1,1 @@
+export const queuePlayers: Map<string, string[]> = new Map();

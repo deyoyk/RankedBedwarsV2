@@ -1,0 +1,11 @@
+
+websocket:
+  host: "yowww8gg444k8w8c0g80kwco.103.16.140.206.sslip.io"
+
+
+
+data-storage:
+  enabled: true
+  folder-path: "games" 
+
+debug: false

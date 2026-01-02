@@ -1,0 +1,23 @@
+field1: "**Always available:**"
+field1value:
+  - "🟩 Fireballs"
+  - "🟩 Ladders"
+  - "🟩 Silverfish"
+  - "🟩 Blue side [4v4 Only]"
+  - "🟩 Diamond Armor"
+  - "🟩 Diamond Sword"
+  - "Anything else not listed under the restricted or banned items is allowed"
+
+field2: "**Available after one bed is broken:**"
+field2value:
+  - "🟨 Water"
+  - "🟨 All pots"
+  - "🟨 Pearls"
+  - "🟨 KB Sticks"
+  - "🟨 Both sides"
+
+field3: "**Banned items:**"
+field3value:
+  - "🟥 Golems"
+  - "🟥 All bows"
+  - "🟥 Obsidian"

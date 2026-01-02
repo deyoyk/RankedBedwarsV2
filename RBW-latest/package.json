@@ -1,0 +1,38 @@
+{
+  "name": "rankedbedwars",
+  "version": "2.2.0 beta",
+  "description": "Ranked Bedwars System for Discord with websocket support",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsup src/index.ts --out-dir dist --minify",
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "migrate:users": "node scripts/migrateUsers.js"
+  },
+  "dependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "axios": "^1.11.0",
+    "canvas": "^3.1.0",
+    "chartjs-node-canvas": "^5.0.0",
+    "cors": "^2.8.5",
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.1",
+    "express": "^5.1.0",
+    "ioredis": "^5.6.1",
+    "mongoose": "^8.1.1",
+    "node-fetch": "^2.7.0",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.1",
+    "yaml": "^2.3.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.16",
+    "@types/node-fetch": "^2.6.12",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.5",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.3.3"
+  }
+}

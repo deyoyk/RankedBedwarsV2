@@ -1,0 +1,43 @@
+name: rankedbedwars
+version: '1.0.0'
+main: com.deyo.rbw.RankedBedwars
+api-version: 1.13
+depend: [PlaceholderAPI]
+softdepend: [MBedwars, BedWars1058]
+authors: [Deyo]
+description: Integration plugin for ranked Bedwars with Discord
+
+commands:
+  rankedbedwars:
+    description: rankedbedwars admin command
+    aliases: [rbw]
+    permission: rankedbedwars.use
+  ss:
+    description: Request a screenshare for a player
+    usage: /ss <ign> <reason>
+    permission: rankedbedwars.ss
+  call:
+    description: Call another player via WebSocket
+    usage: /call <player>
+    permission: rankedbedwars.call
+  queue:
+    description: Queue for a ranked game
+    usage: /queue
+    permission: rankedbedwars.queue
+  stats:
+    description: Show your ranked bedwars stats
+    usage: /stats
+    permission: rankedbedwars.stats
+permissions:
+  rankedbedwars.use:
+    description: Allows use of the rankedbedwars command
+    default: true
+  rankedbedwars.queue:
+    description: Allows use of the queue command
+    default: true
+  rankedbedwars.state:
+    description: Allows use of the state command
+    default: true
+  rankedbedwars.ss:
+    description: Allows use of the ss command
+    default: op

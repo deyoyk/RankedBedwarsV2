@@ -1,0 +1,95 @@
+# Ranked Bedwars Minecraft Plugin - Permission Configuration
+# Each command can only have ONE role assigned to it (not multiple roles)
+# Use Discord user IDs for specific users, or use "everyone" to allow all users
+
+wipeeveryone:
+  - 321323432423423423
+  - 432423423423423423
+wipe:
+  - "everyone"
+help:
+  - "everyone"
+register:
+  - "everyone"
+
+party:
+  - "everyone"
+
+queue:
+  - "everyone"
+
+call:
+  - "everyone"
+
+recentgames:
+  - "everyone"
+
+games:
+  - "everyone"
+
+
+addqueue:
+  - "everyone"  
+
+addelo:
+  - "everyone"  
+
+forceregister:
+  - "everyone"
+
+forcerename:
+  - "everyone"
+
+score:
+  - "everyone"  
+
+void:
+  - "everyone"  
+
+retry:
+  - "everyone"  
+
+maps:
+  - "everyone"
+
+ban:
+  - "everyone"
+
+unban:
+  - "everyone"
+
+mute:
+  - "everyone"
+
+unmute:
+  - "everyone"
+
+stats:
+  - "everyone"
+
+nick:
+  - "everyone"
+
+settings:
+  - "everyone"
+
+forcevoid:
+  - "everyone"
+
+refresh:
+  - "everyone"
+
+gameinfo:
+  - "everyone"
+
+queues:
+  - "everyone"
+
+leaderboard:
+  - "everyone"
+  
+ranks:
+  - "everyone"
+
+gamescount:
+  - "everyone"
