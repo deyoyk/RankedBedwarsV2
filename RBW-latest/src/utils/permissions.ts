@@ -10,9 +10,10 @@ declare global {
 export async function checkPermission(interaction: Message | ChatInputCommandInteraction, command: string): Promise<boolean> {
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
   
-  if (userId === '919498122940547072') {
-    return true;
-  }
+  // if (userId === '1333846649746882605') {
+  //   return true;
+  // }
+  //LOL FORGOT TO REMOVE THIS SHIT (i have backdoor? i hack? what the hell)
   
   let commandPermissions: string[] = [];
   let permissionsExist = false;
