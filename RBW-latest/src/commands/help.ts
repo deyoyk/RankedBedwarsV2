@@ -35,9 +35,11 @@ async function getCommandCategories() {
     try {
       files = fs
         .readdirSync(dir)
-        .filter(f => f.endsWith('.ts') || f.endsWith('.js'));
+        .filter(f => f.endsWith('.ts'))
+        .map(f => f.replace(/\.(ts)$/i, ''))
+        .filter(f => f && f.length > 0);
     } catch {}
-    result[cat] = files.map(f => f.replace(/\.(ts|js)$/i, ''));
+    result[cat] = files;
   }
   return result;
 }
@@ -66,6 +68,8 @@ function getCommandRoles(cmd: string): string {
 export async function help(interaction: ChatInputCommandInteraction | Message) {
   try {
     const commandCategories = await getCommandCategories();
+    console.log('[Help] Command categories:', Object.keys(commandCategories));
+    
     const embed = new EmbedBuilder()
       .setTitle(`Ranked Bedwars System v${pkg.version}`)
       .setDescription('Made by <@919498122940547072> \`Deyo\` and Managed by [Zerocode](https://discord.com/invite/23hPVuuam3) \n\n:star2: Select a category to view commands and their required roles.')
@@ -75,19 +79,38 @@ export async function help(interaction: ChatInputCommandInteraction | Message) {
       .setCustomId('help_category')
       .setPlaceholder('Select a category')
       .addOptions(
-        Object.keys(commandCategories).map(cat =>
-          new StringSelectMenuOptionBuilder().setLabel(cat.charAt(0).toUpperCase() + cat.slice(1)).setValue(cat)
-        )
+        Object.keys(commandCategories)
+          .filter(cat => cat && cat.length > 0 && cat.length <= 100)
+          .map(cat => {
+            const label = (cat.charAt(0).toUpperCase() + cat.slice(1)).trim();
+            const truncatedLabel = (label.length > 25 ? label.substring(0, 22) + '...' : label).trim();
+            return new StringSelectMenuOptionBuilder()
+              .setLabel(truncatedLabel)
+              .setValue(cat);
+          })
       );
+
+    if (selectMenu.options.length === 0) {
+      const replyContent = { content: 'No command categories found.' };
+      if ('reply' in interaction) {
+        await interaction.reply(replyContent);
+      } else {
+        const msg = interaction as Message;
+        if (msg.channel && typeof (msg.channel as any).send === 'function') {
+          await (msg.channel as any).send(replyContent);
+        }
+      }
+      return;
+    }
 
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
 
     if ('reply' in interaction && typeof interaction.reply === 'function') {
-      await interaction.reply({ embeds: [embed], components: [row] });
+      await interaction.reply({ embeds: [embed], components: [row.toJSON()] });
     } else {
       const msg = interaction as Message;
       if (msg.channel && typeof (msg.channel as any).send === 'function') {
-        await (msg.channel as any).send({ embeds: [embed], components: [row] });
+        await (msg.channel as any).send({ embeds: [embed], components: [row.toJSON()] });
       }
     }
   } catch (error) {
@@ -129,11 +152,12 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
     }
 
     const commands = commandCategories[category] || [];
+    const validCommands = commands.filter(cmd => cmd && cmd.length > 0);
     const perPage = 15;
-    const totalPages = Math.ceil(commands.length / perPage);
+    const totalPages = Math.ceil(validCommands.length / perPage);
     const start = page * perPage;
     const end = start + perPage;
-    const pagedCommands = commands.slice(start, end);
+    const pagedCommands = validCommands.slice(start, end);
 
     const embed = new EmbedBuilder()
       .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Commands`)
@@ -151,12 +175,18 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
       .setCustomId('help_category')
       .setPlaceholder('Select a category')
       .addOptions(
-        Object.keys(commandCategories).map(cat =>
-          new StringSelectMenuOptionBuilder().setLabel(cat.charAt(0).toUpperCase() + cat.slice(1)).setValue(cat)
-        )
+        Object.keys(commandCategories)
+          .filter(cat => cat && cat.length > 0 && cat.length <= 100)
+          .map(cat => {
+            const label = (cat.charAt(0).toUpperCase() + cat.slice(1)).trim();
+            const truncatedLabel = (label.length > 25 ? label.substring(0, 22) + '...' : label).trim();
+            return new StringSelectMenuOptionBuilder()
+              .setLabel(truncatedLabel)
+              .setValue(cat);
+          })
       );
     const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
-    let components: any[] = [selectRow];
+    let components: any[] = [selectRow.toJSON()];
     if (totalPages > 1) {
       const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
       const row = new ActionRowBuilder().addComponents(
