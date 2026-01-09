@@ -18,7 +18,7 @@ export class BotStatusTask {
     this.client = client;
     this.wsManager = wsManager;
     this.startTime = new Date();
-    this.statusImagePath = path.resolve(process.cwd(), 'src', 'asserts', 'status', 'ayor.gif');
+    this.statusImagePath = path.resolve(process.cwd(), 'src', 'asserts', 'status', 'rbw.gif');
   }
 
   public async start() {
@@ -64,7 +64,7 @@ export class BotStatusTask {
       }
 
       const embed = await this.createStatusEmbed();
-      this.statusMessage = await channel.send({ embeds: [embed], files: [{ attachment: this.statusImagePath, name: 'ayor.gif' }] });
+      this.statusMessage = await channel.send({ embeds: [embed], files: [{ attachment: this.statusImagePath, name: 'rbw.gif' }] });
       this.statusImageCdnUrl = this.statusMessage.attachments?.first()?.url || null;
     } catch (error) {
       console.error('[BotStatusTask] Error sending status embed:', error);
@@ -93,9 +93,9 @@ export class BotStatusTask {
     const embed = new EmbedBuilder()
       .setTitle('Bot Environment Status ✌️')
       .setColor(0x00AAAA) 
-      .setFooter({ text: 'Made by ✼ Deyo ✼ Managed by Zerocode™' })
+      .setFooter({ text: 'Made by ✼ Deyo ✼' })
       
-      .setImage(this.statusImageCdnUrl || 'attachment://ayor.gif');
+      .setImage(this.statusImageCdnUrl || 'attachment://rbw.gif');
 
     try {
       

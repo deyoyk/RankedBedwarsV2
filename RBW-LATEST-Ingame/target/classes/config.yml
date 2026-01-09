@@ -1,11 +1,18 @@
-
+# WebSocket settings
+# host: address of the discord bot with the socket port that u set on the .env file
+# auth_key: authentication key for the websocket, change it to something random and keep it secret
 websocket:
-  host: "yowww8gg444k8w8c0g80kwco.103.16.140.206.sslip.io"
+  host: "ws://localhost:8080"
+  auth_key: "change_me_in_production"
 
-
+# Data storage settings
+# enabled: whether data storage is enabled or not (tho the game data will be saved from discord bot in mongodb this storage can be used for debugging purposes)
+# folder-path: path to the folder where the data will be stored
 
 data-storage:
   enabled: true
   folder-path: "games" 
 
+
+# if enabled, plugin will print every shit on the console.
 debug: false

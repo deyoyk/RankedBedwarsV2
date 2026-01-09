@@ -211,7 +211,7 @@ export class QueueListener {
         ]).catch(() => ({ online: false }));
 
         if (!onlineCheck.online) {
-          await this.moveToWaiting(state, 'Player is not online, Please make sure to be on `play.ayormc.net` Minecraft server before joining a queue!');
+          await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
           return;
         }
       } catch (error) {

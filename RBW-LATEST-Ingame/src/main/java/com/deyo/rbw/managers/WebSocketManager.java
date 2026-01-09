@@ -348,6 +348,9 @@ public class WebSocketManager {
         org.bukkit.entity.Player player = Bukkit.getPlayerExact(ign);
         if (player != null && player.isOnline()) {
             player.sendMessage("§c[RankedBedwars] §eYou are being requested for screenshare, do not log off the server.");
+            
+            //sendActionBar(player, "§cYOU ARE BEING SCREENSHARED DO NOT LOG OFF");
+            
             JsonObject response = new JsonObject();
             response.addProperty("type", "screensharedontlog_success");
             response.addProperty("uuid", uuid);

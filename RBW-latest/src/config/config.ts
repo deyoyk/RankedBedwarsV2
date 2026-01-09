@@ -71,10 +71,10 @@ export interface Config {
   strikes: {
     [key: string]: string;
   };
+  serverip: string;
 }
 
 
-// Dynamic worker token detection
 const workerTokens: string[] = [];
 let i = 1;
 while (process.env[`WORKER_TOKEN_${i}`]) {
@@ -140,7 +140,7 @@ const configuration: Config = {
     partyof4Queue: process.env.PARTY_OF_4_ROLE_ID || '',
   },
   mongoUri: process.env.MONGO_URI || 'dedass',
-  dbname: process.env.DBNAME || 'ayorrbw',
+  dbname: process.env.DBNAME || 'deyorbw',
   websocketport: process.env.WEBSOCKETPORT || '25565',
   apiport: process.env.APIPORT || '3000',
   CommonPartySize: parseInt(process.env.COMMON_PARTY_SIZE || '4', 10),
@@ -152,6 +152,7 @@ const configuration: Config = {
     4: '7d',
     default: 'warn'
   },
+  serverip: process.env.SERVER_IP || 'play.deyo.lol',
 };
 
 export default configuration;
