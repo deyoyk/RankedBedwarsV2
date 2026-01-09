@@ -9,6 +9,7 @@ import EloRank from '../models/EloRank';
 import Season from '../models/Season';
 import SeasonStats from '../models/SeasonStats';
 import SeasonGames from '../models/SeasonGames';
+import { SeasonManager } from '../managers/SeasonManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { getLevelInfo } from '../utils/levelSystem';
 import { WebSocketManager } from '../websocket/WebSocketManager';
@@ -546,7 +547,7 @@ export class ApiManager {
 
   private getCurrentSeason = async (req: Request, res: Response): Promise<void> => {
     try {
-      const currentSeason = await Season.findOne({ isActive: true });
+      const currentSeason = await SeasonManager.getCurrentSeason();
       if (!currentSeason) {
         res.status(404).json({ error: 'No active season found' });
         return;
@@ -569,7 +570,7 @@ export class ApiManager {
         return;
       }
 
-      const seasonInfo = await Season.findOne({ seasonNumber, chapterNumber });
+      const seasonInfo = await SeasonManager.getSeason(seasonNumber, chapterNumber);
       if (!seasonInfo) {
         res.status(404).json({ error: 'Season not found' });
         return;
@@ -607,33 +608,14 @@ export class ApiManager {
         return;
       }
 
-      const seasonStats = await SeasonStats.findOne({
-        discordId: user.discordId,
-        seasonNumber,
-        chapterNumber
-      });
+      const seasonStats = await SeasonManager.getUserSeasonStats(user.discordId, seasonNumber, chapterNumber);
 
       if (!seasonStats) {
         res.status(404).json({ error: 'No stats found for this user in the specified season' });
         return;
       }
 
-      
-      const levelInfo = getLevelInfo(seasonStats.experience || 0);
-      const statsWithLevel = {
-        ...seasonStats.toObject(),
-        levelInfo: {
-          level: levelInfo.level,
-          experience: levelInfo.experience,
-          experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
-          experienceForNextLevel: levelInfo.experienceForNextLevel,
-          experienceNeededForNext: levelInfo.experienceNeededForNext,
-          totalExperienceForLevel: levelInfo.totalExperienceForLevel,
-          progressPercentage: ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100).toFixed(2)
-        }
-      };
-
-      res.json(statsWithLevel);
+      res.json(seasonStats);
     } catch (error) {
       console.error('Error fetching season stats:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -647,11 +629,20 @@ export class ApiManager {
       const chapterNumber = parseInt(chapter);
       const mode = (req.query.mode as string) || 'elo';
       const page = parseInt(req.query.page as string) || 1;
-      const pageSize = 10;
-      const skip = (page - 1) * pageSize;
+      const pageSize = parseInt(req.query.pageSize as string) || 10;
 
       if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
         res.status(400).json({ error: 'Invalid season or chapter number' });
+        return;
+      }
+
+      if (isNaN(page) || page < 1) {
+        res.status(400).json({ error: 'Invalid page number' });
+        return;
+      }
+
+      if (isNaN(pageSize) || pageSize < 1 || pageSize > 100) {
+        res.status(400).json({ error: 'Invalid page size. Must be between 1 and 100.' });
         return;
       }
 
@@ -664,24 +655,17 @@ export class ApiManager {
         return;
       }
 
-      const sortObj: Record<string, 1 | -1> = {};
-      sortObj[mode] = -1;
+      const result = await SeasonManager.getSeasonLeaderboard(seasonNumber, chapterNumber, mode, page, pageSize);
 
-      const seasonStats = await SeasonStats.find({ seasonNumber, chapterNumber })
-        .sort(sortObj as any)
-        .skip(skip)
-        .limit(pageSize)
-        .select(`ign ${mode}`);
-
-      const result: Record<number, { ign: string, value: number | string }> = {};
-      seasonStats.forEach((stats, index) => {
-        result[index + 1 + skip] = {
-          ign: stats.ign,
-          value: stats[mode as keyof typeof stats] || 0
+      const formattedResult: Record<number, { ign: string, value: number | string }> = {};
+      result.entries.forEach(entry => {
+        formattedResult[entry.position] = {
+          ign: entry.ign,
+          value: entry.value
         };
       });
 
-      res.json(result);
+      res.json(formattedResult);
     } catch (error) {
       console.error('Error fetching season leaderboard:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -695,21 +679,27 @@ export class ApiManager {
       const chapterNumber = parseInt(chapter);
       const page = parseInt(req.query.page as string) || 1;
       const pageSize = parseInt(req.query.limit as string) || 20;
-      const skip = (page - 1) * pageSize;
 
       if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
         res.status(400).json({ error: 'Invalid season or chapter number' });
         return;
       }
 
-      const games = await SeasonGames.find({ seasonNumber, chapterNumber })
-        .sort({ gameId: -1 })
-        .skip(skip)
-        .limit(pageSize);
+      if (isNaN(page) || page < 1) {
+        res.status(400).json({ error: 'Invalid page number' });
+        return;
+      }
 
-      
+      if (isNaN(pageSize) || pageSize < 1 || pageSize > 100) {
+        res.status(400).json({ error: 'Invalid page size. Must be between 1 and 100.' });
+        return;
+      }
+
+      const result = await SeasonManager.getSeasonGames(seasonNumber, chapterNumber, page, pageSize);
+
+      // Get user mappings for displaying IGNS
       const allIds = new Set<string>();
-      games.forEach(game => {
+      result.games.forEach(game => {
         [...game.team1, ...game.team2, ...game.winners, ...game.losers, ...game.mvps, ...game.bedbreaks].forEach(id => allIds.add(id));
       });
 
@@ -717,7 +707,7 @@ export class ApiManager {
       const idToIgn: Record<string, string> = {};
       users.forEach(u => { idToIgn[u.discordId] = u.ign; });
 
-      const gamesWithIgns = games.map(game => ({
+      const gamesWithIgns = result.games.map(game => ({
         ...game.toObject(),
         team1ign: game.team1.map(id => idToIgn[id] || id),
         team2ign: game.team2.map(id => idToIgn[id] || id),
@@ -727,15 +717,13 @@ export class ApiManager {
         bedbreaksign: game.bedbreaks.map(id => idToIgn[id] || id)
       }));
 
-      const totalGames = await SeasonGames.countDocuments({ seasonNumber, chapterNumber });
-
       res.json({
         games: gamesWithIgns,
         pagination: {
           page,
           pageSize,
-          totalGames,
-          totalPages: Math.ceil(totalGames / pageSize)
+          totalGames: result.total,
+          totalPages: result.totalPages
         }
       });
     } catch (error) {
