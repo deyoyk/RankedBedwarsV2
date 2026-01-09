@@ -1,4 +1,6 @@
 import { Client, ActivityType } from 'discord.js';
+import config from '../config/config';
+
 
 export class StatusRotationTask {
   private client: Client;
@@ -7,7 +9,7 @@ export class StatusRotationTask {
 
   private readonly statuses = [
     {
-      name: 'Ayor Ranked Bedwars',
+      name: config.bot_stats_text,
       type: ActivityType.Playing
     },
     {

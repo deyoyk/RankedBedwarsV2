@@ -36,7 +36,7 @@ public class WebSocketManager {
     public void initialize() {
         
         FileConfiguration config = plugin.getConfig();
-        host = config.getString("websocket.host", "ayor.deyo.lol");
+        host = config.getString("websocket.host", "rbw.deyo.lol");
         explicitPortConfigured = config.contains("websocket.port");
         if (explicitPortConfigured) {
             port = config.getInt("websocket.port");

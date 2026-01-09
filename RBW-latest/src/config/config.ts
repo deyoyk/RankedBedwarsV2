@@ -72,6 +72,8 @@ export interface Config {
     [key: string]: string;
   };
   serverip: string;
+  bot_stats_text: string;
+  
 }
 
 
@@ -153,6 +155,7 @@ const configuration: Config = {
     default: 'warn'
   },
   serverip: process.env.SERVER_IP || 'play.deyo.lol',
+  bot_stats_text: process.env.BOT_STATS_TEXT || 'DEYO RANKED BEDWARS'
 };
 
 export default configuration;
