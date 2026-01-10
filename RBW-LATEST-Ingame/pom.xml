@@ -124,14 +124,11 @@
                             <goal>shade</goal>
                         </goals>
                         <configuration>
-                            <createDependencyReducedPom>false</createDependencyReducedPom>                            <relocations>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <relocations>
                                 <relocation>
                                     <pattern>com.google.gson</pattern>
                                     <shadedPattern>com.deyo.rbw.lib.gson</shadedPattern>
-                                </relocation>
-                                <relocation>
-                                    <pattern>org.java_websocket</pattern>
-                                    <shadedPattern>com.deyo.rbw.lib.websocket</shadedPattern>
                                 </relocation>
                             </relocations>
                         </configuration>

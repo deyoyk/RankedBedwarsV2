@@ -1,0 +1,75 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+      
+      - name: Build with Maven
+        working-directory: RBW-LATEST-Ingame
+        run: mvn clean package -DskipTests
+      
+      - name: Get version from pom.xml
+        id: version
+        working-directory: RBW-LATEST-Ingame
+        run: |
+          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Built version: $VERSION"
+      
+      - name: Get tag name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" == "push" ]; then
+            TAG=${GITHUB_REF#refs/tags/}
+          else
+            TAG="v${{ steps.version.outputs.version }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG"
+      
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RankedBedwars-${{ steps.version.outputs.version }}.jar
+          path: RBW-LATEST-Ingame/target/RankedBedwars-*.jar
+          retention-days: 30
+      
+      - name: Create Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: RBW-LATEST-Ingame/target/RankedBedwars-*.jar
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body: |
+            ## RankedBedwars ${{ steps.version.outputs.version }}
+            
+            ### Changes
+            - See commit history for details
+            
+            ### Installation
+            1. Download the JAR file from the assets below
+            2. Place it in your server's `plugins` folder
+            3. Restart your server
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
