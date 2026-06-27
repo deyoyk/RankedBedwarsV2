@@ -47,12 +47,12 @@ import { screenshare } from '../commands/player/screenshare';
 import { ssclose } from '../commands/moderator/ssclose';
 import { data as changeThemeData, execute as changetheme } from '../commands/player/changetheme';
 import { data as myThemesData, execute as mythemes } from '../commands/player/themes';
-import { data as themeManageData, execute as thememanage } from '../commands/admin/thememanage';
+import { themeManageData, executeThemeManage } from '../commands/admin/thememanage';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
 import { fixall } from '../commands/admin/fixall';
 import { execute as startseason } from '../commands/admin/startseason';
-import { execute as endseason } from '../commands/admin/endseason';
-import { execute as listseasons } from '../commands/admin/listseasons';
+import { executeEndSeason } from '../commands/admin/endseason';
+import { executeListSeasons } from '../commands/admin/listseasons';
 import { execute as level } from '../commands/player/level';
 import { seasoninfo } from '../commands/player/seasoninfo';
 
@@ -142,7 +142,7 @@ export class CommandManager {
 
   private registerCommands() {
     
-    const { execute: queuecontrol, data: queuecontrolData } = require('../commands/admin/queuecontrol');
+    const { executeQueueControl: queuecontrol, queueControlData: queuecontrolData } = require('../commands/admin/queuecontrol');
 
 
     this.commands.set('queuecontrol', {
@@ -917,7 +917,7 @@ export class CommandManager {
       options: themeManageData.toJSON().options || [],
       execute: async (interaction, args) => {
         if (interaction instanceof ChatInputCommandInteraction) {
-          await thememanage(interaction);
+          await executeThemeManage(interaction);
         }
       }
     });
@@ -1100,7 +1100,7 @@ export class CommandManager {
       options: [],
       execute: async (interaction, args) => {
         if (interaction instanceof ChatInputCommandInteraction) {
-          await endseason(interaction);
+          await executeEndSeason(interaction);
         }
       }
     });
@@ -1111,7 +1111,7 @@ export class CommandManager {
       options: [],
       execute: async (interaction, args) => {
         if (interaction instanceof ChatInputCommandInteraction) {
-          await listseasons(interaction);
+          await executeListSeasons(interaction);
         }
       }
     });

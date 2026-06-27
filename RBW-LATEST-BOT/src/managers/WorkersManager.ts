@@ -469,44 +469,25 @@ export class WorkersManager {
   }
 
   private async executeTaskOnMainClient(type: WorkerTask['type'], data: any): Promise<any> {
-    
     const guild = this.mainClient.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
     try {
       switch (type) {
         case 'channel_create':
-          return await guild.channels.create(data.options);
+          return await this.executeChannelCreate(this.mainClient, data);
         case 'channel_delete':
-          const channel = guild.channels.cache.get(data.channelId);
-          if (channel) await channel.delete();
-          return;
+          return await this.executeChannelDelete(this.mainClient, data);
         case 'member_move':
-          const member = guild.members.cache.get(data.memberId);
-          if (member?.voice?.channel) {
-            await member.voice.setChannel(data.channelId);
-          }
-          return;
+          return await this.executeMemberMove(this.mainClient, data);
         case 'member_nickname':
-          const memberNick = guild.members.cache.get(data.memberId);
-          if (memberNick) await memberNick.setNickname(data.nickname);
-          return;
+          return await this.executeMemberNickname(this.mainClient, data);
         case 'member_roles':
-          const memberRoles = guild.members.cache.get(data.memberId);
-          if (memberRoles) {
-            if (data.add?.length > 0) await memberRoles.roles.add(data.add);
-            if (data.remove?.length > 0) await memberRoles.roles.remove(data.remove);
-          }
-          return;
+          return await this.executeMemberRoles(this.mainClient, data);
         case 'message_send':
-          const textChannel = guild.channels.cache.get(data.channelId) as TextChannel;
-          if (textChannel?.isTextBased()) {
-            return await textChannel.send(data.message);
-          }
-          return;
+          return await this.executeMessageSend(this.mainClient, data);
       }
     } catch (e: any) {
       if (this.isPermissionError(e)) {
-        
         return;
       }
       throw e;

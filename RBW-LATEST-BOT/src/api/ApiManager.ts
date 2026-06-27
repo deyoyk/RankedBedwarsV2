@@ -18,6 +18,7 @@ import { escapeRegex } from '../utils/regexEscape';
 export class ApiManager {
   private client: Client;
   private wsManager: WebSocketManager;
+  private gameModel: any = null;
 
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
@@ -229,24 +230,29 @@ export class ApiManager {
     };
   }
 
-  private async resolveGameIgns(game: any): Promise<Record<string, string>> {
-    const allIds = [
-      ...(game.team1 || []),
-      ...(game.team2 || []),
-      ...(game.bedbreaks || []),
-      ...(game.mvps || []),
-      ...(game.winners || []),
-      ...(game.losers || [])
-    ];
-    const uniqueIds = Array.from(new Set(allIds));
-    const users = await User.find({ discordId: { $in: uniqueIds } }).select('discordId ign');
+  private async getGameModel(): Promise<any> {
+    if (!this.gameModel) {
+      this.gameModel = (await import('../models/Game')).default;
+    }
+    return this.gameModel;
+  }
+
+  private async resolveGameIgns(games: any[]): Promise<Record<string, string>> {
+    const allIds = new Set<string>();
+    for (const game of games) {
+      for (const id of [...(game.team1 || []), ...(game.team2 || []), ...(game.bedbreaks || []), ...(game.mvps || []), ...(game.winners || []), ...(game.losers || [])]) {
+        allIds.add(id);
+      }
+    }
+    if (allIds.size === 0) return {};
+    const users = await User.find({ discordId: { $in: Array.from(allIds) } }).select('discordId ign');
     const idToIgn: Record<string, string> = {};
     users.forEach(u => { idToIgn[u.discordId] = u.ign; });
     return idToIgn;
   }
 
   private mapGameIgns(game: any, idToIgn: Record<string, string>) {
-    const map = (arr: string[]) => (arr || []).map(id => idToIgn[id] || id);
+    const map = (arr: string[]) => (arr || []).map((id: string) => idToIgn[id] || id);
     return {
       team1ign: map(game.team1),
       team2ign: map(game.team2),
@@ -308,14 +314,14 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing gameid parameter' });
         return;
       }
-      const Game = (await import('../models/Game')).default;
+      const Game = await this.getGameModel();
       const game = await Game.findOne({ gameId: Number(gameid) });
       if (!game) {
         res.status(404).json({ error: 'Game not found' });
         return;
       }
 
-      const idToIgn = await this.resolveGameIgns(game);
+      const idToIgn = await this.resolveGameIgns([game]);
       res.json({ ...game.toObject(), ...this.mapGameIgns(game, idToIgn) });
     } catch (error) {
       console.error('Error fetching game:', error);
@@ -690,14 +696,7 @@ export class ApiManager {
 
       const result = await SeasonManager.getSeasonGames(seasonNumber, chapterNumber, page, pageSize);
 
-      const allIds = new Set<string>();
-      result.games.forEach(game => {
-        [...game.team1, ...game.team2, ...game.winners, ...game.losers, ...game.mvps, ...game.bedbreaks].forEach(id => allIds.add(id));
-      });
-
-      const users = await User.find({ discordId: { $in: Array.from(allIds) } }).select('discordId ign');
-      const idToIgn: Record<string, string> = {};
-      users.forEach(u => { idToIgn[u.discordId] = u.ign; });
+      const idToIgn = await this.resolveGameIgns(result.games);
 
       const gamesWithIgns = result.games.map(game => ({
         ...game.toObject(),
@@ -754,7 +753,8 @@ export class ApiManager {
   private getGlobalStats = async (req: Request, res: Response): Promise<void> => {
     try {
       const totalUsers = await User.countDocuments();
-      const totalGames = await (await import('../models/Game')).default.countDocuments();
+      const Game = await this.getGameModel();
+      const totalGames = await Game.countDocuments();
 
       const stats = await User.aggregate([
         {
@@ -844,7 +844,7 @@ export class ApiManager {
       const limit = parseInt(req.query.limit as string) || 20;
       const skip = (page - 1) * limit;
 
-      const Game = (await import('../models/Game')).default;
+      const Game = await this.getGameModel();
       const games = await Game.find({
         $or: [
           { team1: discordid },
@@ -862,16 +862,9 @@ export class ApiManager {
         ]
       });
 
-      const allIds = new Set<string>();
-      games.forEach(game => {
-        [...game.team1, ...game.team2, ...game.winners, ...game.losers, ...game.mvps, ...game.bedbreaks].forEach(id => allIds.add(id));
-      });
+      const idToIgn = await this.resolveGameIgns(games);
 
-      const users = await User.find({ discordId: { $in: Array.from(allIds) } }).select('discordId ign');
-      const idToIgn: Record<string, string> = {};
-      users.forEach(u => { idToIgn[u.discordId] = u.ign; });
-
-      const gamesWithIgns = games.map(game => ({
+      const gamesWithIgns = games.map((game: any) => ({
         ...game.toObject(),
         ...this.mapGameIgns(game, idToIgn),
         playerResult: {
@@ -903,7 +896,7 @@ export class ApiManager {
       const { discordid } = req.params;
       const limit = parseInt(req.query.limit as string) || 5;
 
-      const Game = (await import('../models/Game')).default;
+      const Game = await this.getGameModel();
       const games = await Game.find({
         $or: [
           { team1: discordid },
@@ -914,7 +907,7 @@ export class ApiManager {
         .limit(limit)
         .select('gameId map winners losers mvps bedbreaks team1 team2 startTime');
 
-      const result = games.map(game => ({
+      const result = games.map((game: any) => ({
         gameId: game.gameId,
         map: game.map,
         date: game.startTime,
@@ -999,7 +992,8 @@ export class ApiManager {
   private getServerStatus = async (req: Request, res: Response): Promise<void> => {
     try {
       const totalUsers = await User.countDocuments();
-      const totalGames = await (await import('../models/Game')).default.countDocuments();
+      const Game = await this.getGameModel();
+      const totalGames = await Game.countDocuments();
       const queues = await Queue.find();
 
       let totalPlayersInQueue = 0;
@@ -1186,31 +1180,23 @@ export class ApiManager {
     try {
       const limit = parseInt(req.query.limit as string) || 20;
 
-      const Game = (await import('../models/Game')).default;
+      const Game = await this.getGameModel();
       const games = await Game.find()
         .sort({ gameId: -1 })
         .limit(limit);
 
-      
-      const allIds = new Set<string>();
-      games.forEach(game => {
-        [...game.team1, ...game.team2, ...game.winners, ...game.losers, ...game.mvps, ...game.bedbreaks].forEach(id => allIds.add(id));
-      });
+      const idToIgn = await this.resolveGameIgns(games);
 
-      const users = await User.find({ discordId: { $in: Array.from(allIds) } }).select('discordId ign');
-      const idToIgn: Record<string, string> = {};
-      users.forEach(u => { idToIgn[u.discordId] = u.ign; });
-
-      const gamesWithIgns = games.map(game => ({
+      const gamesWithIgns = games.map((game: any) => ({
         gameId: game.gameId,
         map: game.map,
         date: game.startTime,
-        duration: game.endTime ? Math.floor((game.endTime.getTime() - game.startTime.getTime()) / 1000 / 60) : null, 
-        team1: game.team1.map(id => ({ discordId: id, ign: idToIgn[id] || id })),
-        team2: game.team2.map(id => ({ discordId: id, ign: idToIgn[id] || id })),
-        winners: game.winners.map(id => ({ discordId: id, ign: idToIgn[id] || id })),
-        mvps: game.mvps.map(id => ({ discordId: id, ign: idToIgn[id] || id })),
-        bedbreaks: game.bedbreaks.map(id => ({ discordId: id, ign: idToIgn[id] || id }))
+        duration: game.endTime ? Math.floor((game.endTime.getTime() - game.startTime.getTime()) / 1000 / 60) : null,
+        team1: game.team1.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+        team2: game.team2.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+        winners: game.winners.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+        mvps: game.mvps.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+        bedbreaks: game.bedbreaks.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id }))
       }));
 
       res.json(gamesWithIgns);
@@ -1356,8 +1342,7 @@ export class ApiManager {
         return;
       }
 
-      
-      const Game = (await import('../models/Game')).default;
+      const Game = await this.getGameModel();
       const recentGames = await Game.find({
         $or: [
           { winners: discordid },
@@ -1413,9 +1398,7 @@ export class ApiManager {
         return;
       }
 
-      
-      
-      const Game = (await import('../models/Game')).default;
+      const Game = await this.getGameModel();
       const recentGames = await Game.find({
         $or: [
           { winners: discordid },
@@ -1426,7 +1409,7 @@ export class ApiManager {
         .limit(20)
         .select('gameId winners startTime');
 
-      const eloHistory = recentGames.map((game, index) => ({
+      const eloHistory = recentGames.map((game: any, index: number) => ({
         gameId: game.gameId,
         date: game.startTime,
         won: game.winners.includes(discordid),

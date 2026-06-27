@@ -3,7 +3,7 @@ import User from '../../models/User';
 import { safeReply } from '../../utils/safeReply';
 import { themes, resolveTheme } from '../../themes';
 
-export const data = new SlashCommandBuilder()
+export const themeManageData = new SlashCommandBuilder()
   .setName('thememanage')
   .setDescription('Admin: give or take a user\'s theme')
   .addStringOption(option =>
@@ -27,7 +27,7 @@ export const data = new SlashCommandBuilder()
       .addChoices(...themes.map(t => ({ name: t, value: t })))
   );
 
-export async function execute(interaction: ChatInputCommandInteraction) {
+export async function executeThemeManage(interaction: ChatInputCommandInteraction) {
   try {
     const action = interaction.options.getString('action', true) as 'give' | 'take';
     const target = interaction.options.getUser('user', true) as DUser;

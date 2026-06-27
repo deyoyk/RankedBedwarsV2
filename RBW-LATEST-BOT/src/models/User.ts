@@ -1,12 +1,10 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { recentGameSubdoc, dailyEloSubdoc } from './gameBase';
-
- 
-
+import { coreStatFields } from './statFields';
 
 export interface IUser extends Document {
   discordId: string;
-  ign: string; 
+  ign: string;
   elo: number;
   ownedThemes?: string[];
   currentTheme?: string;
@@ -20,8 +18,8 @@ export interface IUser extends Document {
   mvps: number;
   kills: number;
   deaths: number;
-  bedBroken: number; 
-  finalKills: number; 
+  bedBroken: number;
+  finalKills: number;
   diamonds?: number;
   irons?: number;
   gold?: number;
@@ -31,7 +29,7 @@ export interface IUser extends Document {
   losestreak?: number;
   kdr?: number;
   wlr?: number;
-  ismuted?: boolean; 
+  ismuted?: boolean;
   isfrozen?: boolean;
   isbanned?: boolean;
   nick?: string;
@@ -77,7 +75,7 @@ export interface IUser extends Document {
     id: string;
     reason: string;
     date: Date;
-    duration: number; 
+    duration: number;
     moderator: string;
   }>;
   bans: Array<{
@@ -92,33 +90,16 @@ export interface IUser extends Document {
 const UserSchema: Schema = new Schema({
   discordId: { type: String, required: true, unique: true, index: true },
   ign: { type: String, index: true },
-  elo: { type: Number, default: 0, index: true },
+  ...coreStatFields,
+  elo: { ...coreStatFields.elo, index: true },
   ownedThemes: { type: [String], default: [] },
   currentTheme: { type: String, default: 'elite' },
   seasonNumber: { type: Number },
   chapterNumber: { type: Number },
-  level: { type: Number, default: 1 },
-  experience: { type: Number, default: 0 },
-  wins: { type: Number, default: 0, index: true },
-  losses: { type: Number, default: 0 },
-  games: { type: Number, default: 0 },
-  mvps: { type: Number, default: 0 },
-  kills: { type: Number, default: 0 },
-  deaths: { type: Number, default: 0 },
-  bedBroken: { type: Number, default: 0 }, 
-  finalKills: { type: Number, default: 0 }, 
-  diamonds: { type: Number, default: 0 },
-  irons: { type: Number, default: 0 },
-  gold: { type: Number, default: 0 },
-  emeralds: { type: Number, default: 0 },
-  blocksPlaced: { type: Number, default: 0 },
-  isbanned: { type: Boolean, default: false, index: true }, 
-  ismuted: { type: Boolean, default: false }, 
-  isfrozen: { type: Boolean, default: false, index: true }, 
-  winstreak: { type: Number, default: 0 },
-  losestreak: { type: Number, default: 0 },
-  kdr: { type: Number, default: 0 },
-  wlr: { type: Number, default: 0 },
+  wins: { ...coreStatFields.wins, index: true },
+  isbanned: { type: Boolean, default: false, index: true },
+  ismuted: { type: Boolean, default: false },
+  isfrozen: { type: Boolean, default: false, index: true },
   settings:{
     toggleprefix:{ type: Boolean, default: false },
     togglescoreping: { type: Boolean, default: false },
@@ -139,14 +120,14 @@ const UserSchema: Schema = new Schema({
     id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
     reason: { type: String, required: true },
     date: { type: Date, required: true },
-    duration: { type: Number, required: true }, 
+    duration: { type: Number, required: true },
     moderator: { type: String, required: true },
   }],
   bans: [{
     id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
     reason: { type: String, required: true },
     date: { type: Date, required: true },
-    duration: { type: Number, required: true }, 
+    duration: { type: Number, required: true },
     moderator: { type: String, required: true },
   }],
 });

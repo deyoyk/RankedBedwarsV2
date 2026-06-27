@@ -11,6 +11,7 @@ export interface PunishmentOperation {
   duration?: number;
   timestamp: number;
   status: 'pending' | 'completed' | 'failed';
+  actionTaken?: string;
 }
 
 export interface PunishmentManagerStats {

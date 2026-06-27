@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import Queue from '../../models/Queue';
 
-export const data = new SlashCommandBuilder()
+export const queueControlData = new SlashCommandBuilder()
   .setName('queuecontrol')
   .setDescription('Enable or disable queues by type or specific queue')
   .addSubcommand(sub =>
@@ -43,7 +43,7 @@ export const data = new SlashCommandBuilder()
       )
   );
 
-export async function execute(interaction: ChatInputCommandInteraction) {
+export async function executeQueueControl(interaction: ChatInputCommandInteraction) {
   const sub = interaction.options.getSubcommand();
   const type = interaction.options.getString('type', true);
   const queueId = interaction.options.getString('queueid');

@@ -2,6 +2,65 @@ import { Message, ChatInputCommandInteraction, Guild } from 'discord.js';
 import { safeReply } from './safeReply';
 import { successEmbed, errorEmbed } from './betterembed';
 
+interface ParsedInteraction {
+  targetId: string;
+  duration?: string;
+  reason: string;
+  guild: Guild | null;
+  issuerId: string;
+}
+
+function parseInteractionInput(
+  interaction: Message | ChatInputCommandInteraction,
+  args: string[] | undefined,
+  options: { hasDuration?: boolean; hasReason?: boolean; commandName: string }
+): ParsedInteraction | { error: string } {
+  if (interaction instanceof ChatInputCommandInteraction) {
+    const user = interaction.options.getUser('user', true);
+    return {
+      targetId: user.id,
+      duration: options.hasDuration ? (interaction.options.getString('duration', false) || '') : undefined,
+      reason: interaction.options.getString('reason', false) || 'No reason provided',
+      guild: interaction.guild,
+      issuerId: interaction.user.id
+    };
+  }
+
+  if (!args || args.length < 1) {
+    const usage = options.hasDuration
+      ? `Usage: =${options.commandName} <@user> [duration] [reason]`
+      : options.hasReason
+        ? `Usage: =${options.commandName} <@user> [reason]`
+        : `Usage: =${options.commandName} <userId>`;
+    return { error: usage };
+  }
+
+  if (options.hasDuration || options.hasReason) {
+    const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
+    if (!mentionMatch) {
+      return { error: 'Please mention a valid user.' };
+    }
+    const targetId = mentionMatch[1];
+    const duration = options.hasDuration ? (args[1] || '') : undefined;
+    const reasonIdx = options.hasDuration ? 2 : 1;
+    const reason = args.length > reasonIdx ? args.slice(reasonIdx).join(' ') : 'No reason provided';
+    return {
+      targetId,
+      duration,
+      reason,
+      guild: interaction.guild,
+      issuerId: interaction.author.id
+    };
+  }
+
+  return {
+    targetId: args[0],
+    reason: args.slice(1).join(' ') || 'No reason provided',
+    guild: (interaction as Message).guild,
+    issuerId: (interaction as Message).author.id
+  };
+}
+
 export interface ModerationActionConfig {
   commandName: string;
   actionVerb: string;
@@ -14,55 +73,26 @@ export async function executeModerationAction(
   args: string[] | undefined,
   config: ModerationActionConfig
 ): Promise<void> {
-  let targetId: string;
-  let duration: string = '';
-  let reason: string = 'No reason provided';
-  let guild: Guild | null = null;
-  let issuerId: string;
+  const parsed = parseInteractionInput(interaction, args, {
+    hasDuration: config.hasDuration,
+    commandName: config.commandName
+  });
 
-  if (interaction instanceof ChatInputCommandInteraction) {
-    const user = interaction.options.getUser('user', true);
-    targetId = user.id;
-    if (config.hasDuration) {
-      duration = interaction.options.getString('duration', false) || '';
-    }
-    reason = interaction.options.getString('reason', false) || 'No reason provided';
-    guild = interaction.guild;
-    issuerId = interaction.user.id;
-  } else {
-    if (!args || args.length < 1) {
-      const usage = config.hasDuration
-        ? `Usage: =${config.commandName} <@user> [duration] [reason]`
-        : `Usage: =${config.commandName} <@user> [reason]`;
-      await safeReply(interaction, errorEmbed(usage, `${config.commandName} Usage Error`));
-      return;
-    }
-    const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
-    if (!mentionMatch) {
-      await safeReply(interaction, errorEmbed('Please mention a valid user.', `${config.commandName} Usage Error`));
-      return;
-    }
-    targetId = mentionMatch[1];
-    if (config.hasDuration) {
-      duration = args[1] || '';
-      reason = args.length > 2 ? args.slice(2).join(' ') : 'No reason provided';
-    } else {
-      reason = args.length > 1 ? args.slice(1).join(' ') : 'No reason provided';
-    }
-    guild = interaction.guild;
-    issuerId = interaction.author.id;
+  if ('error' in parsed) {
+    await safeReply(interaction, errorEmbed(parsed.error, `${config.commandName} Usage Error`));
+    return;
   }
 
-  if (!guild) {
+  if (!parsed.guild) {
     await safeReply(interaction, errorEmbed('This command can only be used in a server.', `${config.commandName} Error`));
     return;
   }
 
   try {
-    await config.managerCall(guild, targetId, issuerId, duration, reason);
-    const durationText = config.hasDuration && duration ? `\n**Duration:** ${duration}` : '';
+    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, parsed.duration || '', parsed.reason);
+    const durationText = config.hasDuration && parsed.duration ? `\n**Duration:** ${parsed.duration}` : '';
     const embed = successEmbed(
-      `${config.actionVerb} <@${targetId}>.${durationText}\n**Reason:** ${reason}`,
+      `${config.actionVerb} <@${parsed.targetId}>.${durationText}\n**Reason:** ${parsed.reason}`,
       undefined,
       false
     );
@@ -83,32 +113,23 @@ export async function executeUnmoderationAction(
   args: string[] | undefined,
   config: UnmoderationActionConfig
 ): Promise<void> {
-  let targetId: string;
-  let guild: any;
-  let issuerId: string;
+  const parsed = parseInteractionInput(interaction, args, {
+    commandName: config.commandName
+  });
 
-  if (interaction instanceof ChatInputCommandInteraction) {
-    targetId = interaction.options.getString('userid', true);
-    guild = interaction.guild;
-    issuerId = interaction.user.id;
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: =${config.commandName} <userId>`, `${config.commandName} Usage Error`));
-      return;
-    }
-    targetId = args[0];
-    guild = (interaction as Message).guild;
-    issuerId = (interaction as Message).author.id;
+  if ('error' in parsed) {
+    await safeReply(interaction, errorEmbed(parsed.error, `${config.commandName} Usage Error`));
+    return;
   }
 
-  if (!guild) {
+  if (!parsed.guild) {
     await safeReply(interaction, errorEmbed('This command can only be used in a server.'));
     return;
   }
 
   try {
-    await config.managerCall(guild, targetId, issuerId);
-    await safeReply(interaction, successEmbed(`${config.actionVerb} <@${targetId}>.`, `User ${config.actionVerb}`));
+    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId);
+    await safeReply(interaction, successEmbed(`${config.actionVerb} <@${parsed.targetId}>.`, `User ${config.actionVerb}`));
   } catch (error) {
     await safeReply(interaction, errorEmbed(`Failed to ${config.commandName} user.`));
   }
@@ -125,37 +146,25 @@ export async function executeStrikeAction(
   args: string[] | undefined,
   config: StrikeActionConfig
 ): Promise<void> {
-  let targetId: string;
-  let reason: string;
-  let guild: any;
-  let issuerId: string;
+  const parsed = parseInteractionInput(interaction, args, {
+    hasReason: true,
+    commandName: config.commandName
+  });
 
-  if (interaction instanceof ChatInputCommandInteraction) {
-    const user = interaction.options.getUser('user', true);
-    targetId = user.id;
-    reason = interaction.options.getString('reason', false) || 'No reason provided';
-    guild = interaction.guild;
-    issuerId = interaction.user.id;
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: =${config.commandName} <userId> [reason]`, `${config.commandName} Usage Error`));
-      return;
-    }
-    targetId = args[0];
-    reason = args.slice(1).join(' ') || 'No reason provided';
-    guild = (interaction as Message).guild;
-    issuerId = (interaction as Message).author.id;
+  if ('error' in parsed) {
+    await safeReply(interaction, errorEmbed(parsed.error, `${config.commandName} Usage Error`));
+    return;
   }
 
-  if (!guild) {
+  if (!parsed.guild) {
     await safeReply(interaction, errorEmbed('This command can only be used in a server.'));
     return;
   }
 
   try {
-    await config.managerCall(guild, targetId, issuerId, reason);
+    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, parsed.reason);
     const embed = successEmbed(
-      config.successMessage(targetId, reason),
+      config.successMessage(parsed.targetId, parsed.reason),
       undefined,
       false
     );

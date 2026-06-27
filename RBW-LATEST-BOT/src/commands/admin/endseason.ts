@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { SeasonManager } from '../../managers/SeasonManager';
 
-export async function execute(interaction: ChatInputCommandInteraction) {
+export async function executeEndSeason(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
 
     try {

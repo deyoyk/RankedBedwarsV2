@@ -5,16 +5,7 @@ import { BanManager } from './BanManager';
 import { parseDuration } from '../utils/parseDuration';
 import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
 import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
-
-interface StrikeOperation {
-  id: string;
-  targetId: string;
-  moderatorId: string;
-  reason: string;
-  timestamp: number;
-  status: 'pending' | 'completed' | 'failed';
-  actionTaken?: string;
-}
+import { PunishmentOperation, createPendingOperation } from './punishmentHelpers';
 
 interface StrikeManagerStats {
   totalStrikes: number;
@@ -26,7 +17,7 @@ interface StrikeManagerStats {
 
 export class StrikeManager {
   private static instance: StrikeManager;
-  private pendingOperations: Map<string, StrikeOperation> = new Map();
+  private pendingOperations: Map<string, PunishmentOperation> = new Map();
   private stats: StrikeManagerStats = {
     totalStrikes: 0,
     activeStrikes: 0,
@@ -46,18 +37,9 @@ export class StrikeManager {
 
   public static async strike(guild: Guild, targetId: string, moderatorId: string, reason: string): Promise<{ strikeCount: number; actionTaken: string }> {
     const instance = StrikeManager.getInstance();
-    const operationId = generatePunishmentId();
+    const operation = createPendingOperation(targetId, moderatorId, reason);
 
-    const operation: StrikeOperation = {
-      id: operationId,
-      targetId,
-      moderatorId,
-      reason,
-      timestamp: Date.now(),
-      status: 'pending'
-    };
-
-    instance.pendingOperations.set(operationId, operation);
+    instance.pendingOperations.set(operation.id, operation);
 
     try {
       
@@ -138,24 +120,15 @@ export class StrikeManager {
       throw new Error(`Strike operation failed: ${error.message}`);
 
     } finally {
-      cleanupOperation(instance.pendingOperations, operationId);
+      cleanupOperation(instance.pendingOperations, operation.id);
     }
   }
 
   public static async unstrike(guild: Guild, targetId: string, moderatorId: string, reason = 'Strike removed'): Promise<{ strikeCount: number; removedStrike: any }> {
     const instance = StrikeManager.getInstance();
-    const operationId = generatePunishmentId();
+    const operation = createPendingOperation(targetId, moderatorId, reason);
 
-    const operation: StrikeOperation = {
-      id: operationId,
-      targetId,
-      moderatorId,
-      reason,
-      timestamp: Date.now(),
-      status: 'pending'
-    };
-
-    instance.pendingOperations.set(operationId, operation);
+    instance.pendingOperations.set(operation.id, operation);
 
     try {
       
@@ -209,7 +182,7 @@ export class StrikeManager {
       throw new Error(`Unstrike operation failed: ${error.message}`);
 
     } finally {
-      cleanupOperation(instance.pendingOperations, operationId);
+      cleanupOperation(instance.pendingOperations, operation.id);
     }
   }
 

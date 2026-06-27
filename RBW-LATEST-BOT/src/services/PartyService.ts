@@ -418,29 +418,36 @@ export class PartyService {
     }
   }
 
+  private static getPartyRoles(): Record<number, string> {
+    return {
+      2: config.roles.partyof2Queue,
+      3: config.roles.partyof3Queue,
+      4: config.roles.partyof4Queue
+    };
+  }
+
+  private static async updateRolesForMember(memberId: string, guild: Guild, roles: Record<number, string>, targetRole: string | null): Promise<void> {
+    try {
+      const member = await guild.members.fetch(memberId);
+      if (member) {
+        await member.roles.remove([roles[2], roles[3], roles[4]]);
+        if (targetRole) {
+          await member.roles.add(targetRole);
+        }
+      }
+    } catch (memberError) {
+      console.warn(`[PartyService] Could not update roles for member ${memberId}:`, memberError);
+    }
+  }
+
   private static async updatePartyRoles(guild: Guild, memberIds: string[]): Promise<void> {
     try {
-      const roles = {
-        2: config.roles.partyof2Queue,
-        3: config.roles.partyof3Queue,
-        4: config.roles.partyof4Queue
-      };
-
+      const roles = this.getPartyRoles();
       const partySize = memberIds.length;
       const targetRole = partySize >= 4 ? roles[4] : partySize >= 3 ? roles[3] : partySize >= 2 ? roles[2] : null;
 
       for (const memberId of memberIds) {
-        try {
-          const member = await guild.members.fetch(memberId);
-          if (member) {
-            await member.roles.remove([roles[2], roles[3], roles[4]]);
-            if (targetRole) {
-              await member.roles.add(targetRole);
-            }
-          }
-        } catch (memberError) {
-          console.warn(`[PartyService] Could not update roles for member ${memberId}:`, memberError);
-        }
+        await this.updateRolesForMember(memberId, guild, roles, targetRole);
       }
     } catch (error) {
       console.error('[PartyService] Error updating party roles:', error);
@@ -449,21 +456,10 @@ export class PartyService {
 
   static async removePartyRoles(guild: Guild, memberIds: string[]): Promise<void> {
     try {
-      const roles = {
-        2: config.roles.partyof2Queue,
-        3: config.roles.partyof3Queue,
-        4: config.roles.partyof4Queue
-      };
+      const roles = this.getPartyRoles();
 
       for (const memberId of memberIds) {
-        try {
-          const member = await guild.members.fetch(memberId);
-          if (member) {
-            await member.roles.remove([roles[2], roles[3], roles[4]]);
-          }
-        } catch (memberError) {
-          console.warn(`[PartyService] Could not remove roles for member ${memberId}:`, memberError);
-        }
+        await this.updateRolesForMember(memberId, guild, roles, null);
       }
     } catch (error) {
       console.error('[PartyService] Error removing party roles:', error);
