@@ -101,19 +101,21 @@ Moderator: ${item.moderator}
       return embedObj.builder;
     };
 
-    const embed = generateEmbed(currentPage);
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    const buildPaginationRow = (page: number) => new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId('prev_page')
         .setLabel('Previous')
         .setStyle(ButtonStyle.Primary)
-        .setDisabled(currentPage === 0),
+        .setDisabled(page === 0),
       new ButtonBuilder()
         .setCustomId('next_page')
         .setLabel('Next')
         .setStyle(ButtonStyle.Primary)
-        .setDisabled(currentPage >= Math.ceil(historyItems.length / itemsPerPage) - 1)
+        .setDisabled(page >= Math.ceil(historyItems.length / itemsPerPage) - 1)
     );
+
+    const embed = generateEmbed(currentPage);
+    const row = buildPaginationRow(currentPage);
 
     const message = await safeReply(interaction, { embeds: [embed], components: [row], fetchReply: true });
     const collector = message.createMessageComponentCollector({ time: 60000 });
@@ -126,18 +128,7 @@ Moderator: ${item.moderator}
       }
 
       const newEmbed = generateEmbed(currentPage);
-      const newRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setCustomId('prev_page')
-          .setLabel('Previous')
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(currentPage === 0),
-        new ButtonBuilder()
-          .setCustomId('next_page')
-          .setLabel('Next')
-          .setStyle(ButtonStyle.Primary)
-          .setDisabled(currentPage >= Math.ceil(historyItems.length / itemsPerPage) - 1)
-      );
+      const newRow = buildPaginationRow(currentPage);
 
       await buttonInteraction.update({ embeds: [newEmbed], components: [newRow] });
     });

@@ -1,3 +1,28 @@
+export interface IUserStats {
+  elo: number;
+  level: number;
+  experience: number;
+  wins: number;
+  losses: number;
+  games: number;
+  mvps: number;
+  kills: number;
+  deaths: number;
+  bedBroken: number;
+  finalKills: number;
+  diamonds: number;
+  irons: number;
+  gold: number;
+  emeralds: number;
+  blocksPlaced: number;
+  winstreak: number;
+  losestreak: number;
+  kdr: number;
+  wlr: number;
+}
+
+export type UserStatKey = keyof IUserStats;
+
 export const coreStatFields = {
   elo: { type: Number, default: 0 },
   level: { type: Number, default: 1 },

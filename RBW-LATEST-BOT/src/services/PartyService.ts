@@ -150,37 +150,56 @@ export class PartyService {
         return { success: false, message: 'Party not found' };
       }
 
-      const user = await UserModel.findOne({ discordId: userId });
-      if (!user) {
-        return { success: false, message: 'User not registered' };
-      }
-
-      if (user.partyId) {
-        return { success: false, message: 'Already in a party' };
-      }
-
-      if (party.members.includes(userId)) {
-        return { success: false, message: 'Already in this party' };
-      }
-
-      if (party.members.length >= party.maxMembers) {
-        return { success: false, message: 'Party is full' };
-      }
-
-      party.members.push(userId);
-      await party.save();
-
-      user.partyId = partyId;
-      await user.save();
-
-      await this.updatePartyRoles(guild, party.members);
-      await this.updatePartyActivity(partyId);
-
-      return { success: true };
+      return this.addMemberToParty(party, userId, guild);
     } catch (error) {
       console.error('[PartyService] Error accepting invite:', error);
       return { success: false, message: 'Failed to accept invite' };
     }
+  }
+
+  private static async removeMemberFromParty(party: any, userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
+    party.members = party.members.filter((id: string) => id !== userId);
+    await party.save();
+
+    await UserModel.updateOne(
+      { discordId: userId },
+      { $unset: { partyId: "" } }
+    );
+
+    await this.updatePartyRoles(guild, party.members);
+    await this.updatePartyActivity(party.partyId);
+
+    return { success: true, party };
+  }
+
+  private static async addMemberToParty(party: any, userId: string, guild: Guild): Promise<{ success: boolean; message?: string }> {
+    const user = await UserModel.findOne({ discordId: userId });
+    if (!user) {
+      return { success: false, message: 'User not registered' };
+    }
+
+    if (user.partyId) {
+      return { success: false, message: 'Already in a party' };
+    }
+
+    if (party.members.includes(userId)) {
+      return { success: false, message: 'Already in this party' };
+    }
+
+    if (party.members.length >= party.maxMembers) {
+      return { success: false, message: 'Party is full' };
+    }
+
+    party.members.push(userId);
+    await party.save();
+
+    user.partyId = party.partyId;
+    await user.save();
+
+    await this.updatePartyRoles(guild, party.members);
+    await this.updatePartyActivity(party.partyId);
+
+    return { success: true };
   }
 
   static async leaveParty(userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
@@ -190,23 +209,11 @@ export class PartyService {
         return { success: false, message: validation.error };
       }
 
-      const party = validation.party!;
-      if (party.leader === userId) {
+      if (validation.party!.leader === userId) {
         return { success: false, message: 'Use disband to dissolve party' };
       }
 
-      party.members = party.members.filter((id: string) => id !== userId);
-      await party.save();
-
-      await UserModel.updateOne(
-        { discordId: userId },
-        { $unset: { partyId: "" } }
-      );
-
-      await this.updatePartyRoles(guild, party.members);
-      await this.updatePartyActivity(party.partyId);
-
-      return { success: true, party };
+      return this.removeMemberFromParty(validation.party!, userId, guild);
     } catch (error) {
       console.error('[PartyService] Error leaving party:', error);
       return { success: false, message: 'Failed to leave party' };
@@ -253,18 +260,7 @@ export class PartyService {
         return { success: false, message: 'Cannot kick yourself' };
       }
 
-      party.members = party.members.filter((id: string) => id !== targetId);
-      await party.save();
-
-      await UserModel.updateOne(
-        { discordId: targetId },
-        { $unset: { partyId: "" } }
-      );
-
-      await this.updatePartyRoles(guild, party.members);
-      await this.updatePartyActivity(party.partyId);
-
-      return { success: true, party };
+      return this.removeMemberFromParty(party, targetId, guild);
     } catch (error) {
       console.error('[PartyService] Error kicking from party:', error);
       return { success: false, message: 'Failed to kick user' };
@@ -340,15 +336,6 @@ export class PartyService {
 
   static async joinParty(userId: string, partyId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
     try {
-      const user = await UserModel.findOne({ discordId: userId });
-      if (!user) {
-        return { success: false, message: 'User not registered' };
-      }
-
-      if (user.partyId) {
-        return { success: false, message: 'Already in a party' };
-      }
-
       const party = await Party.findOne({ partyId });
       if (!party) {
         return { success: false, message: 'Party not found' };
@@ -358,20 +345,8 @@ export class PartyService {
         return { success: false, message: 'Party is private' };
       }
 
-      if (party.members.length >= party.maxMembers) {
-        return { success: false, message: 'Party is full' };
-      }
-
-      party.members.push(userId);
-      await party.save();
-
-      user.partyId = partyId;
-      await user.save();
-
-      await this.updatePartyRoles(guild, party.members);
-      await this.updatePartyActivity(partyId);
-
-      return { success: true, party };
+      const result = await this.addMemberToParty(party, userId, guild);
+      return { ...result, party: result.success ? party : undefined };
     } catch (error) {
       console.error('[PartyService] Error joining party:', error);
       return { success: false, message: 'Failed to join party' };

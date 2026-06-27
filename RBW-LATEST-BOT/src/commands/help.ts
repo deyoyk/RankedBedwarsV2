@@ -44,6 +44,23 @@ async function getCommandCategories() {
   return result;
 }
 
+function buildCategorySelectMenu(commandCategories: Record<string, string[]>): StringSelectMenuBuilder {
+  return new StringSelectMenuBuilder()
+    .setCustomId('help_category')
+    .setPlaceholder('Select a category')
+    .addOptions(
+      Object.keys(commandCategories)
+        .filter(cat => cat && cat.length > 0 && cat.length <= 100)
+        .map(cat => {
+          const label = (cat.charAt(0).toUpperCase() + cat.slice(1)).trim();
+          const truncatedLabel = (label.length > 25 ? label.substring(0, 22) + '...' : label).trim();
+          return new StringSelectMenuOptionBuilder()
+            .setLabel(truncatedLabel)
+            .setValue(cat);
+        })
+    );
+}
+
 function getCommandRoles(cmd: string): string {
   
   let roles: string[] = [];
@@ -75,20 +92,7 @@ export async function help(interaction: ChatInputCommandInteraction | Message) {
       .setDescription('Made by <@919498122940547072> \`Deyo\` and Managed by [Zerocode](https://discord.com/invite/23hPVuuam3) \n\n:star2: Select a category to view commands and their required roles.')
       .setColor('#00AAAA')
 
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('help_category')
-      .setPlaceholder('Select a category')
-      .addOptions(
-        Object.keys(commandCategories)
-          .filter(cat => cat && cat.length > 0 && cat.length <= 100)
-          .map(cat => {
-            const label = (cat.charAt(0).toUpperCase() + cat.slice(1)).trim();
-            const truncatedLabel = (label.length > 25 ? label.substring(0, 22) + '...' : label).trim();
-            return new StringSelectMenuOptionBuilder()
-              .setLabel(truncatedLabel)
-              .setValue(cat);
-          })
-      );
+    const selectMenu = buildCategorySelectMenu(commandCategories);
 
     if (selectMenu.options.length === 0) {
       const replyContent = { content: 'No command categories found.' };
@@ -171,20 +175,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
 
     embed.setFooter({ text: 'Commands use dynamic permissions from the plugin. Same commands applicable for prefix/message commands.' });
     
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('help_category')
-      .setPlaceholder('Select a category')
-      .addOptions(
-        Object.keys(commandCategories)
-          .filter(cat => cat && cat.length > 0 && cat.length <= 100)
-          .map(cat => {
-            const label = (cat.charAt(0).toUpperCase() + cat.slice(1)).trim();
-            const truncatedLabel = (label.length > 25 ? label.substring(0, 22) + '...' : label).trim();
-            return new StringSelectMenuOptionBuilder()
-              .setLabel(truncatedLabel)
-              .setValue(cat);
-          })
-      );
+    const selectMenu = buildCategorySelectMenu(commandCategories);
     const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
     let components: any[] = [selectRow.toJSON()];
     if (totalPages > 1) {

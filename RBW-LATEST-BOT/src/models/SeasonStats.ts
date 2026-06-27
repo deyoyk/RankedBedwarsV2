@@ -1,32 +1,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { recentGameSubdoc, dailyEloSubdoc, IRecentGame, IDailyElo } from './gameBase';
-import { coreStatFields } from './statFields';
+import { coreStatFields, IUserStats } from './statFields';
 
-export interface ISeasonStats extends Document {
+export interface ISeasonStats extends Document, IUserStats {
   discordId: string;
   seasonNumber: number;
   chapterNumber: number;
   ign: string;
-  elo: number;
-  level: number;
-  experience: number;
-  wins: number;
-  losses: number;
-  games: number;
-  mvps: number;
-  kills: number;
-  deaths: number;
-  bedBroken: number;
-  finalKills: number;
-  diamonds: number;
-  irons: number;
-  gold: number;
-  emeralds: number;
-  blocksPlaced: number;
-  winstreak: number;
-  losestreak: number;
-  kdr: number;
-  wlr: number;
   recentGames: IRecentGame[];
   dailyElo: IDailyElo[];
 }

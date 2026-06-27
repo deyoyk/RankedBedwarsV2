@@ -147,6 +147,55 @@ export class PickingQueueManager {
     return { pickOrder, partyPlayers, soloPlayers };
   }
 
+  private assignPartyMembersToTeams(
+    partyInfo: Map<string, string[]>,
+    captains: string[],
+    team1: string[],
+    team2: string[],
+    remainingPlayers: string[],
+    gameId: number
+  ): string[] {
+    let remaining = [...remainingPlayers];
+    const partyEntries = Array.from(partyInfo.entries());
+
+    for (const [, members] of partyEntries) {
+      const partyCaptain = captains.find(c => members.includes(c));
+      if (partyCaptain) {
+        const isPartyOnTeam1 = team1.includes(partyCaptain);
+        for (const member of members) {
+          if (member !== partyCaptain && remaining.includes(member)) {
+            if (isPartyOnTeam1) {
+              team1.push(member);
+              console.log(`[PickingQueue] Game ${gameId} - Auto-picked ${member} to team1 (party member)`);
+            } else {
+              team2.push(member);
+              console.log(`[PickingQueue] Game ${gameId} - Auto-picked ${member} to team2 (party member)`);
+            }
+            remaining = remaining.filter(p => p !== member);
+          }
+        }
+      }
+    }
+
+    return remaining;
+  }
+
+  private buildTeamValue(
+    team: string[],
+    captainId: string,
+    avgElo: number,
+    ignMap: Map<string, string>
+  ): string {
+    const players = team.filter(id => id !== captainId);
+    return [
+      `**Average Elo:** ${avgElo}`,
+      `**Captain:** <@${captainId}>`,
+      `**Players:**`,
+      ...players.map(id => `‎ <@${id}>`),
+      players.length === 0 ? '‎ *(No other players)*' : ''
+    ].filter(Boolean).join('\n');
+  }
+
   private async buildGameStartEmbed(
     team1: string[],
     team2: string[],
@@ -157,20 +206,8 @@ export class PickingQueueManager {
     status: string = 'Ongoing',
     gameid: number
   ): Promise<EmbedBuilder> {
-    const team1Value = [
-      `**Average Elo:** ${team1Avg}`,
-      `**Captain:** <@${captains[0]}>`,
-      `**Players:**`,
-      ...team1.filter(id => id !== captains[0]).map(id => `‎ <@${id}>`),
-      team1.length === 1 ? '‎ *(No other players)*' : ''
-    ].filter(Boolean).join('\n');
-    const team2Value = [
-      `**Average Elo:** ${team2Avg}`,
-      `**Captain:** <@${captains[1]}>`,
-      `**Players:**`,
-      ...team2.filter(id => id !== captains[1]).map(id => `‎  <@${id}>`),
-      team2.length === 1 ? '‎ *(No other players)*' : ''
-    ].filter(Boolean).join('\n');
+    const team1Value = this.buildTeamValue(team1, captains[0], team1Avg, ignMap);
+    const team2Value = this.buildTeamValue(team2, captains[1], team2Avg, ignMap);
     const statusField = `**Status:** ${status}`;
     return new EmbedBuilder()
       .setTitle(`Game #${gameid} Started`)
@@ -289,46 +326,7 @@ export class PickingQueueManager {
       let remainingPlayers = players.filter(p => !captains.includes(p));
 
       if (partyInfo.size > 0) {
-        const partyEntries = Array.from(partyInfo.entries());
-        
-        if (partyEntries.length === 1) {
-          const [partyId, members] = partyEntries[0];
-          const partyCaptain = captains.find(c => members.includes(c))!;
-          const isPartyOnTeam1 = team1.includes(partyCaptain);
-          
-          for (const member of members) {
-            if (member !== partyCaptain) {
-              if (isPartyOnTeam1) {
-                team1.push(member);
-                console.log(`[PickingQueue] Game ${gameId} - Auto-picked ${member} to team1 (party member)`);
-              } else {
-                team2.push(member);
-                console.log(`[PickingQueue] Game ${gameId} - Auto-picked ${member} to team2 (party member)`);
-              }
-              remainingPlayers = remainingPlayers.filter(p => p !== member);
-            }
-          }
-        } else if (partyEntries.length >= 2) {
-          for (const [partyId, members] of partyEntries) {
-            const partyCaptain = captains.find(c => members.includes(c));
-            if (partyCaptain) {
-              const isPartyOnTeam1 = team1.includes(partyCaptain);
-              
-              for (const member of members) {
-                if (member !== partyCaptain) {
-                  if (isPartyOnTeam1) {
-                    team1.push(member);
-                    console.log(`[PickingQueue] Game ${gameId} - Auto-picked ${member} to team1 (party member)`);
-                  } else {
-                    team2.push(member);
-                    console.log(`[PickingQueue] Game ${gameId} - Auto-picked ${member} to team2 (party member)`);
-                  }
-                  remainingPlayers = remainingPlayers.filter(p => p !== member);
-                }
-              }
-            }
-          }
-        }
+        remainingPlayers = this.assignPartyMembersToTeams(partyInfo, captains, team1, team2, remainingPlayers, gameId);
       }
       
       session = {
@@ -569,26 +567,9 @@ export class PickingQueueManager {
       
       const team1Avg = await this.calculateTeamAverageElo(session.team1);
       const team2Avg = await this.calculateTeamAverageElo(session.team2);
-      const team1Captain = session.captains[0];
-      const team2Captain = session.captains[1];
-      const team1Players = session.team1.filter(id => id !== team1Captain);
-      const team2Players = session.team2.filter(id => id !== team2Captain);
       
-      const team1Value = [
-        `**Average Elo:** ${team1Avg}`,
-        `**Captain:** <@${team1Captain}>`,
-        `**Players:**`,
-        ...team1Players.map(id => `‎ <@${id}>`),
-        team1Players.length === 0 ? '‎ *(No other players)*' : ''
-      ].filter(Boolean).join('\n');
-      
-      const team2Value = [
-        `**Average Elo:** ${team2Avg}`,
-        `**Captain:** <@${team2Captain}>`,
-        `**Players:**`,
-        ...team2Players.map(id => `‎ <@${id}>`),
-        team2Players.length === 0 ? '‎ *(No other players)*' : ''
-      ].filter(Boolean).join('\n');
+      const team1Value = this.buildTeamValue(session.team1, session.captains[0], team1Avg, ignMap);
+      const team2Value = this.buildTeamValue(session.team2, session.captains[1], team2Avg, ignMap);
       const autoPickTime = new Date(Date.now() + this.PICK_TIMEOUT);
       const autoPickTimestamp = Math.floor(autoPickTime.getTime() / 1000);
       
@@ -1028,28 +1009,7 @@ export class PickingQueueManager {
 
       
       if (session.partyInfo && session.partyInfo.size > 0) {
-        const partyEntries = Array.from(session.partyInfo.entries());
-        
-        for (const [partyId, members] of partyEntries) {
-          const partyCaptain = session.captains.find(c => members.includes(c));
-          if (partyCaptain) {
-            const isPartyOnTeam1 = team1.includes(partyCaptain);
-            
-            
-            for (const member of members) {
-              if (member !== partyCaptain && remainingPlayers.includes(member)) {
-                if (isPartyOnTeam1) {
-                  team1.push(member);
-                  console.log(`[PickingQueue] Game ${session.gameId} - Auto-assigned party member ${member} to Team1`);
-                } else {
-                  team2.push(member);
-                  console.log(`[PickingQueue] Game ${session.gameId} - Auto-assigned party member ${member} to Team2`);
-                }
-                remainingPlayers = remainingPlayers.filter(p => p !== member);
-              }
-            }
-          }
-        }
+        remainingPlayers = this.assignPartyMembersToTeams(session.partyInfo, session.captains, team1, team2, remainingPlayers, session.gameId);
       }
 
       

@@ -3,9 +3,8 @@ import config from '../config/config';
 import { Guild } from 'discord.js';
 import { BanManager } from './BanManager';
 import { parseDuration } from '../utils/parseDuration';
-import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
 import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
-import { PunishmentOperation, createPendingOperation } from './punishmentHelpers';
+import { PunishmentOperation, createPendingOperation, sendPunishmentNotification, handleOperationError } from './punishmentHelpers';
 
 interface StrikeManagerStats {
   totalStrikes: number;
@@ -73,13 +72,11 @@ export class StrikeManager {
 
       try {
         if (!action || action === 'warn') {
-          await sendPunishmentEmbed({
-            guild, targetId, moderatorId, reason, type: 'strike',
-            extraFields: [
-              { label: 'Strike Count', value: String(strikeCount) },
-              { label: 'Action', value: action }
-            ]
+          const promises: Promise<any>[] = [];
+          sendPunishmentNotification(promises, {
+            guild, targetId, moderatorId, reason, type: 'strike'
           });
+          await Promise.allSettled(promises);
           actionTaken = `Warning issued (Strike ${strikeCount})`;
         } else {
           try {
@@ -89,13 +86,11 @@ export class StrikeManager {
             instance.stats.escalatedStrikes++;
           } catch (banError) {
             console.error(`[StrikeManager] Failed to escalate strike to ban for ${targetId}:`, banError);
-            await sendPunishmentEmbed({
-              guild, targetId, moderatorId, reason, type: 'strike',
-              extraFields: [
-                { label: 'Strike Count', value: String(strikeCount) },
-                { label: 'Action', value: action }
-              ]
+            const promises: Promise<any>[] = [];
+            sendPunishmentNotification(promises, {
+              guild, targetId, moderatorId, reason, type: 'strike'
             });
+            await Promise.allSettled(promises);
             actionTaken = `Warning issued - Ban escalation failed (Strike ${strikeCount})`;
           }
         }
@@ -155,12 +150,11 @@ export class StrikeManager {
 
       
       try {
-        await sendPunishmentEmbed({
-          guild, targetId, moderatorId, reason, type: 'unstrike',
-          extraFields: [
-            { label: 'Remaining Strikes', value: String(strikeCount) }
-          ]
+        const promises: Promise<any>[] = [];
+        sendPunishmentNotification(promises, {
+          guild, targetId, moderatorId, reason, type: 'unstrike'
         });
+        await Promise.allSettled(promises);
       } catch (embedError) {
         console.warn(`[StrikeManager] Failed to send unstrike embed for ${targetId}:`, embedError);
         

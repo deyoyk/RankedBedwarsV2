@@ -113,26 +113,13 @@ export async function executeUnmoderationAction(
   args: string[] | undefined,
   config: UnmoderationActionConfig
 ): Promise<void> {
-  const parsed = parseInteractionInput(interaction, args, {
-    commandName: config.commandName
+  await executeModerationCommand(interaction, args, {
+    commandName: config.commandName,
+    onSuccess: async (parsed) => {
+      await config.managerCall(parsed.guild!, parsed.targetId, parsed.issuerId);
+      return { embed: successEmbed(`${config.actionVerb} <@${parsed.targetId}>.`, `User ${config.actionVerb}`) };
+    }
   });
-
-  if ('error' in parsed) {
-    await safeReply(interaction, errorEmbed(parsed.error, `${config.commandName} Usage Error`));
-    return;
-  }
-
-  if (!parsed.guild) {
-    await safeReply(interaction, errorEmbed('This command can only be used in a server.'));
-    return;
-  }
-
-  try {
-    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId);
-    await safeReply(interaction, successEmbed(`${config.actionVerb} <@${parsed.targetId}>.`, `User ${config.actionVerb}`));
-  } catch (error) {
-    await safeReply(interaction, errorEmbed(`Failed to ${config.commandName} user.`));
-  }
 }
 
 export interface StrikeActionConfig {
@@ -141,18 +128,24 @@ export interface StrikeActionConfig {
   managerCall: (guild: Guild, targetId: string, issuerId: string, reason: string) => Promise<any>;
 }
 
-export async function executeStrikeAction(
+async function executeModerationCommand(
   interaction: Message | ChatInputCommandInteraction,
   args: string[] | undefined,
-  config: StrikeActionConfig
+  options: {
+    commandName: string;
+    hasDuration?: boolean;
+    hasReason?: boolean;
+    onSuccess: (parsed: ParsedInteraction) => Promise<{ embed: any; errorTitle?: string } | { error: string; errorTitle?: string }>;
+  }
 ): Promise<void> {
   const parsed = parseInteractionInput(interaction, args, {
-    hasReason: true,
-    commandName: config.commandName
+    hasDuration: options.hasDuration,
+    hasReason: options.hasReason,
+    commandName: options.commandName
   });
 
   if ('error' in parsed) {
-    await safeReply(interaction, errorEmbed(parsed.error, `${config.commandName} Usage Error`));
+    await safeReply(interaction, errorEmbed(parsed.error, `${options.commandName} Usage Error`));
     return;
   }
 
@@ -162,15 +155,33 @@ export async function executeStrikeAction(
   }
 
   try {
-    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, parsed.reason);
-    const embed = successEmbed(
-      config.successMessage(parsed.targetId, parsed.reason),
-      undefined,
-      false
-    );
-    await safeReply(interaction, embed);
+    const result = await options.onSuccess(parsed);
+    if ('error' in result) {
+      await safeReply(interaction, errorEmbed(result.error, result.errorTitle || `${options.commandName} Error`));
+    } else {
+      await safeReply(interaction, result.embed);
+    }
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : `Failed to ${config.commandName}.`;
-    await safeReply(interaction, errorEmbed(errorMessage, `${config.commandName} Error`));
+    await safeReply(interaction, errorEmbed(`Failed to ${options.commandName} user.`));
   }
+}
+
+export async function executeStrikeAction(
+  interaction: Message | ChatInputCommandInteraction,
+  args: string[] | undefined,
+  config: StrikeActionConfig
+): Promise<void> {
+  await executeModerationCommand(interaction, args, {
+    commandName: config.commandName,
+    hasReason: true,
+    onSuccess: async (parsed) => {
+      await config.managerCall(parsed.guild!, parsed.targetId, parsed.issuerId, parsed.reason);
+      const embed = successEmbed(
+        config.successMessage(parsed.targetId, parsed.reason),
+        undefined,
+        false
+      );
+      return { embed };
+    }
+  });
 }

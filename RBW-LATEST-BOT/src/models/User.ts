@@ -1,34 +1,16 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { recentGameSubdoc, dailyEloSubdoc, IRecentGame, IDailyElo } from './gameBase';
-import { coreStatFields } from './statFields';
+import { coreStatFields, IUserStats } from './statFields';
 
-export interface IUser extends Document {
+export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
   discordId: string;
   ign: string;
-  elo: number;
+  kdr?: number;
+  wlr?: number;
   ownedThemes?: string[];
   currentTheme?: string;
   seasonNumber?: number;
   chapterNumber?: number;
-  level: number;
-  experience: number;
-  wins: number;
-  losses: number;
-  games: number;
-  mvps: number;
-  kills: number;
-  deaths: number;
-  bedBroken: number;
-  finalKills: number;
-  diamonds?: number;
-  irons?: number;
-  gold?: number;
-  emeralds?: number;
-  blocksPlaced?: number;
-  winstreak?: number;
-  losestreak?: number;
-  kdr?: number;
-  wlr?: number;
   ismuted?: boolean;
   isfrozen?: boolean;
   isbanned?: boolean;

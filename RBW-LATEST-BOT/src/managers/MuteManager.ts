@@ -1,8 +1,6 @@
-import User from '../models/User';
 import config from '../config/config';
 import { Guild } from 'discord.js';
 import { parseDuration } from '../utils/parseDuration';
-import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
 import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
 import {
   PunishmentOperation,
@@ -12,7 +10,7 @@ import {
   sendPunishmentNotification,
   sendWebSocketNotification,
   handleOperationError,
-  batchProcessExpired
+  autoExpirePunishments
 } from './punishmentHelpers';
 
 export class MuteManager {
@@ -160,61 +158,26 @@ export class MuteManager {
 
   public static async autoUnmute(guild: Guild): Promise<number> {
     const instance = MuteManager.getInstance();
-    let unmuteCount = 0;
 
     try {
-      const now = new Date();
-      const users = await User.find({
-        ismuted: true,
-        'mutes.0': { $exists: true }
-      }).select('discordId mutes ign').limit(100);
-
-      const expiredUsers: Array<{ user: any; lastMute: any }> = [];
-
-      for (const user of users) {
-        try {
-          const lastMute = user.mutes[user.mutes.length - 1];
-          if (lastMute && lastMute.duration > 0) {
-            const muteExpiry = new Date(lastMute.date.getTime() + lastMute.duration * 60000);
-            if (now >= muteExpiry) {
-              expiredUsers.push({ user, lastMute });
-            }
-          }
-        } catch (error) {
-          console.error(`[MuteManager] Error checking mute expiry for user ${user.discordId}:`, error);
-          instance.stats.errors++;
-        }
-      }
-
-      unmuteCount = await batchProcessExpired(
-        expiredUsers,
-        async ({ user, lastMute }) => {
-          try {
-            await MuteManager.unmute(guild, user.discordId, 'system', 'Mute expired');
-            console.log(`[MuteManager] Auto-unmuted ${user.ign || user.discordId} (expired: ${lastMute.date})`);
-            return true;
-          } catch (error) {
-            console.error(`[MuteManager] Failed to auto-unmute ${user.discordId}:`, error);
-            instance.stats.errors++;
-            return false;
-          }
+      const unmuteCount = await autoExpirePunishments(guild, {
+        typeName: 'mute',
+        statusField: 'ismuted',
+        recordsField: 'mutes',
+        selectFields: 'discordId mutes ign',
+        processExpired: async (g, userId) => {
+          await MuteManager.unmute(g, userId, 'system', 'Mute expired');
         },
-        8,
-        500
-      );
+        logPrefix: 'MuteManager'
+      });
 
       instance.stats.expired += unmuteCount;
-
-      if (unmuteCount > 0) {
-        console.log(`[MuteManager] Auto-unmuted ${unmuteCount} users with expired mutes`);
-      }
-
       return unmuteCount;
 
     } catch (error) {
       console.error('[MuteManager] Error in auto-unmute process:', error);
       instance.stats.errors++;
-      return unmuteCount;
+      return 0;
     }
   }
 }

@@ -1,5 +1,6 @@
 import config from '../config/config';
 import { Guild } from 'discord.js';
+import User from '../models/User';
 import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
 import { generatePunishmentId } from './punishmentBase';
 
@@ -134,4 +135,63 @@ export async function batchProcessExpired<T>(
     }
   }
   return successCount;
+}
+
+export interface AutoExpireConfig {
+  typeName: string;
+  statusField: 'isbanned' | 'ismuted';
+  recordsField: 'bans' | 'mutes';
+  selectFields: string;
+  processExpired: (guild: Guild, userId: string) => Promise<void>;
+  logPrefix: string;
+}
+
+export async function autoExpirePunishments(
+  guild: Guild,
+  config: AutoExpireConfig
+): Promise<number> {
+  const now = new Date();
+  const users = await User.find({
+    [config.statusField]: true,
+    [`${config.recordsField}.0`]: { $exists: true }
+  }).select(`discordId ${config.recordsField} ign`).limit(100);
+
+  const expiredUsers: Array<{ user: any; lastRecord: any }> = [];
+
+  for (const user of users) {
+    try {
+      const records = user[config.recordsField] as any[];
+      const lastRecord = records[records.length - 1];
+      if (lastRecord && lastRecord.duration > 0) {
+        const expiry = new Date(lastRecord.date.getTime() + lastRecord.duration * 60000);
+        if (now >= expiry) {
+          expiredUsers.push({ user, lastRecord });
+        }
+      }
+    } catch (error) {
+      console.error(`[${config.logPrefix}] Error checking expiry for user ${user.discordId}:`, error);
+    }
+  }
+
+  const count = await batchProcessExpired(
+    expiredUsers,
+    async ({ user, lastRecord }) => {
+      try {
+        await config.processExpired(guild, user.discordId);
+        console.log(`[${config.logPrefix}] Auto-resolved ${user.ign || user.discordId} (expired: ${lastRecord.date})`);
+        return true;
+      } catch (error) {
+        console.error(`[${config.logPrefix}] Failed to auto-resolve ${user.discordId}:`, error);
+        return false;
+      }
+    },
+    5,
+    1000
+  );
+
+  if (count > 0) {
+    console.log(`[${config.logPrefix}] Auto-resolved ${count} expired ${config.typeName}s`);
+  }
+
+  return count;
 }

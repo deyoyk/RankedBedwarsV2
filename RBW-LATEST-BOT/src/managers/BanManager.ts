@@ -1,8 +1,6 @@
-import User from '../models/User';
 import config from '../config/config';
 import { Guild } from 'discord.js';
 import { parseDuration } from '../utils/parseDuration';
-import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
 import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
 import {
   PunishmentOperation,
@@ -12,7 +10,7 @@ import {
   sendPunishmentNotification,
   sendWebSocketNotification,
   handleOperationError,
-  batchProcessExpired
+  autoExpirePunishments
 } from './punishmentHelpers';
 
 export class BanManager {
@@ -174,61 +172,26 @@ export class BanManager {
 
   public static async autoUnban(guild: Guild): Promise<number> {
     const instance = BanManager.getInstance();
-    let unbanCount = 0;
 
     try {
-      const now = new Date();
-      const users = await User.find({
-        isbanned: true,
-        'bans.0': { $exists: true }
-      }).select('discordId bans ign').limit(100);
-
-      const expiredUsers: Array<{ user: any; lastBan: any }> = [];
-
-      for (const user of users) {
-        try {
-          const lastBan = user.bans[user.bans.length - 1];
-          if (lastBan && lastBan.duration > 0) {
-            const banExpiry = new Date(lastBan.date.getTime() + lastBan.duration * 60000);
-            if (now >= banExpiry) {
-              expiredUsers.push({ user, lastBan });
-            }
-          }
-        } catch (error) {
-          console.error(`[BanManager] Error checking ban expiry for user ${user.discordId}:`, error);
-          instance.stats.errors++;
-        }
-      }
-
-      unbanCount = await batchProcessExpired(
-        expiredUsers,
-        async ({ user, lastBan }) => {
-          try {
-            await BanManager.unban(guild, user.discordId, 'system', 'Ban expired');
-            console.log(`[BanManager] Auto-unbanned ${user.ign || user.discordId} (expired: ${lastBan.date})`);
-            return true;
-          } catch (error) {
-            console.error(`[BanManager] Failed to auto-unban ${user.discordId}:`, error);
-            instance.stats.errors++;
-            return false;
-          }
+      const unbanCount = await autoExpirePunishments(guild, {
+        typeName: 'ban',
+        statusField: 'isbanned',
+        recordsField: 'bans',
+        selectFields: 'discordId bans ign',
+        processExpired: async (g, userId) => {
+          await BanManager.unban(g, userId, 'system', 'Ban expired');
         },
-        5,
-        1000
-      );
+        logPrefix: 'BanManager'
+      });
 
       instance.stats.expired += unbanCount;
-
-      if (unbanCount > 0) {
-        console.log(`[BanManager] Auto-unbanned ${unbanCount} users with expired bans`);
-      }
-
       return unbanCount;
 
     } catch (error) {
       console.error('[BanManager] Error in auto-unban process:', error);
       instance.stats.errors++;
-      return unbanCount;
+      return 0;
     }
   }
 }
