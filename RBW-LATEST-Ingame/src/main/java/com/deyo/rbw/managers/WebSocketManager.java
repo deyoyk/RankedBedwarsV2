@@ -224,6 +224,10 @@ public class WebSocketManager {
             JsonObject json;
             try {
                 json = JsonParser.parseString(message).getAsJsonObject();
+                if (!json.has("type")) {
+                    plugin.getLogger().warning("Received WebSocket message without 'type' field: " + message);
+                    return;
+                }
                 String type = json.get("type").getAsString();
                 switch (type) {
                     case "auth_success":
@@ -248,13 +252,8 @@ public class WebSocketManager {
                     case "pong":
                         if (json.has("ping_id")) {
                             String pingId = json.get("ping_id").getAsString();
-                            for (org.bukkit.plugin.Plugin p : org.bukkit.Bukkit.getPluginManager().getPlugins()) {
-                                if (p instanceof com.deyo.rbw.RankedBedwars) {
-                                    com.deyo.rbw.RankedBedwars rbw = (com.deyo.rbw.RankedBedwars) p;
-                                    if (rbw.getAdminCommand() != null) {
-                                        rbw.getAdminCommand().handleWebSocketPong(pingId);
-                                    }
-                                }
+                            if (plugin.getAdminCommand() != null) {
+                                plugin.getAdminCommand().handleWebSocketPong(pingId);
                             }
                         }
                         break;
@@ -573,14 +572,6 @@ public class WebSocketManager {
     }
     private void scheduleMapDataSending() {
         sendMapDataIfReady(0);
-        Bukkit.getScheduler().runTaskTimerAsynchronously(plugin, () -> {
-            if (isConnected() && plugin.getMapManager() != null && !plugin.getMapManager().getMapNames().isEmpty()) {
-                Bukkit.getScheduler().runTask(plugin, () -> {
-                    plugin.getMapManager().sendMapInfoToBot();
-                    plugin.debug("Auto-sent map data to WebSocket server");
-                });
-            }
-        }, 20L, 20L);
     }
     private void sendMapDataIfReady(int attempt) {
         if (!isConnected()) {
@@ -669,18 +660,7 @@ public class WebSocketManager {
         }, currentDelay * 20L);
     }
     public boolean isConnected() {
-        boolean connected = client != null && client.isOpen();
-        if (connected) {
-            ensureDataSync();
-        }
-        return connected;
-    }
-    private void ensureDataSync() {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            if (plugin.getMapManager() != null && !plugin.getMapManager().getMapNames().isEmpty()) {
-                plugin.debug("Ensuring WebSocket data synchronization");
-            }
-        });
+        return client != null && client.isOpen();
     }
     public void shutdown() {
         plugin.getLogger().info("Shutting down WebSocket connection...");

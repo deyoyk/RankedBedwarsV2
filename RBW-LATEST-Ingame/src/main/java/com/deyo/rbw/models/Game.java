@@ -4,13 +4,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * @author deyo
- * @created 2025-06-26
- * @updated 2025-06-26
- */
-
- 
 public class Game {
     private final String gameId;
     private final String map;
@@ -20,10 +13,9 @@ public class Game {
     private final List<String> mvps;
     private final List<String> bedBreakers;
     private final long startTime;
-    private final int duration;
+    private int duration;
     private final String date;
 
-    
     private final Map<String, Integer> playerKills = new HashMap<>();
     private final Map<String, Integer> playerDeaths = new HashMap<>();
     private final Map<String, Integer> playerFinalKills = new HashMap<>();
@@ -62,6 +54,8 @@ public class Game {
     public int getDuration() { return duration; }
     public String getDate() { return date; }
 
+    public void setDuration(int duration) { this.duration = duration; }
+
     public Map<String, Integer> getPlayerKills() { return playerKills; }
     public Map<String, Integer> getPlayerDeaths() { return playerDeaths; }
     public Map<String, Integer> getPlayerFinalKills() { return playerFinalKills; }
@@ -74,32 +68,18 @@ public class Game {
     public Map<String, Boolean> getPlayerTeamWon() { return playerTeamWon; }
     public Map<String, String> getPlayerTeamName() { return playerTeamName; }
     public Map<String, Boolean> getPlayerBedBroken() { return playerBedBroken; }
-    
 
     public int getWinningTeamNumber() {
-        
-        boolean team1Won = false;
         for (String player : team1) {
             if (playerTeamWon.getOrDefault(player, false)) {
-                team1Won = true;
-                break;
+                return 1;
             }
         }
-        
-        
-        boolean team2Won = false;
         for (String player : team2) {
             if (playerTeamWon.getOrDefault(player, false)) {
-                team2Won = true;
-                break;
+                return 2;
             }
         }
-        
-        
-        if (team2Won && !team1Won) {
-            return 2;
-        } else {
-            return 1; 
-        }
+        return 1;
     }
 }

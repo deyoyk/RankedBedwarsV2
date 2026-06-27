@@ -47,7 +47,6 @@ public class BedwarsAPIManager {
         
         
         plugin.getLogger().severe("No supported BedWars plugin found! Please install MBedwars or BedWars1058.");
-        initialized = true;
         return false;
     }
 

@@ -39,10 +39,16 @@ public class BedWars1058Listener implements Listener {
     
     public BedWars1058Listener(RankedBedwars plugin) {
         this.plugin = plugin;
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::cleanupStaleData, 6000L, 6000L);
+    }
+
+    private void cleanupStaleData() {
+        long now = System.currentTimeMillis();
+        recentPvpKills.entrySet().removeIf(entry -> (now - entry.getValue()) > 300_000);
     }
 
     @EventHandler
-    public void TeamAssigner(TeamAssignEvent event){
+    public void onTeamAssign(TeamAssignEvent event){
         IArena arena = event.getArena();
         if (gameTrackers.containsKey(arena.getArenaName())) {
             event.setCancelled(true);
@@ -319,36 +325,50 @@ public class BedWars1058Listener implements Listener {
         BW1058GameTracker gameTracker = gameTrackers.get(arenaName);
         if (gameTracker == null || arena.getPlayers().isEmpty()) return;
         
+        ITeam winningTeam = null;
+        try {
+            winningTeam = event.getWinningTeam();
+        } catch (Exception ignored) {}
         
-        ITeam winningTeam = findWinningTeam(arena);
+        if (winningTeam == null) {
+            winningTeam = findLastStandingTeam(arena);
+        }
+        
         if (winningTeam != null) {
             gameTracker.recordGameEnd(winningTeam);
 
-            
             Game game = convertToGame(gameTracker);
             
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 if (plugin.getWebSocketManager() != null && plugin.getWebSocketManager().isConnected()) {
-                    
                     plugin.getWebSocketManager().sendGameScoring(game);
                     plugin.debug("Sent game scoring data via WebSocket for game #" + game.getGameId());
                 } else {
                     plugin.getLogger().warning("WebSocket is unavailable, could not send game data");
                 }
                 
-                
                 plugin.getGameDataManager().saveGameResultData(game);
             });
         }
         
-        
         plugin.getMapManager().unlockMap(arenaName);
         gameTrackers.remove(arenaName);
         preGamePlayers.remove(arenaName);
+        
+        for (String playerName : gameTracker.playerKills.keySet()) {
+            recentPvpKills.remove(playerName);
+        }
     }
     
-    private ITeam findWinningTeam(IArena arena) {
-        
+    private ITeam findLastStandingTeam(IArena arena) {
+        ITeam lastTeam = null;
+        for (ITeam team : arena.getTeams()) {
+            if (team.getMembers().isEmpty()) continue;
+            if (!team.getBed() || !team.getMembers().isEmpty()) {
+                lastTeam = team;
+            }
+        }
+        if (lastTeam != null) return lastTeam;
         for (ITeam team : arena.getTeams()) {
             if (!team.getMembers().isEmpty()) {
                 return team;

@@ -176,10 +176,6 @@ public class RankedBedwars extends JavaPlugin {
         return placeholderExpansion;
     }
 
-    public com.deyo.rbw.bedwars.BedwarsAPIManager getbedwarsAPIManager() {
-        return new com.deyo.rbw.bedwars.BedwarsAPIManager();
-    }
-
     public boolean isBedWars1058() {
         return com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable() && 
                com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getName().equals("BedWars1058");

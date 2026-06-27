@@ -27,9 +27,14 @@ public class BedWars1058Implementation implements BedwarsAPI {
         this.plugin = plugin;
         
         try {
-            this.bedwars1058API = Bukkit.getServicesManager().getRegistration(BedWars.class).getProvider();
+            var registration = Bukkit.getServicesManager().getRegistration(BedWars.class);
+            if (registration == null) {
+                plugin.getLogger().severe("Failed to get BedWars1058 API registration!");
+                return;
+            }
+            this.bedwars1058API = registration.getProvider();
             if (this.bedwars1058API == null) {
-                plugin.getLogger().severe("Failed to get BedWars1058 API!");
+                plugin.getLogger().severe("Failed to get BedWars1058 API provider!");
             } else {
                 plugin.getLogger().info("Successfully initialized BedWars1058 API");
             }
@@ -217,7 +222,7 @@ public class BedWars1058Implementation implements BedwarsAPI {
     }
     
     
-    private static final java.util.Map<String, TeamAssignment> teamAssignments = new ConcurrentHashMap<>();
+    private final java.util.Map<String, TeamAssignment> teamAssignments = new ConcurrentHashMap<>();
     
     public static class TeamAssignment {
         private final List<String> team1;

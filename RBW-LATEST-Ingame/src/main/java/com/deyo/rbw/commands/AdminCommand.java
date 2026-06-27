@@ -23,8 +23,22 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     private final ConcurrentHashMap<String, Long> pendingPings = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CommandSender> pingSenders = new ConcurrentHashMap<>();
 
+    private static final long PING_TIMEOUT_MS = 30_000;
+
     public AdminCommand(RankedBedwars plugin) {
         this.plugin = plugin;
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::cleanupExpiredPings, 600L, 600L);
+    }
+
+    private void cleanupExpiredPings() {
+        long now = System.currentTimeMillis();
+        pendingPings.entrySet().removeIf(entry -> {
+            if ((now - entry.getValue()) > PING_TIMEOUT_MS) {
+                pingSenders.remove(entry.getKey());
+                return true;
+            }
+            return false;
+        });
     }
 
     @Override

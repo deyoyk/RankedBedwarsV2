@@ -6,30 +6,43 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import org.bukkit.configuration.file.FileConfiguration;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
 import java.lang.reflect.Type;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
 public class APIClient {
     private final String baseUrl;
     private final Gson gson;
     private final Logger logger;
+    private final HttpClient httpClient;
+    private final ExecutorService executor;
 
     public APIClient(Gson gson, Logger logger, FileConfiguration config) {
         this.gson = gson;
         this.logger = logger;
-        
-        String host = "websocket.deyo.lol";
-        int port = config.getInt("port", 25506);
+        this.executor = Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "RBW-APIClient");
+            t.setDaemon(true);
+            return t;
+        });
+        this.httpClient = HttpClient.newBuilder()
+                .executor(executor)
+                .connectTimeout(Duration.ofSeconds(5))
+                .build();
+
+        String host = config.getString("api.host", "websocket.deyo.lol");
+        int port = config.getInt("api.port", 25506);
         String endpoint = "/rbw/api";
-        
+
         this.baseUrl = "http://" + host + ":" + port + endpoint;
         logger.info("API Client initialized with base URL: " + this.baseUrl);
     }
@@ -49,7 +62,7 @@ public class APIClient {
                 logger.warning("Failed to fetch user data for " + ign + ": " + e.getMessage());
             }
             return createDefaultUserData();
-        });
+        }, executor);
     }
 
     public CompletableFuture<Map<Integer, LeaderboardEntry>> getLeaderboard(String mode, int page) {
@@ -70,7 +83,7 @@ public class APIClient {
                         try {
                             int position = Integer.parseInt(entry.getKey());
                             leaderboard.put(position, entry.getValue());
-                        } catch (NumberFormatException e) {
+                        } catch (NumberFormatException ignored) {
                         }
                     }
                     return leaderboard;
@@ -79,29 +92,23 @@ public class APIClient {
                 logger.warning("Failed to fetch leaderboard for mode " + mode + " page " + page + ": " + e.getMessage());
             }
             return new HashMap<>();
-        });
+        }, executor);
     }
 
-    private String makeHttpRequest(String urlString) throws IOException {
-        URL url = new URL(urlString);
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(5000);
-        connection.setReadTimeout(5000);
+    private String makeHttpRequest(String urlString) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(urlString))
+                .timeout(Duration.ofSeconds(5))
+                .GET()
+                .build();
 
-        int responseCode = connection.getResponseCode();
-        if (responseCode == HttpURLConnection.HTTP_OK) {
-            BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-            StringBuilder response = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
-            }
-            reader.close();
-            return response.toString();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            return response.body();
         } else {
-            logger.warning("HTTP request failed with response code: " + responseCode);
-            if (responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
+            logger.warning("HTTP request failed with response code: " + response.statusCode());
+            if (response.statusCode() == 404) {
                 return "NaN";
             }
             return null;

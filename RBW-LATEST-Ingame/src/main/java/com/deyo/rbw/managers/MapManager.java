@@ -214,7 +214,19 @@ public class MapManager {
 
 
     private ArenaGroupInfo extractArenaGroupInfo(String physicalArenaName) {
-        return new ArenaGroupInfo(physicalArenaName, ArenaVariant.VANILLA);
+        ArenaVariant detectedVariant = ArenaVariant.VANILLA;
+        String groupId = physicalArenaName;
+        
+        for (ArenaVariant variant : ArenaVariant.values()) {
+            String prefix = variant.getPrefix();
+            if (physicalArenaName.startsWith(prefix)) {
+                detectedVariant = variant;
+                groupId = physicalArenaName.substring(prefix.length());
+                break;
+            }
+        }
+        
+        return new ArenaGroupInfo(groupId, detectedVariant);
     }
 
     

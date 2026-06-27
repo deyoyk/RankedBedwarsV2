@@ -9,6 +9,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -20,8 +21,8 @@ import java.util.logging.Level;
 public class GameDataManager {
     
     private final RankedBedwars plugin;
-    private final SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-    private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH-mm-ss");
+    private final ThreadLocal<SimpleDateFormat> dateFormat = ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd"));
+    private final ThreadLocal<SimpleDateFormat> timeFormat = ThreadLocal.withInitial(() -> new SimpleDateFormat("HH-mm-ss"));
     private final File dataFolder;
     private final boolean enabled;
     
@@ -51,7 +52,7 @@ public class GameDataManager {
                 warpData.addProperty("map", mapName);
                 warpData.addProperty("is_ranked", isRanked);
                 warpData.addProperty("timestamp", System.currentTimeMillis());
-                warpData.addProperty("date", dateFormat.format(new Date()));
+                warpData.addProperty("date", dateFormat.get().format(new Date()));
                 
                 warpData.add("team1", team1Json);
                 warpData.add("team2", team2Json);
@@ -85,13 +86,13 @@ public class GameDataManager {
         });
     }
     private void saveToFile(JsonObject data, String gameId, String type) throws IOException {
-        String date = dateFormat.format(new Date());
+        String date = dateFormat.get().format(new Date());
         File dateFolder = new File(dataFolder, date);
         if (!dateFolder.exists() && !dateFolder.mkdirs()) {
             plugin.getLogger().warning("Failed to create date directory: " + dateFolder.getAbsolutePath());
             return;
         }
-        String timestamp = timeFormat.format(new Date());
+        String timestamp = timeFormat.get().format(new Date());
         String filename = String.format("game_%s_%s_%s.json", gameId, type, timestamp);
         File file = new File(dateFolder, filename);
         
@@ -102,43 +103,31 @@ public class GameDataManager {
     }
     
     private void appendToWarpFile(JsonObject warpData, String gameId) throws IOException {
-        String date = dateFormat.format(new Date());
+        String date = dateFormat.get().format(new Date());
         File dateFolder = new File(dataFolder, date);
         if (!dateFolder.exists() && !dateFolder.mkdirs()) {
             plugin.getLogger().warning("Failed to create date directory: " + dateFolder.getAbsolutePath());
             return;
         }
 
-        
         String filename = String.format("game_%s_warp.json", gameId);
         File file = new File(dateFolder, filename);
         
         JsonArray warpsArray;
         
-        
         if (file.exists()) {
-            
-            java.io.FileReader reader = new java.io.FileReader(file);
-            try {
-                
-                warpsArray = JsonParser.parseReader(reader).getAsJsonArray();
-            } catch (Exception e) {
-                
-                reader.close();
-                reader = new java.io.FileReader(file);
-                JsonObject existingObject = JsonParser.parseReader(reader).getAsJsonObject();
-                warpsArray = new JsonArray();
-                warpsArray.add(existingObject);
+            try (FileReader reader = new FileReader(file)) {
+                try {
+                    warpsArray = JsonParser.parseReader(reader).getAsJsonArray();
+                } catch (Exception e) {
+                    warpsArray = new JsonArray();
+                }
             }
-            reader.close();
         } else {
-            
             warpsArray = new JsonArray();
         }
         
-        
         warpsArray.add(warpData);
-        
         
         try (FileWriter writer = new FileWriter(file)) {
             plugin.getGson().toJson(warpsArray, writer);

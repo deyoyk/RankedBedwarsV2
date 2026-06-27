@@ -41,6 +41,12 @@ public class MBedwarsListener implements Listener {
 
     public MBedwarsListener(RankedBedwars plugin) {
         this.plugin = plugin;
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::cleanupStaleData, 6000L, 6000L);
+    }
+
+    private void cleanupStaleData() {
+        long now = System.currentTimeMillis();
+        recentPvpKills.entrySet().removeIf(entry -> (now - entry.getValue()) > 300_000);
     }
 
 
@@ -230,7 +236,7 @@ public class MBedwarsListener implements Listener {
     }
 
     @EventHandler
-    public void onPlayerAreanaLeave(PlayerQuitArenaEvent event){
+    public void onPlayerArenaLeave(PlayerQuitArenaEvent event){
         Player player = event.getPlayer();
         Arena arena = event.getArena();
         if (arena == null) return;

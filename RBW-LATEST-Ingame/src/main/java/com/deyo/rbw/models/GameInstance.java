@@ -184,12 +184,7 @@ public class GameInstance {
         game.getTeam1().addAll(team1);
         game.getTeam2().clear();
         game.getTeam2().addAll(team2);
-        try {
-            java.lang.reflect.Field durationField = Game.class.getDeclaredField("duration");
-            durationField.setAccessible(true);
-            durationField.setInt(game, duration);
-        } catch (Exception ignored) {}
-        // Populate playerBedBroken
+        game.setDuration(duration);
         Set<String> brokenTeams = brokenBeds.keySet();
         for (Map.Entry<String, String> entry : playerTeams.entrySet()) {
             String player = entry.getKey();
