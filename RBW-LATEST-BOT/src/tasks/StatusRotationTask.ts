@@ -31,14 +31,6 @@ export class StatusRotationTask {
     console.log('[StatusRotationTask] Started status rotation (changes every 10 seconds)');
   }
 
-  public stop() {
-    if (this.statusInterval) {
-      clearInterval(this.statusInterval);
-      this.statusInterval = null;
-      console.log('[StatusRotationTask] Stopped status rotation');
-    }
-  }
-
   private rotateStatus() {
     try {
       const status = this.statuses[this.currentIndex];

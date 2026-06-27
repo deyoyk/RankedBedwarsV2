@@ -1,7 +1,3 @@
-export function withImage(embedObj: ReturnType<typeof betterEmbed>, url: string) {
-  embedObj.builder.setImage(url);
-  return embedObj;
-}
 import { EmbedBuilder } from 'discord.js';
 import config from '../config/config';
 
@@ -59,28 +55,6 @@ export function betterEmbed(
     builder, 
   };
 }
-
-
-export function withThumbnail(embedObj: ReturnType<typeof betterEmbed>, url: string) {
-  embedObj.builder.setThumbnail(url);
-  return embedObj;
-}
-
-export function withIcon(embedObj: ReturnType<typeof betterEmbed>, url: string) {
-  
-  embedObj.builder.setAuthor({ name: embedObj.builder.data.title || '', iconURL: url });
-  return embedObj;
-}
-
-export function withFooter(embedObj: ReturnType<typeof betterEmbed>, text: string, iconURL?: string) {
-  embedObj.builder.setFooter({ text, iconURL });
-  return embedObj;
-}
-
-
-
-
-
 
 
 export function errorEmbed(

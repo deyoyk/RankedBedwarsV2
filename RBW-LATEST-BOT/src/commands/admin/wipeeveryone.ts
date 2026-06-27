@@ -1,103 +1,37 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
-import { safeReply } from '../../utils/safeReply';
+import { Message, ChatInputCommandInteraction, EmbedBuilder, ButtonStyle } from 'discord.js';
 import User from '../../models/User';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { fix } from '../../utils/fix';
+import { executeWithConfirmation } from '../../utils/confirmAction';
+import { successEmbed } from '../../utils/betterembed';
+import { safeReply } from '../../utils/safeReply';
 
 export async function wipeeveryone(interaction: Message | ChatInputCommandInteraction) {
-  if (!interaction.guild) {
-    await safeReply(interaction, errorEmbed('This command can only be used in a server.', 'Wipe Everyone Error'));
+  const users = await User.find();
+  if (!users.length) {
+    const { errorEmbed } = await import('../../utils/betterembed');
+    await safeReply(interaction, errorEmbed('No users found in the database.', 'Wipe Everyone Error'));
     return;
   }
 
-  try {
-    const users = await User.find();
-    if (!users.length) {
-      await safeReply(interaction, errorEmbed('No users found in the database.', 'Wipe Everyone Error'));
-      return;
-    }
+  const total = users.length;
 
-    const total = users.length;
-    const timestamp = Math.floor(Date.now() / 1000);
-
-    const confirmEmbed = new EmbedBuilder()
-      .setTitle('⚠️ Confirm Wipe Everyone Operation')
-      .setColor('#00AAAA')
-      .setDescription(`Are you sure you want to wipe all stats for **${total}** users?\n\n**⚠️ WARNING: This action is irreversible!**`)
-      .addFields(
-        { name: 'What will be wiped', value: '• ELO\n• Wins/Losses\n• Games played\n• MVPs\n• Kills/Deaths\n• Bed breaks/Final kills\n• Resource stats\n• Win/Lose streaks\n• KDR/WLR\n• Recent games\n• Daily ELO history', inline: false },
-        { name: 'What will be preserved', value: '• Bans\n• Mutes\n• Strikes\n• User registration\n• Party information', inline: false },
-        { name: 'Users to process', value: `${total}`, inline: true },
-        { name: 'Estimated time', value: `${Math.ceil(total / 10)} seconds`, inline: true },
-        { name: 'Rate limiting', value: '1 second between batches', inline: true }
-      )
-      .setFooter({ text: 'This confirmation will expire in 30 seconds' })
-      .setTimestamp();
-
-    const confirmButton = new ButtonBuilder()
-      .setCustomId('wipeeveryone_confirm')
-      .setLabel('🗑️ Confirm Wipe')
-      .setStyle(ButtonStyle.Danger);
-
-    const denyButton = new ButtonBuilder()
-      .setCustomId('wipeeveryone_deny')
-      .setLabel('❌ Cancel')
-      .setStyle(ButtonStyle.Secondary);
-
-    const row = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(confirmButton, denyButton);
-
-    const response = await safeReply(interaction, {
-      embeds: [confirmEmbed],
-      components: [row],
-      fetchReply: true
-    });
-
-    const message = response instanceof Message ? response : response;
-
-    try {
-      const confirmation = await message.awaitMessageComponent({
-        filter: (i) => {
-          return (i.customId === 'wipeeveryone_confirm' || i.customId === 'wipeeveryone_deny') && 
-                 i.user.id === (interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id);
-        },
-        time: 30000,
-        componentType: ComponentType.Button
-      });
-
-      if (confirmation.customId === 'wipeeveryone_deny') {
-        await confirmation.update({
-          embeds: [errorEmbed('Wipe everyone operation cancelled.', 'Operation Cancelled').builder],
-          components: []
-        });
-        return;
-      }
-
-      await confirmation.update({
-        embeds: [successEmbed('Starting wipe everyone operation...', 'Wipe Everyone Started').builder],
-        components: []
-      });
-
-      await executeWipeEveryone(interaction, users);
-
-    } catch (timeoutError) {
-      const timeoutEmbed = new EmbedBuilder()
-        .setTitle('⏰ Confirmation Expired')
-        .setColor('#00AAAA')
-        .setDescription('The confirmation has expired. Please run the command again if you want to proceed.')
-        .setFooter({ text: 'Deyo.lol' })
-        .setTimestamp();
-
-      await message.edit({
-        embeds: [timeoutEmbed],
-        components: []
-      });
-    }
-
-  } catch (error: any) {
-    console.error('[WipeEveryone] Error in wipeeveryone command:', error);
-    await safeReply(interaction, errorEmbed(`There was an error running wipeeveryone: ${error.message || 'Unknown error'}`, 'Wipe Everyone Error'));
-  }
+  await executeWithConfirmation(interaction, {
+    commandName: 'wipeeveryone',
+    confirmTitle: '⚠️ Confirm Wipe Everyone Operation',
+    confirmDescription: `Are you sure you want to wipe all stats for **${total}** users?\n\n**⚠️ WARNING: This action is irreversible!**`,
+    confirmLabel: '🗑️ Confirm Wipe',
+    confirmStyle: ButtonStyle.Danger,
+    fields: [
+      { name: 'What will be wiped', value: '• ELO\n• Wins/Losses\n• Games played\n• MVPs\n• Kills/Deaths\n• Bed breaks/Final kills\n• Resource stats\n• Win/Lose streaks\n• KDR/WLR\n• Recent games\n• Daily ELO history', inline: false },
+      { name: 'What will be preserved', value: '• Bans\n• Mutes\n• Strikes\n• User registration\n• Party information', inline: false },
+      { name: 'Users to process', value: `${total}`, inline: true },
+      { name: 'Estimated time', value: `${Math.ceil(total / 10)} seconds`, inline: true },
+      { name: 'Rate limiting', value: '1 second between batches', inline: true }
+    ],
+    startMessage: 'Starting wipe everyone operation...',
+    cancelMessage: 'Wipe everyone operation cancelled.',
+    onConfirm: () => executeWipeEveryone(interaction, users)
+  });
 }
 
 async function executeWipeEveryone(interaction: Message | ChatInputCommandInteraction, users: any[]) {

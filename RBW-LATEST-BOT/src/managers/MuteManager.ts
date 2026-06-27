@@ -33,11 +33,7 @@ export class MuteManager {
     autoUnmutes: 0,
     errors: 0
   };
-  private autoUnmuteInterval: NodeJS.Timeout | null = null;
-
-  private constructor() {
-    this.startAutoUnmuteScheduler();
-  }
+  private constructor() {}
 
   public static getInstance(): MuteManager {
     if (!MuteManager.instance) {
@@ -55,71 +51,7 @@ export class MuteManager {
     return result;
   }
 
-  private startAutoUnmuteScheduler(): void {
-    
-    this.autoUnmuteInterval = setInterval(async () => {
-      try {
-        await this.processExpiredMutes();
-      } catch (error) {
-        console.error('[MuteManager] Error in auto-unmute scheduler:', error);
-        this.stats.errors++;
-      }
-    }, 2 * 60 * 1000);
-  }
 
-  private async processExpiredMutes(): Promise<void> {
-    try {
-      const now = new Date();
-      const users = await User.find({ 
-        ismuted: true,
-        'mutes.0': { $exists: true }
-      }).select('discordId mutes ign').limit(50);
-
-      let processedCount = 0;
-      const batchSize = 10;
-
-      for (let i = 0; i < users.length; i += batchSize) {
-        const batch = users.slice(i, i + batchSize);
-        const promises = batch.map(async (user) => {
-          try {
-            const lastMute = user.mutes[user.mutes.length - 1];
-            if (lastMute && lastMute.duration > 0) {
-              const muteExpiry = new Date(lastMute.date.getTime() + lastMute.duration * 60000);
-              if (now >= muteExpiry) {
-                processedCount++;
-                return user.discordId;
-              }
-            }
-          } catch (error) {
-            console.error(`[MuteManager] Error checking mute expiry for user ${user.discordId}:`, error);
-            this.stats.errors++;
-          }
-          return null;
-        });
-
-        const expiredUserIds = (await Promise.allSettled(promises))
-          .filter(result => result.status === 'fulfilled' && result.value)
-          .map(result => (result as PromiseFulfilledResult<string>).value);
-
-        for (const userId of expiredUserIds) {
-          try {
-            console.log(`[MuteManager] Auto-unmuting user ${userId}`);
-            this.stats.autoUnmutes++;
-          } catch (error) {
-            console.error(`[MuteManager] Error auto-unmuting user ${userId}:`, error);
-            this.stats.errors++;
-          }
-        }
-      }
-
-      if (processedCount > 0) {
-        console.log(`[MuteManager] Processed ${processedCount} expired mutes`);
-      }
-    } catch (error) {
-      console.error('[MuteManager] Error processing expired mutes:', error);
-      this.stats.errors++;
-    }
-  }
 
   public static async mute(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | null> {
     const instance = MuteManager.getInstance();
@@ -539,61 +471,5 @@ export class MuteManager {
     } catch (error) {
       console.error(`[MuteManager] Error sending ${type} embed:`, error);
     }
-  }
-
-  
-  public static getStats(): MuteManagerStats {
-    return { ...MuteManager.getInstance().stats };
-  }
-
-  public static getPendingOperations(): MuteOperation[] {
-    return Array.from(MuteManager.getInstance().pendingOperations.values());
-  }
-
-  public static async getMuteInfo(targetId: string): Promise<{
-    isMuted: boolean;
-    muteCount: number;
-    lastMute?: any;
-    timeRemaining?: number;
-  } | null> {
-    try {
-      const user = await User.findOne({ discordId: targetId }).select('ismuted mutes').lean();
-      if (!user) return null;
-
-      const result = {
-        isMuted: user.ismuted || false,
-        muteCount: user.mutes?.length || 0,
-        lastMute: undefined as any,
-        timeRemaining: undefined as number | undefined
-      };
-
-      if (user.mutes && user.mutes.length > 0) {
-        const lastMute = user.mutes[user.mutes.length - 1];
-        result.lastMute = lastMute;
-
-        if (lastMute.duration > 0) {
-          const muteExpiry = new Date(lastMute.date.getTime() + lastMute.duration * 60000);
-          const remaining = muteExpiry.getTime() - Date.now();
-          result.timeRemaining = Math.max(0, remaining);
-        }
-      }
-
-      return result;
-    } catch (error) {
-      console.error(`[MuteManager] Error getting mute info for ${targetId}:`, error);
-      return null;
-    }
-  }
-
-  public static cleanup(): void {
-    const instance = MuteManager.getInstance();
-    
-    if (instance.autoUnmuteInterval) {
-      clearInterval(instance.autoUnmuteInterval);
-      instance.autoUnmuteInterval = null;
-    }
-    
-    instance.pendingOperations.clear();
-    console.log('[MuteManager] Cleanup completed');
   }
 }

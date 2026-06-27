@@ -13,6 +13,7 @@ import { SeasonManager } from '../managers/SeasonManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { getLevelInfo } from '../utils/levelSystem';
 import { WebSocketManager } from '../websocket/WebSocketManager';
+import { escapeRegex } from '../utils/regexEscape';
 
 export class ApiManager {
   private client: Client;
@@ -25,6 +26,12 @@ export class ApiManager {
     this.wsManager.app.use(cors());
 
     this.wsManager.app.use((req, res, next) => {
+      const apiKey = req.headers['x-api-key'] || req.query.key;
+      const authKey = process.env.AUTH_KEY;
+      if (authKey && apiKey !== authKey) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+      }
       next();
     });
 
@@ -79,7 +86,6 @@ export class ApiManager {
 
     this.wsManager.app.get('/rbw/api/user', this.getUserData);
     this.wsManager.app.get('/rbw/api/leaderboard', this.getLeaderboard);
-    this.wsManager.app.get('/rbw/api/user', this.getUserByDiscordId);
     this.wsManager.app.get('/rbw/api/game/:gameid', this.getGameById);
     this.wsManager.app.get('/rbw/api/queues', this.getQueues);
     this.wsManager.app.get('/rbw/api/eloranks', this.getEloRanks);
@@ -127,7 +133,7 @@ export class ApiManager {
     if (discordid) {
       user = await User.findOne({ discordId: discordid });
     } else if (ign) {
-      user = await User.findOne({ ign: new RegExp(`^${ign}$`, 'i') });
+      user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') });
     }
     return user;
   }
@@ -218,7 +224,7 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing IGN or discordid parameter' });
         return;
       }
-      const user = await User.findOne({ ign: new RegExp(`^${ign}$`, 'i') });
+      const user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') });
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
@@ -967,7 +973,7 @@ export class ApiManager {
       }
 
       const users = await User.find({
-        ign: new RegExp(query, 'i')
+        ign: new RegExp(escapeRegex(query), 'i')
       })
         .limit(limit)
         .select('ign discordId elo wins losses level experience');

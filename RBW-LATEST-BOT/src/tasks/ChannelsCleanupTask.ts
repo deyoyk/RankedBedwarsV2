@@ -20,14 +20,6 @@ export class ChannelsCleanupTask {
     console.log('[ChannelsCleanupTask] Started channel cleanup task (runs every 3 hours)');
   }
 
-  public stop() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-      console.log('[ChannelsCleanupTask] Stopped channel cleanup task');
-    }
-  }
-
   private async cleanupOrphanedChannels() {
     try {
       console.log('[ChannelsCleanupTask] Starting channel cleanup...');
@@ -106,11 +98,5 @@ export class ChannelsCleanupTask {
     } catch (error) {
       console.error(`[ChannelsCleanupTask] Error cleaning up ${categoryType} category:`, error);
     }
-  }
-
-  
-  public async triggerCleanup() {
-    console.log('[ChannelsCleanupTask] Manual cleanup triggered');
-    await this.cleanupOrphanedChannels();
   }
 }

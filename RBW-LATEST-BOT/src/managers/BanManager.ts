@@ -33,11 +33,7 @@ export class BanManager {
     autoUnbans: 0,
     errors: 0
   };
-  private autoUnbanInterval: NodeJS.Timeout | null = null;
-
-  private constructor() {
-    this.startAutoUnbanScheduler();
-  }
+  private constructor() {}
 
   public static getInstance(): BanManager {
     if (!BanManager.instance) {
@@ -55,70 +51,7 @@ export class BanManager {
     return result;
   }
 
-  private startAutoUnbanScheduler(): void {
-    this.autoUnbanInterval = setInterval(async () => {
-      try {
-        await this.processExpiredBans();
-      } catch (error) {
-        console.error('[BanManager] Error in auto-unban scheduler:', error);
-        this.stats.errors++;
-      }
-    }, 5 * 60 * 1000);
-  }
 
-  private async processExpiredBans(): Promise<void> {
-    try {
-      const now = new Date();
-      const users = await User.find({ 
-        isbanned: true,
-        'bans.0': { $exists: true }
-      }).select('discordId bans');
-
-      let processedCount = 0;
-      const batchSize = 10;
-
-      for (let i = 0; i < users.length; i += batchSize) {
-        const batch = users.slice(i, i + batchSize);
-        const promises = batch.map(async (user) => {
-          try {
-            const lastBan = user.bans[user.bans.length - 1];
-            if (lastBan && lastBan.duration > 0) {
-              const banExpiry = new Date(lastBan.date.getTime() + lastBan.duration * 60000);
-              if (now >= banExpiry) {
-                processedCount++;
-                return user.discordId;
-              }
-            }
-          } catch (error) {
-            console.error(`[BanManager] Error checking ban expiry for user ${user.discordId}:`, error);
-            this.stats.errors++;
-          }
-          return null;
-        });
-
-        const expiredUserIds = (await Promise.allSettled(promises))
-          .filter(result => result.status === 'fulfilled' && result.value)
-          .map(result => (result as PromiseFulfilledResult<string>).value);
-
-        for (const userId of expiredUserIds) {
-          try {
-            console.log(`[BanManager] Auto-unbanning user ${userId}`);
-            this.stats.autoUnbans++;
-          } catch (error) {
-            console.error(`[BanManager] Error auto-unbanning user ${userId}:`, error);
-            this.stats.errors++;
-          }
-        }
-      }
-
-      if (processedCount > 0) {
-        console.log(`[BanManager] Processed ${processedCount} expired bans`);
-      }
-    } catch (error) {
-      console.error('[BanManager] Error processing expired bans:', error);
-      this.stats.errors++;
-    }
-  }
 
   public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | null> {
     const instance = BanManager.getInstance();
@@ -546,61 +479,5 @@ export class BanManager {
     } catch (error) {
       console.error(`[BanManager] Error sending ${type} embed:`, error);
     }
-  }
-
-  
-  public static getStats(): BanManagerStats {
-    return { ...BanManager.getInstance().stats };
-  }
-
-  public static getPendingOperations(): BanOperation[] {
-    return Array.from(BanManager.getInstance().pendingOperations.values());
-  }
-
-  public static async getBanInfo(targetId: string): Promise<{
-    isBanned: boolean;
-    banCount: number;
-    lastBan?: any;
-    timeRemaining?: number;
-  } | null> {
-    try {
-      const user = await User.findOne({ discordId: targetId }).select('isbanned bans').lean();
-      if (!user) return null;
-
-      const result = {
-        isBanned: user.isbanned || false,
-        banCount: user.bans?.length || 0,
-        lastBan: undefined as any,
-        timeRemaining: undefined as number | undefined
-      };
-
-      if (user.bans && user.bans.length > 0) {
-        const lastBan = user.bans[user.bans.length - 1];
-        result.lastBan = lastBan;
-
-        if (lastBan.duration > 0) {
-          const banExpiry = new Date(lastBan.date.getTime() + lastBan.duration * 60000);
-          const remaining = banExpiry.getTime() - Date.now();
-          result.timeRemaining = Math.max(0, remaining);
-        }
-      }
-
-      return result;
-    } catch (error) {
-      console.error(`[BanManager] Error getting ban info for ${targetId}:`, error);
-      return null;
-    }
-  }
-
-  public static cleanup(): void {
-    const instance = BanManager.getInstance();
-    
-    if (instance.autoUnbanInterval) {
-      clearInterval(instance.autoUnbanInterval);
-      instance.autoUnbanInterval = null;
-    }
-    
-    instance.pendingOperations.clear();
-    console.log('[BanManager] Cleanup completed');
   }
 }

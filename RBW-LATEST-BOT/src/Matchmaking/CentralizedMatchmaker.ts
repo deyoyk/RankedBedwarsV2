@@ -57,8 +57,8 @@ export class CentralizedMatchmaker {
     this.client = client;
     this.wsManager = wsManager;
     this.gameManager = gameManager;
-    this.randomQueueManager = new RandomQueueManager(client, this, wsManager);
-    this.pickingQueueManager = new PickingQueueManager(client, this, wsManager);
+    this.randomQueueManager = new RandomQueueManager(client, gameManager, wsManager);
+    this.pickingQueueManager = new PickingQueueManager(client, gameManager, wsManager);
     this.startQueueMonitor();
     this.initializeMetrics();
     this.startCacheCleanup();
@@ -378,40 +378,6 @@ export class CentralizedMatchmaker {
     }, this.RETRY_DELAY);
   }
 
-  public async processAllQueues(): Promise<MatchmakingResult[]> {
-    try {
-      const allQueues = await Queue.find({ isActive: true }).select('channelId');
-      const results: MatchmakingResult[] = [];
-
-      for (const queue of allQueues) {
-        try {
-          const result = await this.processQueue(queue.channelId);
-          results.push(result);
-
-          if (results.length < allQueues.length) {
-            await this.sleep(500);
-          }
-        } catch (error: any) {
-          console.error(`[CentralizedMatchmaker] Error processing queue ${queue.channelId}:`, error);
-          results.push({
-            success: false,
-            gamesCreated: 0,
-            errors: [error.message || 'Unknown error']
-          });
-        }
-      }
-
-      const totalGames = results.reduce((sum, r) => sum + r.gamesCreated, 0);
-      console.log(`[CentralizedMatchmaker] Processed ${allQueues.length} queues, created ${totalGames} games total`);
-
-      return results;
-
-    } catch (error) {
-      console.error('[CentralizedMatchmaker] Error processing all queues:', error);
-      return [];
-    }
-  }
-
   public scheduleQueueProcessing(queueId: string, immediate: boolean = false): void {
     try {
       const existingTimeout = this.processingLocks.get(queueId);
@@ -465,72 +431,6 @@ export class CentralizedMatchmaker {
       clearTimeout(timeout);
       this.processingLocks.delete(queueId);
     }
-  }
-
-  public getGameManager(): GameManager {
-    return this.gameManager;
-  }
-
-  public getStats(): {
-    activeGames: number;
-    processingQueues: number;
-    queueCounts: Record<string, number>;
-    processingStates: Record<string, ProcessingState>;
-    metrics: Record<string, QueueMetrics>;
-    priorityQueue: Array<{ queueId: string; priority: number; timestamp: number }>;
-    systemHealth: {
-      totalProcessed: number;
-      successRate: number;
-      averageProcessingTime: number;
-      errorRate: number;
-    };
-  } {
-    const queueCounts: Record<string, number> = {};
-    for (const [queueId, players] of queuePlayers.entries()) {
-      queueCounts[queueId] = players.length;
-    }
-
-    const processingStates: Record<string, ProcessingState> = {};
-    for (const [queueId, state] of this.processingStates.entries()) {
-      processingStates[queueId] = { ...state };
-    }
-
-    const metrics: Record<string, QueueMetrics> = {};
-    for (const [queueId, metric] of this.queueMetrics.entries()) {
-      metrics[queueId] = { ...metric };
-    }
-
-    
-    let totalProcessed = 0;
-    let totalSuccess = 0;
-    let totalErrors = 0;
-    let totalProcessingTime = 0;
-    let queueCount = 0;
-
-    for (const metric of this.queueMetrics.values()) {
-      totalProcessed += metric.processedCount;
-      totalSuccess += metric.successCount;
-      totalErrors += metric.errorCount;
-      totalProcessingTime += metric.averageProcessingTime;
-      queueCount++;
-    }
-
-    const systemHealth = {
-      totalProcessed,
-      successRate: totalProcessed > 0 ? (totalSuccess / totalProcessed) * 100 : 0,
-      averageProcessingTime: queueCount > 0 ? totalProcessingTime / queueCount : 0,
-      errorRate: totalProcessed > 0 ? (totalErrors / totalProcessed) * 100 : 0
-    };
-
-    return {
-      activeGames: this.gameManager.getActiveGameCount(),
-      processingQueues: this.processingStates.size,
-      queueCounts,
-      processingStates,
-      metrics,
-      priorityQueue: [...this.priorityQueue],
-      systemHealth
-    };
   }
 
   private async validatePlayers(playerIds: string[], queue: any): Promise<string[]> {
@@ -754,85 +654,5 @@ export class CentralizedMatchmaker {
     } catch (error) {
       console.error('[CentralizedMatchmaker] Error during cleanup:', error);
     }
-  }
-
-  
-  public getQueueHealth(queueId: string): {
-    isHealthy: boolean;
-    issues: string[];
-    recommendations: string[];
-  } {
-    const state = this.processingStates.get(queueId);
-    const metrics = this.queueMetrics.get(queueId);
-    const issues: string[] = [];
-    const recommendations: string[] = [];
-
-    if (!state || !metrics) {
-      return {
-        isHealthy: false,
-        issues: ['Queue not found or not initialized'],
-        recommendations: ['Check if queue exists and is active']
-      };
-    }
-
-    
-    if (metrics.processedCount > 0 && (metrics.errorCount / metrics.processedCount) > 0.3) {
-      issues.push('High error rate detected');
-      recommendations.push('Check queue configuration and player validation');
-    }
-
-    
-    if (metrics.averageProcessingTime > 10000) {
-      issues.push('Slow processing times');
-      recommendations.push('Consider optimizing queue processing logic');
-    }
-
-    
-    if (state.retryCount >= this.MAX_RETRIES) {
-      issues.push('Maximum retries reached');
-      recommendations.push('Queue may need manual intervention');
-    }
-
-    
-    if (state.isProcessing && Date.now() - state.lastProcessed > this.LOCK_TIMEOUT) {
-      issues.push('Queue appears to be stuck');
-      recommendations.push('Consider resetting queue processing state');
-    }
-
-    return {
-      isHealthy: issues.length === 0,
-      issues,
-      recommendations
-    };
-  }
-
-  public resetQueueHealth(queueId: string): boolean {
-    try {
-      this.resetProcessingState(queueId);
-
-      const metrics = this.queueMetrics.get(queueId);
-      if (metrics) {
-        metrics.errorCount = 0;
-        metrics.processedCount = Math.max(1, metrics.processedCount);
-        metrics.successCount = Math.max(1, metrics.successCount);
-      }
-
-      console.log(`[CentralizedMatchmaker] Reset health for queue ${queueId}`);
-      return true;
-    } catch (error) {
-      console.error(`[CentralizedMatchmaker] Error resetting queue health for ${queueId}:`, error);
-      return false;
-    }
-  }
-
-  public isPlayerInAnyQueue(discordId: string): boolean {
-    
-    for (const [queueId, players] of queuePlayers.entries()) {
-      if (players.includes(discordId)) {
-        return true;
-      }
-    }
-
-    return false;
   }
 }

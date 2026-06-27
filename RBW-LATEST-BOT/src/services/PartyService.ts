@@ -23,19 +23,6 @@ export class PartyService {
   private static readonly MAX_MEMBERS = 8;
   private static readonly MIN_MEMBERS = 2;
 
-  static async validateUser(userId: string): Promise<PartyValidationResult> {
-    try {
-      const user = await UserModel.findOne({ discordId: userId });
-      if (!user) {
-        return { isValid: false, error: 'User not registered' };
-      }
-      return { isValid: true, user };
-    } catch (error) {
-      console.error('[PartyService] Error validating user:', error);
-      return { isValid: false, error: 'Database error' };
-    }
-  }
-
   static async validatePartyAccess(userId: string, requireLeader: boolean = false): Promise<PartyValidationResult> {
     try {
       const user = await UserModel.findOne({ discordId: userId });

@@ -2,7 +2,7 @@ import { config as dotenvConfig } from 'dotenv';
 
 dotenvConfig();
 
-export interface Config {
+interface Config {
   embed?: {
     defaultText?: string;
     defaultColor?: string;

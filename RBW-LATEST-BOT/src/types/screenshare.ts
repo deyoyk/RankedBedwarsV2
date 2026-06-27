@@ -39,18 +39,3 @@ export interface ScreenshareChannelConfig {
   frozenRoleId?: string;
 }
 
-export interface ScreenshareThreadInfo {
-  ign: string;
-  sessionId: string;
-  threadId: string;
-  expiresAt: number;
-}
-
-export type ScreenshareStatus = 'pending' | 'frozen' | 'closed' | 'expired' | 'cancelled';
-
-export interface ScreenshareAction {
-  action: 'freeze' | 'admit' | 'deny' | 'close' | 'expire' | 'cancel';
-  userId: string;
-  timestamp: Date;
-  context?: string;
-}

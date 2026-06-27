@@ -29,15 +29,10 @@ export class ScreenshareCleanupTask {
     console.log('[ScreenshareCleanupTask] Started screenshare cleanup task (runs every 2 minutes)');
     
     
+        
+    
+    
     setTimeout(() => this.cleanupExpiredSessions(), 5000); 
-  }
-
-  public stop() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-      console.log('[ScreenshareCleanupTask] Stopped screenshare cleanup task');
-    }
   }
 
   private async cleanupExpiredSessions() {
@@ -90,17 +85,5 @@ export class ScreenshareCleanupTask {
       console.error(`[ScreenshareCleanupTask] Error cleaning up sessions for guild ${guild.name}:`, error);
       return 0;
     }
-  }
-
-  public async forceCleanup(): Promise<void> {
-    console.log('[ScreenshareCleanupTask] Force cleanup requested');
-    await this.cleanupExpiredSessions();
-  }
-
-  public getStatus(): { isRunning: boolean; hasInterval: boolean } {
-    return {
-      isRunning: this.isRunning,
-      hasInterval: this.cleanupInterval !== null
-    };
   }
 }

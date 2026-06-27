@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
  
 
 
-export interface IParty extends Document {
+interface IParty extends Document {
   partyId: string;
   leader: string;
   members: string[];

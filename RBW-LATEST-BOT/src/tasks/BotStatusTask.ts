@@ -41,14 +41,6 @@ export class BotStatusTask {
     }
   }
 
-  public stop() {
-    if (this.updateInterval) {
-      clearInterval(this.updateInterval);
-      this.updateInterval = null;
-      console.log('[BotStatusTask] Stopped status updates');
-    }
-  }
-
   private async sendStatusEmbed() {
     try {
       const guild = this.client.guilds.cache.first();

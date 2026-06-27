@@ -7,8 +7,7 @@ import { MapService } from '../managers/MapManager';
 import { GameManager } from './GameManager';
 import config from '../config/config';
 import { WorkersManager } from '../managers/WorkersManager';
-
-import { CentralizedMatchmaker } from './CentralizedMatchmaker';
+import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil, getPlayerIGNs as getPlayerIGNsUtil } from './utils';
 
 export class RandomQueueManager {
   private client: Client;
@@ -21,9 +20,9 @@ export class RandomQueueManager {
 
 
 
-  constructor(client: Client, centralizedMatchmaker: CentralizedMatchmaker, wsManager: WebSocketManager) {
+  constructor(client: Client, gameManager: GameManager, wsManager: WebSocketManager) {
     this.client = client;
-    this.gameManager = centralizedMatchmaker.getGameManager();
+    this.gameManager = gameManager;
     this.wsManager = wsManager;
     this.mapService = new MapService(wsManager);
     this.workersManager = WorkersManager.getInstance();
@@ -267,134 +266,11 @@ export class RandomQueueManager {
   }
 
   private async calculateTeamAverageElo(playerIds: string[]): Promise<number> {
-    try {
-      if (playerIds.length === 0) return 0;
-  
-      const users = await User.find({
-        discordId: { $in: playerIds }
-      }).select('elo');
-  
-      const totalElo = users.reduce((sum, user) => sum + (user.elo || 0), 0);
-      return Math.round(totalElo / playerIds.length); 
-    } catch (error) {
-      console.error('[PickingQueue] Error calculating team average ELO:', error);
-      return 0;
-    }
+    return calculateTeamAverageElo(playerIds);
   }
-  
+
   private async selectRandomMap(queueData: any): Promise<string> {
-    try {
-      const reservedMaps = await this.mapService.getReservedMaps();
-      const candidates = reservedMaps.filter(m => (m.maxplayers ?? (m as any).max_players) === queueData.maxPlayers);
-
-      if (candidates.length > 0) {
-        const pick = candidates[Math.floor(Math.random() * candidates.length)];
-        console.log(`[RandomQueue] Selected reserved map: ${pick.name}`);
-        return pick.name;
-      }
-
-      console.warn('[RandomQueue] No reserved maps matching queue size, falling back to unlocked maps');
-      const unlockedMaps = await this.mapService.getUnlockedMaps();
-      const unlockedCandidates = unlockedMaps.filter(m => (m.maxplayers ?? (m as any).max_players) === queueData.maxPlayers);
-
-      if (unlockedCandidates.length > 0) {
-        const pick = unlockedCandidates[Math.floor(Math.random() * unlockedCandidates.length)];
-        return pick.name;
-      }
-
-      
-      if (unlockedMaps.length > 0) {
-        const pick = unlockedMaps[Math.floor(Math.random() * unlockedMaps.length)];
-        return pick.name;
-      }
-
-      return 'Aquarius';
-
-    } catch (error) {
-      console.error('[RandomQueue] Error selecting map:', error);
-      return 'Aquarius';
-    }
-  }
-
-
-  
-
-  public async validatePlayerAvailability(playerIds: string[]): Promise<string[]> {
-    try {
-      console.log(`[RandomQueue] Validating ${playerIds.length} players: ${playerIds.join(', ')}`);
-
-      const users = await User.find({
-        discordId: { $in: playerIds },
-        isbanned: false,
-        isfrozen: false
-      }).select('discordId ign');
-
-      console.log(`[RandomQueue] Found ${users.length} users in database`);
-
-      const validPlayers: string[] = [];
-
-      for (const user of users) {
-        if (!user.ign) {
-          console.log(`[RandomQueue] User ${user.discordId} has no IGN, skipping`);
-          continue;
-        }
-
-        try {
-          const onlineCheck = await Promise.race([
-            this.wsManager.checkPlayerOnline(user.ign),
-            new Promise<{ online: boolean }>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout')), 3000)
-            )
-          ]).catch(() => ({ online: false }));
-
-          if (onlineCheck.online) {
-            validPlayers.push(user.discordId);
-            console.log(`[RandomQueue] User ${user.ign} (${user.discordId}) is online`);
-          } else {
-            console.log(`[RandomQueue] User ${user.ign} (${user.discordId}) is offline`);
-          }
-        } catch (error) {
-          console.warn(`[RandomQueue] Could not check online status for ${user.ign}: ${error}`);
-        }
-      }
-
-      console.log(`[RandomQueue] Validation complete: ${validPlayers.length}/${playerIds.length} players valid`);
-      console.log(`[RandomQueue] Valid players: ${validPlayers.join(', ')}`);
-
-      return validPlayers;
-
-    } catch (error) {
-      console.error('[RandomQueue] Error validating player availability:', error);
-      return [];
-    }
-  }
-
-  public async getPartyMembers(partyId: string): Promise<string[]> {
-    try {
-      
-      const cached = this.partyCache.get(partyId);
-      if (cached) {
-        return cached.members;
-      }
-
-      
-      const party = await Party.findOne({ partyId });
-      if (!party || !party.members) {
-        return [];
-      }
-
-      
-      this.partyCache.set(partyId, {
-        members: party.members,
-        timestamp: Date.now()
-      });
-
-      return party.members;
-
-    } catch (error) {
-      console.error(`[RandomQueue] Error getting party members for ${partyId}:`, error);
-      return [];
-    }
+    return selectRandomMapUtil(this.mapService, queueData);
   }
 
   private async sleep(ms: number): Promise<void> {

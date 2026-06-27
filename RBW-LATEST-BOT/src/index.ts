@@ -1,4 +1,4 @@
-import { registerVcLeaveCleanupListener } from './handlers/VcLeaveCLeanuplistner';
+import { registerVcLeaveCleanupListener } from './handlers/VcLeaveCleanupListener';
 import { Client, GatewayIntentBits, ChatInputCommandInteraction, Interaction, RepliableInteraction, Message } from 'discord.js';
 import mongoose from 'mongoose';
 import config from './config/config';
@@ -121,11 +121,5 @@ client.once('ready', async () => {
 });
 
 
-
-client.on('voiceStateUpdate', async (oldState, newState) => {
-  if (queueListener) {
-    await queueListener.handleVoiceStateUpdate(oldState, newState);
-  }
-});
 
 client.login(config.token);

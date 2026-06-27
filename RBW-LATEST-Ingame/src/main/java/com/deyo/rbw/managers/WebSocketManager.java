@@ -874,8 +874,18 @@ public class WebSocketManager {
         }
     }
 
+    private static final java.util.regex.Pattern IGN_PATTERN = java.util.regex.Pattern.compile("^[a-zA-Z0-9_]{1,16}$");
+
+    private boolean isValidIgn(String ign) {
+        return ign != null && IGN_PATTERN.matcher(ign).matches();
+    }
+
     public void handleBotBan(JsonObject json) {
         String ign = json.get("ign").getAsString();
+        if (!isValidIgn(ign)) {
+            plugin.getLogger().warning("Rejected botban with invalid IGN: " + ign);
+            return;
+        }
         String reason = json.get("reason").getAsString();
         // String banId = json.get("id").getAsString(); // not used
         String command;
@@ -890,6 +900,10 @@ public class WebSocketManager {
 
     public void handleBotMute(JsonObject json) {
         String ign = json.get("ign").getAsString();
+        if (!isValidIgn(ign)) {
+            plugin.getLogger().warning("Rejected botmute with invalid IGN: " + ign);
+            return;
+        }
         String reason = json.get("reason").getAsString();
         // String muteId = json.get("id").getAsString(); // not used
         String command;
@@ -904,6 +918,10 @@ public class WebSocketManager {
 
     public void handleBotUnban(JsonObject json) {
         String ign = json.get("ign").getAsString();
+        if (!isValidIgn(ign)) {
+            plugin.getLogger().warning("Rejected botunban with invalid IGN: " + ign);
+            return;
+        }
         String reason = json.get("reason").getAsString();
         // String targetId = json.get("id").getAsString(); // not used
         String command = String.format("unban %s %s", ign, reason);
@@ -912,6 +930,10 @@ public class WebSocketManager {
 
     public void handleBotUnmute(JsonObject json) {
         String ign = json.get("ign").getAsString();
+        if (!isValidIgn(ign)) {
+            plugin.getLogger().warning("Rejected botunmute with invalid IGN: " + ign);
+            return;
+        }
         String reason = json.get("reason").getAsString();
         // String targetId = json.get("id").getAsString(); // not used
         String command = String.format("unmute %s %s", ign, reason);

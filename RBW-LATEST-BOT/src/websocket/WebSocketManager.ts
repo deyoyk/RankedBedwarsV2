@@ -7,21 +7,12 @@ const activeScreenshareThreads: {
   }
 } = {};
 
-
-export function registerScreenshareThread({ ign, sessionId, threadId, expiresAt }: { ign: string, sessionId: string, threadId: string, expiresAt: number }) {
-  activeScreenshareThreads[ign.toLowerCase()] = { sessionId, threadId, expiresAt };
-}
-
-
-export function unregisterScreenshareThread(ign: string) {
-  delete activeScreenshareThreads[ign.toLowerCase()];
-}
 import { WebSocketServer, WebSocket } from 'ws';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
 import * as http from 'http';
 import express from 'express';
-import { GameManager } from '../Matchmaking/GameManager';
 import config from '../config/config';
+import { escapeRegex } from '../utils/regexEscape';
  
 
 
@@ -267,8 +258,8 @@ export class WebSocketManager {
     }
     try {
       const User = (await import('../models/User')).default;
-      const targetUser = await User.findOne({ ign: { $regex: new RegExp(`^${targetign}$`, 'i') } });
-      const requesterUser = await User.findOne({ ign: { $regex: new RegExp(`^${requestign}$`, 'i') } });
+      const targetUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(targetign)}$`, 'i') } });
+      const requesterUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(requestign)}$`, 'i') } });
       
       if (!targetUser || !requesterUser) {
         this.send({ type: 'autoss_fail', uuid });
@@ -312,23 +303,27 @@ export class WebSocketManager {
   private checkPlayerCallbacks: Map<string, (online: boolean, original_ign_case?: string) => void> = new Map();
   private listeners: { [type: string]: Set<(msg: any) => void> } = {};
   private globalHandlers: { [type: string]: ((msg: any) => void) | undefined } = {};
-  private gameManager: GameManager | null = null;
+  private gameManager: any = null;
   private queueStatusInterval: NodeJS.Timeout | null = null;
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
 
   public async requestDontLog(ign: string, uuid: string): Promise<{ online: boolean; dontlog: boolean }> {
     return new Promise((resolve) => {
-      this.dontLogCallbacks.set(uuid, resolve);
+      const timeout = setTimeout(() => {
+        this.dontLogCallbacks.delete(uuid);
+        resolve({ online: false, dontlog: false });
+      }, 10000);
+
+      this.dontLogCallbacks.set(uuid, (result) => {
+        clearTimeout(timeout);
+        this.dontLogCallbacks.delete(uuid);
+        resolve(result);
+      });
       this.send({ type: 'screensharedontlog', ign, uuid });
     });
   }
   
   private permissions: Record<string, string[]> = {};
-  
-  public __warpTimeouts: { [gameId: string]: NodeJS.Timeout } = {};
-  public __warpAttempts: { [gameId: string]: number } = {};
-  public __warpTeam1IGNs: { [gameId: string]: string[] } = {};
-  public __warpTeam2IGNs: { [gameId: string]: string[] } = {};
   
   public server: http.Server;
   public app: express.Application;
@@ -402,31 +397,7 @@ export class WebSocketManager {
   private startServer(port: number, path?: string): void {
     this.server.on('error', (e: any) => {
       if (e.code === 'EADDRINUSE') {
-        console.error(`[WebSocketManager] Port ${port} is already in use.`);
-        console.log(`[WebSocketManager] Attempting to kill process using port ${port}...`);
-        
-        
-        const killCommand = `powershell -Command "Stop-Process -Id (Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess) -Force"`;
-        
-        try {
-          require('child_process').execSync(killCommand);
-          console.log(`[WebSocketManager] Retrying port ${port} in 1 second...`);
-          
-          
-          setTimeout(() => {
-            this.server.listen(port, () => {
-              console.log(`[WebSocketManager] Listening on port ${port}${path ? ` with path ${path}` : ''}`);
-            });
-          }, 1000);
-        } catch (killError) {
-          
-          const newPort = port + 1;
-          console.log(`[WebSocketManager] Could not kill process. Trying port ${newPort} instead...`);
-          
-          this.server.listen(newPort, () => {
-            console.log(`[WebSocketManager] Listening on port ${newPort}${path ? ` with path ${path}` : ''}`);
-          });
-        }
+        console.error(`[WebSocketManager] Port ${port} is already in use. Cannot start WebSocket server.`);
       } else {
         console.error('[WebSocketManager] Server error:', e);
       }
@@ -776,10 +747,6 @@ export class WebSocketManager {
     }
   }
 
-  public getMaps(): MapInfo[] {
-    return this.reservedMaps.length > 0 ? this.reservedMaps : this.allMaps;
-  }
-
   public getAllMaps(): MapInfo[] {
     return this.allMaps;
   }
@@ -805,90 +772,43 @@ export class WebSocketManager {
     }
   }
   // WIERD ASS AUTH METHOD. IF IT WORKS IT WORKS.
-  public async authenticate(): Promise<boolean> {
-    if (this.client && this.client.readyState === this.client.OPEN) {
-      return new Promise((resolve) => {
-        const handleMessage = (data: any) => {
-          try {
-            const msg = typeof data === 'string' ? JSON.parse(data) : data;
-            if (msg.type === 'auth_success') {
-              this.client?.off('message', handleMessage);
-              console.log('[WebSocketManager] Authentication successful');
-              resolve(true);
-            } else if (msg.type === 'auth_failure') {
-              this.client?.off('message', handleMessage);
-              console.error('[WebSocketManager] Authentication failed:', msg.message);
-              resolve(false);
-            }
-          } catch (e) {
-            console.error('[WebSocketManager] Error parsing auth response:', e);
-            this.client?.off('message', handleMessage);
-            resolve(false);
-          }
-        };
-        
-        this.client?.on('message', handleMessage);
-        
-        this.client?.send(JSON.stringify({
-          type: 'auth',
-          auth_key: process.env.AUTH_KEY
-        }));
-        
-        setTimeout(() => {
-          this.client?.off('message', handleMessage);
-          console.error('[WebSocketManager] Authentication timeout');
-          resolve(false);
-        }, 5000);
-      });
-    }
-    return false;
-  }
-
   public async checkPlayerOnline(ign: string): Promise<{ online: boolean; original_ign_case?: string }> {
     return new Promise((resolve) => {
-      console.log(`[WebSocketManager] Checking online status for ${ign}`);
+      const timeout = setTimeout(() => {
+        this.checkPlayerCallbacks.delete(ign);
+        resolve({ online: false });
+      }, 10000);
+
       this.checkPlayerCallbacks.set(ign, (online, original_ign_case) => {
-        console.log(`[WebSocketManager] Online status for ${ign}: ${online}`);
+        clearTimeout(timeout);
+        this.checkPlayerCallbacks.delete(ign);
         resolve({ online, original_ign_case });
       });
       this.send({ type: 'check_player', ign });
     });
   }
 
-  public on(type: string, cb: (msg: any) => void) {
-    if (!this.listeners[type]) this.listeners[type] = new Set();
-    this.listeners[type].add(cb);
-  }
-
-  public off(type: string, cb: (msg: any) => void) {
-    if (this.listeners[type]) this.listeners[type].delete(cb);
-  }
-
   public getPermission(command: string): string[] {
     return this.permissions[command] || [];
-  }
-  
-  public getAllPermissions(): Record<string, string[]> {
-    return {...this.permissions}; 
   }
 
   public async getPing(): Promise<number | null> {
     const client = this.client;
     if (!client || client.readyState !== client.OPEN) return null;
     return new Promise((resolve) => {
-      const timestamp = Date.now();
+      const localTimestamp = Date.now();
       const pongHandler = (data: any) => {
         try {
           const msg = typeof data === 'string' ? JSON.parse(data) : data;
-          if (msg.type === 'pong' && typeof msg.timestamp === 'number') {
+          if (msg.type === 'pong') {
             client.off('message', pongHandler);
-            resolve(Date.now() - msg.timestamp);
+            resolve(Date.now() - localTimestamp);
           }
         } catch (e) {
         }
       };
       client.on('message', pongHandler);
-      this.send({ type: 'ping', timestamp });
+      this.send({ type: 'ping', timestamp: localTimestamp });
       setTimeout(() => {
         client.off('message', pongHandler);
         resolve(null);
@@ -915,7 +835,7 @@ export class WebSocketManager {
       const User = (await import('../models/User')).default;
       
       
-      const requesterUser = await User.findOne({ ign: { $regex: new RegExp(`^${requester}$`, 'i') } });
+      const requesterUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(requester)}$`, 'i') } });
       if (!requesterUser) {
         console.error(`[WebSocketManager] Requester ${requester} not found in database`);
         this.send({
@@ -927,7 +847,7 @@ export class WebSocketManager {
       }
 
       
-      const targetUser = await User.findOne({ ign: { $regex: new RegExp(`^${target}$`, 'i') } });
+      const targetUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(target)}$`, 'i') } });
       if (!targetUser) {
         console.error(`[WebSocketManager] Target ${target} not found in database`);
         this.send({
@@ -1076,7 +996,7 @@ export class WebSocketManager {
 
       
       const User = (await import('../models/User')).default;
-      const user = await User.findOne({ ign: { $regex: new RegExp(`^${ign}$`, 'i') } });
+      const user = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(ign)}$`, 'i') } });
       if (!user) {
         console.error(`[WebSocketManager] User ${ign} not found in database`);
         this.send({
@@ -1260,6 +1180,9 @@ export class WebSocketManager {
       
       const queueStatus: Record<string, any> = {};
 
+      const allMemberIds = new Set<string>();
+      const channelMemberMap = new Map<string, { channelId: string; members: Map<string, any> }>();
+
       
       if (this.discordClient) {
         const guild = this.discordClient.guilds.cache.first();
@@ -1268,7 +1191,10 @@ export class WebSocketManager {
             try {
               const channel = await guild.channels.fetch(queue.channelId);
               if (channel && channel.isVoiceBased()) {
-                const members = channel.members.map((m: any) => `${m.user.username} (${m.id})`);
+                channelMemberMap.set(queue.channelId, { channelId: queue.channelId, members: channel.members });
+                for (const [memberId] of channel.members) {
+                  allMemberIds.add(memberId);
+                }
               }
             } catch (err: any) {
             }
@@ -1277,40 +1203,31 @@ export class WebSocketManager {
       }
 
       
+      const memberIdsArray = Array.from(allMemberIds);
+      const userMap = new Map<string, string>();
+      if (memberIdsArray.length > 0) {
+        const users = await User.find({ discordId: { $in: memberIdsArray } }).select('discordId ign');
+        for (const user of users) {
+          if (user.ign) userMap.set(user.discordId, user.ign);
+        }
+      }
+
+      
       for (const queue of queues) {
         let currentPlayerCount = 0;
         const playersInQueue: string[] = [];
 
-        
-        if (this.discordClient) {
-          const guild = this.discordClient.guilds.cache.first();
-          if (guild) {
-            try {
-              const channel = await guild.channels.fetch(queue.channelId);
-              if (channel && channel.isVoiceBased()) {
-                currentPlayerCount = channel.members.size;
-                
-                
-                for (const [memberId, member] of channel.members) {
-                  try {
-                    const user = await User.findOne({ discordId: memberId }).select('ign');
-                    if (user && user.ign) {
-                      playersInQueue.push(user.ign);
-                    } else {
-                      console.log(`[WebSocketManager] User ${member.user.username} (${memberId}) not found in database or has no IGN`);
-                    }
-                  } catch (userError) {
-                    console.error(`[WebSocketManager] Error fetching user ${memberId}:`, userError);
-                  }
-                }
-              }
-            } catch (err: any) {
+        const channelData = channelMemberMap.get(queue.channelId);
+        if (channelData) {
+          currentPlayerCount = channelData.members.size;
+          for (const [memberId] of channelData.members) {
+            const ign = userMap.get(memberId);
+            if (ign) {
+              playersInQueue.push(ign);
             }
           }
         }
-        
 
-        
         queueStatus[queue.channelId] = {
           minElo: queue.minElo,
           maxElo: queue.maxElo,
@@ -1346,7 +1263,7 @@ export class WebSocketManager {
     }
   }
 
-  public setGameManager(gameManager: GameManager): void {
+  public setGameManager(gameManager: any): void {
     this.gameManager = gameManager;
   }
 }

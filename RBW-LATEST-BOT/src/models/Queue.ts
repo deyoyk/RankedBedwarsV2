@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
  
 
 
-export interface IQueue extends Document {
+interface IQueue extends Document {
   channelId: string;
   maxPlayers: number;
   minElo: number;

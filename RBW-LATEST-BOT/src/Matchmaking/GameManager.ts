@@ -6,7 +6,6 @@ import EloRank, { IEloRank } from '../models/EloRank';
 import config from '../config/config';
 import { GameState, GameResources, WarpRequestData, GameResult, VoidResult, PlayerData } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
-import { MapService } from '../managers/MapManager';
 import { fix } from '../utils/fix';
 import { generateScoreImageBuffer } from '../utils/scoreImage';
 import {
@@ -17,6 +16,7 @@ import {
 import { WorkersManager } from '../managers/WorkersManager';
 
 import axios from 'axios';
+import { getNextSequence } from '../models/Counter';
 
 interface PlayerScoreData {
   player: IUser;
@@ -68,10 +68,10 @@ interface GameVoidContext {
 export class GameManager {
   private client: Client;
   private wsManager: WebSocketManager;
-  private mapService: MapService;
   
   private workersManager: WorkersManager;
   private activeGames: Map<number, GameResources> = new Map();
+  private cleaningGames: Set<number> = new Set();
   private warpRequests: Map<string, WarpRequestData> = new Map();
   private readonly MAX_CONCURRENT_GAMES = 50;
   private readonly WARP_TIMEOUT = 60000;
@@ -81,7 +81,6 @@ export class GameManager {
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
     this.wsManager = wsManager;
-    this.mapService = new MapService(wsManager);
     
     this.workersManager = WorkersManager.getInstance();
     this.setupWarpHandlers();
@@ -235,24 +234,16 @@ export class GameManager {
 
   public async getNextGameId(): Promise<number> {
     try {
-      const lastGame = await Game.findOne().sort({ gameId: -1 }).select('gameId');
-      return (lastGame?.gameId || 0) + 1;
+      return await getNextSequence('gameId');
     } catch (error) {
       console.error('[GameManager] Error getting next game ID:', error);
-      return 1;
+      const lastGame = await Game.findOne().sort({ gameId: -1 }).select('gameId');
+      return (lastGame?.gameId || 0) + 1;
     }
   }
 
   public getActiveGameCount(): number {
     return this.activeGames.size;
-  }
-
-  public isGameActive(gameId: number): boolean {
-    return this.activeGames.has(gameId);
-  }
-
-  public getGameResources(gameId: number): GameResources | undefined {
-    return this.activeGames.get(gameId);
   }
 
   public async updateGameMap(gameId: number, newMap: string): Promise<void> {
@@ -736,12 +727,9 @@ export class GameManager {
       const resources = this.activeGames.get(gameId);
       if (!resources) return;
 
-
-      this.activeGames.delete(gameId);
-
+      this.cleaningGames.add(gameId);
 
       this.warpRequests.delete(gameId.toString());
-
 
       setTimeout(async () => {
         try {
@@ -753,6 +741,9 @@ export class GameManager {
           }
         } catch (error) {
           console.error(`[GameManager] Error cleaning up channels for game ${gameId}:`, error);
+        } finally {
+          this.activeGames.delete(gameId);
+          this.cleaningGames.delete(gameId);
         }
       }, 30000);
 

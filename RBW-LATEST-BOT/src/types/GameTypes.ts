@@ -9,18 +9,6 @@ export enum QueueType {
   PICKING = 'picking'
 }
 
-export interface TeamData {
-  team1: string[];
-  team2: string[];
-}
-
-export interface GameChannel {
-  text: string;
-  team1Voice: string;
-  team2Voice: string;
-  picking?: string;
-}
-
 export interface GameResources {
   gameId: number;
   gameChannel: any;
@@ -97,18 +85,3 @@ export interface PickingSession {
   pickOrder?: string[];
 }
 
-export interface PartyInfo {
-  partyId: string;
-  members: string[];
-  leader: string;
-}
-
-export interface GameSettings {
-  maxPlayers: number;
-  minElo: number;
-  maxElo: number;
-  isRanked: boolean;
-  allowParties: boolean;
-  queueType: QueueType;
-  pickingEnabled: boolean;
-}

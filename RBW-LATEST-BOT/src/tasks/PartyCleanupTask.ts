@@ -20,14 +20,6 @@ export class PartyCleanupTask {
     console.log('[PartyCleanupTask] Started party cleanup task (runs every 30 minutes)');
   }
 
-  public stop() {
-    if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-      console.log('[PartyCleanupTask] Stopped party cleanup task');
-    }
-  }
-
   private async cleanupInactiveParties() {
     try {
       const cutoffTime = new Date(Date.now() - this.INACTIVITY_THRESHOLD);

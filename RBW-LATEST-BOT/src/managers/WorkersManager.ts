@@ -425,23 +425,6 @@ export class WorkersManager {
     return Promise.allSettled(promises);
   }
 
-  public async moveMembersAndWait(memberIds: string[], channelId: string, priority: number = 7): Promise<void> {
-    const results = await this.moveMembers(memberIds, channelId, priority);
-    const failures = results.filter(result => result.status === 'rejected');
-
-    if (failures.length > 0) {
-      console.warn(`[WorkersManager] ${failures.length}/${memberIds.length} member moves failed`);
-      failures.forEach((failure, index) => {
-        if (failure.status === 'rejected') {
-          console.warn(`[WorkersManager] Failed to move member ${memberIds[index]}:`, failure.reason);
-        }
-      });
-    }
-
-    const successCount = results.length - failures.length;
-    console.log(`[WorkersManager] Successfully moved ${successCount}/${memberIds.length} members`);
-  }
-
   public async setMemberNickname(memberId: string, nickname: string, priority: number = 4): Promise<void> {
     return this.addTask('member_nickname', { memberId, nickname }, priority);
   }
@@ -528,48 +511,5 @@ export class WorkersManager {
       }
       throw e;
     }
-  }
-
-  public getStats(): {
-    enabled: boolean;
-    workersCount: number;
-    queuedTasks: number;
-    processingTasks: number;
-    workerStats: WorkerStats[];
-  } {
-    const queuedTasks = Array.from(this.taskQueue.values()).reduce((sum, queue) => sum + queue.length, 0);
-
-    return {
-      enabled: this.isEnabled,
-      workersCount: this.workers.length,
-      queuedTasks,
-      processingTasks: this.processingTasks.size,
-      workerStats: this.workers.map(w => ({ ...w.stats }))
-    };
-  }
-
-  public cleanup(): void {
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval);
-      this.processingInterval = null;
-    }
-
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
-    }
-
-    
-    this.workers.forEach(worker => {
-      if (worker.client) {
-        worker.client.destroy();
-      }
-    });
-
-    this.workers = [];
-    this.taskQueue.clear();
-    this.processingTasks.clear();
-
-    console.log('[WorkersManager] Cleanup completed');
   }
 }

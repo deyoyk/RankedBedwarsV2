@@ -1,8 +1,7 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
-import { safeReply } from '../../utils/safeReply';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { Message, ChatInputCommandInteraction, EmbedBuilder, ButtonStyle } from 'discord.js';
 import { fix } from '../../utils/fix';
 import User from '../../models/User';
+import { executeWithConfirmation } from '../../utils/confirmAction';
 
 interface FixAllProgress {
   total: number;
@@ -15,98 +14,32 @@ interface FixAllProgress {
 }
 
 export async function fixall(interaction: Message | ChatInputCommandInteraction) {
-  if (!interaction.guild) {
-    await safeReply(interaction, errorEmbed('This command can only be used in a server.', 'Fix All Error'));
+  const users = await User.find().select('discordId ign');
+  if (!users.length) {
+    const { safeReply } = await import('../../utils/safeReply');
+    const { errorEmbed } = await import('../../utils/betterembed');
+    await safeReply(interaction, errorEmbed('No users found in the database.', 'Fix All Error'));
     return;
   }
 
-  try {
-    const users = await User.find().select('discordId ign');
-    if (!users.length) {
-      await safeReply(interaction, errorEmbed('No users found in the database.', 'Fix All Error'));
-      return;
-    }
+  const total = users.length;
 
-    const total = users.length;
-    const timestamp = Math.floor(Date.now() / 1000);
-
-    const confirmEmbed = new EmbedBuilder()
-      .setTitle('⚠️ Confirm Fix All Operation')
-      .setColor('#FFA500')
-      .setDescription(`Are you sure you want to fix roles and nicknames for **${total}** users?\n\nThis operation will:`)
-      .addFields(
-        { name: 'What it does', value: '• Update user roles based on ELO\n• Update user nicknames\n• Process all users in batches\n• Respect Discord rate limits', inline: false },
-        { name: 'Users to process', value: `${total}`, inline: true },
-        { name: 'Estimated time', value: `${Math.ceil(total / 5)} seconds`, inline: true },
-        { name: 'Rate limiting', value: '1 second between batches', inline: true }
-      )
-      .setFooter({ text: 'This confirmation will expire in 30 seconds' })
-      .setTimestamp();
-
-    const confirmButton = new ButtonBuilder()
-      .setCustomId('fixall_confirm')
-      .setLabel('✅ Confirm')
-      .setStyle(ButtonStyle.Success);
-
-    const denyButton = new ButtonBuilder()
-      .setCustomId('fixall_deny')
-      .setLabel('❌ Cancel')
-      .setStyle(ButtonStyle.Danger);
-
-    const row = new ActionRowBuilder<ButtonBuilder>()
-      .addComponents(confirmButton, denyButton);
-
-    const response = await safeReply(interaction, {
-      embeds: [confirmEmbed],
-      components: [row],
-      fetchReply: true
-    });
-
-    const message = response instanceof Message ? response : response;
-
-    try {
-      const confirmation = await message.awaitMessageComponent({
-        filter: (i) => {
-          return (i.customId === 'fixall_confirm' || i.customId === 'fixall_deny') && 
-                 i.user.id === (interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id);
-        },
-        time: 30000,
-        componentType: ComponentType.Button
-      });
-
-      if (confirmation.customId === 'fixall_deny') {
-        await confirmation.update({
-          embeds: [errorEmbed('Fix all operation cancelled.', 'Operation Cancelled').builder],
-          components: []
-        });
-        return;
-      }
-
-      await confirmation.update({
-        embeds: [successEmbed('Starting fix all operation...', 'Fix All Started').builder],
-        components: []
-      });
-
-      await executeFixAll(interaction, users);
-
-    } catch (timeoutError) {
-      const timeoutEmbed = new EmbedBuilder()
-        .setTitle('⏰ Confirmation Expired')
-        .setColor('#00AAAA')
-        .setDescription('The confirmation has expired. Please run the command again if you want to proceed.')
-        .setFooter({ text: 'Deyo.lol' })
-        .setTimestamp();
-
-      await message.edit({
-        embeds: [timeoutEmbed],
-        components: []
-      });
-    }
-
-  } catch (error: any) {
-    console.error('[FixAll] Error in fixall command:', error);
-    await safeReply(interaction, errorEmbed(`There was an error running fixall: ${error.message || 'Unknown error'}`, 'Fix All Error'));
-  }
+  await executeWithConfirmation(interaction, {
+    commandName: 'fixall',
+    confirmTitle: '⚠️ Confirm Fix All Operation',
+    confirmDescription: `Are you sure you want to fix roles and nicknames for **${total}** users?\n\nThis operation will:`,
+    confirmLabel: '✅ Confirm',
+    confirmStyle: ButtonStyle.Success,
+    fields: [
+      { name: 'What it does', value: '• Update user roles based on ELO\n• Update user nicknames\n• Process all users in batches\n• Respect Discord rate limits', inline: false },
+      { name: 'Users to process', value: `${total}`, inline: true },
+      { name: 'Estimated time', value: `${Math.ceil(total / 5)} seconds`, inline: true },
+      { name: 'Rate limiting', value: '1 second between batches', inline: true }
+    ],
+    startMessage: 'Starting fix all operation...',
+    cancelMessage: 'Fix all operation cancelled.',
+    onConfirm: () => executeFixAll(interaction, users)
+  });
 }
 
 async function executeFixAll(interaction: Message | ChatInputCommandInteraction, users: any[]) {
