@@ -1521,6 +1521,24 @@ export class GameManager {
     }
   }
 
+  private revertStatFields(player: any, gameStats: any): void {
+    const statFields = ['kills', 'deaths', 'finalKills', 'bedBroken', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced'];
+    for (const field of statFields) {
+      if (typeof gameStats[field] === 'number') {
+        player[field] = Math.max(0, (player[field] || 0) - gameStats[field]);
+      }
+    }
+    if (gameStats.won === true) {
+      player.wins = Math.max(0, (player.wins || 0) - 1);
+    } else if (gameStats.won === false) {
+      player.losses = Math.max(0, (player.losses || 0) - 1);
+    }
+    if (gameStats.ismvp) {
+      player.mvps = Math.max(0, (player.mvps || 0) - 1);
+    }
+    player.games = Math.max(0, (player.games || 0) - 1);
+  }
+
   private async revertPlayerGameStats(player: IUser, voidData: PlayerVoidData): Promise<void> {
     try {
       const gameStats = voidData.gameStats;
@@ -1534,34 +1552,10 @@ export class GameManager {
         return;
       }
 
-      if (typeof gameStats.kills === 'number') player.kills = Math.max(0, (player.kills || 0) - gameStats.kills);
-      if (typeof gameStats.deaths === 'number') player.deaths = Math.max(0, (player.deaths || 0) - gameStats.deaths);
-      if (typeof gameStats.finalKills === 'number') player.finalKills = Math.max(0, (player.finalKills || 0) - gameStats.finalKills);
-      if (typeof gameStats.bedBroken === 'number') player.bedBroken = Math.max(0, (player.bedBroken || 0) - gameStats.bedBroken);
-      if (typeof gameStats.diamonds === 'number') player.diamonds = Math.max(0, (player.diamonds || 0) - gameStats.diamonds);
-      if (typeof gameStats.irons === 'number') player.irons = Math.max(0, (player.irons || 0) - gameStats.irons);
-      if (typeof gameStats.gold === 'number') player.gold = Math.max(0, (player.gold || 0) - gameStats.gold);
-      if (typeof gameStats.emeralds === 'number') player.emeralds = Math.max(0, (player.emeralds || 0) - gameStats.emeralds);
-      if (typeof gameStats.blocksPlaced === 'number') player.blocksPlaced = Math.max(0, (player.blocksPlaced || 0) - gameStats.blocksPlaced);
-
-      if (gameStats.won === true) {
-        player.wins = Math.max(0, (player.wins || 0) - 1);
-        
-      } else if (gameStats.won === false) {
-        player.losses = Math.max(0, (player.losses || 0) - 1);
-        
-      }
-
-      if (gameStats.ismvp) {
-        player.mvps = Math.max(0, (player.mvps || 0) - 1);
-      }
-
-      player.games = Math.max(0, (player.games || 0) - 1);
+      this.revertStatFields(player, gameStats);
 
       player.experience = Math.max(0, (player.experience || 0) - voidData.experienceToRevert);
       player.level = voidData.newLevel;
-
-      
       player.kdr = player.deaths && player.deaths > 0 ? Number((player.kills / player.deaths).toFixed(2)) : (player.kills || 0);
       player.wlr = player.losses && player.losses > 0 ? Number((player.wins / player.losses).toFixed(2)) : (player.wins || 0);
 

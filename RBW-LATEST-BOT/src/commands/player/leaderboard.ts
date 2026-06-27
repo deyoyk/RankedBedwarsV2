@@ -3,6 +3,31 @@ import User, { IUser } from '../../models/User';
 import { betterEmbed, errorEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
+const LEADERBOARD_MODES: Record<string, { title: string; field: string }> = {
+  elo: { title: 'Elo Leaderboard', field: 'elo' },
+  wins: { title: 'Wins Leaderboard', field: 'wins' },
+  losses: { title: 'Losses Leaderboard', field: 'losses' },
+  games: { title: 'Games Played Leaderboard', field: 'games' },
+  mvps: { title: 'MVPs Leaderboard', field: 'mvps' },
+  kills: { title: 'Kills Leaderboard', field: 'kills' },
+  deaths: { title: 'Deaths Leaderboard', field: 'deaths' },
+  bedBroken: { title: 'Beds Broken Leaderboard', field: 'bedBroken' },
+  finalKills: { title: 'Final Kills Leaderboard', field: 'finalKills' },
+  diamonds: { title: 'Diamonds Collected Leaderboard', field: 'diamonds' },
+  irons: { title: 'Irons Collected Leaderboard', field: 'irons' },
+  gold: { title: 'Gold Collected Leaderboard', field: 'gold' },
+  emeralds: { title: 'Emeralds Collected Leaderboard', field: 'emeralds' },
+  blocksPlaced: { title: 'Blocks Placed Leaderboard', field: 'blocksPlaced' },
+  winstreak: { title: 'Winstreak Leaderboard', field: 'winstreak' },
+  losestreak: { title: 'Losestreak Leaderboard', field: 'losestreak' },
+  kdr: { title: 'KDR Leaderboard', field: 'kdr' },
+  wlr: { title: 'WLR Leaderboard', field: 'wlr' },
+};
+
+function getModeConfig(mode: string) {
+  return LEADERBOARD_MODES[mode] || LEADERBOARD_MODES.elo;
+}
+
 export async function leaderboard(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let page = 0;
   let mode = 'elo';
@@ -24,86 +49,7 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
   async function renderPage(page: number) {
     let users: IUser[] = [];
     let totalUsers = 0;
-    let title = 'Leaderboard';
-    let valueField = 'elo';
-    switch (mode) {
-      case 'elo':
-        title = 'Elo Leaderboard';
-        valueField = 'elo';
-        break;
-      case 'wins':
-        title = 'Wins Leaderboard';
-        valueField = 'wins';
-        break;
-      case 'losses':
-        title = 'Losses Leaderboard';
-        valueField = 'losses';
-        break;
-      case 'games':
-        title = 'Games Played Leaderboard';
-        valueField = 'games';
-        break;
-      case 'mvps':
-        title = 'MVPs Leaderboard';
-        valueField = 'mvps';
-        break;
-      case 'kills':
-        title = 'Kills Leaderboard';
-        valueField = 'kills';
-        break;
-      case 'deaths':
-        title = 'Deaths Leaderboard';
-        valueField = 'deaths';
-        break;
-      case 'bedBroken':
-        title = 'Beds Broken Leaderboard';
-        valueField = 'bedBroken';
-        break;
-      case 'finalKills':
-        title = 'Final Kills Leaderboard';
-        valueField = 'finalKills';
-        break;
-      case 'diamonds':
-        title = 'Diamonds Collected Leaderboard';
-        valueField = 'diamonds';
-        break;
-      case 'irons':
-        title = 'Irons Collected Leaderboard';
-        valueField = 'irons';
-        break;
-      case 'gold':
-        title = 'Gold Collected Leaderboard';
-        valueField = 'gold';
-        break;
-      case 'emeralds':
-        title = 'Emeralds Collected Leaderboard';
-        valueField = 'emeralds';
-        break;
-      case 'blocksPlaced':
-        title = 'Blocks Placed Leaderboard';
-        valueField = 'blocksPlaced';
-        break;
-      case 'winstreak':
-        title = 'Winstreak Leaderboard';
-        valueField = 'winstreak';
-        break;
-      case 'losestreak':
-        title = 'Losestreak Leaderboard';
-        valueField = 'losestreak';
-        break;
-      case 'kdr':
-        title = 'KDR Leaderboard';
-        valueField = 'kdr';
-        break;
-      case 'wlr':
-        title = 'WLR Leaderboard';
-        valueField = 'wlr';
-        break;
-      default:
-        title = 'Elo Leaderboard';
-        valueField = 'elo';
-        break;
-    }
+    const { title, field: valueField } = getModeConfig(mode);
 
     // searching for a player by IGN? we got you fam
     if (searchIGN) {
@@ -144,20 +90,11 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
     }
 
     let leaderboardList = '';
-    // adding medals for top 3 players - they earned that drip 🏆
-    const medals = [
-      ':first_place:', // #1 just hits different
-      ':second_place:', // still goated
-      ':third_place:' // bronze but make it fashion
-    ];
+    const medals = [':first_place:', ':second_place:', ':third_place:'];
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
       const rank = page * usersPerPage + i + 1;
-      let prefix = '';
-      if (rank === 1) prefix = medals[0];
-      else if (rank === 2) prefix = medals[1];
-      else if (rank === 3) prefix = medals[2];
-      else prefix = `#${rank}`;
+      const prefix = rank <= 3 ? medals[rank - 1] : `#${rank}`;
       const value = (user as any)[valueField] ?? 0;
       leaderboardList += `${prefix} ${user.ign || user.discordId} » ${value}\n`;
     }
@@ -264,29 +201,7 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
         
         const user = await User.findOne({ ign: searchIGN });
         if (user) {
-          
-          let valueField = 'elo';
-          switch (mode) {
-            case 'elo': valueField = 'elo'; break;
-            case 'wins': valueField = 'wins'; break;
-            case 'losses': valueField = 'losses'; break;
-            case 'games': valueField = 'games'; break;
-            case 'mvps': valueField = 'mvps'; break;
-            case 'kills': valueField = 'kills'; break;
-            case 'deaths': valueField = 'deaths'; break;
-            case 'bedBroken': valueField = 'bedBroken'; break;
-            case 'finalKills': valueField = 'finalKills'; break;
-            case 'diamonds': valueField = 'diamonds'; break;
-            case 'irons': valueField = 'irons'; break;
-            case 'gold': valueField = 'gold'; break;
-            case 'emeralds': valueField = 'emeralds'; break;
-            case 'blocksPlaced': valueField = 'blocksPlaced'; break;
-            case 'winstreak': valueField = 'winstreak'; break;
-            case 'losestreak': valueField = 'losestreak'; break;
-            case 'kdr': valueField = 'kdr'; break;
-            case 'wlr': valueField = 'wlr'; break;
-            default: valueField = 'elo'; break;
-          }
+          const { field: valueField } = getModeConfig(mode);
           const allUsers = await User.find({}).sort({ [valueField]: -1 });
           const pos = allUsers.findIndex(u => u.ign === searchIGN);
           if (pos !== -1) {

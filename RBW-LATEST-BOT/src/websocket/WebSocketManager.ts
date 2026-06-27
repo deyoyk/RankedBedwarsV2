@@ -608,45 +608,35 @@ export class WebSocketManager {
     }
   }
 
-  private handleScoring(msg: any) {
-    console.log('[WebSocketManager] Received scoring JSON:', JSON.stringify(msg, null, 2));
-    
-    if (!this.gameManager) {
-      console.error('[WebSocketManager] GameManager not available for scoring');
-      return;
+  private determineWinningTeam(msg: any): number {
+    if (msg.winningTeamNumber) return msg.winningTeamNumber;
+    if (msg.winningteamignlist && Array.isArray(msg.winningteamignlist)) {
+      console.log(`[WebSocketManager] Winning team IGNs: ${msg.winningteamignlist.join(', ')}`);
+      return 1;
     }
-    
-    const { gameid, winningTeamNumber, winningteamignlist, players, mvps: msgMvps, bedsbroken: msgBedsbroken } = msg;
-    
+    console.error('[WebSocketManager] No winning team information provided');
+    return 1;
+  }
+
+  private calculateMvpsFromStats(players: any, msgMvps?: string[]): string[] {
+    if (msgMvps && msgMvps.length > 0) return msgMvps;
     let maxKills = -1;
-    let mvps: string[] = msgMvps || [];
-    let winningTeam: number;
-    
-    if (winningTeamNumber) {
-      winningTeam = winningTeamNumber;
-    } else if (winningteamignlist && Array.isArray(winningteamignlist)) {
-      winningTeam = 1;
-      console.log(`[WebSocketManager] Winning team IGNs: ${winningteamignlist.join(', ')}`);
-    } else {
-      console.error('[WebSocketManager] No winning team information provided');
-      winningTeam = 1;
-    }
-    
-    if (!msgMvps || msgMvps.length === 0) {
-      mvps = [];
-      for (const [ign, statsRaw] of Object.entries(players || {})) {
-        const stats = statsRaw as any;
-        if ((stats.kills ?? 0) > maxKills) {
-          maxKills = stats.kills ?? 0;
-          mvps = [ign];
-        } else if ((stats.kills ?? 0) === maxKills) {
-          mvps.push(ign);
-        }
+    let mvps: string[] = [];
+    for (const [ign, statsRaw] of Object.entries(players || {})) {
+      const stats = statsRaw as any;
+      const kills = stats.kills ?? 0;
+      if (kills > maxKills) {
+        maxKills = kills;
+        mvps = [ign];
+      } else if (kills === maxKills) {
+        mvps.push(ign);
       }
     }
-    
+    return mvps;
+  }
+
+  private buildPlayerData(players: any, bedbreaks: string[]): Record<string, any> {
     const playerData: Record<string, any> = {};
-    const bedbreaks: string[] = msgBedsbroken || [];
     for (const [ign, statsRaw] of Object.entries(players || {})) {
       const stats = statsRaw as any;
       playerData[ign] = {
@@ -661,6 +651,22 @@ export class WebSocketManager {
         blocksPlaced: stats.blocksplaced ?? 0
       };
     }
+    return playerData;
+  }
+
+  private handleScoring(msg: any) {
+    console.log('[WebSocketManager] Received scoring JSON:', JSON.stringify(msg, null, 2));
+    
+    if (!this.gameManager) {
+      console.error('[WebSocketManager] GameManager not available for scoring');
+      return;
+    }
+    
+    const { gameid, winningteamignlist, players, mvps: msgMvps, bedsbroken: msgBedsbroken } = msg;
+    const winningTeam = this.determineWinningTeam(msg);
+    const mvps = this.calculateMvpsFromStats(players, msgMvps);
+    const bedbreaks: string[] = msgBedsbroken || [];
+    const playerData = this.buildPlayerData(players, bedbreaks);
 
     (async () => {
       try {
