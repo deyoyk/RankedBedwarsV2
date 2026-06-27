@@ -1,8 +1,9 @@
 import { Message, ChatInputCommandInteraction, User as DiscordUser } from 'discord.js';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
-import { fix } from '../../utils/fix';
+import { safeFix } from '../../utils/fix';
 import { safeReply } from '../../utils/safeReply';
+import { resetUserStats } from '../../utils/userStats';
 
 export async function wipe(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let targetId: string | undefined;
@@ -34,33 +35,11 @@ export async function wipe(interaction: Message | ChatInputCommandInteraction, a
     }
 
     
-    userDoc.elo = 0;
-    userDoc.wins = 0;
-    userDoc.losses = 0;
-    userDoc.games = 0;
-    userDoc.mvps = 0;
-    userDoc.kills = 0;
-    userDoc.deaths = 0;
-    userDoc.bedBroken = 0;
-    userDoc.finalKills = 0;
-    userDoc.diamonds = 0;
-    userDoc.irons = 0;
-    userDoc.gold = 0;
-    userDoc.emeralds = 0;
-    userDoc.blocksPlaced = 0;
-    userDoc.winstreak = 0;
-    userDoc.losestreak = 0;
-    userDoc.kdr = 0;
-    userDoc.wlr = 0;
-    userDoc.recentGames = [];
-    userDoc.dailyElo = [];
+    resetUserStats(userDoc);
 
     await userDoc.save();
 
-    
-    if (interaction.guild) {
-      await fix(interaction.guild, userDoc.discordId);
-    }
+    await safeFix(interaction.guild, userDoc.discordId);
 
     await safeReply(interaction, successEmbed(`All stats for ${targetMention} have been wiped.`, 'Wipe Successful'));
   } catch (error) {

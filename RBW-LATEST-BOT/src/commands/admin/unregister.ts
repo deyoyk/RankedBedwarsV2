@@ -2,7 +2,7 @@ import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
-import { fix } from '../../utils/fix';
+import { safeFix } from '../../utils/fix';
 
 
 export async function unregister(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
@@ -35,9 +35,7 @@ export async function unregister(interaction: Message | ChatInputCommandInteract
     await User.deleteOne({ discordId: targetUserId });
     
     
-    if (interaction.guild) {
-      await fix(interaction.guild, targetUserId);
-    }
+    await safeFix(interaction.guild, targetUserId);
     
     await safeReply(interaction, successEmbed(`User <@${targetUserId}> has been removed from the database.`, 'User Unregistered'));
   } catch (error) {

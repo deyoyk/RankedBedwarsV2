@@ -1,15 +1,7 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import User from '../../models/User';
 import { getLevelInfo, EXPERIENCE_REWARDS } from '../../utils/levelSystem';
 import { safeReply } from '../../utils/safeReply';
-
-export const data = new SlashCommandBuilder()
-    .setName('level')
-    .setDescription('View level and experience information')
-    .addUserOption(option =>
-        option.setName('user')
-            .setDescription('User to view level for (leave empty for yourself)')
-            .setRequired(false));
 
 export async function execute(interaction: ChatInputCommandInteraction) {
     try {

@@ -1,9 +1,9 @@
 import User from '../models/User';
 import config from '../config/config';
-import { Guild, User as DiscordUser, EmbedBuilder, TextChannel } from 'discord.js';
+import { Guild } from 'discord.js';
 import { parseDuration } from '../utils/parseDuration';
-import path from 'path';
-import fs from 'fs';
+import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
+import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
 
 interface MuteOperation {
   id: string;
@@ -42,20 +42,9 @@ export class MuteManager {
     return MuteManager.instance;
   }
 
-  private static generateId(length = 9): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
-
-
   public static async mute(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | null> {
     const instance = MuteManager.getInstance();
-    const operationId = MuteManager.generateId();
+    const operationId = generatePunishmentId();
     
     const operation: MuteOperation = {
       id: operationId,
@@ -75,12 +64,7 @@ export class MuteManager {
       }
 
       
-      const userPromise = User.findOne({ discordId: targetId });
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database timeout')), 5000)
-      );
-
-      const user = await Promise.race([userPromise, timeoutPromise]) as any;
+      const user = await fetchUserWithTimeout(targetId);
       if (!user) {
         throw new Error(`User ${targetId} not found in database`);
       }
@@ -107,7 +91,7 @@ export class MuteManager {
       }
 
       const expires = duration ? new Date(Date.now() + duration) : null;
-      const muteId = MuteManager.generateId();
+      const muteId = generatePunishmentId();
 
       
       const muteRecord = {
@@ -140,7 +124,9 @@ export class MuteManager {
 
       
       promises.push(
-        MuteManager.sendEmbed(guild, targetId, moderatorId, reason, expires, 'mute').catch(error => {
+        sendPunishmentEmbed({
+          guild, targetId, moderatorId, reason, type: 'mute', expires
+        }).catch(error => {
           console.warn(`[MuteManager] Failed to send mute embed:`, error.message);
         })
       );
@@ -181,16 +167,13 @@ export class MuteManager {
       throw new Error(`Mute operation failed: ${error.message}`);
       
     } finally {
-      
-      setTimeout(() => {
-        instance.pendingOperations.delete(operationId);
-      }, 5 * 60 * 1000);
+      cleanupOperation(instance.pendingOperations, operationId);
     }
   }
 
   public static async unmute(guild: Guild, targetId: string, moderatorId: string, reason = 'Unmuted', wsManager?: any): Promise<void> {
     const instance = MuteManager.getInstance();
-    const operationId = MuteManager.generateId();
+    const operationId = generatePunishmentId();
     
     const operation: MuteOperation = {
       id: operationId,
@@ -210,12 +193,7 @@ export class MuteManager {
       }
 
       
-      const userPromise = User.findOne({ discordId: targetId });
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database timeout')), 5000)
-      );
-
-      const user = await Promise.race([userPromise, timeoutPromise]) as any;
+      const user = await fetchUserWithTimeout(targetId);
       if (!user) {
         throw new Error(`User ${targetId} not found in database`);
       }
@@ -248,7 +226,9 @@ export class MuteManager {
 
       
       promises.push(
-        MuteManager.sendEmbed(guild, targetId, moderatorId, reason, null, 'unmute').catch(error => {
+        sendPunishmentEmbed({
+          guild, targetId, moderatorId, reason, type: 'unmute'
+        }).catch(error => {
           console.warn(`[MuteManager] Failed to send unmute embed:`, error.message);
         })
       );
@@ -285,10 +265,7 @@ export class MuteManager {
       throw new Error(`Unmute operation failed: ${error.message}`);
       
     } finally {
-      
-      setTimeout(() => {
-        instance.pendingOperations.delete(operationId);
-      }, 5 * 60 * 1000);
+      cleanupOperation(instance.pendingOperations, operationId);
     }
   }
 
@@ -363,113 +340,4 @@ export class MuteManager {
     }
   }
 
-  private static async sendEmbed(guild: Guild, targetId: string, moderatorId: string, reason: string, expires: Date | null, type: 'mute' | 'unmute'): Promise<void> {
-    try {
-      const channelId = config.channels.punishmentsChannel;
-      if (!channelId) {
-        console.warn('[MuteManager] Punishments channel not configured');
-        return;
-      }
-
-      const channelPromise = guild.channels.fetch(channelId);
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Channel fetch timeout')), 3000)
-      );
-
-      const channel = await Promise.race([channelPromise, timeoutPromise]).catch(() => null) as TextChannel | null;
-      if (!channel || !channel.isTextBased()) {
-        console.warn(`[MuteManager] Punishments channel ${channelId} not found or not text-based`);
-        return;
-      }
-
-      const isMute = type === 'mute';
-      const userMention = `<@${targetId}>`;
-      const moderatorMention = moderatorId === 'system' ? 'System' : 
-                              moderatorId === 'auto' ? 'Auto-Moderation' : `<@${moderatorId}>`;
-      const reasonField = reason?.trim() || 'No reason provided';
-      
-      let durationDisplay = 'Permanent';
-      let expiryDisplay: string | null = null;
-      if (expires) {
-        const remainingMs = Math.max(0, expires.getTime() - Date.now());
-        const minutes = Math.ceil(remainingMs / 60000);
-        if (minutes < 60) {
-          durationDisplay = `${minutes}m`;
-        } else if (minutes < 1440) {
-          const hours = Math.ceil(minutes / 60);
-          durationDisplay = `${hours}h`;
-        } else {
-          const days = Math.ceil(minutes / 1440);
-          durationDisplay = `${days}d`;
-        }
-        const d = new Date(expires);
-        expiryDisplay = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-      }
-
-      
-      let ign: string | undefined;
-      try {
-        const userDoc = await User.findOne({ discordId: targetId }).select('ign').lean();
-        ign = userDoc?.ign;
-      } catch (_) {}
-
-      const title = isMute ? 'Muted' : 'User Unmuted';
-      const color = isMute ? 0xff9900 : 0x2dd56b;
-      const descriptionLines: string[] = [];
-      descriptionLines.push(`**User:** ${userMention}${ign ? ` (${ign})` : ''}`);
-      descriptionLines.push(`**Reason:** \`${reasonField}\``);
-      if (isMute) {
-        descriptionLines.push(`**Duration:** \`${durationDisplay}\``);
-        if (expiryDisplay) descriptionLines.push(`**Mute expires at:** \`${expiryDisplay}\``);
-        descriptionLines.push(`**Staff:** ${moderatorMention}`);
-        descriptionLines.push('\nIf you wish to appeal this punishment, please create an appeal Support Channel and staff will be swift to help.');
-      } else {
-        descriptionLines.push(`**Unmuted by:** ${moderatorMention}`);
-        descriptionLines.push('\nIn future if you face another punishment, it will likely increase due to your punishment history.');
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setColor(color)
-        .setDescription(descriptionLines.join('\n'))
-        .setTimestamp();
-
-      
-      const assetFileName = isMute ? 'ban.png' : 'unbanunmute.png';
-      const candidatePaths = [
-        path.resolve(process.cwd(), 'src', 'asserts', 'punishments', assetFileName),
-        path.resolve(process.cwd(), 'asserts', 'punishments', assetFileName)
-      ];
-      const assetPath = candidatePaths.find(p => fs.existsSync(p));
-      const files: { attachment: string; name: string }[] = [];
-      if (assetPath) {
-        embed.setThumbnail(`attachment://${assetFileName}`);
-        files.push({ attachment: assetPath, name: assetFileName });
-      } else {
-        console.warn(`[MuteManager] Asset not found for embed thumbnail: ${assetFileName}`);
-      }
-
-      
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (attempts < maxAttempts) {
-        try {
-          await channel.send({ content: userMention, embeds: [embed], files });
-          break;
-        } catch (error: any) {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            console.error(`[MuteManager] Failed to send ${type} embed after ${maxAttempts} attempts:`, error);
-            throw error;
-          }
-          
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-        }
-      }
-
-    } catch (error) {
-      console.error(`[MuteManager] Error sending ${type} embed:`, error);
-    }
-  }
 }

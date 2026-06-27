@@ -1,20 +1,15 @@
-import { ChatInputCommandInteraction, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ThreadAutoArchiveDuration } from 'discord.js';
+import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
 import Game from '../../models/Game';
 import configuration from '../../config/config';
 import { GameManager } from '../../Matchmaking/GameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed } from '../../utils/voteRequest';
 
 interface VoidRequestData {
   gameId: string;
   reason: string;
   requesterId: string;
-}
-
-interface VoteData {
-  upvote: Set<string>;
-  downvote: Set<string>;
 }
 
 export async function voidrequest(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
@@ -94,21 +89,32 @@ async function createVoidRequest(interaction: Message | ChatInputCommandInteract
   const teamMentions = allPlayers.map((id: string) => `<@${id}>`).join(' ');
 
   const embed = createVoidRequestEmbed(data, game);
-  const components = createVoteButtons();
-  
-  const message = await channel.send({ 
-    content: teamMentions, 
-    embeds: [embed], 
-    components: [components] 
+  const components = createVoteButtons('Approve Void', 'Reject Void', 'void');
+
+  const message = await channel.send({
+    content: teamMentions,
+    embeds: [embed],
+    components: [components]
   });
 
-  await createDiscussionThread(message, data.gameId);
-  await setupVoteCollector(message, data, allPlayers, game);
+  await createDiscussionThread(message, `Void Discussion - Game ${data.gameId}`);
+
+  const votes: VoteData = { upvote: new Set(), downvote: new Set() };
+  const collector = setupVoteCollector(message, allPlayers, (userId, customId) => {
+    if (votes.upvote.has(userId) || votes.downvote.has(userId)) return;
+    if (customId === 'void_upvote') votes.upvote.add(userId);
+    else if (customId === 'void_downvote') votes.downvote.add(userId);
+  });
+
+  collector.on('end', async () => {
+    await processVoteResults(message, data, votes, allPlayers, game);
+  });
+
   await safeReply(interaction, { content: 'Void request created successfully.' });
 }
 
 function createVoidRequestEmbed(data: VoidRequestData, game: any): EmbedBuilder {
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setTitle('Void Request')
     .setDescription(`A void has been requested for Game ID: ${data.gameId}`)
     .addFields(
@@ -123,92 +129,17 @@ function createVoidRequestEmbed(data: VoidRequestData, game: any): EmbedBuilder 
     .setColor('#ff6b6b')
     .setTimestamp()
     .setFooter({ text: `Game ID: ${data.gameId}` });
-
-  return embed;
-}
-
-function createVoteButtons(): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId('void_upvote')
-      .setLabel('Approve Void')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('✅'),
-    new ButtonBuilder()
-      .setCustomId('void_downvote')
-      .setLabel('Reject Void')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('❌')
-  );
-}
-
-async function createDiscussionThread(message: any, gameId: string) {
-  try {
-    await message.startThread({ 
-      name: `Void Discussion - Game ${gameId}`, 
-      autoArchiveDuration: ThreadAutoArchiveDuration.OneDay 
-    });
-  } catch (error) {
-    console.error('Failed to create discussion thread:', error);
-  }
-}
-
-async function setupVoteCollector(message: any, data: VoidRequestData, allPlayers: string[], game: any) {
-  const votes: VoteData = {
-    upvote: new Set(),
-    downvote: new Set()
-  };
-
-  const collector = message.createMessageComponentCollector({ 
-    time: 15 * 60 * 1000,
-    filter: (i: any) => allPlayers.includes(i.user.id)
-  });
-
-  collector.on('collect', async (buttonInteraction: any) => {
-    try {
-      const userId = buttonInteraction.user.id;
-      
-      if (votes.upvote.has(userId) || votes.downvote.has(userId)) {
-        await buttonInteraction.reply({ 
-          content: 'You have already voted on this void request.', 
-          ephemeral: true 
-        });
-        return;
-      }
-
-      if (buttonInteraction.customId === 'void_upvote') {
-        votes.upvote.add(userId);
-      } else if (buttonInteraction.customId === 'void_downvote') {
-        votes.downvote.add(userId);
-      }
-
-      await buttonInteraction.deferUpdate();
-    } catch (error) {
-      console.error('Error handling vote:', error);
-    }
-  });
-
-  collector.on('end', async () => {
-    await processVoteResults(message, data, votes, allPlayers, game);
-  });
 }
 
 async function processVoteResults(message: any, data: VoidRequestData, votes: VoteData, allPlayers: string[], game: any) {
   const teamMentions = allPlayers.map((id: string) => `<@${id}>`).join(' ');
   const requiredVotes = Math.max(2, Math.ceil(allPlayers.length * 0.6));
+  const approved = votes.upvote.size >= requiredVotes;
 
-  const resultEmbed = new EmbedBuilder()
-    .setTitle('Void Request Results')
-    .setColor(votes.upvote.size >= requiredVotes ? '#00ff00' : '#00AAAA')
-    .addFields(
-      { name: 'Approval Votes', value: votes.upvote.size.toString(), inline: true },
-      { name: 'Rejection Votes', value: votes.downvote.size.toString(), inline: true },
-      { name: 'Required Votes', value: requiredVotes.toString(), inline: true }
-    )
-    .setTimestamp();
+  const resultEmbed = buildResultEmbed('Void Request Results', votes, requiredVotes, approved);
 
   try {
-    if (votes.upvote.size >= requiredVotes) {
+    if (approved) {
       const wsManager = global._wsManager as WebSocketManager;
       if (!wsManager) {
         resultEmbed.setDescription(`❌ Void request failed due to WebSocket manager not being available.`);
@@ -221,16 +152,16 @@ async function processVoteResults(message: any, data: VoidRequestData, votes: Vo
       resultEmbed.setDescription(`❌ Void request rejected due to insufficient approval votes.`);
     }
 
-    await message.edit({ 
-      content: teamMentions, 
-      embeds: [message.embeds[0], resultEmbed], 
-      components: [] 
+    await message.edit({
+      content: teamMentions,
+      embeds: [message.embeds[0], resultEmbed],
+      components: []
     });
   } catch (error) {
     console.error('Error processing void request results:', error);
-    await message.edit({ 
-      content: `${teamMentions} Error processing void request results.`, 
-      components: [] 
+    await message.edit({
+      content: `${teamMentions} Error processing void request results.`,
+      components: []
     });
   }
 }

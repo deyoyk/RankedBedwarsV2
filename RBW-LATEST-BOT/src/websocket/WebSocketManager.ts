@@ -408,43 +408,6 @@ export class WebSocketManager {
     });
   }
 
-  private isKnownMessageType(type: string): boolean {
-    const knownTypes = [
-      'autoss',
-      'player_status_update',
-      'screensharedontlog_success',
-      'screensharedontlog_failure',
-      'pong',
-      'ping',
-      'callcmd',
-      'queuefromingame',
-      'game_start',
-      'maps_info',
-      'player_status',
-      'permission',
-      'scoring',
-      'voiding',
-      'callsuccess',
-      'callfailure',
-      'queuefromingame_success',
-      'queuefromingame_fail',
-      'queuestatus',
-      'screensharedontlog',
-      'autoss_success',
-      'autoss_fail',
-      'botban',
-      'botmute',
-      'botunban',
-      'botunmute',
-      'scoringsuccess',
-      'gamevoided',
-      'warp_players',
-      'verification',
-      'check_player'
-    ];
-    return knownTypes.includes(type);
-  }
-
   private async handleMessage(data: string) {
     let msg: IncomingPayload;
     try {
@@ -478,265 +441,47 @@ export class WebSocketManager {
       this.globalHandlers[msg.type]?.(msg);
       return;
     }
-    // THIS SHIT IS FLOODING CONSOLE WHEN A RRANDOM KID SPAMMED THE SOCKET
-    // if (!this.isKnownMessageType(msg.type)) {
-    //   console.warn('[WebSocketManager] Unknown message type received:', msg.type, msg);
-    // }
-    
+
     switch (msg.type) {
       case 'autoss':
         await this.handleAutoSS(msg);
         break;
-      case 'player_status_update': {
-        const ignKey = msg.ign?.toLowerCase();
-        const threadInfo = ignKey ? activeScreenshareThreads[ignKey] : undefined;
-        if (threadInfo && Date.now() < threadInfo.expiresAt) {
-          try {
-            const guild = this.discordClient.guilds.cache.first();
-            if (guild) {
-              const thread = await guild.channels.fetch(threadInfo.threadId);
-              if (thread && thread.isTextBased()) {
-                const statusMsg = msg.online
-                  ? `**${msg.original_ign_case || msg.ign}** joined the server.`
-                  : `**${msg.original_ign_case || msg.ign}** left the server.`;
-                await thread.send(statusMsg);
-              }
-            }
-          } catch (e) {
-            console.error('[WebSocketManager] Failed to send player status update to thread:', e);
-          }
-        }
+      case 'player_status_update':
+        await this.handlePlayerStatusUpdate(msg);
         break;
-      }
-      case 'screensharedontlog_success': {
-        if (msg.uuid && this.dontLogCallbacks.has(msg.uuid)) {
-          this.dontLogCallbacks.get(msg.uuid)!({ online: true, dontlog: true });
-          this.dontLogCallbacks.delete(msg.uuid);
-        }
+      case 'screensharedontlog_success':
+        this.handleDontLogCallback(msg, true);
         break;
-      }
-      case 'screensharedontlog_failure': {
-        if (msg.uuid && this.dontLogCallbacks.has(msg.uuid)) {
-          this.dontLogCallbacks.get(msg.uuid)!({ online: false, dontlog: false });
-          this.dontLogCallbacks.delete(msg.uuid);
-        }
+      case 'screensharedontlog_failure':
+        this.handleDontLogCallback(msg, false);
         break;
-      }
-      case 'ping': {
-        this.send({
-          type: 'pong',
-          ping_id: msg.ping_id,
-          timestamp: Date.now()
-        });
+      case 'ping':
+        this.send({ type: 'pong', ping_id: msg.ping_id, timestamp: Date.now() });
         break;
-      }
-      case 'callcmd': {
+      case 'callcmd':
         this.handleCallCommand(msg as CallCommandPayload);
         break;
-      }
-      case 'queuefromingame': {
+      case 'queuefromingame':
         this.handleQueueFromInGame(msg as QueueFromInGamePayload);
         break;
-      }
-      case 'game_start': {
-        
-        (async () => {
-          try {
-            const gameIdRaw = msg.game_id || msg.gameid;
-            let gameId = gameIdRaw;
-
-            const Game = (await import('../models/Game')).default;
-            const game = await Game.findOne({ gameId: parseInt(gameId) });
-            if (!game) return;
-            const guild = this.discordClient.guilds.cache.first();
-            if (!guild) return;
-
-            let channel;
-            try {
-              channel = await guild.channels.fetch(game.channels.text);
-            } catch (err: any) {
-              if (err.code === 10003) {
-                console.warn(`[WebSocketManager] Channel ${game.channels.text} not found (may have been deleted).`);
-                return;
-              } else {
-                throw err;
-              }
-            }
-            if (!channel) return;
-
-            const { successEmbed } = require('../utils/betterembed');
-            const embed = successEmbed(
-              `Game started in arena: \`${msg.arena || 'Unknown'}\`\nStart time: <t:${Math.floor((msg.timestamp || Date.now())/1000)}:F>`,
-              'Game Started!'
-            ).builder;
-            embed.setTimestamp(new Date(msg.timestamp || Date.now()));
-            await channel.send({ embeds: [embed] });
-          } catch (err) {
-            console.error('[WebSocketManager] Error handling game_start:', err);
-          }
-        })();
+      case 'game_start':
+        this.handleGameStart(msg);
         break;
-      }
-      case 'maps_info': {
-        const payload = msg as MapsJsonPayload;
-
-        const reservedMapsArr = Array.isArray(payload.reserved) ? payload.reserved : [];
-        const lockedMapsArr = Array.isArray(payload.locked) ? payload.locked : [];
-        const disabledMapsArr = Array.isArray(payload.disabled) ? payload.disabled : [];
-        const allMapsMap = new Map<string, any>();
-        for (const m of [...reservedMapsArr, ...lockedMapsArr, ...disabledMapsArr]) {
-          allMapsMap.set(m.name, {
-            ...m,
-            maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-            max_players: (m as any).max_players ?? (m as any).maxplayers
-          });
-        }
-        this.allMaps = Array.from(allMapsMap.values());
-        this.reservedMaps = reservedMapsArr.map((m: any) => ({
-          ...m,
-          maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-          max_players: (m as any).max_players ?? (m as any).maxplayers
-        }));
-        this.lockedMaps = lockedMapsArr.map((m: any) => ({
-          ...m,
-          maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-          max_players: (m as any).max_players ?? (m as any).maxplayers
-        }));
-        this.disabledMaps = disabledMapsArr.map((m: any) => ({
-          ...m,
-          maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-          max_players: (m as any).max_players ?? (m as any).maxplayers
-        }));
+      case 'maps_info':
+        this.handleMapsInfo(msg as MapsJsonPayload);
         break;
-      }
-      
-      case 'player_status': {
-        
-        const ign = msg.ign;
-        const cb = this.checkPlayerCallbacks.get(ign);
-        if (cb) {
-          cb(msg.online, msg.original_ign_case);
-          this.checkPlayerCallbacks.delete(ign);
-        }
+      case 'player_status':
+        this.handlePlayerStatus(msg);
         break;
-      }
-      case 'permission': {
-        
-        console.log('[WebSocketManager] Received permission settings');
-        
-        const permissionsUpdate = {...msg};
-        
-        delete permissionsUpdate.type;
-        
-        
-        for (const [cmd, roles] of Object.entries(permissionsUpdate)) {
-          if (Array.isArray(roles)) {
-            this.permissions[cmd] = roles;
-          }
-        }
+      case 'permission':
+        this.handlePermission(msg);
         break;
-      }
-      case 'scoring': {
-        console.log('[WebSocketManager] Received scoring JSON:', JSON.stringify(msg, null, 2));
-        
-        if (!this.gameManager) {
-          console.error('[WebSocketManager] GameManager not available for scoring');
-          break;
-        }
-        
-        const { 
-          gameid, 
-          winningTeamNumber, 
-          winningteamignlist, 
-          players, 
-          mvps: msgMvps, 
-          bedsbroken: msgBedsbroken 
-        } = msg;
-        
-        const playerData: Record<string, any> = {};
-        let maxKills = -1;
-        let mvps: string[] = msgMvps || [];
-        let bedbreaks: string[] = msgBedsbroken || [];
-        let winningTeam: number;
-        
-        if (winningTeamNumber) {
-
-          winningTeam = winningTeamNumber;
-        } else if (winningteamignlist && Array.isArray(winningteamignlist)) {
-
-          winningTeam = 1;
-          console.log(`[WebSocketManager] Winning team IGNs: ${winningteamignlist.join(', ')}`);
-        } else {
-          console.error('[WebSocketManager] No winning team information provided');
-          winningTeam = 1; 
-        }
-        
-        if (!msgMvps || msgMvps.length === 0) {
-          mvps = [];
-          for (const [ign, statsRaw] of Object.entries(players || {})) {
-            const stats = statsRaw as any;
-            if ((stats.kills ?? 0) > maxKills) {
-              maxKills = stats.kills ?? 0;
-              mvps = [ign];
-            } else if ((stats.kills ?? 0) === maxKills) {
-              mvps.push(ign);
-            }
-          }
-        }
-        
-        for (const [ign, statsRaw] of Object.entries(players || {})) {
-          const stats = statsRaw as any;
-          const playerBrokeBed = bedbreaks.includes(ign);
-          
-          playerData[ign] = {
-            kills: stats.kills ?? 0,
-            deaths: stats.deaths ?? 0,
-            bedBroken: playerBrokeBed ? 1 : 0,
-            finalKills: stats.finalkills ?? 0,
-            diamonds: stats.diamonds ?? 0,
-            irons: stats.irons ?? 0,
-            gold: stats.gold ?? 0,
-            emeralds: stats.emeralds ?? 0,
-            blocksPlaced: stats.blocksplaced ?? 0
-          };
-        }
-        (async () => {
-          try {
-            await this.gameManager!.scoreGame({
-              gameId: parseInt(gameid),
-              winningTeam: winningTeam,
-              winningTeamIGNs: winningteamignlist || [], 
-              mvps,
-              bedbreaks,
-              playerData,
-              reason: 'Game completed'
-            });
-            console.log(`[WebSocketManager] Successfully scored game ${gameid} via GameManager`);
-          } catch (error) {
-            console.error(`[WebSocketManager] Error scoring game ${gameid} via GameManager:`, error);
-          }
-        })();
+      case 'scoring':
+        this.handleScoring(msg);
         break;
-      }
-      case 'voiding': {
-        
-        if (!this.gameManager) {
-          console.error('[WebSocketManager] GameManager not available for voiding');
-          break;
-        }
-
-        const { gameid, reason } = msg;
-        
-        (async () => {
-          try {
-            await this.gameManager!.voidGame(parseInt(gameid), reason || 'Voided via WebSocket');
-            console.log(`[WebSocketManager] Successfully voided game ${gameid} via GameManager`);
-          } catch (error) {
-            console.error(`[WebSocketManager] Error voiding game ${gameid} via GameManager:`, error);
-          }
-        })();
+      case 'voiding':
+        this.handleVoiding(msg);
         break;
-      }
       default:
         if (msg.type && this.listeners[msg.type]) {
           for (const cb of this.listeners[msg.type]) {
@@ -745,6 +490,210 @@ export class WebSocketManager {
         }
         break;
     }
+  }
+
+  private async handlePlayerStatusUpdate(msg: any) {
+    const ignKey = msg.ign?.toLowerCase();
+    const threadInfo = ignKey ? activeScreenshareThreads[ignKey] : undefined;
+    if (threadInfo && Date.now() < threadInfo.expiresAt) {
+      try {
+        const guild = this.discordClient.guilds.cache.first();
+        if (guild) {
+          const thread = await guild.channels.fetch(threadInfo.threadId);
+          if (thread && thread.isTextBased()) {
+            const statusMsg = msg.online
+              ? `**${msg.original_ign_case || msg.ign}** joined the server.`
+              : `**${msg.original_ign_case || msg.ign}** left the server.`;
+            await thread.send(statusMsg);
+          }
+        }
+      } catch (e) {
+        console.error('[WebSocketManager] Failed to send player status update to thread:', e);
+      }
+    }
+  }
+
+  private handleDontLogCallback(msg: any, success: boolean) {
+    if (msg.uuid && this.dontLogCallbacks.has(msg.uuid)) {
+      this.dontLogCallbacks.get(msg.uuid)!({ online: success, dontlog: success });
+      this.dontLogCallbacks.delete(msg.uuid);
+    }
+  }
+
+  private handleGameStart(msg: any) {
+    (async () => {
+      try {
+        const gameIdRaw = msg.game_id || msg.gameid;
+        let gameId = gameIdRaw;
+
+        const Game = (await import('../models/Game')).default;
+        const game = await Game.findOne({ gameId: parseInt(gameId) });
+        if (!game) return;
+        const guild = this.discordClient.guilds.cache.first();
+        if (!guild) return;
+
+        let channel;
+        try {
+          channel = await guild.channels.fetch(game.channels.text);
+        } catch (err: any) {
+          if (err.code === 10003) {
+            console.warn(`[WebSocketManager] Channel ${game.channels.text} not found (may have been deleted).`);
+            return;
+          } else {
+            throw err;
+          }
+        }
+        if (!channel) return;
+
+        const { successEmbed } = require('../utils/betterembed');
+        const embed = successEmbed(
+          `Game started in arena: \`${msg.arena || 'Unknown'}\`\nStart time: <t:${Math.floor((msg.timestamp || Date.now())/1000)}:F>`,
+          'Game Started!'
+        ).builder;
+        embed.setTimestamp(new Date(msg.timestamp || Date.now()));
+        await channel.send({ embeds: [embed] });
+      } catch (err) {
+        console.error('[WebSocketManager] Error handling game_start:', err);
+      }
+    })();
+  }
+
+  private handleMapsInfo(payload: MapsJsonPayload) {
+    const reservedMapsArr = Array.isArray(payload.reserved) ? payload.reserved : [];
+    const lockedMapsArr = Array.isArray(payload.locked) ? payload.locked : [];
+    const disabledMapsArr = Array.isArray(payload.disabled) ? payload.disabled : [];
+    const allMapsMap = new Map<string, any>();
+    for (const m of [...reservedMapsArr, ...lockedMapsArr, ...disabledMapsArr]) {
+      allMapsMap.set(m.name, {
+        ...m,
+        maxplayers: (m as any).maxplayers ?? (m as any).max_players,
+        max_players: (m as any).max_players ?? (m as any).maxplayers
+      });
+    }
+    this.allMaps = Array.from(allMapsMap.values());
+    this.reservedMaps = reservedMapsArr.map((m: any) => ({
+      ...m,
+      maxplayers: (m as any).maxplayers ?? (m as any).max_players,
+      max_players: (m as any).max_players ?? (m as any).maxplayers
+    }));
+    this.lockedMaps = lockedMapsArr.map((m: any) => ({
+      ...m,
+      maxplayers: (m as any).maxplayers ?? (m as any).max_players,
+      max_players: (m as any).max_players ?? (m as any).maxplayers
+    }));
+    this.disabledMaps = disabledMapsArr.map((m: any) => ({
+      ...m,
+      maxplayers: (m as any).maxplayers ?? (m as any).max_players,
+      max_players: (m as any).max_players ?? (m as any).maxplayers
+    }));
+  }
+
+  private handlePlayerStatus(msg: any) {
+    const ign = msg.ign;
+    const cb = this.checkPlayerCallbacks.get(ign);
+    if (cb) {
+      cb(msg.online, msg.original_ign_case);
+      this.checkPlayerCallbacks.delete(ign);
+    }
+  }
+
+  private handlePermission(msg: any) {
+    console.log('[WebSocketManager] Received permission settings');
+    const permissionsUpdate = { ...msg };
+    delete permissionsUpdate.type;
+    for (const [cmd, roles] of Object.entries(permissionsUpdate)) {
+      if (Array.isArray(roles)) {
+        this.permissions[cmd] = roles;
+      }
+    }
+  }
+
+  private handleScoring(msg: any) {
+    console.log('[WebSocketManager] Received scoring JSON:', JSON.stringify(msg, null, 2));
+    
+    if (!this.gameManager) {
+      console.error('[WebSocketManager] GameManager not available for scoring');
+      return;
+    }
+    
+    const { gameid, winningTeamNumber, winningteamignlist, players, mvps: msgMvps, bedsbroken: msgBedsbroken } = msg;
+    
+    let maxKills = -1;
+    let mvps: string[] = msgMvps || [];
+    let winningTeam: number;
+    
+    if (winningTeamNumber) {
+      winningTeam = winningTeamNumber;
+    } else if (winningteamignlist && Array.isArray(winningteamignlist)) {
+      winningTeam = 1;
+      console.log(`[WebSocketManager] Winning team IGNs: ${winningteamignlist.join(', ')}`);
+    } else {
+      console.error('[WebSocketManager] No winning team information provided');
+      winningTeam = 1;
+    }
+    
+    if (!msgMvps || msgMvps.length === 0) {
+      mvps = [];
+      for (const [ign, statsRaw] of Object.entries(players || {})) {
+        const stats = statsRaw as any;
+        if ((stats.kills ?? 0) > maxKills) {
+          maxKills = stats.kills ?? 0;
+          mvps = [ign];
+        } else if ((stats.kills ?? 0) === maxKills) {
+          mvps.push(ign);
+        }
+      }
+    }
+    
+    const playerData: Record<string, any> = {};
+    const bedbreaks: string[] = msgBedsbroken || [];
+    for (const [ign, statsRaw] of Object.entries(players || {})) {
+      const stats = statsRaw as any;
+      playerData[ign] = {
+        kills: stats.kills ?? 0,
+        deaths: stats.deaths ?? 0,
+        bedBroken: bedbreaks.includes(ign) ? 1 : 0,
+        finalKills: stats.finalkills ?? 0,
+        diamonds: stats.diamonds ?? 0,
+        irons: stats.irons ?? 0,
+        gold: stats.gold ?? 0,
+        emeralds: stats.emeralds ?? 0,
+        blocksPlaced: stats.blocksplaced ?? 0
+      };
+    }
+
+    (async () => {
+      try {
+        await this.gameManager!.scoreGame({
+          gameId: parseInt(gameid),
+          winningTeam,
+          winningTeamIGNs: winningteamignlist || [],
+          mvps,
+          bedbreaks,
+          playerData,
+          reason: 'Game completed'
+        });
+        console.log(`[WebSocketManager] Successfully scored game ${gameid} via GameManager`);
+      } catch (error) {
+        console.error(`[WebSocketManager] Error scoring game ${gameid} via GameManager:`, error);
+      }
+    })();
+  }
+
+  private handleVoiding(msg: any) {
+    if (!this.gameManager) {
+      console.error('[WebSocketManager] GameManager not available for voiding');
+      return;
+    }
+    const { gameid, reason } = msg;
+    (async () => {
+      try {
+        await this.gameManager!.voidGame(parseInt(gameid), reason || 'Voided via WebSocket');
+        console.log(`[WebSocketManager] Successfully voided game ${gameid} via GameManager`);
+      } catch (error) {
+        console.error(`[WebSocketManager] Error voiding game ${gameid} via GameManager:`, error);
+      }
+    })();
   }
 
   public getAllMaps(): MapInfo[] {

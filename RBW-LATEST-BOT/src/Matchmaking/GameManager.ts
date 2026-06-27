@@ -1737,6 +1737,63 @@ export class GameManager {
     }
   }
 
+  private applyScoringStats(user: any, stats: any, isWinner: boolean, isMvp: boolean, eloChange: number): void {
+    user.kills = (user.kills || 0) + (stats.kills ?? 0);
+    user.deaths = (user.deaths || 0) + (stats.deaths ?? 0);
+    user.finalKills = (user.finalKills || 0) + (stats.finalKills ?? 0);
+    user.bedBroken = (user.bedBroken || 0) + (stats.bedBroken ?? 0);
+    user.diamonds = (user.diamonds || 0) + (stats.diamonds ?? 0);
+    user.irons = (user.irons || 0) + (stats.irons ?? 0);
+    user.gold = (user.gold || 0) + (stats.gold ?? 0);
+    user.emeralds = (user.emeralds || 0) + (stats.emeralds ?? 0);
+    user.blocksPlaced = (user.blocksPlaced || 0) + (stats.blocksPlaced ?? 0);
+    if (isWinner) {
+      user.wins = (user.wins || 0) + 1;
+      user.winstreak = (user.winstreak || 0) + 1;
+      user.losestreak = 0;
+    } else {
+      user.losses = (user.losses || 0) + 1;
+      user.losestreak = (user.losestreak || 0) + 1;
+      user.winstreak = 0;
+    }
+    if (isMvp) user.mvps = (user.mvps || 0) + 1;
+    user.kdr = user.deaths && user.deaths > 0 ? user.kills / user.deaths : user.kills;
+    user.wlr = user.losses && user.losses > 0 ? user.wins / user.losses : user.wins;
+    user.elo = Math.max(0, user.elo + eloChange);
+    user.games = (user.games || 0) + 1;
+  }
+
+  private updateRecentGamesForScoring(user: any, game: any, stats: any, eloChange: number, isWinner: boolean, isMvp: boolean, now: Date): void {
+    if (!user.recentGames) user.recentGames = [];
+    const idx = user.recentGames.findIndex((g: any) => g.gameId === game.gameId);
+    const entry = {
+      gameId: game.gameId,
+      queueid: typeof game.queueId === 'number' ? game.queueId : parseInt(game.queueId, 10),
+      map: game.map,
+      eloGain: eloChange,
+      kills: stats.kills ?? 0,
+      deaths: stats.deaths ?? 0,
+      bedBroken: stats.bedBroken ?? 0,
+      finalKills: stats.finalKills ?? 0,
+      won: isWinner,
+      ismvp: isMvp,
+      date: now,
+      state: 'scored',
+      startTime: game.startTime,
+      endTime: now,
+      diamonds: stats.diamonds ?? 0,
+      irons: stats.irons ?? 0,
+      gold: stats.gold ?? 0,
+      emeralds: stats.emeralds ?? 0,
+      blocksPlaced: stats.blocksPlaced ?? 0
+    };
+    if (idx !== -1) {
+      user.recentGames[idx] = entry;
+    } else {
+      user.recentGames.unshift(entry);
+    }
+  }
+
   private async updateAllUsersForScoring(context: GameScoreContext, gameResult: GameResult): Promise<void> {
     const { game, playerData, idToIgn, players: contextPlayers } = context;
     const User = (await import('../models/User')).default;
@@ -1750,41 +1807,18 @@ export class GameManager {
       const isWinner = (context.winningTeam === 1 && game.team1.includes(user.discordId)) || (context.winningTeam === 2 && game.team2.includes(user.discordId));
       const isMvp = userIgn ? (gameResult.mvps || []).map(x => x.toLowerCase()).includes(userIgn.toLowerCase()) : false;
       const isBedBreaker = userIgn ? (gameResult.bedbreaks || []).map(x => x.toLowerCase()).includes(userIgn.toLowerCase()) : false;
-      const eloRanks = context.eloRanks;
-      const rank = eloRanks.find(r => user.elo >= r.startElo && user.elo <= r.endElo);
+      const rank = context.eloRanks.find((r: any) => user.elo >= r.startElo && user.elo <= r.endElo);
       let eloChange = 0;
       if (rank) eloChange = this.calculateScoreElo(user, rank, isWinner, isMvp, isBedBreaker);
+
+      this.applyScoringStats(user, stats, isWinner, isMvp, eloChange);
 
       const experienceGained = this.calculateExperienceGained(isWinner, isMvp, isBedBreaker, stats);
       const oldExperience = user.experience || 0;
       const newExperience = oldExperience + experienceGained;
       const levelUpInfo = checkLevelUp(oldExperience, newExperience);
-
-      user.kills = (user.kills || 0) + (stats.kills ?? 0);
-      user.deaths = (user.deaths || 0) + (stats.deaths ?? 0);
-      user.finalKills = (user.finalKills || 0) + (stats.finalKills ?? 0);
-      user.bedBroken = (user.bedBroken || 0) + (stats.bedBroken ?? 0);
-      user.diamonds = (user.diamonds || 0) + (stats.diamonds ?? 0);
-      user.irons = (user.irons || 0) + (stats.irons ?? 0);
-      user.gold = (user.gold || 0) + (stats.gold ?? 0);
-      user.emeralds = (user.emeralds || 0) + (stats.emeralds ?? 0);
-      user.blocksPlaced = (user.blocksPlaced || 0) + (stats.blocksPlaced ?? 0);
-      if (isWinner) {
-        user.wins = (user.wins || 0) + 1;
-        user.winstreak = (user.winstreak || 0) + 1;
-        user.losestreak = 0;
-      } else {
-        user.losses = (user.losses || 0) + 1;
-        user.losestreak = (user.losestreak || 0) + 1;
-        user.winstreak = 0;
-      }
-      if (isMvp) user.mvps = (user.mvps || 0) + 1;
-      user.kdr = user.deaths && user.deaths > 0 ? user.kills / user.deaths : user.kills;
-      user.wlr = user.losses && user.losses > 0 ? user.wins / user.losses : user.wins;
-      user.elo = Math.max(0, user.elo + eloChange);
       user.experience = newExperience;
       user.level = levelUpInfo.newLevel;
-      user.games = (user.games || 0) + 1;
 
       
       if (levelUpInfo.leveledUp) {
@@ -1799,35 +1833,7 @@ export class GameManager {
         
       }
       await this.updatePlayerDailyElo(user);
-      
-      if (!user.recentGames) user.recentGames = [];
-      const idx = user.recentGames.findIndex((g: any) => g.gameId === game.gameId);
-      const entry = {
-        gameId: game.gameId,
-        queueid: typeof game.queueId === 'number' ? game.queueId : parseInt(game.queueId, 10),
-        map: game.map,
-        eloGain: eloChange,
-        kills: stats.kills ?? 0,
-        deaths: stats.deaths ?? 0,
-        bedBroken: stats.bedBroken ?? 0,
-        finalKills: stats.finalKills ?? 0,
-        won: isWinner,
-        ismvp: isMvp,
-        date: now,
-        state: 'scored',
-        startTime: game.startTime,
-        endTime: now,
-        diamonds: stats.diamonds ?? 0,
-        irons: stats.irons ?? 0,
-        gold: stats.gold ?? 0,
-        emeralds: stats.emeralds ?? 0,
-        blocksPlaced: stats.blocksPlaced ?? 0
-      };
-      if (idx !== -1) {
-        user.recentGames[idx] = entry;
-      } else {
-        user.recentGames.unshift(entry);
-      }
+      this.updateRecentGamesForScoring(user, game, stats, eloChange, isWinner, isMvp, now);
       await user.save();
     });
     await Promise.allSettled(updatePromises);

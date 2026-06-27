@@ -213,6 +213,50 @@ export class ApiManager {
     }
   }
 
+  private buildUserWithLevel(user: any) {
+    const levelInfo = getLevelInfo(user.experience || 0);
+    return {
+      ...user.toObject(),
+      levelInfo: {
+        level: levelInfo.level,
+        experience: levelInfo.experience,
+        experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
+        experienceForNextLevel: levelInfo.experienceForNextLevel,
+        experienceNeededForNext: levelInfo.experienceNeededForNext,
+        totalExperienceForLevel: levelInfo.totalExperienceForLevel,
+        progressPercentage: ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100).toFixed(2)
+      }
+    };
+  }
+
+  private async resolveGameIgns(game: any): Promise<Record<string, string>> {
+    const allIds = [
+      ...(game.team1 || []),
+      ...(game.team2 || []),
+      ...(game.bedbreaks || []),
+      ...(game.mvps || []),
+      ...(game.winners || []),
+      ...(game.losers || [])
+    ];
+    const uniqueIds = Array.from(new Set(allIds));
+    const users = await User.find({ discordId: { $in: uniqueIds } }).select('discordId ign');
+    const idToIgn: Record<string, string> = {};
+    users.forEach(u => { idToIgn[u.discordId] = u.ign; });
+    return idToIgn;
+  }
+
+  private mapGameIgns(game: any, idToIgn: Record<string, string>) {
+    const map = (arr: string[]) => (arr || []).map(id => idToIgn[id] || id);
+    return {
+      team1ign: map(game.team1),
+      team2ign: map(game.team2),
+      bedbreaksign: map(game.bedbreaks),
+      mvpsign: map(game.mvps),
+      winnersign: map(game.winners),
+      losersign: map(game.losers)
+    };
+  }
+
   private getUserData = async (req: Request, res: Response): Promise<void> => {
     try {
       const ign = req.query.ign as string;
@@ -230,22 +274,7 @@ export class ApiManager {
         return;
       }
 
-      
-      const levelInfo = getLevelInfo(user.experience || 0);
-      const userWithLevel = {
-        ...user.toObject(),
-        levelInfo: {
-          level: levelInfo.level,
-          experience: levelInfo.experience,
-          experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
-          experienceForNextLevel: levelInfo.experienceForNextLevel,
-          experienceNeededForNext: levelInfo.experienceNeededForNext,
-          totalExperienceForLevel: levelInfo.totalExperienceForLevel,
-          progressPercentage: ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100).toFixed(2)
-        }
-      };
-
-      res.json(userWithLevel);
+      res.json(this.buildUserWithLevel(user));
     } catch (error) {
       console.error('Error fetching user:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -265,22 +294,7 @@ export class ApiManager {
         return;
       }
 
-      
-      const levelInfo = getLevelInfo(user.experience || 0);
-      const userWithLevel = {
-        ...user.toObject(),
-        levelInfo: {
-          level: levelInfo.level,
-          experience: levelInfo.experience,
-          experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
-          experienceForNextLevel: levelInfo.experienceForNextLevel,
-          experienceNeededForNext: levelInfo.experienceNeededForNext,
-          totalExperienceForLevel: levelInfo.totalExperienceForLevel,
-          progressPercentage: ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100).toFixed(2)
-        }
-      };
-
-      res.json(userWithLevel);
+      res.json(this.buildUserWithLevel(user));
     } catch (error) {
       console.error('Error fetching user by discordid:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -301,32 +315,8 @@ export class ApiManager {
         return;
       }
 
-
-      const allIds = [
-        ...(game.team1 || []),
-        ...(game.team2 || []),
-        ...(game.bedbreaks || []),
-        ...(game.mvps || []),
-        ...(game.winners || []),
-        ...(game.losers || [])
-      ];
-      const uniqueIds = Array.from(new Set(allIds));
-      const users = await User.find({ discordId: { $in: uniqueIds } }).select('discordId ign');
-      const idToIgn: Record<string, string> = {};
-      users.forEach(u => { idToIgn[u.discordId] = u.ign; });
-
-      const mapToIgn = (arr: string[]) => (arr || []).map(id => idToIgn[id] || id);
-
-      const response = {
-        ...game.toObject(),
-        team1ign: mapToIgn(game.team1),
-        team2ign: mapToIgn(game.team2),
-        bedbreaksign: mapToIgn(game.bedbreaks),
-        mvpsign: mapToIgn(game.mvps),
-        winnersign: mapToIgn(game.winners),
-        loosersign: mapToIgn(game.losers)
-      };
-      res.json(response);
+      const idToIgn = await this.resolveGameIgns(game);
+      res.json({ ...game.toObject(), ...this.mapGameIgns(game, idToIgn) });
     } catch (error) {
       console.error('Error fetching game:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -467,9 +457,6 @@ export class ApiManager {
     });
   }
 
-  public stop(): Promise<void> {
-    return Promise.resolve();
-  }
   private getPunishments = async (req: Request, res: Response): Promise<void> => {
     try {
       const type = req.params.type;
@@ -703,7 +690,6 @@ export class ApiManager {
 
       const result = await SeasonManager.getSeasonGames(seasonNumber, chapterNumber, page, pageSize);
 
-      // Get user mappings for displaying IGNS
       const allIds = new Set<string>();
       result.games.forEach(game => {
         [...game.team1, ...game.team2, ...game.winners, ...game.losers, ...game.mvps, ...game.bedbreaks].forEach(id => allIds.add(id));
@@ -715,12 +701,7 @@ export class ApiManager {
 
       const gamesWithIgns = result.games.map(game => ({
         ...game.toObject(),
-        team1ign: game.team1.map(id => idToIgn[id] || id),
-        team2ign: game.team2.map(id => idToIgn[id] || id),
-        winnersign: game.winners.map(id => idToIgn[id] || id),
-        losersign: game.losers.map(id => idToIgn[id] || id),
-        mvpsign: game.mvps.map(id => idToIgn[id] || id),
-        bedbreaksign: game.bedbreaks.map(id => idToIgn[id] || id)
+        ...this.mapGameIgns(game, idToIgn)
       }));
 
       res.json({
@@ -881,7 +862,6 @@ export class ApiManager {
         ]
       });
 
-      
       const allIds = new Set<string>();
       games.forEach(game => {
         [...game.team1, ...game.team2, ...game.winners, ...game.losers, ...game.mvps, ...game.bedbreaks].forEach(id => allIds.add(id));
@@ -891,26 +871,16 @@ export class ApiManager {
       const idToIgn: Record<string, string> = {};
       users.forEach(u => { idToIgn[u.discordId] = u.ign; });
 
-      const gamesWithIgns = games.map(game => {
-        const isWinner = game.winners.includes(discordid);
-        const isTeam1 = game.team1.includes(discordid);
-
-        return {
-          ...game.toObject(),
-          team1ign: game.team1.map(id => idToIgn[id] || id),
-          team2ign: game.team2.map(id => idToIgn[id] || id),
-          winnersign: game.winners.map(id => idToIgn[id] || id),
-          losersign: game.losers.map(id => idToIgn[id] || id),
-          mvpsign: game.mvps.map(id => idToIgn[id] || id),
-          bedbreaksign: game.bedbreaks.map(id => idToIgn[id] || id),
-          playerResult: {
-            won: isWinner,
-            team: isTeam1 ? 1 : 2,
-            wasMVP: game.mvps.includes(discordid),
-            brokeABed: game.bedbreaks.includes(discordid)
-          }
-        };
-      });
+      const gamesWithIgns = games.map(game => ({
+        ...game.toObject(),
+        ...this.mapGameIgns(game, idToIgn),
+        playerResult: {
+          won: game.winners.includes(discordid),
+          team: game.team1.includes(discordid) ? 1 : 2,
+          wasMVP: game.mvps.includes(discordid),
+          brokeABed: game.bedbreaks.includes(discordid)
+        }
+      }));
 
       res.json({
         games: gamesWithIgns,

@@ -1,57 +1,38 @@
-import { Message, ChatInputCommandInteraction, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
+import { ensureUserStats, updateDailyElo, computeWlr } from '../../utils/userStats';
 
 export async function win(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let targetUserId: string;
-  let user: any;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    
     const optionUser = interaction.options.getUser('user');
-    if (optionUser) {
-      targetUserId = optionUser.id;
-    } else {
-      targetUserId = interaction.user.id;
-    }
+    targetUserId = optionUser ? optionUser.id : interaction.user.id;
   } else {
-    
     if (!args || args.length < 1) {
       targetUserId = interaction.author.id;
     } else {
-      const arg = args[0];
-      const mentionMatch = arg.match(/^<@!?([0-9]+)>$/);
-      if (mentionMatch) {
-        targetUserId = mentionMatch[1];
-      } else {
+      const mentionMatch = args[0].match(/^<@!?([0-9]+)>$/);
+      if (!mentionMatch) {
         await safeReply(interaction, errorEmbed('Please provide a user mention (e.g. <@1234567890>).', 'Win Usage Error'));
         return;
       }
+      targetUserId = mentionMatch[1];
     }
   }
 
   try {
-    if (!user) {
-      user = await User.findOne({ discordId: targetUserId });
-    }
+    const user = await User.findOne({ discordId: targetUserId });
     if (!user) {
       await safeReply(interaction, errorEmbed('User not found or not registered.', 'Win Usage Error'));
       return;
     }
-    targetUserId = user.discordId;
 
-    
-    user.elo = typeof user.elo === 'number' && !isNaN(user.elo) ? user.elo : 0;
-    user.wins = typeof user.wins === 'number' && !isNaN(user.wins) ? user.wins : 0;
-    user.games = typeof user.games === 'number' && !isNaN(user.games) ? user.games : 0;
-    user.winstreak = typeof user.winstreak === 'number' && !isNaN(user.winstreak) ? user.winstreak : 0;
-    user.losestreak = typeof user.losestreak === 'number' && !isNaN(user.losestreak) ? user.losestreak : 0;
-    user.losses = typeof user.losses === 'number' && !isNaN(user.losses) ? user.losses : 0;
-    
-    if (!Array.isArray(user.dailyElo)) user.dailyElo = [];
+    ensureUserStats(user);
 
     const eloRank = await EloRank.findOne({
       startElo: { $lte: user.elo },
@@ -67,22 +48,8 @@ export async function win(interaction: Message | ChatInputCommandInteraction, ar
     user.games += 1;
     user.winstreak = (user.winstreak ?? 0) + 1;
     user.losestreak = 0;
-    const wins = user.wins ?? 0;
-    const losses = user.losses ?? 0;
-    user.wlr = losses > 0 ? parseFloat((wins / losses).toFixed(2)) : wins;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const existingEntry = user.dailyElo.find((entry: any) => {
-      const entryDate = new Date(entry.date);
-      entryDate.setHours(0, 0, 0, 0);
-      return entryDate.getTime() === today.getTime();
-    });
-    if (existingEntry) {
-      existingEntry.elo = user.elo;
-    } else {
-      user.dailyElo.push({ elo: user.elo, date: new Date() });
-    }
+    user.wlr = computeWlr(user.wins, user.losses);
+    updateDailyElo(user, user.elo);
 
     await user.save();
 

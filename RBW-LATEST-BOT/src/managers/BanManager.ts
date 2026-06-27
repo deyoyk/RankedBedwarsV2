@@ -1,9 +1,9 @@
 import User from '../models/User';
 import config from '../config/config';
-import { Guild, User as DiscordUser, EmbedBuilder, TextChannel } from 'discord.js';
+import { Guild } from 'discord.js';
 import { parseDuration } from '../utils/parseDuration';
-import path from 'path';
-import fs from 'fs';
+import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
+import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
 
 interface BanOperation {
   id: string;
@@ -42,20 +42,9 @@ export class BanManager {
     return BanManager.instance;
   }
 
-  private static generateId(length = 9): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
-
-
   public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | null> {
     const instance = BanManager.getInstance();
-    const operationId = BanManager.generateId();
+    const operationId = generatePunishmentId();
     
     const operation: BanOperation = {
       id: operationId,
@@ -73,12 +62,7 @@ export class BanManager {
         throw new Error('Invalid ban parameters');
       }
 
-      const userPromise = User.findOne({ discordId: targetId });
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database timeout')), 5000)
-      );
-
-      const user = await Promise.race([userPromise, timeoutPromise]) as any;
+      const user = await fetchUserWithTimeout(targetId);
       if (!user) {
         throw new Error(`User ${targetId} not found in database`);
       }
@@ -102,7 +86,7 @@ export class BanManager {
       }
 
       const expires = duration ? new Date(Date.now() + duration) : null;
-      const banId = BanManager.generateId();
+      const banId = generatePunishmentId();
 
       const banRecord = {
         id: banId,
@@ -142,7 +126,9 @@ export class BanManager {
 
       
       promises.push(
-        BanManager.sendEmbed(guild, targetId, moderatorId, reason, expires, 'ban').catch(error => {
+        sendPunishmentEmbed({
+          guild, targetId, moderatorId, reason, type: 'ban', expires
+        }).catch(error => {
           console.warn(`[BanManager] Failed to send ban embed:`, error.message);
         })
       );
@@ -183,16 +169,13 @@ export class BanManager {
       throw new Error(`Ban operation failed: ${error.message}`);
       
     } finally {
-      
-      setTimeout(() => {
-        instance.pendingOperations.delete(operationId);
-      }, 5 * 60 * 1000);
+      cleanupOperation(instance.pendingOperations, operationId);
     }
   }
 
   public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: any): Promise<void> {
     const instance = BanManager.getInstance();
-    const operationId = BanManager.generateId();
+    const operationId = generatePunishmentId();
     
     const operation: BanOperation = {
       id: operationId,
@@ -212,12 +195,7 @@ export class BanManager {
       }
 
       
-      const userPromise = User.findOne({ discordId: targetId });
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Database timeout')), 5000)
-      );
-
-      const user = await Promise.race([userPromise, timeoutPromise]) as any;
+      const user = await fetchUserWithTimeout(targetId);
       if (!user) {
         throw new Error(`User ${targetId} not found in database`);
       }
@@ -257,7 +235,9 @@ export class BanManager {
 
       
       promises.push(
-        BanManager.sendEmbed(guild, targetId, moderatorId, reason, null, 'unban').catch(error => {
+        sendPunishmentEmbed({
+          guild, targetId, moderatorId, reason, type: 'unban'
+        }).catch(error => {
           console.warn(`[BanManager] Failed to send unban embed:`, error.message);
         })
       );
@@ -294,10 +274,7 @@ export class BanManager {
       throw new Error(`Unban operation failed: ${error.message}`);
       
     } finally {
-      
-      setTimeout(() => {
-        instance.pendingOperations.delete(operationId);
-      }, 5 * 60 * 1000);
+      cleanupOperation(instance.pendingOperations, operationId);
     }
   }
 
@@ -372,112 +349,4 @@ export class BanManager {
     }
   }
 
-  private static async sendEmbed(guild: Guild, targetId: string, moderatorId: string, reason: string, expires: Date | null, type: 'ban' | 'unban'): Promise<void> {
-    try {
-      const channelId = config.channels.punishmentsChannel;
-      if (!channelId) {
-        console.warn('[BanManager] Punishments channel not configured');
-        return;
-      }
-
-      
-      const channelPromise = guild.channels.fetch(channelId);
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Channel fetch timeout')), 3000)
-      );
-
-      const channel = await Promise.race([channelPromise, timeoutPromise]).catch(() => null) as TextChannel | null;
-      if (!channel || !channel.isTextBased()) {
-        console.warn(`[BanManager] Punishments channel ${channelId} not found or not text-based`);
-        return;
-      }
-
-      const isBan = type === 'ban';
-      const userMention = `<@${targetId}>`;
-      const moderatorMention = moderatorId === 'system' ? 'System' : 
-                              moderatorId === 'auto' ? 'Auto-Moderation' : `<@${moderatorId}>`;
-      const reasonField = reason?.trim() || 'No reason provided';
-
-      let durationDisplay = 'Permanent';
-      let expiryDisplay: string | null = null;
-      if (expires) {
-        const remainingMs = Math.max(0, expires.getTime() - Date.now());
-        const minutes = Math.ceil(remainingMs / 60000);
-        if (minutes < 60) {
-          durationDisplay = `${minutes}m`;
-        } else if (minutes < 1440) {
-          const hours = Math.ceil(minutes / 60);
-          durationDisplay = `${hours}h`;
-        } else {
-          const days = Math.ceil(minutes / 1440);
-          durationDisplay = `${days}d`;
-        }
-        const d = new Date(expires);
-        expiryDisplay = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
-      }
-
-      let ign: string | undefined;
-      try {
-        const userDoc = await User.findOne({ discordId: targetId }).select('ign').lean();
-        ign = userDoc?.ign;
-      } catch (err) {}
-
-      const title = isBan ? 'Rank Banned' : 'User Unbanned';
-      const color = isBan ? 0x7b0606 : 0x2dd56b;
-      const descriptionLines: string[] = [];
-      descriptionLines.push(`**User:** ${userMention}${ign ? ` (${ign})` : ''}`);
-      descriptionLines.push(`**Reason:** \`${reasonField}\``);
-      if (isBan) {
-        descriptionLines.push(`**Duration:** \`${durationDisplay}\``);
-        if (expiryDisplay) descriptionLines.push(`**Ban expires at:** \`${expiryDisplay}\``);
-        descriptionLines.push(`**Staff:** ${moderatorMention}`);
-        descriptionLines.push('\nIf you wish to appeal this punishment, please create an appeal Support Channel and staff will be swift to help.');
-      } else {
-        descriptionLines.push(`**Unbanned by:** ${moderatorMention}`);
-        descriptionLines.push('\nIn future if you face another punishment, it will likely increase due to your punishment history.');
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setColor(color)
-        .setDescription(descriptionLines.join('\n'))
-        .setTimestamp();
-
-      const assetFileName = isBan ? 'ban.png' : 'unbanunmute.png';
-      const candidatePaths = [
-        path.resolve(process.cwd(), 'src', 'asserts', 'punishments', assetFileName),
-        path.resolve(process.cwd(), 'asserts', 'punishments', assetFileName)
-      ];
-      const assetPath = candidatePaths.find(p => fs.existsSync(p));
-      const files: { attachment: string; name: string }[] = [];
-      if (assetPath) {
-        embed.setThumbnail(`attachment://${assetFileName}`);
-        files.push({ attachment: assetPath, name: assetFileName });
-      } else {
-        console.warn(`[BanManager] Asset not found for embed thumbnail: ${assetFileName}`);
-      }
-
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (attempts < maxAttempts) {
-        try {
-          await channel.send({ content: userMention, embeds: [embed], files });
-          break;
-        } catch (error: any) {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            console.error(`[BanManager] Failed to send ${type} embed after ${maxAttempts} attempts:`, error);
-            throw error;
-          }
-          
-          
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-        }
-      }
-
-    } catch (error) {
-      console.error(`[BanManager] Error sending ${type} embed:`, error);
-    }
-  }
 }

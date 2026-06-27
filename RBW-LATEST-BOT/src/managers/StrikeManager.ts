@@ -1,10 +1,10 @@
 import User from '../models/User';
 import config from '../config/config';
-import { Guild, EmbedBuilder, TextChannel } from 'discord.js';
+import { Guild } from 'discord.js';
 import { BanManager } from './BanManager';
 import { parseDuration } from '../utils/parseDuration';
-import path from 'path';
-import fs from 'fs';
+import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
+import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
 
 interface StrikeOperation {
   id: string;
@@ -44,18 +44,9 @@ export class StrikeManager {
     return StrikeManager.instance;
   }
 
-  private static generateId(length = 9): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-  }
-
   public static async strike(guild: Guild, targetId: string, moderatorId: string, reason: string): Promise<{ strikeCount: number; actionTaken: string }> {
     const instance = StrikeManager.getInstance();
-    const operationId = StrikeManager.generateId();
+    const operationId = generatePunishmentId();
 
     const operation: StrikeOperation = {
       id: operationId,
@@ -75,17 +66,12 @@ export class StrikeManager {
       }
 
       
-      const userPromise = User.findOne({ discordId: targetId });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Database timeout')), 5000)
-      );
-
-      const user = await Promise.race([userPromise, timeoutPromise]) as any;
+      const user = await fetchUserWithTimeout(targetId);
       if (!user) {
         throw new Error(`User ${targetId} not found in database`);
       }
 
-      const strikeId = StrikeManager.generateId();
+      const strikeId = generatePunishmentId();
       const strikeRecord = {
         id: strikeId,
         reason: reason.trim(),
@@ -105,7 +91,13 @@ export class StrikeManager {
 
       try {
         if (!action || action === 'warn') {
-          await StrikeManager.sendEmbed(guild, targetId, moderatorId, reason, strikeCount, 'strike');
+          await sendPunishmentEmbed({
+            guild, targetId, moderatorId, reason, type: 'strike',
+            extraFields: [
+              { label: 'Strike Count', value: String(strikeCount) },
+              { label: 'Action', value: action }
+            ]
+          });
           actionTaken = `Warning issued (Strike ${strikeCount})`;
         } else {
           try {
@@ -115,7 +107,13 @@ export class StrikeManager {
             instance.stats.escalatedStrikes++;
           } catch (banError) {
             console.error(`[StrikeManager] Failed to escalate strike to ban for ${targetId}:`, banError);
-            await StrikeManager.sendEmbed(guild, targetId, moderatorId, reason, strikeCount, 'strike');
+            await sendPunishmentEmbed({
+              guild, targetId, moderatorId, reason, type: 'strike',
+              extraFields: [
+                { label: 'Strike Count', value: String(strikeCount) },
+                { label: 'Action', value: action }
+              ]
+            });
             actionTaken = `Warning issued - Ban escalation failed (Strike ${strikeCount})`;
           }
         }
@@ -140,16 +138,13 @@ export class StrikeManager {
       throw new Error(`Strike operation failed: ${error.message}`);
 
     } finally {
-      
-      setTimeout(() => {
-        instance.pendingOperations.delete(operationId);
-      }, 5 * 60 * 1000);
+      cleanupOperation(instance.pendingOperations, operationId);
     }
   }
 
   public static async unstrike(guild: Guild, targetId: string, moderatorId: string, reason = 'Strike removed'): Promise<{ strikeCount: number; removedStrike: any }> {
     const instance = StrikeManager.getInstance();
-    const operationId = StrikeManager.generateId();
+    const operationId = generatePunishmentId();
 
     const operation: StrikeOperation = {
       id: operationId,
@@ -169,12 +164,7 @@ export class StrikeManager {
       }
 
       
-      const userPromise = User.findOne({ discordId: targetId });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Database timeout')), 5000)
-      );
-
-      const user = await Promise.race([userPromise, timeoutPromise]) as any;
+      const user = await fetchUserWithTimeout(targetId);
       if (!user) {
         throw new Error(`User ${targetId} not found in database`);
       }
@@ -192,7 +182,12 @@ export class StrikeManager {
 
       
       try {
-        await StrikeManager.sendEmbed(guild, targetId, moderatorId, reason, strikeCount, 'unstrike');
+        await sendPunishmentEmbed({
+          guild, targetId, moderatorId, reason, type: 'unstrike',
+          extraFields: [
+            { label: 'Remaining Strikes', value: String(strikeCount) }
+          ]
+        });
       } catch (embedError) {
         console.warn(`[StrikeManager] Failed to send unstrike embed for ${targetId}:`, embedError);
         
@@ -214,97 +209,8 @@ export class StrikeManager {
       throw new Error(`Unstrike operation failed: ${error.message}`);
 
     } finally {
-      
-      setTimeout(() => {
-        instance.pendingOperations.delete(operationId);
-      }, 5 * 60 * 1000);
+      cleanupOperation(instance.pendingOperations, operationId);
     }
   }
 
-  private static async sendEmbed(guild: Guild, targetId: string, moderatorId: string, reason: string, strikeCount: number, type: 'strike' | 'unstrike'): Promise<void> {
-    try {
-      const channelId = config.channels.punishmentsChannel;
-      if (!channelId) {
-        console.warn('[StrikeManager] Punishments channel not configured');
-        return;
-      }
-
-      const channelPromise = guild.channels.fetch(channelId);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Channel fetch timeout')), 3000)
-      );
-
-      const channel = await Promise.race([channelPromise, timeoutPromise]).catch(() => null) as TextChannel | null;
-      if (!channel || !channel.isTextBased()) {
-        console.warn(`[StrikeManager] Punishments channel ${channelId} not found or not text-based`);
-        return;
-      }
-
-      const isStrike = type === 'strike';
-      const userMention = `<@${targetId}>`;
-      const moderatorMention = moderatorId === 'system' ? 'System' :
-        moderatorId === 'auto' ? 'Auto-Moderation' : `<@${moderatorId}>`;
-      const reasonField = reason?.trim() || 'No reason provided';
-
-      const strikeConfig = config.strikes || {};
-      const action = strikeConfig[strikeCount] || strikeConfig['default'] || 'warn';
-
-      const descriptionLines: string[] = [];
-      descriptionLines.push(`**User:** ${userMention}`);
-      descriptionLines.push(`**Reason:** \`${reasonField}\``);
-      if (isStrike) {
-        descriptionLines.push(`**Strike Count:** \`${strikeCount}\``);
-        descriptionLines.push(`**Action:** \`${action}\``);
-        descriptionLines.push(`**Staff:** ${moderatorMention}`);
-      } else {
-        descriptionLines.push(`**Remaining Strikes:** \`${strikeCount}\``);
-        descriptionLines.push(`**Unstriked by:** ${moderatorMention}`);
-      }
-
-      const title = isStrike ? 'Strike Issued' : 'Strike Removed';
-      const color = isStrike ? 0xcda12f : 0x2dd56b;
-
-      const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setColor(color)
-        .setDescription(descriptionLines.join('\n'))
-        .setTimestamp();
-
-      const assetFileName = isStrike ? 'strike.png' : 'unbanunmute.png';
-      const candidatePaths = [
-        path.resolve(process.cwd(), 'src', 'asserts', 'punishments', assetFileName),
-        path.resolve(process.cwd(), 'asserts', 'punishments', assetFileName)
-      ];
-      const assetPath = candidatePaths.find(p => fs.existsSync(p));
-      const files: { attachment: string; name: string }[] = [];
-      if (assetPath) {
-        embed.setThumbnail(`attachment://${assetFileName}`);
-        files.push({ attachment: assetPath, name: assetFileName });
-      } else {
-        console.warn(`[StrikeManager] Asset not found for embed thumbnail: ${assetFileName}`);
-      }
-
-      
-      let attempts = 0;
-      const maxAttempts = 3;
-
-      while (attempts < maxAttempts) {
-        try {
-          await channel.send({ content: userMention, embeds: [embed], files });
-          break;
-        } catch (error: any) {
-          attempts++;
-          if (attempts >= maxAttempts) {
-            console.error(`[StrikeManager] Failed to send ${type} embed after ${maxAttempts} attempts:`, error);
-            throw error;
-          }
-
-          await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-        }
-      }
-
-    } catch (error) {
-      console.error(`[StrikeManager] Error sending ${type} embed:`, error);
-    }
-  }
 }

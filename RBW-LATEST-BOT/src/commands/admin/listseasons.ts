@@ -1,11 +1,8 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import Season from '../../models/Season';
 import { safeReply } from '../../utils/safeReply';
 
-export const data = new SlashCommandBuilder()
-  .setName('listseasons')
-  .setDescription('List all seasons');
-
+// fallow-ignore-next-line duplicate-exports — imported with alias in CommandManager
 export async function execute(interaction: ChatInputCommandInteraction) {
   try {
     const seasons = await Season.find({}).sort({ seasonNumber: 1, chapterNumber: 1 });

@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { recentGameSubdoc, dailyEloSubdoc } from './gameBase';
 
  
 
@@ -125,34 +126,9 @@ const UserSchema: Schema = new Schema({
     togglestaticnick: { type: Boolean, default: false },
     nick: { type: String, default: '' },
   },
-  recentGames: [{
-    gameId: { type: Number, required: true },
-    queueid: { type: String, required: false },
-    map: { type: String, required: true },
-    eloGain: { type: Number, required: true },
-    kills: { type: Number, required: true },
-    deaths: { type: Number, required: true },
-    bedBroken: { type: Number, required: true },
-    finalKills: { type: Number, required: true },
-    won: { type: Boolean, required: true },
-    ismvp: { type: Boolean, default: false },
-    date: { type: Date, required: true },
-    state: { type: String, default: 'pending' },
-    startTime: { type: Date, required: true },
-    endTime: { type: Date },
-    diamonds: { type: Number, default: 0 },
-    irons: { type: Number, default: 0 },
-    gold: { type: Number, default: 0 },
-    emeralds: { type: Number, default: 0 },
-    blocksPlaced: { type: Number, default: 0 },
-  }],
+  recentGames: [recentGameSubdoc],
   partyId: { type: String, index: true },
-  dailyElo: [
-    {
-      elo: { type: Number, required: true },
-      date: { type: Date, required: true },
-    },
-  ],
+  dailyElo: [dailyEloSubdoc],
   strikes: [{
     id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
     reason: { type: String, required: true },

@@ -2,6 +2,14 @@ import config from '../config/config';
 import { Guild } from 'discord.js';
 import { WorkersManager } from '../managers/WorkersManager';
 
+export async function safeFix(guild: Guild | null, discordId: string): Promise<void> {
+  if (!guild) return;
+  try {
+    await fix(guild, discordId);
+  } catch (error) {
+    console.error(`Error updating roles/nickname for ${discordId}:`, error);
+  }
+}
 
 export async function fix(guild: Guild, discordId: string) {
   const User = (await import('../models/User')).default;

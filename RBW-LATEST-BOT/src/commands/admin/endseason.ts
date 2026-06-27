@@ -1,10 +1,7 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { SeasonManager } from '../../managers/SeasonManager';
 
-export const data = new SlashCommandBuilder()
-    .setName('endseason')
-    .setDescription('End the current active season and migrate data');
-
+// fallow-ignore-next-line duplicate-exports — imported with alias in CommandManager
 export async function execute(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
 

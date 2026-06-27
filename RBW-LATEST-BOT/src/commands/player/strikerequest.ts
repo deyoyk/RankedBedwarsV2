@@ -1,20 +1,15 @@
-import { ChatInputCommandInteraction, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ThreadAutoArchiveDuration } from 'discord.js';
+import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
 import Game from '../../models/Game';
 import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
-import { betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed } from '../../utils/voteRequest';
 
 interface StrikeRequestData {
   gameId: string;
   targetId: string;
   reason: string;
   requesterId: string;
-}
-
-interface VoteData {
-  upvote: Set<string>;
-  downvote: Set<string>;
 }
 
 export async function strikerequest(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
@@ -100,21 +95,32 @@ async function createStrikeRequest(interaction: Message | ChatInputCommandIntera
   const teamMentions = team.map((id: string) => `<@${id}>`).join(' ');
 
   const embed = createStrikeRequestEmbed(data, game);
-  const components = createVoteButtons();
-  
-  const message = await channel.send({ 
-    content: teamMentions, 
-    embeds: [embed], 
-    components: [components] 
+  const components = createVoteButtons('Approve Strike', 'Reject Strike', 'strike');
+
+  const message = await channel.send({
+    content: teamMentions,
+    embeds: [embed],
+    components: [components]
   });
 
-  await createDiscussionThread(message, data.targetId);
-  await setupVoteCollector(message, data, team);
+  await createDiscussionThread(message, `Strike Discussion - ${data.targetId}`);
+
+  const votes: VoteData = { upvote: new Set(), downvote: new Set() };
+  const collector = setupVoteCollector(message, team, (userId, customId) => {
+    if (votes.upvote.has(userId) || votes.downvote.has(userId)) return;
+    if (customId === 'strike_upvote') votes.upvote.add(userId);
+    else if (customId === 'strike_downvote') votes.downvote.add(userId);
+  });
+
+  collector.on('end', async () => {
+    await processVoteResults(message, data, votes, team);
+  });
+
   await safeReply(interaction, { content: 'Strike request created successfully.' });
 }
 
 function createStrikeRequestEmbed(data: StrikeRequestData, game: any): EmbedBuilder {
-  const embed = new EmbedBuilder()
+  return new EmbedBuilder()
     .setTitle('Strike Request')
     .setDescription(`A strike has been requested against <@${data.targetId}>`)
     .addFields(
@@ -126,108 +132,33 @@ function createStrikeRequestEmbed(data: StrikeRequestData, game: any): EmbedBuil
     .setColor('#ffcc00')
     .setTimestamp()
     .setFooter({ text: `Game ID: ${data.gameId} | Target: ${data.targetId}` });
-
-  return embed;
-}
-
-function createVoteButtons(): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId('strike_upvote')
-      .setLabel('Approve Strike')
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('✅'),
-    new ButtonBuilder()
-      .setCustomId('strike_downvote')
-      .setLabel('Reject Strike')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('❌')
-  );
-}
-
-async function createDiscussionThread(message: any, targetId: string) {
-  try {
-    await message.startThread({ 
-      name: `Strike Discussion - ${targetId}`, 
-      autoArchiveDuration: ThreadAutoArchiveDuration.OneDay 
-    });
-  } catch (error) {
-    console.error('Failed to create discussion thread:', error);
-  }
-}
-
-async function setupVoteCollector(message: any, data: StrikeRequestData, team: string[]) {
-  const votes: VoteData = {
-    upvote: new Set(),
-    downvote: new Set()
-  };
-
-  const collector = message.createMessageComponentCollector({ 
-    time: 15 * 60 * 1000,
-    filter: (i: any) => team.includes(i.user.id)
-  });
-
-  collector.on('collect', async (buttonInteraction: any) => {
-    try {
-      const userId = buttonInteraction.user.id;
-      
-      if (votes.upvote.has(userId) || votes.downvote.has(userId)) {
-        await buttonInteraction.reply({ 
-          content: 'You have already voted on this strike request.', 
-          ephemeral: true 
-        });
-        return;
-      }
-
-      if (buttonInteraction.customId === 'strike_upvote') {
-        votes.upvote.add(userId);
-      } else if (buttonInteraction.customId === 'strike_downvote') {
-        votes.downvote.add(userId);
-      }
-
-      await buttonInteraction.deferUpdate();
-    } catch (error) {
-      console.error('Error handling vote:', error);
-    }
-  });
-
-  collector.on('end', async () => {
-    await processVoteResults(message, data, votes, team);
-  });
 }
 
 async function processVoteResults(message: any, data: StrikeRequestData, votes: VoteData, team: string[]) {
   const teamMentions = team.map((id: string) => `<@${id}>`).join(' ');
   const requiredVotes = Math.max(2, Math.ceil(team.length * 0.6));
+  const approved = votes.upvote.size >= requiredVotes;
 
-  const resultEmbed = new EmbedBuilder()
-    .setTitle('Strike Request Results')
-    .setColor(votes.upvote.size >= requiredVotes ? '#00ff00' : '#00AAAA')
-    .addFields(
-      { name: 'Approval Votes', value: votes.upvote.size.toString(), inline: true },
-      { name: 'Rejection Votes', value: votes.downvote.size.toString(), inline: true },
-      { name: 'Required Votes', value: requiredVotes.toString(), inline: true }
-    )
-    .setTimestamp();
+  const resultEmbed = buildResultEmbed('Strike Request Results', votes, requiredVotes, approved);
 
   try {
-    if (votes.upvote.size >= requiredVotes) {
+    if (approved) {
       await StrikeManager.strike(message.guild!, data.targetId, data.requesterId, data.reason);
       resultEmbed.setDescription(`✅ Strike approved and applied to <@${data.targetId}>.`);
     } else {
       resultEmbed.setDescription(`❌ Strike request rejected due to insufficient approval votes.`);
     }
 
-    await message.edit({ 
-      content: teamMentions, 
-      embeds: [message.embeds[0], resultEmbed], 
-      components: [] 
+    await message.edit({
+      content: teamMentions,
+      embeds: [message.embeds[0], resultEmbed],
+      components: []
     });
   } catch (error) {
     console.error('Error processing strike request results:', error);
-    await message.edit({ 
-      content: `${teamMentions} Error processing strike request results.`, 
-      components: [] 
+    await message.edit({
+      content: `${teamMentions} Error processing strike request results.`,
+      components: []
     });
   }
 }

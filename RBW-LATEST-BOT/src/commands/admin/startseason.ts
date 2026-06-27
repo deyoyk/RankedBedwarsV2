@@ -1,25 +1,5 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { SeasonManager } from '../../managers/SeasonManager';
-
-export const data = new SlashCommandBuilder()
-  .setName('startseason')
-  .setDescription('Start a new season')
-  .addIntegerOption(option =>
-    option.setName('season')
-      .setDescription('Season number')
-      .setRequired(true))
-  .addIntegerOption(option =>
-    option.setName('chapter')
-      .setDescription('Chapter number')
-      .setRequired(true))
-  .addStringOption(option =>
-    option.setName('name')
-      .setDescription('Name of the new season')
-      .setRequired(true))
-  .addStringOption(option =>
-    option.setName('description')
-      .setDescription('Description of the new season')
-      .setRequired(false));
 
 export async function execute(interaction: ChatInputCommandInteraction) {
   const seasonNumber = interaction.options.getInteger('season', true);

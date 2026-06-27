@@ -2,7 +2,7 @@ import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { safeReply } from '../../utils/safeReply';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
-import { fix } from '../../utils/fix';
+import { fix, safeFix } from '../../utils/fix';
 
  
 
@@ -35,14 +35,7 @@ export async function forcerename(interaction: Message | ChatInputCommandInterac
     user.ign = newIgn;
     await user.save();
 
-    
-    if (interaction.guild) {
-      try {
-        await fix(interaction.guild, targetUser);
-      } catch (error) {
-        console.error(`Error updating roles/nickname for ${targetUser}:`, error);
-      }
-    }
+    await safeFix(interaction.guild, targetUser);
 
     const embed = successEmbed(`Successfully renamed <@${targetUser}>`, '✅ User Force Renamed');
     embed.builder.addFields(

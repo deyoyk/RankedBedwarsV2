@@ -1,9 +1,10 @@
-import { Message, ChatInputCommandInteraction, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
+import { ensureUserStats, updateDailyElo, computeWlr } from '../../utils/userStats';
 
 export async function lose(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let targetId: string;
@@ -39,27 +40,15 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
       return;
     }
 
+    ensureUserStats(user);
+
     user.elo = Math.max(0, user.elo - eloRank.loseElo);
     user.losses += 1;
     user.games += 1;
     user.losestreak = (user.losestreak ?? 0) + 1;
     user.winstreak = 0;
-    const wins = user.wins ?? 0;
-    const losses = user.losses ?? 0;
-    user.wlr = losses > 0 ? parseFloat((wins / losses).toFixed(2)) : wins;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const existingEntry = user.dailyElo.find(entry => {
-      const entryDate = new Date(entry.date);
-      entryDate.setHours(0, 0, 0, 0);
-      return entryDate.getTime() === today.getTime();
-    });
-    if (existingEntry) {
-      existingEntry.elo = user.elo;
-    } else {
-      user.dailyElo.push({ elo: user.elo, date: new Date() });
-    }
+    user.wlr = computeWlr(user.wins, user.losses);
+    updateDailyElo(user, user.elo);
 
     await user.save();
 

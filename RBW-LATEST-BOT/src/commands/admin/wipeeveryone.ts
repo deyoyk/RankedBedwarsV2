@@ -4,6 +4,7 @@ import { fix } from '../../utils/fix';
 import { executeWithConfirmation } from '../../utils/confirmAction';
 import { successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import { resetUserStats } from '../../utils/userStats';
 
 export async function wipeeveryone(interaction: Message | ChatInputCommandInteraction) {
   const users = await User.find();
@@ -54,26 +55,7 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
   }
 
   for (const userDoc of users) {
-    userDoc.elo = 0;
-    userDoc.wins = 0;
-    userDoc.losses = 0;
-    userDoc.games = 0;
-    userDoc.mvps = 0;
-    userDoc.kills = 0;
-    userDoc.deaths = 0;
-    userDoc.bedBroken = 0;
-    userDoc.finalKills = 0;
-    userDoc.diamonds = 0;
-    userDoc.irons = 0;
-    userDoc.gold = 0;
-    userDoc.emeralds = 0;
-    userDoc.blocksPlaced = 0;
-    userDoc.winstreak = 0;
-    userDoc.losestreak = 0;
-    userDoc.kdr = 0;
-    userDoc.wlr = 0;
-    userDoc.recentGames = [];
-    userDoc.dailyElo = [];
+    resetUserStats(userDoc);
     await userDoc.save();
     await fix(interaction.guild!, userDoc.discordId);
     processed++;
