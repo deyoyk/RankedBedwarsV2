@@ -307,7 +307,7 @@ export class WebSocketManager {
   private queueStatusInterval: NodeJS.Timeout | null = null;
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
 
-  // fallow-ignore-next-line unused-export — used via global._wsManager
+  // fallow-ignore-next-line unused-class-member
   public async requestDontLog(ign: string, uuid: string): Promise<{ online: boolean; dontlog: boolean }> {
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
@@ -744,7 +744,7 @@ export class WebSocketManager {
     });
   }
 
-  // fallow-ignore-next-line unused-export — used via global._wsManager
+  // fallow-ignore-next-line unused-class-member
   public getPermission(command: string): string[] {
     return this.permissions[command] || [];
   }

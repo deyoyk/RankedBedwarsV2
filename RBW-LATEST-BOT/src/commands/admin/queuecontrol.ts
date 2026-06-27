@@ -1,7 +1,6 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import Queue from '../../models/Queue';
 
-// fallow-ignore-next-line duplicate-export — command system loads by filename
 export const data = new SlashCommandBuilder()
   .setName('queuecontrol')
   .setDescription('Enable or disable queues by type or specific queue')

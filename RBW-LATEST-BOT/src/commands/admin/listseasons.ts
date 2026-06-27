@@ -2,7 +2,6 @@ import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import Season from '../../models/Season';
 import { safeReply } from '../../utils/safeReply';
 
-// fallow-ignore-next-line duplicate-export — command system loads by filename
 export async function execute(interaction: ChatInputCommandInteraction) {
   try {
     const seasons = await Season.find({}).sort({ seasonNumber: 1, chapterNumber: 1 });

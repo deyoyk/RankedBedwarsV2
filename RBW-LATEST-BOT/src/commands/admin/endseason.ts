@@ -1,7 +1,6 @@
 import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { SeasonManager } from '../../managers/SeasonManager';
 
-// fallow-ignore-next-line duplicate-export — command system loads by filename
 export async function execute(interaction: ChatInputCommandInteraction) {
     await interaction.deferReply();
 
