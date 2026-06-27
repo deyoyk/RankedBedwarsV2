@@ -199,17 +199,30 @@ function buildPartyEmbed(party: any, description: string, color: string, title: 
   return embedObj;
 }
 
-async function handleLeaveParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: any) {
-  const result = await PartyService.leaveParty(userId, guild);
+async function handlePartyAction(
+  interaction: Message | ChatInputCommandInteraction,
+  serviceCall: Promise<{ success: boolean; message?: string; party?: any }>,
+  embedConfig: { description: string; color: string; title: string; extraFields?: Array<{ name: string; value: string; inline: boolean }> }
+) {
+  const result = await serviceCall;
   if (!result.success) {
     await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
     return;
   }
-  const embedObj = buildPartyEmbed(
-    result.party!, `<@${userId}> has left the party.`, '#ff9900', 'Left Party',
-    [{ name: 'Remaining Members', value: result.party!.members.map((id: string) => `<@${id}>`).join(', '), inline: false }]
-  );
+  const embedObj = buildPartyEmbed(result.party!, embedConfig.description, embedConfig.color, embedConfig.title, embedConfig.extraFields);
   await safeReply(interaction, { embeds: [embedObj.builder] });
+}
+
+function membersList(party: any) {
+  return party.members.map((id: string) => `<@${id}>`).join(', ');
+}
+
+async function handleLeaveParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: any) {
+  await handlePartyAction(
+    interaction,
+    PartyService.leaveParty(userId, guild),
+    { description: `<@${userId}> has left the party.`, color: '#ff9900', title: 'Left Party', extraFields: [{ name: 'Remaining Members', value: '', inline: false }] }
+  );
 }
 
 async function handlePartyInfo(interaction: Message | ChatInputCommandInteraction, userId: string) {
@@ -219,58 +232,46 @@ async function handlePartyInfo(interaction: Message | ChatInputCommandInteractio
     return;
   }
   const party = result.party!;
-  const embedObj = buildPartyEmbed(party, '', '#00AAAA', 'Party Information', [
+  const embedObj = betterEmbed('', '#00AAAA', 'Party Information');
+  embedObj.builder.addFields(
     { name: 'Members', value: party.members.map((id: string) => `<@${id}>`).join('\n'), inline: false },
     { name: 'Max Members', value: party.maxMembers.toString(), inline: true },
     { name: 'Private', value: party.isPrivate ? 'Yes' : 'No', inline: true },
     { name: 'Description', value: party.description || 'No description', inline: false }
-  ]);
+  );
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
 async function handleDisbandParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: any) {
-  const result = await PartyService.disbandParty(userId, guild);
-  if (!result.success) {
-    await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
-    return;
-  }
-  const embedObj = buildPartyEmbed(
-    result.party!, 'The party has been disbanded.', '#ff0000', 'Party Disbanded',
-    [
+  await handlePartyAction(
+    interaction,
+    PartyService.disbandParty(userId, guild),
+    { description: 'The party has been disbanded.', color: '#ff0000', title: 'Party Disbanded', extraFields: [
       { name: 'Former Leader', value: `<@${userId}>`, inline: true },
-      { name: 'Former Members', value: result.party!.members.map((id: string) => `<@${id}>`).join(', '), inline: false }
-    ]
+      { name: 'Former Members', value: '', inline: false }
+    ]}
   );
-  await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
 async function handleKickFromParty(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string, guild: any) {
-  const result = await PartyService.kickFromParty(userId, targetId, guild);
-  if (!result.success) {
-    await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
-    return;
-  }
-  const embedObj = buildPartyEmbed(
-    result.party!, `<@${targetId}> has been kicked from the party.`, '#ff0000', 'Party Member Kicked',
-    [{ name: 'Remaining Members', value: result.party!.members.map((id: string) => `<@${id}>`).join(', '), inline: false }]
+  await handlePartyAction(
+    interaction,
+    PartyService.kickFromParty(userId, targetId, guild),
+    { description: `<@${targetId}> has been kicked from the party.`, color: '#ff0000', title: 'Party Member Kicked', extraFields: [
+      { name: 'Remaining Members', value: '', inline: false }
+    ]}
   );
-  await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
 async function handlePromoteToLeader(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string) {
-  const result = await PartyService.promoteToLeader(userId, targetId);
-  if (!result.success) {
-    await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
-    return;
-  }
-  const embedObj = buildPartyEmbed(
-    result.party!, `<@${targetId}> is now the party leader!`, '#00ff00', 'New Party Leader',
-    [
+  await handlePartyAction(
+    interaction,
+    PartyService.promoteToLeader(userId, targetId),
+    { description: `<@${targetId}> is now the party leader!`, color: '#00ff00', title: 'New Party Leader', extraFields: [
       { name: 'Former Leader', value: `<@${userId}>`, inline: true },
-      { name: 'Members', value: result.party!.members.map((id: string) => `<@${id}>`).join(', '), inline: false }
-    ]
+      { name: 'Members', value: '', inline: false }
+    ]}
   );
-  await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
 async function handlePartySettings(interaction: Message | ChatInputCommandInteraction, userId: string, args?: string[]) {

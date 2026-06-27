@@ -22,6 +22,25 @@ export class CommandHandler {
     this.commands.set(name, handler);
   }
 
+  private async sendPermissionDenied(target: Message | ChatInputCommandInteraction, commandName: string) {
+    const wsPermissions = global._wsManager?.getPermission(commandName) || [];
+    const requiredRoles = wsPermissions || [];
+
+    if (requiredRoles.length > 0 && !requiredRoles.includes('everyone')) {
+      const embed = new EmbedBuilder()
+        .setColor('#00AAAA')
+        .setTitle('You do not have permission')
+        .setDescription(`Roles required: ${requiredRoles.map((roleId: string) => `<@&${roleId}>`).join(', ')}`)
+        .setTimestamp();
+
+      if (target instanceof Message) {
+        await target.reply({ embeds: [embed] });
+      } else {
+        await safeReply(target, { embeds: [embed] });
+      }
+    }
+  }
+
   public async handleMessage(message: Message) {
 
     if (message.author.bot || !message.content.startsWith(config.prefix)) return;
@@ -50,24 +69,7 @@ export class CommandHandler {
 
     try {
       if (!await checkPermission(message, commandName)) {
-        
-        
-        
-        
-        
-        const wsPermissions = global._wsManager?.getPermission(commandName) || [];
-        const requiredRoles = wsPermissions  || [];
-        
-        
-        if (requiredRoles.length > 0 && !requiredRoles.includes('everyone')) {
-          const embed = new EmbedBuilder()
-            .setColor('#00AAAA')
-            .setTitle('You do not have permission')
-            .setDescription(`Roles required: ${requiredRoles.map((roleId: string) => `<@&${roleId}>`).join(', ')}`)
-            .setTimestamp();
-
-          await message.reply({ embeds: [embed] });
-        }
+        await this.sendPermissionDenied(message, commandName);
         return;
       }
       await command(message, args, this.wsManager);
@@ -96,19 +98,7 @@ export class CommandHandler {
       }
 
       if (!await checkPermission(interaction, commandName)) {
-        const wsPermissions = global._wsManager?.getPermission(commandName) || [];
-        const requiredRoles = wsPermissions || [];
-
-        if (requiredRoles.length > 0 && !requiredRoles.includes('everyone')) {
-          const embed = new EmbedBuilder()
-            .setColor('#00AAAA')
-            .setTitle('You do not have permission')
-            .setDescription(`Roles required: ${requiredRoles.map((roleId: string) => `<@&${roleId}>`).join(', ')}`)
-            .setTimestamp();
-
-          await safeReply(interaction, { embeds: [embed] });
-          return;
-        }
+        await this.sendPermissionDenied(interaction, commandName);
         return;
       }
       

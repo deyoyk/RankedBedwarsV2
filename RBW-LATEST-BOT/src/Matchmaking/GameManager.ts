@@ -14,6 +14,7 @@ import {
   EXPERIENCE_REWARDS
 } from '../utils/levelSystem';
 import { WorkersManager } from '../managers/WorkersManager';
+import { updateDailyElo } from '../utils/userStats';
 
 import axios from 'axios';
 import { getNextSequence } from '../models/Counter';
@@ -845,21 +846,25 @@ export class GameManager {
     }
   }
 
+  private async loadGameWithPlayers(gameId: number) {
+    const game = await Game.findOne({ gameId });
+    if (!game) {
+      throw new Error(`Game ${gameId} not found`);
+    }
+
+    const allPlayerIds = [...game.team1, ...game.team2];
+    const players = await User.find({ discordId: { $in: allPlayerIds } });
+
+    if (players.length !== allPlayerIds.length) {
+      throw new Error('Some players not found in database');
+    }
+
+    return { game, players };
+  }
+
   private async loadGameContext(gameResult: GameResult): Promise<GameScoreContext> {
     try {
-
-      const game = await Game.findOne({ gameId: gameResult.gameId });
-      if (!game) {
-        throw new Error(`Game ${gameResult.gameId} not found`);
-      }
-
-
-      const allPlayerIds = [...game.team1, ...game.team2];
-      const players = await User.find({ discordId: { $in: allPlayerIds } });
-
-      if (players.length !== allPlayerIds.length) {
-        throw new Error('Some players not found in database');
-      }
+      const { game, players } = await this.loadGameWithPlayers(gameResult.gameId);
 
 
       const eloRanks = await EloRank.find().sort({ startElo: 1 });
@@ -999,33 +1004,36 @@ export class GameManager {
         stats.bedBroken = (typeof stats.bedBroken === 'number' ? stats.bedBroken : 0) + 1;
       }
 
-      const experienceGained = this.calculateExperienceGained(isWinner, isMvp, isBedBreaker, stats);
-      const oldExperience = player.experience || 0;
-      const newExperience = oldExperience + experienceGained;
-
-      const levelUpInfo = checkLevelUp(oldExperience, newExperience);
-
-      const oldElo = player.elo;
-      const newElo = Math.max(0, player.elo + eloChange);
-
-      return {
-        player,
-        isWinner,
-        isMvp,
-        isBedBreaker,
-        eloChange,
-        oldElo,
-        newElo,
-        stats,
-        experienceGained,
-        oldLevel: levelUpInfo.oldLevel,
-        newLevel: levelUpInfo.newLevel,
-        leveledUp: levelUpInfo.leveledUp
-      };
+      return this.buildPlayerScoreData(player, isWinner, isMvp, isBedBreaker, eloChange, stats);
     } catch (error) {
-      console.error(`[GameManager] Error processing player ${player.discordId}:`, error);
+      console.error('[GameManager] Error processing player:', error);
       throw error;
     }
+  }
+
+  private buildPlayerScoreData(
+    player: IUser, isWinner: boolean, isMvp: boolean, isBedBreaker: boolean,
+    eloChange: number, stats: Record<string, any>
+  ) {
+    const experienceGained = this.calculateExperienceGained(isWinner, isMvp, isBedBreaker, stats);
+    const oldExperience = player.experience || 0;
+    const newExperience = oldExperience + experienceGained;
+    const levelUpInfo = checkLevelUp(oldExperience, newExperience);
+
+    return {
+      player,
+      isWinner,
+      isMvp,
+      isBedBreaker,
+      eloChange,
+      oldElo: player.elo,
+      newElo: Math.max(0, player.elo + eloChange),
+      stats,
+      experienceGained,
+      oldLevel: levelUpInfo.oldLevel,
+      newLevel: levelUpInfo.newLevel,
+      leveledUp: levelUpInfo.leveledUp
+    };
   }
 
   private calculateScoreElo(
@@ -1223,28 +1231,11 @@ export class GameManager {
 
   private async updatePlayerDailyElo(player: IUser): Promise<void> {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
       if (!player.dailyElo) {
         player.dailyElo = [];
       }
 
-      const existingEntry = player.dailyElo.find(entry => {
-        const entryDate = new Date(entry.date);
-        entryDate.setHours(0, 0, 0, 0);
-        return entryDate.getTime() === today.getTime();
-      });
-
-      if (existingEntry) {
-        existingEntry.elo = player.elo;
-      } else {
-        player.dailyElo.push({
-          date: today,
-          elo: player.elo
-        });
-      }
-
+      updateDailyElo(player, player.elo);
 
       if (player.dailyElo.length > 30) {
         player.dailyElo = player.dailyElo.slice(-30);
@@ -1385,16 +1376,7 @@ export class GameManager {
   
   private async loadGameVoidContext(gameId: number, reason: string): Promise<GameVoidContext> {
     try {
-      const game = await Game.findOne({ gameId });
-      if (!game) {
-        throw new Error(`Game ${gameId} not found`);
-      }
-
-      const allPlayerIds = [...game.team1, ...game.team2];
-      const players = await User.find({ discordId: { $in: allPlayerIds } });
-      if (players.length !== allPlayerIds.length) {
-        throw new Error('Some players not found in database');
-      }
+      const { game, players } = await this.loadGameWithPlayers(gameId);
 
       return {
         game,
@@ -1846,28 +1828,7 @@ export class GameManager {
       const playerIgn = idToIgn[player.discordId];
       const stats = playerData[playerIgn] || {};
 
-      const experienceGained = this.calculateExperienceGained(isWinner, isMvp, isBedBreaker, stats);
-      const oldExperience = player.experience || 0;
-      const newExperience = oldExperience + experienceGained;
-      const levelUpInfo = checkLevelUp(oldExperience, newExperience);
-
-      const oldElo = player.elo;
-      const newElo = Math.max(0, player.elo + eloChange);
-
-      return {
-        player,
-        isWinner,
-        isMvp,
-        isBedBreaker,
-        eloChange,
-        oldElo,
-        newElo,
-        stats,
-        experienceGained,
-        oldLevel: levelUpInfo.oldLevel,
-        newLevel: levelUpInfo.newLevel,
-        leveledUp: levelUpInfo.leveledUp
-      };
+      return this.buildPlayerScoreData(player, isWinner, isMvp, isBedBreaker, eloChange, stats);
     });
   }
 

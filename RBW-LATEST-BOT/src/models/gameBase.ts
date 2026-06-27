@@ -1,5 +1,32 @@
 import { Schema } from 'mongoose';
 
+export interface IRecentGame {
+  gameId: number;
+  queueid?: string;
+  map: string;
+  eloGain: number;
+  kills: number;
+  deaths: number;
+  bedBroken: number;
+  finalKills: number;
+  won?: boolean;
+  ismvp?: boolean;
+  date: Date;
+  state: String;
+  startTime: Date;
+  endTime?: Date;
+  diamonds?: number;
+  irons?: number;
+  gold?: number;
+  emeralds?: number;
+  blocksPlaced?: number;
+}
+
+export interface IDailyElo {
+  elo: number;
+  date: Date;
+}
+
 export const recentGameSubdoc = {
   gameId: { type: Number, required: true },
   queueid: { type: String, required: false },

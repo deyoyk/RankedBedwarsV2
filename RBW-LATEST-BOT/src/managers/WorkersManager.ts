@@ -234,12 +234,7 @@ export class WorkersManager {
       }
 
       
-      const processingTime = Date.now() - startTime;
-      worker.stats.tasksProcessed++;
-      worker.stats.tasksSucceeded++;
-      worker.stats.lastActiveAt = Date.now();
-      worker.stats.averageProcessingTime =
-        (worker.stats.averageProcessingTime * (worker.stats.tasksProcessed - 1) + processingTime) / worker.stats.tasksProcessed;
+      this.recordTaskCompletion(worker, startTime, true);
 
       if (task.resolve) {
         task.resolve(result);
@@ -251,17 +246,11 @@ export class WorkersManager {
         try {
           const fallbackResult = await this.executeTaskOnMainClient(task.type, task.data);
           
-          const processingTime = Date.now() - startTime;
-          worker.stats.tasksProcessed++;
-          worker.stats.tasksSucceeded++;
-          worker.stats.lastActiveAt = Date.now();
-          worker.stats.averageProcessingTime =
-            (worker.stats.averageProcessingTime * (worker.stats.tasksProcessed - 1) + processingTime) / worker.stats.tasksProcessed;
+          this.recordTaskCompletion(worker, startTime, true);
           if (task.resolve) task.resolve(fallbackResult);
           return;
         } catch (mainErr: any) {
           if (this.isPermissionError(mainErr)) {
-            
             worker.stats.tasksProcessed++;
             worker.stats.tasksSucceeded++;
             worker.stats.lastActiveAt = Date.now();
@@ -317,6 +306,15 @@ export class WorkersManager {
     const status = error && error.status;
     const msg = (error && error.message) ? String(error.message).toLowerCase() : '';
     return code === 50013 || status === 403 || msg.includes('missing permissions');
+  }
+
+  private recordTaskCompletion(worker: WorkerClient, startTime: number, success: boolean) {
+    const processingTime = Date.now() - startTime;
+    worker.stats.tasksProcessed++;
+    if (success) worker.stats.tasksSucceeded++;
+    worker.stats.lastActiveAt = Date.now();
+    worker.stats.averageProcessingTime =
+      (worker.stats.averageProcessingTime * (worker.stats.tasksProcessed - 1) + processingTime) / worker.stats.tasksProcessed;
   }
 
   private async executeChannelDelete(client: Client, data: any): Promise<void> {

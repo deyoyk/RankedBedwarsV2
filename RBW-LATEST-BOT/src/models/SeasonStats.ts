@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { recentGameSubdoc, dailyEloSubdoc } from './gameBase';
+import { recentGameSubdoc, dailyEloSubdoc, IRecentGame, IDailyElo } from './gameBase';
 import { coreStatFields } from './statFields';
 
 export interface ISeasonStats extends Document {
@@ -27,31 +27,8 @@ export interface ISeasonStats extends Document {
   losestreak: number;
   kdr: number;
   wlr: number;
-  recentGames: Array<{
-    gameId: number;
-    queueid?: number;
-    map: string;
-    eloGain: number;
-    kills: number;
-    deaths: number;
-    bedBroken: number;
-    finalKills: number;
-    won?: boolean;
-    ismvp?: boolean;
-    date: Date;
-    state: String;
-    startTime: Date;
-    endTime?: Date;
-    diamonds?: number;
-    irons?: number;
-    gold?: number;
-    emeralds?: number;
-    blocksPlaced?: number;
-  }>;
-  dailyElo: Array<{
-    elo: number;
-    date: Date;
-  }>;
+  recentGames: IRecentGame[];
+  dailyElo: IDailyElo[];
 }
 
 const SeasonStatsSchema: Schema = new Schema({

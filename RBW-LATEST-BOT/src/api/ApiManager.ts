@@ -176,6 +176,31 @@ export class ApiManager {
     return mode;
   }
 
+  private async getGlobalCounts() {
+    const totalUsers = await User.countDocuments();
+    const Game = await this.getGameModel();
+    const totalGames = await Game.countDocuments();
+    return { totalUsers, totalGames };
+  }
+
+  private async fetchUserWithGameHistory(discordid: string, limit: number) {
+    const user = await User.findOne({ discordId: discordid });
+    if (!user) return null;
+
+    const Game = await this.getGameModel();
+    const recentGames = await Game.find({
+      $or: [
+        { winners: discordid },
+        { losers: discordid }
+      ]
+    })
+      .sort({ gameId: -1 })
+      .limit(limit)
+      .select('gameId winners startTime');
+
+    return { user, recentGames };
+  }
+
   private getBanInfo = async (req: Request, res: Response): Promise<void> => {
     try {
       const banId = req.query.id as string;
@@ -442,20 +467,12 @@ export class ApiManager {
 
   private getLeaderboard = async (req: Request, res: Response): Promise<void> => {
     try {
-      const mode = (req.query.mode as string) || 'elo';
+      const mode = this.validateMode(req, res);
+      if (!mode) return;
+
       const page = parseInt(req.query.page as string) || 1;
       const pageSize = 10;
       const skip = (page - 1) * pageSize;
-
-
-      const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
-        'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
-
-      if (!validModes.includes(mode)) {
-        res.status(400).json({ error: 'Invalid mode parameter' });
-        return;
-      }
 
 
       const sortObj: Record<string, 1 | -1> = {};
@@ -746,9 +763,7 @@ export class ApiManager {
   
   private getGlobalStats = async (req: Request, res: Response): Promise<void> => {
     try {
-      const totalUsers = await User.countDocuments();
-      const Game = await this.getGameModel();
-      const totalGames = await Game.countDocuments();
+      const { totalUsers, totalGames } = await this.getGlobalCounts();
 
       const stats = await User.aggregate([
         {
@@ -985,9 +1000,7 @@ export class ApiManager {
   
   private getServerStatus = async (req: Request, res: Response): Promise<void> => {
     try {
-      const totalUsers = await User.countDocuments();
-      const Game = await this.getGameModel();
-      const totalGames = await Game.countDocuments();
+      const { totalUsers, totalGames } = await this.getGlobalCounts();
       const queues = await Queue.find();
 
       let totalPlayersInQueue = 0;
@@ -1115,17 +1128,10 @@ export class ApiManager {
   
   private getTopPlayers = async (req: Request, res: Response): Promise<void> => {
     try {
-      const mode = (req.query.mode as string) || 'elo';
+      const mode = this.validateMode(req, res);
+      if (!mode) return;
+
       const limit = parseInt(req.query.limit as string) || 50;
-
-      const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
-        'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
-
-      if (!validModes.includes(mode)) {
-        res.status(400).json({ error: 'Invalid mode parameter' });
-        return;
-      }
 
       const sortObj: Record<string, 1 | -1> = {};
       sortObj[mode] = -1;
@@ -1329,23 +1335,12 @@ export class ApiManager {
   private getUserWinstreakHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-
-      const user = await User.findOne({ discordId: discordid });
-      if (!user) {
+      const data = await this.fetchUserWithGameHistory(discordid, 50);
+      if (!data) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      const Game = await this.getGameModel();
-      const recentGames = await Game.find({
-        $or: [
-          { winners: discordid },
-          { losers: discordid }
-        ]
-      })
-        .sort({ gameId: -1 })
-        .limit(50)
-        .select('gameId winners startTime');
+      const { user, recentGames } = data;
 
       const winstreakHistory = [];
       let currentStreak = 0;
@@ -1385,23 +1380,12 @@ export class ApiManager {
   private getUserEloHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-
-      const user = await User.findOne({ discordId: discordid });
-      if (!user) {
+      const data = await this.fetchUserWithGameHistory(discordid, 20);
+      if (!data) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      const Game = await this.getGameModel();
-      const recentGames = await Game.find({
-        $or: [
-          { winners: discordid },
-          { losers: discordid }
-        ]
-      })
-        .sort({ gameId: -1 })
-        .limit(20)
-        .select('gameId winners startTime');
+      const { user, recentGames } = data;
 
       const eloHistory = recentGames.map((game: any, index: number) => ({
         gameId: game.gameId,

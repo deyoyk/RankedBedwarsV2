@@ -1,47 +1,30 @@
-import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, EmbedBuilder, SlashCommandSubcommandBuilder } from 'discord.js';
 import Queue from '../../models/Queue';
+
+function addQueueOptions(sub: SlashCommandSubcommandBuilder) {
+  return sub
+    .addStringOption(opt =>
+      opt.setName('type')
+        .setDescription('Type: ranked, unranked, or specific')
+        .setRequired(true)
+        .addChoices(
+          { name: 'ranked', value: 'ranked' },
+          { name: 'unranked', value: 'unranked' },
+          { name: 'specific', value: 'specific' }
+        )
+    )
+    .addStringOption(opt =>
+      opt.setName('queueid')
+        .setDescription('Channel ID of the specific queue (if type is specific)')
+        .setRequired(false)
+    );
+}
 
 export const queueControlData = new SlashCommandBuilder()
   .setName('queuecontrol')
   .setDescription('Enable or disable queues by type or specific queue')
-  .addSubcommand(sub =>
-    sub.setName('enable')
-      .setDescription('Enable queues')
-      .addStringOption(opt =>
-        opt.setName('type')
-          .setDescription('Type: ranked, unranked, or specific')
-          .setRequired(true)
-          .addChoices(
-            { name: 'ranked', value: 'ranked' },
-            { name: 'unranked', value: 'unranked' },
-            { name: 'specific', value: 'specific' }
-          )
-      )
-      .addStringOption(opt =>
-        opt.setName('queueid')
-          .setDescription('Channel ID of the specific queue (if type is specific)')
-          .setRequired(false)
-      )
-  )
-  .addSubcommand(sub =>
-    sub.setName('disable')
-      .setDescription('Disable queues')
-      .addStringOption(opt =>
-        opt.setName('type')
-          .setDescription('Type: ranked, unranked, or specific')
-          .setRequired(true)
-          .addChoices(
-            { name: 'ranked', value: 'ranked' },
-            { name: 'unranked', value: 'unranked' },
-            { name: 'specific', value: 'specific' }
-          )
-      )
-      .addStringOption(opt =>
-        opt.setName('queueid')
-          .setDescription('Channel ID of the specific queue (if type is specific)')
-          .setRequired(false)
-      )
-  );
+  .addSubcommand(sub => addQueueOptions(sub.setName('enable').setDescription('Enable queues')))
+  .addSubcommand(sub => addQueueOptions(sub.setName('disable').setDescription('Disable queues')));
 
 export async function executeQueueControl(interaction: ChatInputCommandInteraction) {
   const sub = interaction.options.getSubcommand();

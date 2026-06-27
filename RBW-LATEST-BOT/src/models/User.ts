@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { recentGameSubdoc, dailyEloSubdoc } from './gameBase';
+import { recentGameSubdoc, dailyEloSubdoc, IRecentGame, IDailyElo } from './gameBase';
 import { coreStatFields } from './statFields';
 
 export interface IUser extends Document {
@@ -39,32 +39,9 @@ export interface IUser extends Document {
     togglepartyinvites: boolean;
     togglestaticnick: boolean;
   };
-  recentGames: Array<{
-    gameId: number;
-    queueid?: number;
-    map: string;
-    eloGain: number;
-    kills: number;
-    deaths: number;
-    bedBroken: number;
-    finalKills: number;
-    won?: boolean;
-    ismvp?: boolean;
-    date: Date;
-    state: String;
-    startTime: Date;
-    endTime?: Date;
-    diamonds?: number;
-    irons?: number;
-    gold?: number;
-    emeralds?: number;
-    blocksPlaced?: number;
-  }>;
+  recentGames: IRecentGame[];
   partyId?: string;
-  dailyElo: Array<{
-    elo: number;
-    date: Date;
-  }>;
+  dailyElo: IDailyElo[];
   strikes: Array<{
     id: string;
     reason: string;
