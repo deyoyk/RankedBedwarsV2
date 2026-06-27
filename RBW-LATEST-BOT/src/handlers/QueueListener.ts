@@ -27,7 +27,7 @@ interface QueueState {
   processing: boolean;
 }
 
-// fallow-ignore-next-line unused-exports — used in index.ts via dynamic import
+// fallow-ignore-next-line unused-export — used via dynamic import in index.ts
 export class QueueListener {
   private client: Client;
   private matchmaker: CentralizedMatchmaker;

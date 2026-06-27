@@ -55,7 +55,7 @@ export const gameBaseFields = {
   reason: { type: String, default: '' },
 };
 
-export function getTeamOfPlayer(this: any, playerId: string): string[] | null {
+function getTeamOfPlayer(this: any, playerId: string): string[] | null {
   if (this.team1.includes(playerId)) return this.team1;
   if (this.team2.includes(playerId)) return this.team2;
   return null;

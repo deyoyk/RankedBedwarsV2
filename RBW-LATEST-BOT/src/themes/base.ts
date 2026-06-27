@@ -31,8 +31,7 @@ const FONT_PATHS = {
 
 let fontsRegistered = false;
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function ensureFontsRegistered(tag: string): void {
+function ensureFontsRegistered(tag: string): void {
   if (fontsRegistered) return;
   try {
     if (fs.existsSync(FONT_PATHS.ADAMCGPRO)) {
@@ -56,8 +55,7 @@ export function ensureFontsRegistered(tag: string): void {
   }
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export async function fetchSkin(ign: string, pose: 'fullbody' | 'avatar' = 'fullbody'): Promise<CanvasImage | null> {
+async function fetchSkin(ign: string, pose: 'fullbody' | 'avatar' = 'fullbody'): Promise<CanvasImage | null> {
   const url = `https://nmsr.nickac.dev/${pose}/${encodeURIComponent(ign)}`;
   try {
     const controller = new AbortController();
@@ -72,8 +70,7 @@ export async function fetchSkin(ign: string, pose: 'fullbody' | 'avatar' = 'full
   }
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function drawCenteredText(ctx: CanvasRenderingContext2D, text: string, centerX: number, centerY: number, font: string, color = '#FFFFFF') {
+function drawCenteredText(ctx: CanvasRenderingContext2D, text: string, centerX: number, centerY: number, font: string, color = '#FFFFFF') {
   ctx.font = font;
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
@@ -81,8 +78,7 @@ export function drawCenteredText(ctx: CanvasRenderingContext2D, text: string, ce
   ctx.fillText(text, centerX, centerY);
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function drawLeftText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, color = '#FFFFFF') {
+function drawLeftText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, font: string, color = '#FFFFFF') {
   ctx.font = font;
   ctx.fillStyle = color;
   ctx.textAlign = 'left';
@@ -90,24 +86,21 @@ export function drawLeftText(ctx: CanvasRenderingContext2D, text: string, x: num
   ctx.fillText(text, x, y);
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function mvpRate(player: PlayerData): number {
+function mvpRate(player: PlayerData): number {
   const mvps = player.mvps || 0;
   const gamesPlayed = player.gamesplayed || 0;
   if (gamesPlayed <= 0) return 0;
   return (mvps / gamesPlayed) * 100;
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function wlRatio(player: PlayerData): string {
+function wlRatio(player: PlayerData): string {
   const wins = player.wins || 0;
   const losses = player.losses || 0;
   const ratio = wins / Math.max(1, losses);
   return ratio.toFixed(1);
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function getRecentColor(result?: string): string {
+function getRecentColor(result?: string): string {
   switch ((result || '').toLowerCase()) {
     case 'win': return '#4CAF50';
     case 'lose':
@@ -119,8 +112,7 @@ export function getRecentColor(result?: string): string {
   }
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function createShadowFromSkin(skin: CanvasImage): CanvasImage {
+function createShadowFromSkin(skin: CanvasImage): CanvasImage {
   const targetWidth = 250;
   const targetHeight = 420;
   const off = createCanvas(targetWidth, targetHeight);
@@ -141,8 +133,7 @@ export function createShadowFromSkin(skin: CanvasImage): CanvasImage {
   return off as unknown as CanvasImage;
 }
 
-// fallow-ignore-next-line unused-exports — consumed by generateThemeImage in same file
-export function getThemeImagePath(themeName: string): string {
+function getThemeImagePath(themeName: string): string {
   return path.resolve(process.cwd(), 'src', 'asserts', 'themes', `${themeName}.png`);
 }
 

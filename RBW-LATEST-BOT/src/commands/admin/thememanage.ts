@@ -3,7 +3,7 @@ import User from '../../models/User';
 import { safeReply } from '../../utils/safeReply';
 import { themes, resolveTheme } from '../../themes';
 
-// fallow-ignore-next-line duplicate-exports — imported with alias in CommandManager
+// fallow-ignore-next-line duplicate-export — command system loads by filename
 export const data = new SlashCommandBuilder()
   .setName('thememanage')
   .setDescription('Admin: give or take a user\'s theme')

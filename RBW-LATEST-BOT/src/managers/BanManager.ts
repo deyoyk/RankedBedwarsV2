@@ -4,33 +4,25 @@ import { Guild } from 'discord.js';
 import { parseDuration } from '../utils/parseDuration';
 import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
 import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
-
-interface BanOperation {
-  id: string;
-  targetId: string;
-  moderatorId: string;
-  reason: string;
-  duration?: number;
-  timestamp: number;
-  status: 'pending' | 'completed' | 'failed';
-}
-
-interface BanManagerStats {
-  totalBans: number;
-  activeBans: number;
-  expiredBans: number;
-  autoUnbans: number;
-  errors: number;
-}
+import {
+  PunishmentOperation,
+  PunishmentManagerStats,
+  createPendingOperation,
+  addPunishmentRole,
+  sendPunishmentNotification,
+  sendWebSocketNotification,
+  handleOperationError,
+  batchProcessExpired
+} from './punishmentHelpers';
 
 export class BanManager {
   private static instance: BanManager;
-  private pendingOperations: Map<string, BanOperation> = new Map();
-  private stats: BanManagerStats = {
-    totalBans: 0,
-    activeBans: 0,
-    expiredBans: 0,
-    autoUnbans: 0,
+  private pendingOperations: Map<string, PunishmentOperation> = new Map();
+  private stats: PunishmentManagerStats = {
+    total: 0,
+    active: 0,
+    expired: 0,
+    autoResolved: 0,
     errors: 0
   };
   private constructor() {}
@@ -42,20 +34,10 @@ export class BanManager {
     return BanManager.instance;
   }
 
-  public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | null> {
+  public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | undefined> {
     const instance = BanManager.getInstance();
-    const operationId = generatePunishmentId();
-    
-    const operation: BanOperation = {
-      id: operationId,
-      targetId,
-      moderatorId,
-      reason,
-      timestamp: Date.now(),
-      status: 'pending'
-    };
-
-    instance.pendingOperations.set(operationId, operation);
+    const operation = createPendingOperation(targetId, moderatorId, reason);
+    instance.pendingOperations.set(operation.id, operation);
 
     try {
       if (!targetId || !moderatorId || !reason.trim()) {
@@ -81,11 +63,11 @@ export class BanManager {
       if (duration && duration < 60000) {
         throw new Error('Ban duration must be at least 1 minute');
       }
-      if (duration && duration > 365 * 24 * 60 * 60 * 1000) { 
+      if (duration && duration > 365 * 24 * 60 * 60 * 1000) {
         throw new Error('Ban duration cannot exceed 1 year');
       }
 
-      const expires = duration ? new Date(Date.now() + duration) : null;
+      const expires = duration ? new Date(Date.now() + duration) : undefined;
       const banId = generatePunishmentId();
 
       const banRecord = {
@@ -98,24 +80,12 @@ export class BanManager {
 
       user.bans.push(banRecord);
       user.isbanned = true;
-      
       await user.save();
 
       const promises: Promise<any>[] = [];
 
-      const bannedRole = config.roles.banned;
-      if (bannedRole) {
-        const member = guild.members.cache.get(targetId);
-        if (member) {
-          promises.push(
-            member.roles.add(bannedRole).catch(error => {
-              console.warn(`[BanManager] Failed to add banned role to ${targetId}:`, error.message);
-            })
-          );
-        }
-      }
+      addPunishmentRole(promises, guild, targetId, config.roles.banned, 'add', 'ban');
 
-      
       if (!duration) {
         promises.push(
           guild.members.ban(targetId, { reason: `${reason} - By: ${moderatorId}` }).catch(error => {
@@ -124,157 +94,81 @@ export class BanManager {
         );
       }
 
-      
-      promises.push(
-        sendPunishmentEmbed({
-          guild, targetId, moderatorId, reason, type: 'ban', expires
-        }).catch(error => {
-          console.warn(`[BanManager] Failed to send ban embed:`, error.message);
-        })
-      );
+      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: 'ban', expires });
+      sendWebSocketNotification(promises, wsManager, user, {
+        type: 'ban',
+        reason,
+        duration: duration ? Math.ceil(duration / 60000) : null,
+        id: banId
+      }, 'ban');
 
-      
-      if (wsManager && typeof wsManager.send === 'function') {
-        promises.push(
-          Promise.resolve().then(() => {
-            wsManager.send({
-              type: 'botban',
-              ign: user.ign,
-              reason: reason.trim(),
-              duration: duration ? Math.ceil(duration / 60000) : null,
-              id: banId
-            });
-          }).catch(error => {
-            console.warn(`[BanManager] Failed to send WebSocket ban notification:`, error.message);
-          })
-        );
-      }
-
-      
       await Promise.allSettled(promises);
 
       operation.status = 'completed';
-      instance.stats.totalBans++;
-      instance.stats.activeBans++;
+      instance.stats.total++;
+      instance.stats.active++;
 
       console.log(`[BanManager] Successfully banned ${user.ign || targetId} (${banId}) for ${durationStr || 'permanent'}: ${reason}`);
-      
       return expires;
 
     } catch (error: any) {
-      operation.status = 'failed';
-      instance.stats.errors++;
-      
-      console.error(`[BanManager] Failed to ban ${targetId}:`, error);
-      throw new Error(`Ban operation failed: ${error.message}`);
-      
+      handleOperationError(error, operation, instance.stats, 'ban', targetId);
     } finally {
-      cleanupOperation(instance.pendingOperations, operationId);
+      cleanupOperation(instance.pendingOperations, operation.id);
     }
   }
 
   public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: any): Promise<void> {
     const instance = BanManager.getInstance();
-    const operationId = generatePunishmentId();
-    
-    const operation: BanOperation = {
-      id: operationId,
-      targetId,
-      moderatorId,
-      reason,
-      timestamp: Date.now(),
-      status: 'pending'
-    };
-
-    instance.pendingOperations.set(operationId, operation);
+    const operation = createPendingOperation(targetId, moderatorId, reason);
+    instance.pendingOperations.set(operation.id, operation);
 
     try {
-      
       if (!targetId || !moderatorId) {
         throw new Error('Invalid unban parameters');
       }
 
-      
       const user = await fetchUserWithTimeout(targetId);
       if (!user) {
         throw new Error(`User ${targetId} not found in database`);
       }
 
-      
       if (!user.isbanned) {
         console.warn(`[BanManager] User ${targetId} is not currently banned`);
-        return; 
+        return;
       }
 
-      
       user.isbanned = false;
       await user.save();
 
-      
       const promises: Promise<any>[] = [];
 
-      
-      const bannedRole = config.roles.banned;
-      if (bannedRole) {
-        const member = guild.members.cache.get(targetId);
-        if (member) {
-          promises.push(
-            member.roles.remove(bannedRole).catch(error => {
-              console.warn(`[BanManager] Failed to remove banned role from ${targetId}:`, error.message);
-            })
-          );
-        }
-      }
+      addPunishmentRole(promises, guild, targetId, config.roles.banned, 'remove', 'ban');
 
-      
       promises.push(
         guild.members.unban(targetId, `${reason} - By: ${moderatorId}`).catch(error => {
           console.warn(`[BanManager] Failed to Discord unban ${targetId}:`, error.message);
         })
       );
 
-      
-      promises.push(
-        sendPunishmentEmbed({
-          guild, targetId, moderatorId, reason, type: 'unban'
-        }).catch(error => {
-          console.warn(`[BanManager] Failed to send unban embed:`, error.message);
-        })
-      );
+      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: 'unban' });
+      sendWebSocketNotification(promises, wsManager, user, {
+        type: 'unban',
+        reason,
+        id: targetId
+      }, 'ban');
 
-      
-      if (wsManager && typeof wsManager.send === 'function') {
-        promises.push(
-          Promise.resolve().then(() => {
-            wsManager.send({
-              type: 'botunban',
-              ign: user.ign,
-              reason: reason.trim(),
-              id: targetId
-            });
-          }).catch(error => {
-            console.warn(`[BanManager] Failed to send WebSocket unban notification:`, error.message);
-          })
-        );
-      }
-
-      
       await Promise.allSettled(promises);
 
       operation.status = 'completed';
-      instance.stats.activeBans = Math.max(0, instance.stats.activeBans - 1);
+      instance.stats.active = Math.max(0, instance.stats.active - 1);
 
       console.log(`[BanManager] Successfully unbanned ${user.ign || targetId}: ${reason}`);
 
     } catch (error: any) {
-      operation.status = 'failed';
-      instance.stats.errors++;
-      
-      console.error(`[BanManager] Failed to unban ${targetId}:`, error);
-      throw new Error(`Unban operation failed: ${error.message}`);
-      
+      handleOperationError(error, operation, instance.stats, 'unban', targetId);
     } finally {
-      cleanupOperation(instance.pendingOperations, operationId);
+      cleanupOperation(instance.pendingOperations, operation.id);
     }
   }
 
@@ -284,14 +178,13 @@ export class BanManager {
 
     try {
       const now = new Date();
-      const users = await User.find({ 
+      const users = await User.find({
         isbanned: true,
         'bans.0': { $exists: true }
-      }).select('discordId bans ign').limit(100); 
+      }).select('discordId bans ign').limit(100);
 
       const expiredUsers: Array<{ user: any; lastBan: any }> = [];
 
-      
       for (const user of users) {
         try {
           const lastBan = user.bans[user.bans.length - 1];
@@ -307,11 +200,9 @@ export class BanManager {
         }
       }
 
-      
-      const batchSize = 5;
-      for (let i = 0; i < expiredUsers.length; i += batchSize) {
-        const batch = expiredUsers.slice(i, i + batchSize);
-        const unbanPromises = batch.map(async ({ user, lastBan }) => {
+      unbanCount = await batchProcessExpired(
+        expiredUsers,
+        async ({ user, lastBan }) => {
           try {
             await BanManager.unban(guild, user.discordId, 'system', 'Ban expired');
             console.log(`[BanManager] Auto-unbanned ${user.ign || user.discordId} (expired: ${lastBan.date})`);
@@ -321,21 +212,13 @@ export class BanManager {
             instance.stats.errors++;
             return false;
           }
-        });
+        },
+        5,
+        1000
+      );
 
-        const results = await Promise.allSettled(unbanPromises);
-        unbanCount += results.filter(result => 
-          result.status === 'fulfilled' && result.value === true
-        ).length;
+      instance.stats.expired += unbanCount;
 
-        
-        if (i + batchSize < expiredUsers.length) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-
-      instance.stats.expiredBans += unbanCount;
-      
       if (unbanCount > 0) {
         console.log(`[BanManager] Auto-unbanned ${unbanCount} users with expired bans`);
       }
@@ -348,5 +231,4 @@ export class BanManager {
       return unbanCount;
     }
   }
-
 }

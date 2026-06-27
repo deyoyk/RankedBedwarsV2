@@ -1,5 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { recentGameSubdoc, dailyEloSubdoc } from './gameBase';
+import { coreStatFields } from './statFields';
 
 export interface ISeasonStats extends Document {
   discordId: string;
@@ -58,26 +59,7 @@ const SeasonStatsSchema: Schema = new Schema({
   seasonNumber: { type: Number, required: true },
   chapterNumber: { type: Number, required: true },
   ign: { type: String },
-  elo: { type: Number, default: 0 },
-  level: { type: Number, default: 1 },
-  experience: { type: Number, default: 0 },
-  wins: { type: Number, default: 0 },
-  losses: { type: Number, default: 0 },
-  games: { type: Number, default: 0 },
-  mvps: { type: Number, default: 0 },
-  kills: { type: Number, default: 0 },
-  deaths: { type: Number, default: 0 },
-  bedBroken: { type: Number, default: 0 },
-  finalKills: { type: Number, default: 0 },
-  diamonds: { type: Number, default: 0 },
-  irons: { type: Number, default: 0 },
-  gold: { type: Number, default: 0 },
-  emeralds: { type: Number, default: 0 },
-  blocksPlaced: { type: Number, default: 0 },
-  winstreak: { type: Number, default: 0 },
-  losestreak: { type: Number, default: 0 },
-  kdr: { type: Number, default: 0 },
-  wlr: { type: Number, default: 0 },
+  ...coreStatFields,
   recentGames: [recentGameSubdoc],
   dailyElo: [dailyEloSubdoc],
 });

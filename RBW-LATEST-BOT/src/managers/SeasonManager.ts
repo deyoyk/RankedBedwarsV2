@@ -10,6 +10,7 @@ import { ISeasonGames } from '../models/SeasonGames';
 
 import { getLevelInfo } from '../utils/levelSystem';
 import { EmbedBuilder } from 'discord.js';
+import { validatePositiveInt, validatePageLimit, computePagination } from './validationHelpers';
 
 export interface SeasonStartOptions {
   seasonNumber: number;
@@ -206,28 +207,14 @@ export class SeasonManager {
 
         const games = await Game.find({}).session(session);
 
-        await Promise.all(games.map(game =>
-          new SeasonGames({
-            gameId: game.gameId,
+        await Promise.all(games.map(game => {
+          const { _id, __v, ...gameData } = game.toObject();
+          return new SeasonGames({
+            ...gameData,
             seasonNumber,
-            chapterNumber,
-            map: game.map,
-            team1: game.team1,
-            team2: game.team2,
-            winners: game.winners,
-            losers: game.losers,
-            mvps: game.mvps,
-            bedbreaks: game.bedbreaks,
-            startTime: game.startTime,
-            endTime: game.endTime,
-            state: game.state,
-            channels: game.channels,
-            queueId: game.queueId,
-            isRanked: game.isRanked,
-            partiesInThisGame: game.partiesInThisGame,
-            reason: game.reason
-          }).save({ session })
-        ));
+            chapterNumber
+          }).save({ session });
+        }));
 
         await User.updateMany({}, {
           $set: {
@@ -298,13 +285,8 @@ export class SeasonManager {
 
   public static async getSeason(seasonNumber: number, chapterNumber: number): Promise<ISeason | null> {
     try {
-      if (typeof seasonNumber !== 'number' || seasonNumber <= 0 || !Number.isInteger(seasonNumber)) {
-        throw new Error('Season number must be a positive integer');
-      }
-
-      if (typeof chapterNumber !== 'number' || chapterNumber <= 0 || !Number.isInteger(chapterNumber)) {
-        throw new Error('Chapter number must be a positive integer');
-      }
+      validatePositiveInt(seasonNumber, 'Season number');
+      validatePositiveInt(chapterNumber, 'Chapter number');
 
       return await Season.findOne({ seasonNumber, chapterNumber });
     } catch (error) {
@@ -322,12 +304,8 @@ export class SeasonManager {
   ): Promise<ISeasonStats | null> {
     try {
 
-      if (
-        !Number.isInteger(seasonNumber) || seasonNumber <= 0 ||
-        !Number.isInteger(chapterNumber) || chapterNumber <= 0
-      ) {
-        throw new Error('Season number and chapter number must be positive integers');
-      }
+      validatePositiveInt(seasonNumber, 'Season number');
+      validatePositiveInt(chapterNumber, 'Chapter number');
 
       if (!discordId || typeof discordId !== 'string') {
         throw new Error('Discord ID is required and must be a string');
@@ -367,30 +345,17 @@ export class SeasonManager {
 
   public static async getSeasonGames(seasonNumber: number, chapterNumber: number, page: number = 1, limit: number = 20): Promise<{ games: ISeasonGames[]; total: number; totalPages: number }> {
     try {
-      if (typeof seasonNumber !== 'number' || seasonNumber <= 0 || !Number.isInteger(seasonNumber)) {
-        throw new Error('Season number must be a positive integer');
-      }
+      validatePositiveInt(seasonNumber, 'Season number');
+      validatePositiveInt(chapterNumber, 'Chapter number');
+      const { page: validPage, limit: validLimit } = validatePageLimit(page, limit);
 
-      if (typeof chapterNumber !== 'number' || chapterNumber <= 0 || !Number.isInteger(chapterNumber)) {
-        throw new Error('Chapter number must be a positive integer');
-      }
-
-      if (typeof page !== 'number' || page <= 0 || !Number.isInteger(page)) {
-        throw new Error('Page must be a positive integer');
-      }
-
-      if (typeof limit !== 'number' || limit <= 0 || !Number.isInteger(limit)) {
-        throw new Error('Limit must be a positive integer');
-      }
-
-      const skip = (page - 1) * limit;
       const total = await SeasonGames.countDocuments({ seasonNumber, chapterNumber });
-      const totalPages = Math.ceil(total / limit);
+      const { skip, totalPages } = computePagination(validPage, validLimit, total);
 
       const games = await SeasonGames.find({ seasonNumber, chapterNumber })
         .sort({ gameId: -1 })
         .skip(skip)
-        .limit(limit);
+        .limit(validLimit);
 
       return {
         games,
@@ -406,23 +371,10 @@ export class SeasonManager {
 
   public static async getSeasonLeaderboard(seasonNumber: number, chapterNumber: number, mode: string = 'elo', page: number = 1, limit: number = 10): Promise<{ entries: Array<{ position: number; ign: string; value: number | string }>; total: number; totalPages: number }> {
     try {
-      if (typeof seasonNumber !== 'number' || seasonNumber <= 0 || !Number.isInteger(seasonNumber)) {
-        throw new Error('Season number must be a positive integer');
-      }
+      validatePositiveInt(seasonNumber, 'Season number');
+      validatePositiveInt(chapterNumber, 'Chapter number');
+      const { page: validPage, limit: validLimit } = validatePageLimit(page, limit);
 
-      if (typeof chapterNumber !== 'number' || chapterNumber <= 0 || !Number.isInteger(chapterNumber)) {
-        throw new Error('Chapter number must be a positive integer');
-      }
-
-      if (typeof page !== 'number' || page <= 0 || !Number.isInteger(page)) {
-        throw new Error('Page must be a positive integer');
-      }
-
-      if (typeof limit !== 'number' || limit <= 0 || !Number.isInteger(limit)) {
-        throw new Error('Limit must be a positive integer');
-      }
-
-      // Validate mode
       const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
         'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
         'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
@@ -431,9 +383,8 @@ export class SeasonManager {
         throw new Error(`Invalid mode parameter. Valid modes: ${validModes.join(', ')}`);
       }
 
-      const skip = (page - 1) * limit;
       const total = await SeasonStats.countDocuments({ seasonNumber, chapterNumber });
-      const totalPages = Math.ceil(total / limit);
+      const { skip, totalPages } = computePagination(validPage, validLimit, total);
 
       const sortObj: Record<string, 1 | -1> = {};
       sortObj[mode] = -1;
@@ -441,7 +392,7 @@ export class SeasonManager {
       const seasonStats = await SeasonStats.find({ seasonNumber, chapterNumber })
         .sort(sortObj as any)
         .skip(skip)
-        .limit(limit)
+        .limit(validLimit)
         .select(`ign ${mode}`);
 
       const entries = seasonStats.map((stats, index) => ({
