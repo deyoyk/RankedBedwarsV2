@@ -45,12 +45,12 @@ import { queue } from '../commands/player/queue';
 import { history } from '../commands/player/history';
 import { screenshare } from '../commands/player/screenshare';
 import { ssclose } from '../commands/moderator/ssclose';
-import { data as changeThemeData, execute as changetheme } from '../commands/player/changetheme';
-import { data as myThemesData, execute as mythemes } from '../commands/player/themes';
+import { changeThemeData, executeChangeTheme } from '../commands/player/changetheme';
+import { themesData, executeThemes } from '../commands/player/themes';
 import { themeManageData, executeThemeManage } from '../commands/admin/thememanage';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
 import { fixall } from '../commands/admin/fixall';
-import { execute as startseason } from '../commands/admin/startseason';
+import { executeStartSeason } from '../commands/admin/startseason';
 import { executeEndSeason } from '../commands/admin/endseason';
 import { executeListSeasons } from '../commands/admin/listseasons';
 import { execute as level } from '../commands/player/level';
@@ -739,7 +739,7 @@ export class CommandManager {
       options: changeThemeData.toJSON().options || [],
       execute: async (interaction, args) => {
         if (interaction instanceof ChatInputCommandInteraction) {
-          await changetheme(interaction);
+          await executeChangeTheme(interaction);
         }
       }
     });
@@ -747,10 +747,10 @@ export class CommandManager {
     this.commands.set('themes', {
       name: 'themes',
       description: 'List your owned themes and current theme',
-      options: myThemesData.toJSON().options || [],
+      options: themesData.toJSON().options || [],
       execute: async (interaction, args) => {
         if (interaction instanceof ChatInputCommandInteraction) {
-          await mythemes(interaction);
+          await executeThemes(interaction);
         }
       }
     });
@@ -1089,7 +1089,7 @@ export class CommandManager {
       ],
       execute: async (interaction, args) => {
         if (interaction instanceof ChatInputCommandInteraction) {
-          await startseason(interaction);
+          await executeStartSeason(interaction);
         }
       }
     });

@@ -2,11 +2,11 @@ import { ChatInputCommandInteraction, SlashCommandBuilder, EmbedBuilder } from '
 import User from '../../models/User';
 import { safeReply } from '../../utils/safeReply';
 
-export const data = new SlashCommandBuilder()
+export const themesData = new SlashCommandBuilder()
   .setName('themes')
   .setDescription('List your owned themes and current theme');
 
-export async function execute(interaction: ChatInputCommandInteraction) {
+export async function executeThemes(interaction: ChatInputCommandInteraction) {
   try {
     const user = await User.findOne({ discordId: interaction.user.id });
     if (!user) {

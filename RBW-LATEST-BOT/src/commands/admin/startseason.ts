@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import { SeasonManager } from '../../managers/SeasonManager';
 
-export async function execute(interaction: ChatInputCommandInteraction) {
+export async function executeStartSeason(interaction: ChatInputCommandInteraction) {
   const seasonNumber = interaction.options.getInteger('season', true);
   const chapterNumber = interaction.options.getInteger('chapter', true);
   const name = interaction.options.getString('name', true);

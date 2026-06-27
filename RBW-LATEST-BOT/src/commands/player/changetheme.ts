@@ -3,7 +3,7 @@ import User from '../../models/User';
 import { safeReply } from '../../utils/safeReply';
 import { themes, resolveTheme } from '../../themes';
 
-export const data = new SlashCommandBuilder()
+export const changeThemeData = new SlashCommandBuilder()
   .setName('changetheme')
   .setDescription('Change your stats image theme')
   .addStringOption(option =>
@@ -14,7 +14,7 @@ export const data = new SlashCommandBuilder()
       .addChoices(...themes.map(t => ({ name: t, value: t })))
   );
 
-export async function execute(interaction: ChatInputCommandInteraction) {
+export async function executeChangeTheme(interaction: ChatInputCommandInteraction) {
   try {
     const theme = interaction.options.getString('theme', true).toLowerCase();
     const user = await User.findOne({ discordId: interaction.user.id });

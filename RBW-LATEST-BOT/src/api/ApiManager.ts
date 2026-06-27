@@ -139,6 +139,43 @@ export class ApiManager {
     return user;
   }
 
+  private validateSeasonChapter(req: Request, res: Response): { seasonNumber: number; chapterNumber: number } | null {
+    const { season, chapter } = req.params;
+    const seasonNumber = parseInt(season);
+    const chapterNumber = parseInt(chapter);
+    if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
+      res.status(400).json({ error: 'Invalid season or chapter number' });
+      return null;
+    }
+    return { seasonNumber, chapterNumber };
+  }
+
+  private validatePagination(req: Request, res: Response, defaultPageSize = 20): { page: number; pageSize: number } | null {
+    const page = parseInt(req.query.page as string) || 1;
+    const pageSize = parseInt(req.query.limit as string || req.query.pageSize as string) || defaultPageSize;
+    if (isNaN(page) || page < 1) {
+      res.status(400).json({ error: 'Invalid page number' });
+      return null;
+    }
+    if (isNaN(pageSize) || pageSize < 1 || pageSize > 100) {
+      res.status(400).json({ error: 'Invalid page size. Must be between 1 and 100.' });
+      return null;
+    }
+    return { page, pageSize };
+  }
+
+  private validateMode(req: Request, res: Response): string | null {
+    const mode = (req.query.mode as string) || 'elo';
+    const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
+      'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
+      'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
+    if (!validModes.includes(mode)) {
+      res.status(400).json({ error: 'Invalid mode parameter' });
+      return null;
+    }
+    return mode;
+  }
+
   private getBanInfo = async (req: Request, res: Response): Promise<void> => {
     try {
       const banId = req.query.id as string;
@@ -560,14 +597,9 @@ export class ApiManager {
 
   private getSeasonInfo = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { season, chapter } = req.params;
-      const seasonNumber = parseInt(season);
-      const chapterNumber = parseInt(chapter);
-
-      if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
-        res.status(400).json({ error: 'Invalid season or chapter number' });
-        return;
-      }
+      const seasonParams = this.validateSeasonChapter(req, res);
+      if (!seasonParams) return;
+      const { seasonNumber, chapterNumber } = seasonParams;
 
       const seasonInfo = await SeasonManager.getSeason(seasonNumber, chapterNumber);
       if (!seasonInfo) {
@@ -592,14 +624,9 @@ export class ApiManager {
 
   private getSeasonStats = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { season, chapter } = req.params;
-      const seasonNumber = parseInt(season);
-      const chapterNumber = parseInt(chapter);
-
-      if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
-        res.status(400).json({ error: 'Invalid season or chapter number' });
-        return;
-      }
+      const seasonParams = this.validateSeasonChapter(req, res);
+      if (!seasonParams) return;
+      const { seasonNumber, chapterNumber } = seasonParams;
 
       const user = await this.findUserByQuery(req);
       if (!user) {
@@ -623,36 +650,16 @@ export class ApiManager {
 
   private getSeasonLeaderboard = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { season, chapter } = req.params;
-      const seasonNumber = parseInt(season);
-      const chapterNumber = parseInt(chapter);
-      const mode = (req.query.mode as string) || 'elo';
-      const page = parseInt(req.query.page as string) || 1;
-      const pageSize = parseInt(req.query.pageSize as string) || 10;
+      const seasonParams = this.validateSeasonChapter(req, res);
+      if (!seasonParams) return;
+      const { seasonNumber, chapterNumber } = seasonParams;
 
-      if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
-        res.status(400).json({ error: 'Invalid season or chapter number' });
-        return;
-      }
+      const mode = this.validateMode(req, res);
+      if (!mode) return;
 
-      if (isNaN(page) || page < 1) {
-        res.status(400).json({ error: 'Invalid page number' });
-        return;
-      }
-
-      if (isNaN(pageSize) || pageSize < 1 || pageSize > 100) {
-        res.status(400).json({ error: 'Invalid page size. Must be between 1 and 100.' });
-        return;
-      }
-
-      const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
-        'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
-
-      if (!validModes.includes(mode)) {
-        res.status(400).json({ error: 'Invalid mode parameter' });
-        return;
-      }
+      const pagination = this.validatePagination(req, res, 10);
+      if (!pagination) return;
+      const { page, pageSize } = pagination;
 
       const result = await SeasonManager.getSeasonLeaderboard(seasonNumber, chapterNumber, mode, page, pageSize);
 
@@ -673,26 +680,13 @@ export class ApiManager {
 
   private getSeasonGames = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { season, chapter } = req.params;
-      const seasonNumber = parseInt(season);
-      const chapterNumber = parseInt(chapter);
-      const page = parseInt(req.query.page as string) || 1;
-      const pageSize = parseInt(req.query.limit as string) || 20;
+      const seasonParams = this.validateSeasonChapter(req, res);
+      if (!seasonParams) return;
+      const { seasonNumber, chapterNumber } = seasonParams;
 
-      if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
-        res.status(400).json({ error: 'Invalid season or chapter number' });
-        return;
-      }
-
-      if (isNaN(page) || page < 1) {
-        res.status(400).json({ error: 'Invalid page number' });
-        return;
-      }
-
-      if (isNaN(pageSize) || pageSize < 1 || pageSize > 100) {
-        res.status(400).json({ error: 'Invalid page size. Must be between 1 and 100.' });
-        return;
-      }
+      const pagination = this.validatePagination(req, res);
+      if (!pagination) return;
+      const { page, pageSize } = pagination;
 
       const result = await SeasonManager.getSeasonGames(seasonNumber, chapterNumber, page, pageSize);
 
