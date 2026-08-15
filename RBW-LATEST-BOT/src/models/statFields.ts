@@ -10,6 +10,7 @@ export interface IUserStats {
   deaths: number;
   bedBroken: number;
   finalKills: number;
+  finalDeaths: number;
   diamonds: number;
   irons: number;
   gold: number;
@@ -19,6 +20,8 @@ export interface IUserStats {
   losestreak: number;
   kdr: number;
   wlr: number;
+  playtimeSeconds: number;
+  peakElo: number;
 }
 
 export type UserStatKey = keyof IUserStats;
@@ -35,6 +38,7 @@ export const coreStatFields = {
   deaths: { type: Number, default: 0 },
   bedBroken: { type: Number, default: 0 },
   finalKills: { type: Number, default: 0 },
+  finalDeaths: { type: Number, default: 0 },
   diamonds: { type: Number, default: 0 },
   irons: { type: Number, default: 0 },
   gold: { type: Number, default: 0 },
@@ -44,4 +48,6 @@ export const coreStatFields = {
   losestreak: { type: Number, default: 0 },
   kdr: { type: Number, default: 0 },
   wlr: { type: Number, default: 0 },
+  playtimeSeconds: { type: Number, default: 0 },
+  peakElo: { type: Number, default: 0 },
 };

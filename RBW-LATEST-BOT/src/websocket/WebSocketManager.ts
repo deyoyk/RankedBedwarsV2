@@ -300,7 +300,7 @@ export class WebSocketManager {
   
   
   
-  private checkPlayerCallbacks: Map<string, (online: boolean, original_ign_case?: string) => void> = new Map();
+  private checkPlayerCallbacks: Map<string, Set<(online: boolean, original_ign_case?: string) => void>> = new Map();
   private listeners: { [type: string]: Set<(msg: any) => void> } = {};
   private globalHandlers: { [type: string]: ((msg: any) => void) | undefined } = {};
   private gameManager: any = null;
@@ -640,9 +640,11 @@ export class WebSocketManager {
 
   private handlePlayerStatus(msg: any) {
     const ign = typeof msg.ign === 'string' ? msg.ign.toLowerCase() : '';
-    const cb = this.checkPlayerCallbacks.get(ign);
-    if (cb) {
-      cb(msg.online, msg.original_ign_case);
+    const callbacks = this.checkPlayerCallbacks.get(ign);
+    if (callbacks && callbacks.size > 0) {
+      for (const cb of Array.from(callbacks)) {
+        cb(msg.online, msg.original_ign_case);
+      }
       this.checkPlayerCallbacks.delete(ign);
     }
   }
@@ -694,6 +696,7 @@ export class WebSocketManager {
         deaths: stats.deaths ?? 0,
         bedBroken: bedbreaks.includes(ign) ? 1 : 0,
         finalKills: stats.finalkills ?? 0,
+        finalDeaths: stats.finaldeaths ?? 0,
         diamonds: stats.diamonds ?? 0,
         irons: stats.irons ?? 0,
         gold: stats.gold ?? 0,
@@ -723,6 +726,10 @@ export class WebSocketManager {
     const mvps = this.calculateMvpsFromStats(players, msgMvps);
     const bedbreaks: string[] = Array.isArray(msgBedsbroken) ? msgBedsbroken : [];
     const playerData = this.buildPlayerData(players, bedbreaks);
+    const rawTimeline: any[] = Array.isArray(msg.timeline) ? msg.timeline : [];
+    const timeline = rawTimeline
+      .filter((e: any) => e && typeof e === 'object' && typeof e.type === 'string' && typeof e.timestamp === 'number')
+      .slice(0, 5000);
 
     (async () => {
       try {
@@ -733,6 +740,7 @@ export class WebSocketManager {
           mvps,
           bedbreaks,
           playerData,
+          timeline,
           reason: 'Game completed'
         });
         console.log(`[WebSocketManager] Successfully scored game ${gameid} via GameManager`);
@@ -790,16 +798,30 @@ export class WebSocketManager {
   public async checkPlayerOnline(ign: string): Promise<{ online: boolean; original_ign_case?: string }> {
     return new Promise((resolve) => {
       const normalizedIgn = ign.toLowerCase();
+      let callbacks = this.checkPlayerCallbacks.get(normalizedIgn);
+      if (!callbacks) {
+        callbacks = new Set();
+        this.checkPlayerCallbacks.set(normalizedIgn, callbacks);
+      }
+
+      const cb = (online: boolean, original_ign_case?: string) => {
+        clearTimeout(timeout);
+        callbacks.delete(cb);
+        if (callbacks.size === 0) {
+          this.checkPlayerCallbacks.delete(normalizedIgn);
+        }
+        resolve({ online, original_ign_case });
+      };
+
       const timeout = setTimeout(() => {
-        this.checkPlayerCallbacks.delete(normalizedIgn);
+        callbacks.delete(cb);
+        if (callbacks.size === 0) {
+          this.checkPlayerCallbacks.delete(normalizedIgn);
+        }
         resolve({ online: false });
       }, 10000);
 
-      this.checkPlayerCallbacks.set(normalizedIgn, (online, original_ign_case) => {
-        clearTimeout(timeout);
-        this.checkPlayerCallbacks.delete(normalizedIgn);
-        resolve({ online, original_ign_case });
-      });
+      callbacks.add(cb);
       this.send({ type: 'check_player', ign });
     });
   }

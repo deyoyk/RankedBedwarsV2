@@ -191,6 +191,7 @@ export class SeasonManager {
             deaths: user.deaths,
             bedBroken: user.bedBroken,
             finalKills: user.finalKills,
+            finalDeaths: user.finalDeaths,
             diamonds: user.diamonds || 0,
             irons: user.irons || 0,
             gold: user.gold || 0,
@@ -200,6 +201,8 @@ export class SeasonManager {
             losestreak: user.losestreak || 0,
             kdr: user.kdr || 0,
             wlr: user.wlr || 0,
+            playtimeSeconds: user.playtimeSeconds || 0,
+            peakElo: user.peakElo || 0,
             recentGames: user.recentGames,
             dailyElo: user.dailyElo
           }).save({ session })
@@ -229,6 +232,7 @@ export class SeasonManager {
             deaths: 0,
             bedBroken: 0,
             finalKills: 0,
+            finalDeaths: 0,
             diamonds: 0,
             irons: 0,
             gold: 0,
@@ -238,6 +242,8 @@ export class SeasonManager {
             losestreak: 0,
             kdr: 0,
             wlr: 0,
+            playtimeSeconds: 0,
+            peakElo: 0,
             recentGames: [],
             dailyElo: [],
             seasonNumber: null,
@@ -376,8 +382,9 @@ export class SeasonManager {
       const { page: validPage, limit: validLimit } = validatePageLimit(page, limit);
 
       const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
-        'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
+        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths', 'bedBroken', 'mvps',
+        'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience',
+        'playtimeSeconds', 'peakElo'];
 
       if (!validModes.includes(mode)) {
         throw new Error(`Invalid mode parameter. Valid modes: ${validModes.join(', ')}`);

@@ -58,6 +58,15 @@ export const dailyEloSubdoc = {
   date: { type: Date, required: true },
 };
 
+export const timelineEventSubdoc = {
+  type: { type: String, required: true },
+  player: { type: String },
+  target: { type: String },
+  amount: { type: Number },
+  team: { type: String },
+  timestamp: { type: Number, required: true },
+};
+
 export const gameBaseFields = {
   gameId: { type: Number, required: true },
   map: { type: String, required: true },
@@ -84,6 +93,7 @@ export const gameBaseFields = {
   isRanked: { type: Boolean, default: false },
   partiesInThisGame: { type: String, default: '' },
   reason: { type: String, default: '' },
+  timeline: { type: [timelineEventSubdoc], default: [] },
 };
 
 function getTeamOfPlayer(this: any, playerId: string): string[] | null {

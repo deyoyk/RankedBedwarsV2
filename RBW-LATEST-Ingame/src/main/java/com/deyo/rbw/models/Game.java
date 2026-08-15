@@ -1,5 +1,6 @@
 package com.deyo.rbw.models;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,7 @@ public class Game {
     private final Map<String, Boolean> playerTeamWon = new HashMap<>();
     private final Map<String, String> playerTeamName = new HashMap<>();
     private final Map<String, Boolean> playerBedBroken = new HashMap<>();
+    private final List<Map<String, Object>> timeline = new ArrayList<>();
 
     public Game(String gameId, String map, boolean ranked, List<String> team1, List<String> team2,
                 List<String> mvps, List<String> bedBreakers, long startTime, int duration, String date) {
@@ -68,6 +70,7 @@ public class Game {
     public Map<String, Boolean> getPlayerTeamWon() { return playerTeamWon; }
     public Map<String, String> getPlayerTeamName() { return playerTeamName; }
     public Map<String, Boolean> getPlayerBedBroken() { return playerBedBroken; }
+    public List<Map<String, Object>> getTimeline() { return timeline; }
 
     public int getWinningTeamNumber() {
         for (String player : team1) {

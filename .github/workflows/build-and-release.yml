@@ -2,11 +2,47 @@ name: Build and Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
 
 jobs:
+  bot-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: RBW-LATEST-BOT/package-lock.json
+
+      - name: Install dependencies
+        working-directory: RBW-LATEST-BOT
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: RBW-LATEST-BOT
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        working-directory: RBW-LATEST-BOT
+        run: npm test
+
+      - name: Lint
+        working-directory: RBW-LATEST-BOT
+        run: npm run lint
+
+      - name: Build
+        working-directory: RBW-LATEST-BOT
+        run: npm run build
+
   build:
     runs-on: ubuntu-latest
     
@@ -21,9 +57,9 @@ jobs:
           distribution: 'temurin'
           cache: maven
       
-      - name: Build with Maven
+      - name: Build and test with Maven
         working-directory: RBW-LATEST-Ingame
-        run: mvn clean package -DskipTests
+        run: mvn clean package
       
       - name: Get version from pom.xml
         id: version
@@ -36,7 +72,7 @@ jobs:
       - name: Get tag name
         id: tag
         run: |
-          if [ "${{ github.event_name }}" == "push" ]; then
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref_type }}" == "tag" ]; then
             TAG=${GITHUB_REF#refs/tags/}
           else
             TAG="v${{ steps.version.outputs.version }}"
@@ -52,7 +88,7 @@ jobs:
           retention-days: 30
       
       - name: Create Release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: softprops/action-gh-release@v1
         with:
           files: RBW-LATEST-Ingame/target/RankedBedwars-*.jar

@@ -7,6 +7,9 @@ export function ensureUserStats(user: any) {
   user.winstreak = typeof user.winstreak === 'number' && !isNaN(user.winstreak) ? user.winstreak : 0;
   user.losestreak = typeof user.losestreak === 'number' && !isNaN(user.losestreak) ? user.losestreak : 0;
   user.losses = typeof user.losses === 'number' && !isNaN(user.losses) ? user.losses : 0;
+  user.finalDeaths = typeof user.finalDeaths === 'number' && !isNaN(user.finalDeaths) ? user.finalDeaths : 0;
+  user.playtimeSeconds = typeof user.playtimeSeconds === 'number' && !isNaN(user.playtimeSeconds) ? user.playtimeSeconds : 0;
+  user.peakElo = typeof user.peakElo === 'number' && !isNaN(user.peakElo) ? user.peakElo : 0;
   if (!Array.isArray(user.dailyElo)) user.dailyElo = [];
 }
 
@@ -20,6 +23,7 @@ export function resetUserStats(user: any) {
   user.deaths = 0;
   user.bedBroken = 0;
   user.finalKills = 0;
+  user.finalDeaths = 0;
   user.diamonds = 0;
   user.irons = 0;
   user.gold = 0;
@@ -29,6 +33,8 @@ export function resetUserStats(user: any) {
   user.losestreak = 0;
   user.kdr = 0;
   user.wlr = 0;
+  user.playtimeSeconds = 0;
+  user.peakElo = 0;
   user.recentGames = [];
   user.dailyElo = [];
 }

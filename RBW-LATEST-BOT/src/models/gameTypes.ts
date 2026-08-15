@@ -1,3 +1,12 @@
+export interface ITimelineEvent {
+  type: string;
+  player?: string;
+  target?: string;
+  amount?: number;
+  team?: string;
+  timestamp: number;
+}
+
 export interface IGameBase {
   gameId: number;
   map: string;
@@ -20,4 +29,5 @@ export interface IGameBase {
   isRanked: boolean;
   partiesInThisGame: string;
   reason: string;
+  timeline?: ITimelineEvent[];
 }

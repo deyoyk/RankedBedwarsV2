@@ -28,6 +28,7 @@ interface PlayerScoreData {
   oldElo: number;
   newElo: number;
   stats: PlayerData;
+  finalDeaths: number;
   experienceGained: number;
   oldLevel: number;
   newLevel: number;
@@ -144,7 +145,19 @@ export class GameManager {
         throw new Error('Winning team must be 1 or 2');
       }
       await this.validateGameForScoring(context.game);
-      await this.updateGameState(context.game, context.winningTeam, context.mvpsIds, context.bedbreaksIds, gameResult.reason);
+
+      // Atomic claim: exactly one concurrent score/void call may settle this game.
+      const claimedGame = await this.claimGameForSettling(context.game.gameId, (game) => {
+        game.state = GameState.SCORED;
+        game.mvps = context.mvpsIds;
+        game.bedbreaks = context.bedbreaksIds;
+        game.reason = gameResult.reason || '';
+        game.timeline = gameResult.timeline || [];
+        game.winners = (context.winningTeam === 1 ? game.team1 : game.team2);
+        game.losers = (context.winningTeam === 1 ? game.team2 : game.team1);
+        game.endTime = new Date();
+      });
+      context.game = claimedGame;
 
       const playerScoreData = await this.processAllPlayers(context);
 
@@ -196,14 +209,24 @@ export class GameManager {
       const context = await this.loadGameVoidContext(gameId, reason);
       await this.validateGameForVoiding(context.game);
 
-      
+      // Compute the revert data from the pre-transition document (it still
+      // holds winners/mvps/bedbreaks needed for the revert).
       const playerVoidData = await this.processAllPlayersForVoiding(context);
 
+      // Atomic claim: exactly one concurrent score/void call may settle this
+      // game. Only the winner of the claim may revert stats.
+      const claimedGame = await this.claimGameForSettling(gameId, (game) => {
+        game.state = GameState.VOIDED;
+        game.reason = reason;
+        game.mvps = [];
+        game.winners = [];
+        game.losers = [];
+        game.bedbreaks = [];
+        game.endTime = new Date();
+      });
+      context.game = claimedGame;
 
       await this.revertPlayerStats(playerVoidData, gameId);
-
-
-      await this.updateGameStateToVoided(context.game, reason);
       await this.updatePlayerRolesForVoid(playerVoidData);
       await this.sendVoidNotifications(context, playerVoidData);
       try {
@@ -950,37 +973,29 @@ export class GameManager {
       throw new Error('Game not found');
     }
 
-    if (game.state === GameState.SCORED) {
-      throw new Error('Game is already scored');
-    }
-
     if (!game.team1 || !game.team2 || game.team1.length === 0 || game.team2.length === 0) {
       throw new Error('Game has invalid team data');
     }
   }
 
-  private async updateGameState(
-    game: IGame,
-    winningTeam: number,
-    mvpsIds: string[],
-    bedbreaksIds: string[],
-    reason?: string
-  ): Promise<void> {
-    try {
-      game.state = GameState.SCORED;
-      game.mvps = mvpsIds;
-      game.bedbreaks = bedbreaksIds;
-      game.reason = reason || '';
-      game.winners = (winningTeam === 1 ? game.team1 : game.team2);
-      game.losers = (winningTeam === 1 ? game.team2 : game.team1);
-      game.endTime = new Date();
-
-      await game.save();
-      console.log(`[GameManager] Game ${game.gameId} state updated to scored`);
-    } catch (error) {
-      console.error('[GameManager] Error updating game state:', error);
-      throw error;
+  /**
+   * Atomically claims a game for scoring/voiding so that concurrent callers
+   * can never settle the same game twice. The transition itself is performed
+   * with a conditional findOneAndUpdate; exactly one caller wins, the rest get
+   * an error. Returns the claimed (pre-transition) game document.
+   */
+  private async claimGameForSettling(gameId: number, mutate: (game: IGame) => void): Promise<IGame> {
+    const game = await Game.findOneAndUpdate(
+      { gameId, state: { $nin: [GameState.SCORED, GameState.VOIDED] } },
+      { $set: { endTime: new Date() } },
+      { new: false }
+    );
+    if (!game) {
+      throw new Error(`Game ${gameId} is already settled (scored or voided)`);
     }
+    mutate(game);
+    await game.save();
+    return game;
   }
 
   private async processAllPlayers(context: GameScoreContext): Promise<PlayerScoreData[]> {
@@ -1035,6 +1050,10 @@ export class GameManager {
     const newExperience = oldExperience + experienceGained;
     const levelUpInfo = checkLevelUp(oldExperience, newExperience);
 
+    const finalDeaths = typeof stats.finalDeaths === 'number'
+      ? stats.finalDeaths
+      : (typeof stats.finaldeaths === 'number' ? stats.finaldeaths : 0);
+
     return {
       player,
       isWinner,
@@ -1044,6 +1063,7 @@ export class GameManager {
       oldElo: player.elo,
       newElo: Math.max(0, player.elo + eloChange),
       stats,
+      finalDeaths,
       experienceGained,
       oldLevel: levelUpInfo.oldLevel,
       newLevel: levelUpInfo.newLevel,
@@ -1128,6 +1148,7 @@ export class GameManager {
 
   private async updatePlayerStats(playerScoreData: PlayerScoreData[], game: IGame): Promise<void> {
     try {
+      const gameDurationSeconds = this.computeGameDurationSeconds(game);
       const updatePromises = playerScoreData.map(async (scoreData) => {
         try {
           const player = scoreData.player;
@@ -1155,6 +1176,10 @@ export class GameManager {
           }
 
           this.updatePlayerGameStats(player, scoreData.stats);
+
+          player.finalDeaths = (player.finalDeaths || 0) + (scoreData.finalDeaths || 0);
+          player.playtimeSeconds = (player.playtimeSeconds || 0) + gameDurationSeconds;
+          player.peakElo = Math.max(player.peakElo || 0, scoreData.newElo);
 
           player.kdr = player.deaths && player.deaths > 0 ? player.kills / player.deaths : player.kills;
           player.wlr = player.losses && player.losses > 0 ? player.wins / player.losses : player.wins;
@@ -1188,6 +1213,13 @@ export class GameManager {
     }
   }
 
+  private computeGameDurationSeconds(game: IGame): number {
+    if (game.endTime && game.startTime) {
+      return Math.max(0, Math.floor((game.endTime.getTime() - game.startTime.getTime()) / 1000));
+    }
+    return 600;
+  }
+
   private updatePlayerGameStats(player: IUser, stats: PlayerData): void {
     try {
       if (typeof stats.kills === 'number') player.kills = (player.kills || 0) + stats.kills;
@@ -1218,6 +1250,7 @@ export class GameManager {
         deaths: scoreData.stats.deaths || 0,
         bedBroken: scoreData.stats.bedBroken || 0,
         finalKills: scoreData.stats.finalKills || 0,
+        finalDeaths: scoreData.finalDeaths || 0,
         won: scoreData.isWinner,
         ismvp: scoreData.isMvp,
         date: now,
@@ -1411,10 +1444,6 @@ export class GameManager {
       throw new Error('Game not found');
     }
 
-    if (game.state === GameState.VOIDED) {
-      throw new Error('Game is already voided');
-    }
-
     if (!game.team1 || !game.team2 || game.team1.length === 0 || game.team2.length === 0) {
       throw new Error('Game has invalid team data');
     }
@@ -1526,7 +1555,7 @@ export class GameManager {
   }
 
   private revertStatFields(player: any, gameStats: any): void {
-    const statFields = ['kills', 'deaths', 'finalKills', 'bedBroken', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced'];
+    const statFields = ['kills', 'deaths', 'finalKills', 'finalDeaths', 'bedBroken', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced'];
     for (const field of statFields) {
       if (typeof gameStats[field] === 'number') {
         player[field] = Math.max(0, (player[field] || 0) - gameStats[field]);
@@ -1647,23 +1676,6 @@ export class GameManager {
       await Promise.allSettled(updatePromises);
     } catch (error) {
       console.error('[GameManager] Error updating player roles:', error);
-    }
-  }
-
-  private async updateGameStateToVoided(game: IGame, reason: string): Promise<void> {
-    try {
-      game.state = GameState.VOIDED;
-      game.reason = reason;
-      game.mvps = [];
-      game.winners = [];
-      game.losers = [];
-      game.bedbreaks = [];
-      game.endTime = new Date();
-      await game.save();
-      console.log(`[GameManager] Game ${game.gameId} state updated to voided`);
-    } catch (error) {
-      console.error('[GameManager] Error updating game state to voided:', error);
-      throw error;
     }
   }
 

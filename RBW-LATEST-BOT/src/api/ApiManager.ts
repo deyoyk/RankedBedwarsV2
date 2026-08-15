@@ -4,6 +4,7 @@ import User from '../models/User';
 import { Client } from 'discord.js';
 import config from '../config/config';
 import cors from 'cors';
+import { rateLimit } from 'express-rate-limit';
 import Queue from '../models/Queue';
 import EloRank from '../models/EloRank';
 import Season from '../models/Season';
@@ -15,16 +16,54 @@ import { getLevelInfo } from '../utils/levelSystem';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { escapeRegex } from '../utils/regexEscape';
 
+interface CacheEntry {
+  value: any;
+  expiresAt: number;
+}
+
 export class ApiManager {
   private client: Client;
   private wsManager: WebSocketManager;
   private gameModel: any = null;
+  private cache: Map<string, CacheEntry> = new Map();
+
+  private globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: parseInt(process.env.RBW_RATE_LIMIT_MAX || '300', 10),
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false, forwardedHeader: false },
+    handler: (req, res) => {
+      res.status(429).json({ error: 'Too many requests, slow down' });
+    }
+  });
+
+  private strictLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: parseInt(process.env.RBW_RATE_LIMIT_STRICT_MAX || '30', 10),
+    standardHeaders: true,
+    legacyHeaders: false,
+    validate: { xForwardedForHeader: false, forwardedHeader: false },
+    handler: (req, res) => {
+      res.status(429).json({ error: 'Too many requests, slow down' });
+    }
+  });
 
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
     this.wsManager = wsManager;
 
     this.wsManager.app.use(cors());
+
+    this.wsManager.app.use(this.globalLimiter);
+
+    this.wsManager.app.use((req, res, next) => {
+      if (this.isHeavyEndpoint(req.path)) {
+        this.strictLimiter(req, res, next);
+        return;
+      }
+      next();
+    });
 
     this.wsManager.app.use((req, res, next) => {
       const apiKey = req.headers['x-api-key'] || req.query.key;
@@ -39,15 +78,44 @@ export class ApiManager {
     this.setupRoutes();
   }
 
+  private isHeavyEndpoint(path: string): boolean {
+    return (
+      path.startsWith('/rbw/api/leaderboard') ||
+      path === '/rbw/api/stats/top' ||
+      /^\/rbw\/api\/seasons\/[^/]+\/[^/]+\/leaderboard$/.test(path) ||
+      /^\/rbw\/api\/user\/[^/]+\/compare\/[^/]+$/.test(path) ||
+      path === '/rbw/api/search/users'
+    );
+  }
+
+  private async getCached<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+    const entry = this.cache.get(key);
+    if (entry && entry.expiresAt > now) {
+      return entry.value as T;
+    }
+    const value = await fetcher();
+    this.cache.set(key, { value, expiresAt: now + ttlMs });
+    if (this.cache.size > 100) {
+      for (const [k, e] of this.cache) {
+        if (e.expiresAt <= now) this.cache.delete(k);
+      }
+    }
+    return value;
+  }
+
   private setupRoutes() {
     this.wsManager.app.get('/rbw/api', (req: Request, res: Response) => {
       res.json({
         status: 'online',
+        note: 'New clients: prefer GET /rbw/api/user/:discordid/overview - a single consolidated user profile (stats, recent games, level, streak, season history) that supersedes multiple separate calls.',
         endpoints: [
           '/rbw/api/user?ign=<ign>',
           '/rbw/api/user?discordid=<id>',
+          '/rbw/api/user/:discordid/overview',
           '/rbw/api/leaderboard?mode=<mode>&page=<page>',
           '/rbw/api/game/:gameid',
+          '/rbw/api/game/:gameid/timeline',
           '/rbw/api/queues',
           '/rbw/api/eloranks',
           '/rbw/api/punishments/:type',
@@ -65,8 +133,6 @@ export class ApiManager {
           '/rbw/api/stats/top?stat=<stat>&limit=<limit>',
           '/rbw/api/user/:discordid/games?page=<page>&limit=<limit>',
           '/rbw/api/user/:discordid/recent-games?limit=<limit>',
-          '/rbw/api/knockback/votes',
-          '/rbw/api/knockback/vote',
           '/rbw/api/search/users?query=<query>&limit=<limit>',
           '/rbw/api/online-players',
           '/rbw/api/server/status',
@@ -79,7 +145,6 @@ export class ApiManager {
           '/rbw/api/maps',
           '/rbw/api/user/:discordid/winstreak-history',
           '/rbw/api/user/:discordid/elo-history',
-
         ],
         version: '1.0.0'
       });
@@ -88,16 +153,17 @@ export class ApiManager {
     this.wsManager.app.get('/rbw/api/user', this.getUserData);
     this.wsManager.app.get('/rbw/api/leaderboard', this.getLeaderboard);
     this.wsManager.app.get('/rbw/api/game/:gameid', this.getGameById);
+    this.wsManager.app.get('/rbw/api/game/:gameid/timeline', this.getGameTimeline);
     this.wsManager.app.get('/rbw/api/queues', this.getQueues);
     this.wsManager.app.get('/rbw/api/eloranks', this.getEloRanks);
     this.wsManager.app.get('/rbw/api/punishments/:type', this.getPunishments);
 
-    
+
     this.wsManager.app.get('/rbw/api/baninfo', this.getBanInfo);
     this.wsManager.app.get('/rbw/api/muteinfo', this.getMuteInfo);
     this.wsManager.app.get('/rbw/api/strikeinfo', this.getStrikeInfo);
 
-    
+
     this.wsManager.app.get('/rbw/api/seasons', this.getAllSeasons);
     this.wsManager.app.get('/rbw/api/seasons/current', this.getCurrentSeason);
     this.wsManager.app.get('/rbw/api/seasons/:season/:chapter', this.getSeasonInfo);
@@ -105,10 +171,10 @@ export class ApiManager {
     this.wsManager.app.get('/rbw/api/seasons/:season/:chapter/leaderboard', this.getSeasonLeaderboard);
     this.wsManager.app.get('/rbw/api/seasons/:season/:chapter/games', this.getSeasonGames);
 
-    
+
     this.wsManager.app.get('/rbw/api/level', this.getLevelInfo);
 
-    
+
     this.wsManager.app.get('/rbw/api/stats/global', this.getGlobalStats);
     this.wsManager.app.get('/rbw/api/stats/top', this.getTopStats);
     this.wsManager.app.get('/rbw/api/user/:discordid/games', this.getUserGames);
@@ -125,16 +191,17 @@ export class ApiManager {
     this.wsManager.app.get('/rbw/api/maps', this.getMaps);
     this.wsManager.app.get('/rbw/api/user/:discordid/winstreak-history', this.getUserWinstreakHistory);
     this.wsManager.app.get('/rbw/api/user/:discordid/elo-history', this.getUserEloHistory);
+    this.wsManager.app.get('/rbw/api/user/:discordid/overview', this.getUserOverview);
   }
-  
+
   private async findUserByQuery(req: Request) {
     const discordid = req.query.discordid as string;
     const ign = req.query.ign as string;
     let user = null;
     if (discordid) {
-      user = await User.findOne({ discordId: discordid });
+      user = await User.findOne({ discordId: discordid }).lean();
     } else if (ign) {
-      user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') });
+      user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') }).lean();
     }
     return user;
   }
@@ -167,8 +234,9 @@ export class ApiManager {
   private validateMode(req: Request, res: Response): string | null {
     const mode = (req.query.mode as string) || 'elo';
     const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-      'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
-      'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
+      'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
+      'bedBroken', 'mvps', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced',
+      'level', 'experience', 'playtimeSeconds', 'peakElo'];
     if (!validModes.includes(mode)) {
       res.status(400).json({ error: 'Invalid mode parameter' });
       return null;
@@ -184,7 +252,7 @@ export class ApiManager {
   }
 
   private async fetchUserWithGameHistory(discordid: string, limit: number) {
-    const user = await User.findOne({ discordId: discordid });
+    const user = await User.findOne({ discordId: discordid }).lean();
     if (!user) return null;
 
     const Game = await this.getGameModel();
@@ -196,7 +264,8 @@ export class ApiManager {
     })
       .sort({ gameId: -1 })
       .limit(limit)
-      .select('gameId winners startTime');
+      .select('gameId winners startTime')
+      .lean();
 
     return { user, recentGames };
   }
@@ -212,8 +281,8 @@ export class ApiManager {
         res.status(404).json({ error: 'Ban not found' });
         return;
       }
-      
-      const user = await User.findOne({ 'bans.id': banId });
+
+      const user = await User.findOne({ 'bans.id': banId }).lean();
       if (!user || !Array.isArray(user.bans)) {
         res.status(404).json({ error: 'Ban not found' });
         return;
@@ -283,7 +352,7 @@ export class ApiManager {
   private buildUserWithLevel(user: any) {
     const levelInfo = getLevelInfo(user.experience || 0);
     return {
-      ...user.toObject(),
+      ...user,
       levelInfo: {
         level: levelInfo.level,
         experience: levelInfo.experience,
@@ -311,7 +380,7 @@ export class ApiManager {
       }
     }
     if (allIds.size === 0) return {};
-    const users = await User.find({ discordId: { $in: Array.from(allIds) } }).select('discordId ign');
+    const users = await User.find({ discordId: { $in: Array.from(allIds) } }).select('discordId ign').lean();
     const idToIgn: Record<string, string> = {};
     users.forEach(u => { idToIgn[u.discordId] = u.ign; });
     return idToIgn;
@@ -340,7 +409,7 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing IGN or discordid parameter' });
         return;
       }
-      const user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') });
+      const user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') }).lean();
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
@@ -360,7 +429,7 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing discordid parameter' });
         return;
       }
-      const user = await User.findOne({ discordId: discordid });
+      const user = await User.findOne({ discordId: discordid }).lean();
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
@@ -381,23 +450,55 @@ export class ApiManager {
         return;
       }
       const Game = await this.getGameModel();
-      const game = await Game.findOne({ gameId: Number(gameid) });
+      const game = await Game.findOne({ gameId: Number(gameid) }).lean();
       if (!game) {
         res.status(404).json({ error: 'Game not found' });
         return;
       }
 
       const idToIgn = await this.resolveGameIgns([game]);
-      res.json({ ...game.toObject(), ...this.mapGameIgns(game, idToIgn) });
+      res.json({ ...game, ...this.mapGameIgns(game, idToIgn) });
     } catch (error) {
       console.error('Error fetching game:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
+  private getGameTimeline = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { gameid } = req.params;
+      if (!gameid) {
+        res.status(400).json({ error: 'Missing gameid parameter' });
+        return;
+      }
+      const Game = await this.getGameModel();
+      const game = await Game.findOne({ gameId: Number(gameid) })
+        .select('gameId map state startTime endTime winners losers timeline')
+        .lean();
+      if (!game) {
+        res.status(404).json({ error: 'Game not found' });
+        return;
+      }
+
+      res.json({
+        gameId: game.gameId,
+        map: game.map,
+        state: game.state,
+        startTime: game.startTime,
+        endTime: game.endTime || null,
+        winners: game.winners || [],
+        losers: game.losers || [],
+        timeline: game.timeline || []
+      });
+    } catch (error) {
+      console.error('Error fetching game timeline:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
   private getQueues = async (req: Request, res: Response): Promise<void> => {
     try {
-      const queues = await Queue.find();
+      const queues = await Queue.find().lean();
       const guild = this.client.guilds.cache.first();
       const rolesMap: Record<string, string> = {};
       if (guild) {
@@ -416,7 +517,7 @@ export class ApiManager {
         const playerIds = queuePlayers.get(q.channelId) || [];
         let igns: string[] = [];
         if (playerIds.length > 0) {
-          const users = await User.find({ discordId: { $in: playerIds } }).select('ign');
+          const users = await User.find({ discordId: { $in: playerIds } }).select('ign').lean();
           igns = users.map(u => u.ign);
         }
         return {
@@ -440,7 +541,7 @@ export class ApiManager {
 
   private getEloRanks = async (req: Request, res: Response): Promise<void> => {
     try {
-      const eloranks = await EloRank.find();
+      const eloranks = await EloRank.find().lean();
       const guild = this.client.guilds.cache.first();
       const rolesMap: Record<string, { name: string, color: string | null }> = {};
       if (guild) {
@@ -474,27 +575,31 @@ export class ApiManager {
       const mode = this.validateMode(req, res);
       if (!mode) return;
 
-      const page = Math.max(parseInt(req.query.page as string) || 1, 1);
-      const pageSize = 10;
+      const pagination = this.validatePagination(req, res, 10);
+      if (!pagination) return;
+      const { page, pageSize } = pagination;
       const skip = (page - 1) * pageSize;
 
+      const result = await this.getCached(`leaderboard:${mode}:${page}`, 10000, async () => {
+        const sortObj: Record<string, 1 | -1> = {};
+        sortObj[mode] = -1;
 
-      const sortObj: Record<string, 1 | -1> = {};
-      sortObj[mode] = -1;
+        const users = await User.find()
+          .sort(sortObj as any)
+          .skip(skip)
+          .limit(pageSize)
+          .select(`ign ${mode}`)
+          .lean();
 
-      const users = await User.find()
-        .sort(sortObj as any)
-        .skip(skip)
-        .limit(pageSize)
-        .select(`ign ${mode}`);
+        const formatted: Record<number, { ign: string, value: number | string }> = {};
+        users.forEach((user: any, index: number) => {
+          formatted[index + 1 + skip] = {
+            ign: user.ign,
+            value: user[mode as keyof typeof user] || 0
+          };
+        });
 
-
-      const result: Record<number, { ign: string, value: number | string }> = {};
-      users.forEach((user, index) => {
-        result[index + 1 + skip] = {
-          ign: user.ign,
-          value: user[mode as keyof typeof user] || 0
-        };
+        return formatted;
       });
 
       res.json(result);
@@ -528,7 +633,7 @@ export class ApiManager {
         res.status(400).json({ error: 'Invalid punishment type' });
         return;
       }
-      const users = await User.find({ [`${type}.0`]: { $exists: true } }).select(`discordId ign ${type}`);
+      const users = await User.find({ [`${type}.0`]: { $exists: true } }).select(`discordId ign ${type}`).lean();
 
       const staffIds: Set<string> = new Set();
       const targetIds: Set<string> = new Set();
@@ -565,7 +670,7 @@ export class ApiManager {
       const allIds = Array.from(new Set([...staffIds, ...targetIds]));
       const idToIgn: Record<string, string> = {};
       if (allIds.length > 0) {
-        const ignUsers = await User.find({ discordId: { $in: allIds } }).select('discordId ign');
+        const ignUsers = await User.find({ discordId: { $in: allIds } }).select('discordId ign').lean();
         ignUsers.forEach(u => { idToIgn[u.discordId] = u.ign; });
       }
 
@@ -591,10 +696,10 @@ export class ApiManager {
     }
   }
 
-  
+
   private getAllSeasons = async (req: Request, res: Response): Promise<void> => {
     try {
-      const seasons = await Season.find().sort({ seasonNumber: 1, chapterNumber: 1 });
+      const seasons = await Season.find().sort({ seasonNumber: 1, chapterNumber: 1 }).lean();
       res.json(seasons);
     } catch (error) {
       console.error('Error fetching seasons:', error);
@@ -628,7 +733,7 @@ export class ApiManager {
         return;
       }
 
-      
+
       const statsCount = await SeasonStats.countDocuments({ seasonNumber, chapterNumber });
       const gamesCount = await SeasonGames.countDocuments({ seasonNumber, chapterNumber });
 
@@ -682,7 +787,18 @@ export class ApiManager {
       if (!pagination) return;
       const { page, pageSize } = pagination;
 
-      const result = await SeasonManager.getSeasonLeaderboard(seasonNumber, chapterNumber, mode, page, pageSize);
+      const result = await this.getCached(`seasonLeaderboard:${seasonNumber}:${chapterNumber}:${mode}:${page}`, 30000, async () => {
+        try {
+          return await SeasonManager.getSeasonLeaderboard(seasonNumber, chapterNumber, mode, page, pageSize);
+        } catch (error: any) {
+          if (error && typeof error.message === 'string' && error.message.startsWith('Invalid mode parameter')) {
+            const err = new Error('Invalid mode parameter');
+            (err as any).statusCode = 400;
+            throw err;
+          }
+          throw error;
+        }
+      });
 
       const formattedResult: Record<number, { ign: string, value: number | string }> = {};
       result.entries.forEach(entry => {
@@ -693,7 +809,11 @@ export class ApiManager {
       });
 
       res.json(formattedResult);
-    } catch (error) {
+    } catch (error: any) {
+      if (error && error.statusCode === 400) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       console.error('Error fetching season leaderboard:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
@@ -733,7 +853,7 @@ export class ApiManager {
     }
   }
 
-  
+
   private getLevelInfo = async (req: Request, res: Response): Promise<void> => {
     try {
       const user = await this.findUserByQuery(req);
@@ -764,83 +884,94 @@ export class ApiManager {
     }
   }
 
-  
+
   private getGlobalStats = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { totalUsers, totalGames } = await this.getGlobalCounts();
+      const result = await this.getCached('globalStats', 10000, async () => {
+        const { totalUsers, totalGames } = await this.getGlobalCounts();
 
-      const stats = await User.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalKills: { $sum: '$kills' },
-            totalDeaths: { $sum: '$deaths' },
-            totalWins: { $sum: '$wins' },
-            totalLosses: { $sum: '$losses' },
-            totalBedsBroken: { $sum: '$bedBroken' },
-            totalMVPs: { $sum: '$mvps' },
-            totalExperience: { $sum: '$experience' },
-            totalDiamonds: { $sum: '$diamonds' },
-            totalIrons: { $sum: '$irons' },
-            totalGold: { $sum: '$gold' },
-            totalEmeralds: { $sum: '$emeralds' },
-            totalBlocksPlaced: { $sum: '$blocksPlaced' },
-            averageElo: { $avg: '$elo' },
-            highestElo: { $max: '$elo' },
-            lowestElo: { $min: '$elo' }
+        const stats = await User.aggregate([
+          {
+            $group: {
+              _id: null,
+              totalKills: { $sum: '$kills' },
+              totalDeaths: { $sum: '$deaths' },
+              totalWins: { $sum: '$wins' },
+              totalLosses: { $sum: '$losses' },
+              totalBedsBroken: { $sum: '$bedBroken' },
+              totalMVPs: { $sum: '$mvps' },
+              totalExperience: { $sum: '$experience' },
+              totalDiamonds: { $sum: '$diamonds' },
+              totalIrons: { $sum: '$irons' },
+              totalGold: { $sum: '$gold' },
+              totalEmeralds: { $sum: '$emeralds' },
+              totalBlocksPlaced: { $sum: '$blocksPlaced' },
+              averageElo: { $avg: '$elo' },
+              highestElo: { $max: '$elo' },
+              lowestElo: { $min: '$elo' }
+            }
           }
-        }
-      ]);
+        ]);
 
-      const globalStats = stats[0] || {};
+        const globalStats = stats[0] || {};
 
-      res.json({
-        totalUsers,
-        totalGames,
-        ...globalStats,
-        averageElo: Math.round(globalStats.averageElo || 0),
-        totalKDR: globalStats.totalDeaths > 0 ? (globalStats.totalKills / globalStats.totalDeaths).toFixed(2) : 'N/A',
-        totalWLR: globalStats.totalLosses > 0 ? (globalStats.totalWins / globalStats.totalLosses).toFixed(2) : 'N/A'
+        return {
+          totalUsers,
+          totalGames,
+          ...globalStats,
+          averageElo: Math.round(globalStats.averageElo || 0),
+          totalKDR: globalStats.totalDeaths > 0 ? (globalStats.totalKills / globalStats.totalDeaths).toFixed(2) : 'N/A',
+          totalWLR: globalStats.totalLosses > 0 ? (globalStats.totalWins / globalStats.totalLosses).toFixed(2) : 'N/A'
+        };
       });
+
+      res.json(result);
     } catch (error) {
       console.error('Error fetching global stats:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
-  
+
   private getTopStats = async (req: Request, res: Response): Promise<void> => {
     try {
       const stat = req.query.stat as string || 'elo';
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
 
       const validStats = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
-        'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience'];
+        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
+        'bedBroken', 'mvps', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced',
+        'level', 'experience', 'playtimeSeconds', 'peakElo'];
 
       if (!validStats.includes(stat)) {
         res.status(400).json({ error: 'Invalid stat parameter' });
         return;
       }
 
-      const sortObj: Record<string, 1 | -1> = {};
-      sortObj[stat] = -1;
+      const result = await this.getCached(`topStats:${stat}:${limit}`, 10000, async () => {
+        const sortObj: Record<string, 1 | -1> = {};
+        sortObj[stat] = -1;
 
-      const users = await User.find()
-        .sort(sortObj as any)
-        .limit(limit)
-        .select(`ign discordId ${stat} elo wins losses kills deaths`);
+        const users = await User.find()
+          .sort(sortObj as any)
+          .limit(limit)
+          .select(`ign discordId ${stat} elo wins losses kills deaths finalDeaths playtimeSeconds peakElo`)
+          .lean();
 
-      const result = users.map((user, index) => ({
-        rank: index + 1,
-        ign: user.ign,
-        discordId: user.discordId,
-        value: user[stat as keyof typeof user] || 0,
-        elo: user.elo,
-        wins: user.wins,
-        losses: user.losses,
-        kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A'
-      }));
+        return users.map((user: any, index: number) => ({
+          rank: index + 1,
+          ign: user.ign,
+          discordId: user.discordId,
+          value: user[stat as keyof typeof user] || 0,
+          elo: user.elo,
+          wins: user.wins,
+          losses: user.losses,
+          kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A',
+          finalDeaths: user.finalDeaths || 0,
+          playtimeSeconds: user.playtimeSeconds || 0,
+          peakElo: user.peakElo || 0
+        }));
+      });
 
       res.json({ stat, results: result });
     } catch (error) {
@@ -849,13 +980,15 @@ export class ApiManager {
     }
   }
 
-  
+
   private getUserGames = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-      const page = Math.max(parseInt(req.query.page as string) || 1, 1);
-      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
-      const skip = (page - 1) * limit;
+
+      const pagination = this.validatePagination(req, res, 20);
+      if (!pagination) return;
+      const { page, pageSize } = pagination;
+      const skip = (page - 1) * pageSize;
 
       const Game = await this.getGameModel();
       const games = await Game.find({
@@ -866,7 +999,8 @@ export class ApiManager {
       })
         .sort({ gameId: -1 })
         .skip(skip)
-        .limit(limit);
+        .limit(pageSize)
+        .lean();
 
       const totalGames = await Game.countDocuments({
         $or: [
@@ -878,7 +1012,7 @@ export class ApiManager {
       const idToIgn = await this.resolveGameIgns(games);
 
       const gamesWithIgns = games.map((game: any) => ({
-        ...game.toObject(),
+        ...game,
         ...this.mapGameIgns(game, idToIgn),
         playerResult: {
           won: game.winners.includes(discordid),
@@ -892,9 +1026,9 @@ export class ApiManager {
         games: gamesWithIgns,
         pagination: {
           page,
-          limit,
+          limit: pageSize,
           totalGames,
-          totalPages: Math.ceil(totalGames / limit)
+          totalPages: Math.ceil(totalGames / pageSize)
         }
       });
     } catch (error) {
@@ -903,11 +1037,11 @@ export class ApiManager {
     }
   }
 
-  
+
   private getUserRecentGames = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-      const limit = parseInt(req.query.limit as string) || 5;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5, 1), 100);
 
       const Game = await this.getGameModel();
       const games = await Game.find({
@@ -918,7 +1052,8 @@ export class ApiManager {
       })
         .sort({ gameId: -1 })
         .limit(limit)
-        .select('gameId map winners losers mvps bedbreaks team1 team2 startTime');
+        .select('gameId map winners losers mvps bedbreaks team1 team2 startTime')
+        .lean();
 
       const result = games.map((game: any) => ({
         gameId: game.gameId,
@@ -937,11 +1072,11 @@ export class ApiManager {
   }
 
 
-  
+
   private searchUsers = async (req: Request, res: Response): Promise<void> => {
     try {
       const query = req.query.query as string;
-      const limit = parseInt(req.query.limit as string) || 10;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
 
       if (!query || query.length < 2) {
         res.status(400).json({ error: 'Query must be at least 2 characters' });
@@ -952,7 +1087,8 @@ export class ApiManager {
         ign: new RegExp(escapeRegex(query), 'i')
       })
         .limit(limit)
-        .select('ign discordId elo wins losses level experience');
+        .select('ign discordId elo wins losses level experience')
+        .lean();
 
       const results = users.map(user => ({
         ign: user.ign,
@@ -970,97 +1106,108 @@ export class ApiManager {
     }
   }
 
-  
+
   private getOnlinePlayers = async (req: Request, res: Response): Promise<void> => {
     try {
-      const allPlayerIds = new Set<string>();
+      const result = await this.getCached('onlinePlayers', 5000, async () => {
+        const allPlayerIds = new Set<string>();
 
-      
-      for (const [channelId, playerIds] of queuePlayers.entries()) {
-        playerIds.forEach(id => allPlayerIds.add(id));
-      }
 
-      const playerIdsArray = Array.from(allPlayerIds);
-      const users = await User.find({ discordId: { $in: playerIdsArray } })
-        .select('ign discordId elo level experience');
+        for (const [channelId, playerIds] of queuePlayers.entries()) {
+          playerIds.forEach(id => allPlayerIds.add(id));
+        }
 
-      const onlinePlayers = users.map(user => ({
-        ign: user.ign,
-        discordId: user.discordId,
-        elo: user.elo,
-        level: user.level || getLevelInfo(user.experience || 0).level
-      }));
+        const playerIdsArray = Array.from(allPlayerIds);
+        const users = await User.find({ discordId: { $in: playerIdsArray } })
+          .select('ign discordId elo level experience')
+          .lean();
 
-      res.json({
-        count: onlinePlayers.length,
-        players: onlinePlayers
+        const onlinePlayers = users.map(user => ({
+          ign: user.ign,
+          discordId: user.discordId,
+          elo: user.elo,
+          level: user.level || getLevelInfo(user.experience || 0).level
+        }));
+
+        return {
+          count: onlinePlayers.length,
+          players: onlinePlayers
+        };
       });
+
+      res.json(result);
     } catch (error) {
       console.error('Error fetching online players:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
-  
+
   private getServerStatus = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { totalUsers, totalGames } = await this.getGlobalCounts();
-      const queues = await Queue.find();
+      const result = await this.getCached('serverStatus', 5000, async () => {
+        const { totalUsers, totalGames } = await this.getGlobalCounts();
+        const queues = await Queue.find().lean();
 
-      let totalPlayersInQueue = 0;
-      for (const [channelId, playerIds] of queuePlayers.entries()) {
-        totalPlayersInQueue += playerIds.length;
-      }
+        let totalPlayersInQueue = 0;
+        for (const [channelId, playerIds] of queuePlayers.entries()) {
+          totalPlayersInQueue += playerIds.length;
+        }
 
-      const currentSeason = await Season.findOne({ isActive: true });
+        const currentSeason = await Season.findOne({ isActive: true }).lean();
 
-      res.json({
-        status: 'online',
-        uptime: process.uptime(),
-        totalUsers,
-        totalGames,
-        totalQueues: queues.length,
-        playersInQueue: totalPlayersInQueue,
-        currentSeason: currentSeason ? {
-          season: currentSeason.seasonNumber,
-          chapter: currentSeason.chapterNumber,
-          name: currentSeason.name
-        } : null,
-        timestamp: new Date().toISOString()
+        return {
+          status: 'online',
+          uptime: process.uptime(),
+          totalUsers,
+          totalGames,
+          totalQueues: queues.length,
+          playersInQueue: totalPlayersInQueue,
+          currentSeason: currentSeason ? {
+            season: currentSeason.seasonNumber,
+            chapter: currentSeason.chapterNumber,
+            name: currentSeason.name
+          } : null,
+          timestamp: new Date().toISOString()
+        };
       });
+
+      res.json(result);
     } catch (error) {
       console.error('Error fetching server status:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
-  
+
   private getUserPunishmentHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
 
       const user = await User.findOne({ discordId: discordid })
-        .select('ign discordId bans mutes strikes');
+        .select('ign discordId bans mutes strikes')
+        .lean();
 
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
 
-      
+
       const allStaffIds = new Set<string>();
       [...(user.bans || []), ...(user.mutes || []), ...(user.strikes || [])].forEach(p => {
         if (p.moderator) allStaffIds.add(p.moderator);
       });
 
       const staffUsers = await User.find({ discordId: { $in: Array.from(allStaffIds) } })
-        .select('discordId ign');
+        .select('discordId ign')
+        .lean();
       const staffIgnMap: Record<string, string> = {};
       staffUsers.forEach(u => { staffIgnMap[u.discordId] = u.ign; });
 
       const formatPunishments = (punishments: any[], type: string) => {
         return punishments.map(p => ({
-          ...p.toObject(),
+          ...p,
           type,
           staffIgn: staffIgnMap[p.moderator] || p.moderator
         }));
@@ -1087,19 +1234,20 @@ export class ApiManager {
     }
   }
 
-  
+
   private getUserSeasonHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
 
-      const user = await User.findOne({ discordId: discordid }).select('ign discordId');
+      const user = await User.findOne({ discordId: discordid }).select('ign discordId').lean();
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
 
       const seasonStats = await SeasonStats.find({ discordId: discordid })
-        .sort({ seasonNumber: -1, chapterNumber: -1 });
+        .sort({ seasonNumber: -1, chapterNumber: -1 })
+        .lean();
 
       const seasonHistory = seasonStats.map(stats => ({
         season: stats.seasonNumber,
@@ -1129,7 +1277,7 @@ export class ApiManager {
     }
   }
 
-  
+
   private getTopPlayers = async (req: Request, res: Response): Promise<void> => {
     try {
       const mode = this.validateMode(req, res);
@@ -1143,9 +1291,10 @@ export class ApiManager {
       const users = await User.find()
         .sort(sortObj as any)
         .limit(limit)
-        .select('ign discordId elo wins losses kills deaths games mvps bedBroken experience level');
+        .select('ign discordId elo wins losses kills deaths games mvps bedBroken experience level finalDeaths playtimeSeconds peakElo')
+        .lean();
 
-      const topPlayers = users.map((user, index) => {
+      const topPlayers = users.map((user: any, index: number) => {
         const levelInfo = getLevelInfo(user.experience || 0);
         return {
           rank: index + 1,
@@ -1159,6 +1308,9 @@ export class ApiManager {
           games: user.games,
           mvps: user.mvps,
           bedBroken: user.bedBroken,
+          finalDeaths: user.finalDeaths || 0,
+          playtimeSeconds: user.playtimeSeconds || 0,
+          peakElo: user.peakElo || 0,
           level: user.level || levelInfo.level,
           experience: user.experience || 0,
           kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A',
@@ -1179,15 +1331,16 @@ export class ApiManager {
     }
   }
 
-  
+
   private getRecentGames = async (req: Request, res: Response): Promise<void> => {
     try {
-      const limit = parseInt(req.query.limit as string) || 20;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
 
       const Game = await this.getGameModel();
       const games = await Game.find()
         .sort({ gameId: -1 })
-        .limit(limit);
+        .limit(limit)
+        .lean();
 
       const idToIgn = await this.resolveGameIgns(games);
 
@@ -1210,18 +1363,18 @@ export class ApiManager {
     }
   }
 
-  
+
   private getLiveGames = async (req: Request, res: Response): Promise<void> => {
     try {
-      
-      
-      const queues = await Queue.find();
+
+
+      const queues = await Queue.find().lean();
       const liveActivity = [];
 
       for (const queue of queues) {
         const playerIds = queuePlayers.get(queue.channelId) || [];
         if (playerIds.length > 0) {
-          const users = await User.find({ discordId: { $in: playerIds } }).select('ign discordId elo');
+          const users = await User.find({ discordId: { $in: playerIds } }).select('ign discordId elo').lean();
           const players = users.map(u => ({
             ign: u.ign,
             discordId: u.discordId,
@@ -1251,14 +1404,13 @@ export class ApiManager {
 
 
 
-  
   private compareUsers = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid, targetid } = req.params;
 
       const [user1, user2] = await Promise.all([
-        User.findOne({ discordId: discordid }),
-        User.findOne({ discordId: targetid })
+        User.findOne({ discordId: discordid }).lean(),
+        User.findOne({ discordId: targetid }).lean()
       ]);
 
       if (!user1 || !user2) {
@@ -1321,24 +1473,28 @@ export class ApiManager {
     }
   }
 
-  
+
   private getMaps = async (req: Request, res: Response): Promise<void> => {
     try {
-      const allMaps = this.wsManager.getAllMaps();
-      res.json({
-        totalMaps: allMaps.length,
-        reservedCount: this.wsManager.getReservedMaps().length,
-        lockedCount: this.wsManager.getLockedMaps().length,
-        disabledCount: this.wsManager.getDisabledMaps().length,
-        maps: allMaps
+      const result = await this.getCached('maps', 5000, async () => {
+        const allMaps = this.wsManager.getAllMaps();
+        return {
+          totalMaps: allMaps.length,
+          reservedCount: this.wsManager.getReservedMaps().length,
+          lockedCount: this.wsManager.getLockedMaps().length,
+          disabledCount: this.wsManager.getDisabledMaps().length,
+          maps: allMaps
+        };
       });
+
+      res.json(result);
     } catch (error) {
       console.error('Error fetching maps:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }
 
-  
+
   private getUserWinstreakHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
@@ -1383,11 +1539,11 @@ export class ApiManager {
     }
   }
 
-  
+
   private getUserEloHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-      const user = await User.findOne({ discordId: discordid });
+      const user = await User.findOne({ discordId: discordid }).lean();
       if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
@@ -1411,6 +1567,80 @@ export class ApiManager {
       });
     } catch (error) {
       console.error('Error fetching user ELO history:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  private getUserOverview = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { discordid } = req.params;
+
+      const user = await User.findOne({ discordId: discordid }).lean();
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const wins = user.wins || 0;
+      const losses = user.losses || 0;
+      const kills = user.kills || 0;
+      const deaths = user.deaths || 0;
+      const games = user.games || 0;
+
+      const levelInfo = getLevelInfo(user.experience || 0);
+
+      const seasonStats = await SeasonStats.find({ discordId: discordid })
+        .sort({ seasonNumber: -1, chapterNumber: -1 })
+        .limit(10)
+        .lean();
+
+      const seasonHistory = seasonStats.map(stats => ({
+        season: stats.seasonNumber,
+        chapter: stats.chapterNumber,
+        elo: stats.elo,
+        wins: stats.wins,
+        losses: stats.losses,
+        kills: stats.kills,
+        deaths: stats.deaths,
+        games: stats.games,
+        mvps: stats.mvps,
+        bedBroken: stats.bedBroken,
+        finalDeaths: stats.finalDeaths,
+        playtimeSeconds: stats.playtimeSeconds,
+        peakElo: stats.peakElo,
+        level: stats.level || getLevelInfo(stats.experience || 0).level,
+        kdr: stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : 'N/A',
+        wlr: stats.losses > 0 ? (stats.wins / stats.losses).toFixed(2) : 'N/A'
+      }));
+
+      res.json({
+        discordId: user.discordId,
+        ign: user.ign,
+        profile: {
+          ...user,
+          winRate: games > 0 ? ((wins / games) * 100).toFixed(1) + '%' : 'N/A',
+          kdr: deaths > 0 ? (kills / deaths).toFixed(2) : 'N/A',
+          wlr: losses > 0 ? (wins / losses).toFixed(2) : 'N/A',
+          levelInfo
+        },
+        recentGames: (user.recentGames || []).slice(0, 10),
+        dailyElo: user.dailyElo || [],
+        level: {
+          level: levelInfo.level,
+          experience: levelInfo.experience,
+          levelInfo
+        },
+        currentStreak: {
+          winstreak: user.winstreak || 0,
+          losestreak: user.losestreak || 0
+        },
+        seasonHistory: {
+          totalSeasons: seasonHistory.length,
+          seasons: seasonHistory
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching user overview:', error);
       res.status(500).json({ error: 'Internal server error' });
     }
   }

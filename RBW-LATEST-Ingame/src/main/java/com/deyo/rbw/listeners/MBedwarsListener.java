@@ -242,6 +242,11 @@ public class MBedwarsListener implements Listener {
         if (arena == null) return;
         
         String arenaName = arena.getName();
+        GameInstance gameInstance = gameInstances.get(arenaName);
+        if (gameInstance != null) {
+            gameInstance.recordPlayerLeave(player.getName());
+        }
+        
         Set<String> players = preGamePlayers.get(arenaName);
         
         if(arena.getStatus()==ArenaStatus.LOBBY){

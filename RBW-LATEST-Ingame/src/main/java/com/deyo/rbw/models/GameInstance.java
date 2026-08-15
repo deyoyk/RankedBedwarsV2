@@ -35,7 +35,23 @@ public class GameInstance {
             0,
             new java.text.SimpleDateFormat("dd/MM/yyyy").format(new Date())
         );
+        addTimelineEvent(0L, "game_start", null, null, null, null);
         initializePlayerTracking(arena);
+    }
+
+    private void addTimelineEvent(long timestamp, String type, String player, String target, Integer amount, String team) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", type);
+        event.put("player", player);
+        event.put("target", target);
+        event.put("amount", amount);
+        event.put("team", team);
+        event.put("timestamp", timestamp);
+        game.getTimeline().add(event);
+    }
+
+    private void addTimelineEvent(String type, String player, String target, Integer amount, String team) {
+        addTimelineEvent(System.currentTimeMillis() - game.getStartTime(), type, player, target, amount, team);
     }
 
     private void initializePlayerTracking(Arena arena) {
@@ -55,6 +71,7 @@ public class GameInstance {
                 game.getPlayerEmeraldsCollected().put(player.getName(), 0);
                 game.getPlayerGoldCollected().put(player.getName(), 0);
                 game.getPlayerIronCollected().put(player.getName(), 0);
+                addTimelineEvent("player_join", player.getName(), null, null, null);
             }
         }
     }
@@ -73,24 +90,34 @@ public class GameInstance {
 
     public void recordKill(String killer, String victim, boolean isFinal) {
         game.getPlayerKills().put(killer, game.getPlayerKills().getOrDefault(killer, 0) + 1);
+        addTimelineEvent("kill", killer, victim, null, null);
         if (isFinal) {
             game.getPlayerFinalKills().put(killer, game.getPlayerFinalKills().getOrDefault(killer, 0) + 1);
+            addTimelineEvent("final_kill", killer, victim, null, null);
         }
         game.getPlayerDeaths().put(victim, game.getPlayerDeaths().getOrDefault(victim, 0) + 1);
+        addTimelineEvent("death", victim, killer, null, null);
     }
 
     public void recordDeath(String player) {
         game.getPlayerDeaths().put(player, game.getPlayerDeaths().getOrDefault(player, 0) + 1);
+        addTimelineEvent("death", player, null, null, null);
     }
 
     public void recordBedBreak(String player, String teamName) {
         game.getPlayerBedsDestroyed().put(player, game.getPlayerBedsDestroyed().getOrDefault(player, 0) + 1);
         bedBreakers.add(player);
         brokenBeds.put(teamName, player);
+        addTimelineEvent("bed_break", player, teamName, null, teamName);
     }
 
     public void recordBlocksPlaced(String player, int count) {
         game.getPlayerBlocksPlaced().put(player, game.getPlayerBlocksPlaced().getOrDefault(player, 0) + count);
+        addTimelineEvent("block_place", player, null, 1, null);
+    }
+
+    public void recordPlayerLeave(String player) {
+        addTimelineEvent("player_leave", player, null, null, null);
     }
 
     public void recordResourceCollection(String player, ResourceType resourceType, int amount) {
@@ -120,6 +147,7 @@ public class GameInstance {
         // reason to discard the amount, so no upper-bound check is applied.
         int currentAmount = resourceMap.getOrDefault(player, 0);
         resourceMap.put(player, currentAmount + amount);
+        addTimelineEvent("resource_pickup", player, null, amount, null);
     }
 
     public void recordGameEnd(Team winningTeam) {
@@ -131,6 +159,7 @@ public class GameInstance {
                 game.getPlayerTeamWon().put(entry.getKey(), true);
             }
         }
+        addTimelineEvent("game_end", winningTeamName, null, null, winningTeamName);
     }
 
     public int getDuration() {

@@ -1,173 +1,60 @@
-# Ranked Bedwars System by deyo
+# Ranked Bedwars System
 
-A comprehensive Discord integration system for Minecraft Bedwars servers that provides ranked gameplay, queue management, and real-time communication between Discord and Minecraft.
+A Discord bot + Minecraft plugin pairing that runs ranked Bedwars matchmaking — ELO-based queues, live scoring, seasons, and screenshares — connected by a WebSocket bridge between Discord and your Bedwars server.
 
 ## Features
 
-### Discord Bot Features
-- Advanced queue management with ELO-based matchmaking
-- Support for both random and captain-based picking modes
-- Party system with size restrictions
-- Game scoring and statistics tracking
-- Screenshare functionality for fair play enforcement
-- Voice channel management for teams
-- Game result logging and voiding capabilities
-- Administrative commands for game management
-- Player verification system
-- Command permissions system
-- Worker bot support for high-traffic servers
-- Real-time queue status updates
-
-### Minecraft Plugin Features
-- Bedwars1058 and MBedwars support (dual compatibility)
-- WebSocket communication with Discord bot
-- Player warping to specific game arenas
-- Real-time game status updates
-- Screenshare request handling
-- Game scoring integration
-- Player verification system
-- Call command for voice access
-- Game voiding and scoring notifications
-- Map management and availability tracking
-
-### Queue System
-- ELO-based matchmaking with configurable ranges
-- Support for ranked and unranked games
-- Party queue management with size limits
-- Priority queue system for fair processing
-- Queue status broadcasting
-- Automatic player movement between channels
-
-### Security & Authentication
-- WebSocket authentication using AUTH_KEY
-- Player verification system
-- Screenshare functionality for anti-cheat
-- Permission-based command access
-- Player restriction system (bans, mutes, freezes)
-
-## Installation
-
-### Discord Bot Setup
-
-1. **Prerequisites**
-   - Node.js 16+ installed
-   - MongoDB database connection
-   - Discord bot token with required permissions
-
-2. **Installation**
-   ```bash
-   cd RBW-latest
-   npm install
-   ```
-
-3. **Configuration**
-   - Copy `.env.example` to `.env`
-   - Fill in your Discord bot token and other required values
-   - Set up MongoDB connection string
-   - Configure channel and role IDs
-   - Set the AUTH_KEY for WebSocket & API authentication
-
-4. **Build and Run**
-   ```bash
-   npm run build
-   npm start
-   ```
-
-5. **Adding queues and Ranks**
-   - Using /addelo to add ranks and /addqueue to add queues
-
-6. **Starting the season**
-   - Using /startseason
-
-### Minecraft Plugin Setup
-
-1. **Prerequisites**
-   - Java 11+ installed
-   - Minecraft server (Spigot/Paper 1.8.8+)
-   - Bedwars1058 or MBedwars plugin installed
-
-2. **Compilation**
-   ```bash
-   cd RBW-LATEST-Ingame
-   mvn clean package
-   ```
-   
-   The compiled JAR file will be in the `target/` directory.
-
-3. **Configuration**
-   - Place the JAR file in your server's `plugins/` folder
-   - Restart the server to generate the config file
-   - Edit `config.yml`
-   - Edit `permission.yml` with discord role ids
-
-4. **Server Requirements**
-   - Java 11 or higher (configured in pom.xml)
-   - Bedwars1058 (version 25.6+) or MBedwars (version 5.3.2+)
-   - WebSocket connectivity to Discord bot server
-
-## Usage
-
-### For Players
-- Join queue voice channels based on your ELO range
-- Use in-game commands for verification and game management
-- Participate in ranked and unranked games
-- Request screenshares when needed
-- Join parties for group play
-
-### For Administrators
-- Use administrative commands to manage games and players
-- Configure queue settings and ELO ranges
-- Manage player restrictions and permissions
-- Monitor game statistics and logs
+- **ELO-based queues** using Discord voice channels, with ranked/unranked modes and random or captain (picking) matchmaking
+- **Party system** with size limits and dedicated party roles
+- **Full statistics tracking** — kills, beds, finals, winstreaks, levels, ELO history — plus leaderboards and seasons/chapters
+- **In-game integration** — auto-warp players to arenas, live queue status in the action bar, in-game verification codes
+- **Scoring & moderation** — game scoring, voiding with requests, strikes, bans and mutes that sync to the game server, screenshare sessions
+- **Permission system** driven by the plugin's `permission.yml` (command → Discord role IDs)
+- **REST API** for users, leaderboards, games, seasons, queues and maps
+- **Dual Bedwars support** — works with BedWars1058 (25.6+) and MBedwars (5.3.2+)
 
 ## Architecture
 
-The system consists of two main components:
+```
++---------------------+   WebSocket, AUTH_KEY   +---------------------+
+|    Discord Bot      | <---------------------> |   Minecraft Plugin  |
+| (Node.js, discord.js|  /rbw/websocket:25565   |  (Spigot 1.8.8)    |
++---------------------+                         +---------------------+
+        |                                                 |
+        | MongoDB                                         | BedWars1058 / MBedwars
+        v                                                 v
++---------------------+                         +---------------------+
+|       MongoDB       |                         |     Game Server     |
++---------------------+                         +---------------------+
+```
 
-1. **Discord Bot** - Handles Discord interactions, queue management, matchmaking, and communication
-2. **Minecraft Plugin** - Handles in-game events, player warping, and game integration
+## Setup
 
-These components communicate through a secure WebSocket connection authenticated with the AUTH_KEY.
+- [Discord Bot Setup](RBW-LATEST-BOT/README.md) — hosting, configuration, commands, WebSocket & REST API reference
+- [In-Game Plugin Setup](RBW-LATEST-Ingame/README.md) — connecting your Bedwars server to the bot
 
-## Supported Bedwars Plugins
+### Quick start
 
-- **BedWars1058** - Version 25.6+ (by Andrei1058)
-- **MBedwars** - Version 5.3.2+ (by Marcely)
-
-The system automatically detects which plugin is installed and uses the appropriate API integration.
-
-## WebSocket Communication
-
-The Discord bot and Minecraft plugin communicate via a secure WebSocket connection:
-- Authentication required using AUTH_KEY
-- Real-time game status updates
-- Player verification and online checks
-- Game scoring and voiding notifications
-- Screenshare requests and management
-
-## Development
-Check the specific project README files:
-- [Discord Bot README](RBW-latest/README.md)
-- [Minecraft Plugin README](RBW-LATEST-Ingame/README.md)
-
-To run in development mode:
 ```bash
-# Discord Bot
-npm run dev
+# Discord bot
+cd RBW-LATEST-BOT
+npm install
+npm run build
+npm start
 
-# For Minecraft plugin
-mvn clean package
+# Minecraft plugin
+cd RBW-LATEST-Ingame
+mvn clean package   # jar lands in target/
 ```
 
 ## Testing
 
 ```bash
-# Discord Bot (Jest)
-cd RBW-LATEST-BOT
+cd RBW-LATEST-BOT   # Jest unit tests + ESLint
 npm test
+npm run lint
 
-# Minecraft Plugin (JUnit 5)
-cd RBW-LATEST-Ingame
+cd RBW-LATEST-Ingame   # JUnit 5 + Mockito
 mvn test
 ```
 

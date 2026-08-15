@@ -48,6 +48,8 @@ export class CentralizedMatchmaker {
   private priorityQueue: Array<{ queueId: string; priority: number; timestamp: number }> = [];
   private queueCache: Map<string, { queue: any; timestamp: number }> = new Map();
   private validationCache: Map<string, { valid: boolean; timestamp: number }> = new Map();
+  private queueMonitorInterval: NodeJS.Timeout | null = null;
+  private cacheCleanupInterval: NodeJS.Timeout | null = null;
 
   
   private readonly MAX_CONCURRENT_GAMES = 100;
@@ -90,7 +92,7 @@ export class CentralizedMatchmaker {
   }
 
   private startCacheCleanup(): void {
-    setInterval(() => {
+    this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
       
       for (const [key, cache] of this.queueCache.entries()) {
@@ -108,7 +110,7 @@ export class CentralizedMatchmaker {
   }
 
   private startQueueMonitor(): void {
-    setInterval(async () => {
+    this.queueMonitorInterval = setInterval(async () => {
       await this.monitorQueues();
     }, this.QUEUE_MONITOR_INTERVAL);
   }
@@ -272,7 +274,12 @@ export class CentralizedMatchmaker {
       }
 
       if (validPlayers.length !== players.length) {
-        queuePlayers.set(queueId, validPlayers);
+        // Preserve players who joined the queue while validation was running:
+        // the snapshot we validated must not silently drop concurrent joins.
+        const currentQueuePlayers = queuePlayers.get(queueId) || [];
+        const snapshotSet = new Set(players);
+        const joinedDuringValidation = currentQueuePlayers.filter(p => !snapshotSet.has(p));
+        queuePlayers.set(queueId, [...validPlayers, ...joinedDuringValidation]);
       }
 
       if (validPlayers.length < queue.maxPlayers) {
@@ -326,8 +333,11 @@ export class CentralizedMatchmaker {
 
       if (gamesCreated > 0) {
         const usedPlayers = new Set(processingResult.usedPlayers);
+        const currentQueuePlayers = queuePlayers.get(queueId) || [];
+        const snapshotSet = new Set(validPlayers);
+        const joinedDuringProcessing = currentQueuePlayers.filter(p => !snapshotSet.has(p));
         const remainingPlayers = validPlayers.filter(p => !usedPlayers.has(p));
-        queuePlayers.set(queueId, remainingPlayers);
+        queuePlayers.set(queueId, [...remainingPlayers, ...joinedDuringProcessing]);
       }
 
       state.retryCount = 0;
@@ -641,6 +651,15 @@ export class CentralizedMatchmaker {
 
   public cleanup(): void {
     try {
+      if (this.queueMonitorInterval) {
+        clearInterval(this.queueMonitorInterval);
+        this.queueMonitorInterval = null;
+      }
+      if (this.cacheCleanupInterval) {
+        clearInterval(this.cacheCleanupInterval);
+        this.cacheCleanupInterval = null;
+      }
+
       for (const timeout of this.processingLocks.values()) {
         clearTimeout(timeout);
       }

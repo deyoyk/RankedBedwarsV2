@@ -131,6 +131,7 @@ public class BedWars1058Listener implements Listener {
         private final Map<String, Integer> playerGoldCollected = new HashMap<>();
         private final Map<String, Integer> playerIronCollected = new HashMap<>();
         private final Map<String, Boolean> playerTeamWon = new HashMap<>();
+        private final List<Map<String, Object>> timeline = new ArrayList<>();
         
         public BW1058GameTracker(String gameId, IArena arena, boolean isRanked) {
             this.gameId = gameId;
@@ -156,28 +157,58 @@ public class BedWars1058Listener implements Listener {
                     playerIronCollected.put(player.getName(), 0);
                 }
             }
+            
+            addTimelineEvent(0L, "game_start", null, null, null, null);
+            for (Player player : arena.getPlayers()) {
+                addTimelineEvent("player_join", player.getName(), null, null, null);
+            }
+        }
+        
+        private void addTimelineEvent(long timestamp, String type, String player, String target, Integer amount, String team) {
+            Map<String, Object> event = new HashMap<>();
+            event.put("type", type);
+            event.put("player", player);
+            event.put("target", target);
+            event.put("amount", amount);
+            event.put("team", team);
+            event.put("timestamp", timestamp);
+            timeline.add(event);
+        }
+        
+        private void addTimelineEvent(String type, String player, String target, Integer amount, String team) {
+            addTimelineEvent(System.currentTimeMillis() - startTime, type, player, target, amount, team);
         }
         
         public void recordKill(String killer, String victim, boolean isFinal) {
             playerKills.put(killer, playerKills.getOrDefault(killer, 0) + 1);
+            addTimelineEvent("kill", killer, victim, null, null);
             if (isFinal) {
                 playerFinalKills.put(killer, playerFinalKills.getOrDefault(killer, 0) + 1);
+                addTimelineEvent("final_kill", killer, victim, null, null);
             }
             playerDeaths.put(victim, playerDeaths.getOrDefault(victim, 0) + 1);
+            addTimelineEvent("death", victim, killer, null, null);
         }
         
         public void recordDeath(String player) {
             playerDeaths.put(player, playerDeaths.getOrDefault(player, 0) + 1);
+            addTimelineEvent("death", player, null, null, null);
         }
         
         public void recordBedBreak(String player, String teamName) {
             playerBedsDestroyed.put(player, playerBedsDestroyed.getOrDefault(player, 0) + 1);
             bedBreakers.add(player);
             brokenBeds.put(teamName, player);
+            addTimelineEvent("bed_break", player, teamName, null, teamName);
         }
         
         public void recordBlocksPlaced(String player, int count) {
             playerBlocksPlaced.put(player, playerBlocksPlaced.getOrDefault(player, 0) + count);
+            addTimelineEvent("block_place", player, null, 1, null);
+        }
+        
+        public void recordPlayerLeave(String player) {
+            addTimelineEvent("player_leave", player, null, null, null);
         }
         
         public void recordResourceCollection(String player, ResourceType resourceType, int amount) {
@@ -203,6 +234,7 @@ public class BedWars1058Listener implements Listener {
             
             int currentAmount = resourceMap.getOrDefault(player, 0);
             resourceMap.put(player, currentAmount + amount);
+            addTimelineEvent("resource_pickup", player, null, amount, null);
         }
         
         public void recordGameEnd(ITeam winningTeam) {
@@ -215,6 +247,7 @@ public class BedWars1058Listener implements Listener {
                     playerTeamWon.put(entry.getKey(), true);
                 }
             }
+            addTimelineEvent("game_end", winningTeamName, null, null, winningTeamName);
         }
         
         public int getDuration() {
@@ -436,6 +469,7 @@ public class BedWars1058Listener implements Listener {
         for (Map.Entry<String, String> entry : tracker.playerTeams.entrySet()) {
             game.getPlayerTeamName().put(entry.getKey(), entry.getValue());
         }
+        game.getTimeline().addAll(tracker.timeline);
         
         return game;
     }
@@ -465,6 +499,11 @@ public class BedWars1058Listener implements Listener {
     private void handlePlayerLeave(Player player, IArena arena) {
         String arenaName = arena.getArenaName();
         Set<String> players = preGamePlayers.get(arenaName);
+        
+        BW1058GameTracker gameTracker = gameTrackers.get(arenaName);
+        if (gameTracker != null) {
+            gameTracker.recordPlayerLeave(player.getName());
+        }
         
         if (arena.getStatus() == GameState.waiting || arena.getStatus() == GameState.starting) {
             if (players != null && players.contains(player.getName())) {

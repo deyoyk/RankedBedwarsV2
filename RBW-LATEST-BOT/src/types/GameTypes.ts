@@ -49,6 +49,14 @@ export interface GameResult {
   mvps: string[];
   bedbreaks?: string[];
   playerData?: Record<string, PlayerData>;
+  timeline?: Array<{
+    type: string;
+    player?: string;
+    target?: string;
+    amount?: number;
+    team?: string;
+    timestamp: number;
+  }>;
   reason?: string;
 }
 

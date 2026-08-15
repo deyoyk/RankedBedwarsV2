@@ -14,6 +14,7 @@ import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Map;
 import java.util.logging.Level;
 
 
@@ -545,6 +546,22 @@ public class WebSocketManager {
                 playersJson.add(playerName, playerJson);
             }
             json.add("players", playersJson);
+            
+            if (game.getTimeline() != null && !game.getTimeline().isEmpty()) {
+                JsonArray timelineArray = new JsonArray();
+                for (Map<String, Object> event : game.getTimeline()) {
+                    JsonObject eventJson = new JsonObject();
+                    for (Map.Entry<String, Object> entry : event.entrySet()) {
+                        Object value = entry.getValue();
+                        if (value instanceof Number) eventJson.addProperty(entry.getKey(), (Number) value);
+                        else if (value instanceof Boolean) eventJson.addProperty(entry.getKey(), (Boolean) value);
+                        else if (value == null) eventJson.add(entry.getKey(), com.google.gson.JsonNull.INSTANCE);
+                        else eventJson.addProperty(entry.getKey(), String.valueOf(value));
+                    }
+                    timelineArray.add(eventJson);
+                }
+                json.add("timeline", timelineArray);
+            }
             
             int winningTeamNumber = game.getWinningTeamNumber();
             if (winningTeamNumber == 1 || winningTeamNumber == 2) {
