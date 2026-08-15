@@ -23,5 +23,7 @@ const SeasonStatsSchema: Schema = new Schema({
 
 
 SeasonStatsSchema.index({ discordId: 1, seasonNumber: 1, chapterNumber: 1 }, { unique: true });
+SeasonStatsSchema.index({ seasonNumber: 1, chapterNumber: 1, elo: -1 });
+SeasonStatsSchema.index({ seasonNumber: 1, chapterNumber: 1, wins: -1 });
 
 export default mongoose.model<ISeasonStats>('SeasonStats', SeasonStatsSchema);

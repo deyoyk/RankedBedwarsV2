@@ -177,7 +177,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
     
     const selectMenu = buildCategorySelectMenu(commandCategories);
     const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
-    let components: any[] = [selectRow.toJSON()];
+    const components: any[] = [selectRow.toJSON()];
     if (totalPages > 1) {
       const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
       const row = new ActionRowBuilder().addComponents(

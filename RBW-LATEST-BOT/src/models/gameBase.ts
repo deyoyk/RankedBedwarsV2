@@ -5,6 +5,8 @@ export interface IRecentGame {
   queueid?: string;
   map: string;
   eloGain: number;
+  oldElo?: number;
+  newElo?: number;
   kills: number;
   deaths: number;
   bedBroken: number;
@@ -12,7 +14,7 @@ export interface IRecentGame {
   won?: boolean;
   ismvp?: boolean;
   date: Date;
-  state: String;
+  state: string;
   startTime: Date;
   endTime?: Date;
   diamonds?: number;
@@ -32,6 +34,8 @@ export const recentGameSubdoc = {
   queueid: { type: String, required: false },
   map: { type: String, required: true },
   eloGain: { type: Number, required: true },
+  oldElo: { type: Number },
+  newElo: { type: Number },
   kills: { type: Number, required: true },
   deaths: { type: Number, required: true },
   bedBroken: { type: Number, required: true },

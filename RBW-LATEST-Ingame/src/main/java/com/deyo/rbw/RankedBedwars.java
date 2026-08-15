@@ -24,6 +24,7 @@ public class RankedBedwars extends JavaPlugin {
     private CallCmd callCommand;
     private QueueCmd queueCommand;
     private RankedBedwarsExpansion placeholderExpansion;
+    private com.deyo.rbw.utils.APIClient apiClient;
 
     public AdminCommand getAdminCommand() {
         return adminCommand;
@@ -65,7 +66,7 @@ public class RankedBedwars extends JavaPlugin {
         getCommand("ss").setExecutor(ssCmd);
 
         
-        com.deyo.rbw.utils.APIClient apiClient = new com.deyo.rbw.utils.APIClient(getGson(), getLogger(), getConfig());
+        apiClient = new com.deyo.rbw.utils.APIClient(getGson(), getLogger(), getConfig());
         com.deyo.rbw.commands.StatsCmd statsCmd = new com.deyo.rbw.commands.StatsCmd(this, apiClient);
         getCommand("stats").setExecutor(statsCmd);
         
@@ -96,6 +97,9 @@ public class RankedBedwars extends JavaPlugin {
         
         if (webSocketManager != null) {
             webSocketManager.shutdown();
+        }
+        if (apiClient != null) {
+            apiClient.shutdown();
         }
         getLogger().info("rankedbedwars has been disabled!");
     }

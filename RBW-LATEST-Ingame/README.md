@@ -6,5 +6,33 @@ this bot was originally made for HestiaRBW since the owner was a dickhead i quit
 
 please follow same structure and variables naming method as the current codebase. before making any pull requests make sure the code is well tested and error free (logical and run time)
 
+# testing
+
+```bash
+mvn test   # runs the JUnit 5 suite (src/test/java) plus compile + package
+```
+
+# note on vendored libraries
+
+`src/main/java/com/deyo/rbw/libs/` contains two JARs referenced as `system` scope
+dependencies:
+
+- `bungeecord-chat-1.8.jar` - legacy chat API for the 1.8.8 build target
+- `bedwars-api-25.6.jar` - BedWars1058 API. The official repo
+  (`repo.andrei1058.dev`) now serves a JS challenge page instead of artifacts
+  for unauthenticated Maven clients, which corrupts the local cache. This jar
+  was built from the BedWars1058 GitHub source at tag `25.6`
+  (`bedwars-api` module, ISidebar/ISidebarService/PlayerSidebarInitEvent
+  classes compiled against bundled sidebar stubs).
+
+To rebuild it yourself:
+
+```bash
+git clone --branch 25.6 --depth 1 https://github.com/andrei1058/BedWars1058
+cd BedWars1058/bedwars-api
+mvn package -DskipTests
+# then replace libs/bedwars-api-25.6.jar with target/bedwars-api-25.6.jar
+```
+
 
 

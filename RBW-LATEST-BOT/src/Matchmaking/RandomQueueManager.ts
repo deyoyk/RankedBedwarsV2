@@ -1,7 +1,7 @@
 import { Client, TextChannel } from 'discord.js';
 import User from '../models/User';
 import Party from '../models/Party';
-import { TeamBalanceResult } from '../types/GameTypes';
+import { TeamBalanceResult, QueueProcessingResult } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
 import { GameManager } from './GameManager';
@@ -45,9 +45,10 @@ export class RandomQueueManager {
     players: string[],
     queueData: any,
     maxGames: number = 10
-  ): Promise<number> {
+  ): Promise<QueueProcessingResult> {
     try {
       let gamesCreated = 0;
+      const usedPlayers: string[] = [];
       let availablePlayers = [...players];
 
       console.log(`[RandomQueue] Processing ${availablePlayers.length} players, max ${maxGames} games`);
@@ -64,7 +65,7 @@ export class RandomQueueManager {
 
           
           const gameId = await this.gameManager.getNextGameId();
-          let selectedMap = await this.selectRandomMap(queueData);
+          const selectedMap = await this.selectRandomMap(queueData);
           
 
           
@@ -145,6 +146,7 @@ export class RandomQueueManager {
 
           
           availablePlayers = availablePlayers.filter(p => !teamResult.usedPlayers.has(p));
+          usedPlayers.push(...Array.from(teamResult.usedPlayers));
           gamesCreated++;
 
           console.log(`[RandomQueue] Created game ${gameId}, ${availablePlayers.length} players remaining`);
@@ -160,11 +162,11 @@ export class RandomQueueManager {
         }
       }
 
-      return gamesCreated;
+      return { gamesCreated, usedPlayers };
 
     } catch (error) {
       console.error(`[RandomQueue] Error processing queue:`, error);
-      return 0;
+      return { gamesCreated: 0, usedPlayers: [] };
     }
   }
 
@@ -195,14 +197,14 @@ export class RandomQueueManager {
         }
       }
 
-      const partyPlayers = Array.from(partyGroups.values()).flat();
-      const soloPlayers = players.filter(p => !partyPlayers.includes(p));
+      const partyPlayerSet = new Set(Array.from(partyGroups.values()).flat());
+      const soloPlayers = players.filter(p => !partyPlayerSet.has(p));
 
       const sortedParties = Array.from(partyGroups.entries())
         .sort((a, b) => b[1].length - a[1].length);
 
-      let team1: string[] = [];
-      let team2: string[] = [];
+      const team1: string[] = [];
+      const team2: string[] = [];
       const usedPlayers = new Set<string>();
 
       const targetTeamSize = queueData.maxPlayers / 2;
@@ -220,11 +222,13 @@ export class RandomQueueManager {
 
         if (team1Space >= members.length && (team1Space >= team2Space || team1.length <= team2.length)) {
           team1.push(...members);
+          members.forEach(p => usedPlayers.add(p));
         } else if (team2Space >= members.length) {
           team2.push(...members);
+          members.forEach(p => usedPlayers.add(p));
+        } else {
+          console.warn(`[RandomQueue] Party ${partyId} (${members.length} members) does not fit in either team, keeping in queue`);
         }
-
-        members.forEach(p => usedPlayers.add(p));
       }
 
       const remainingSoloPlayers = soloPlayers.filter(p => !usedPlayers.has(p));

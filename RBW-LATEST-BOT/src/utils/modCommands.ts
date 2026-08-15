@@ -97,8 +97,8 @@ export async function executeModerationAction(
       false
     );
     await safeReply(interaction, embed);
-  } catch (error) {
-    await safeReply(interaction, errorEmbed(`Failed to ${config.commandName} user.`, `${config.commandName} Error`));
+  } catch (error: any) {
+    await safeReply(interaction, errorEmbed(`Failed to ${config.commandName} user. ${error?.message || ''}`, `${config.commandName} Error`));
   }
 }
 
@@ -161,8 +161,8 @@ async function executeModerationCommand(
     } else {
       await safeReply(interaction, result.embed);
     }
-  } catch (error) {
-    await safeReply(interaction, errorEmbed(`Failed to ${options.commandName} user.`));
+  } catch (error: any) {
+    await safeReply(interaction, errorEmbed(`Failed to ${options.commandName} user. ${error?.message || ''}`));
   }
 }
 

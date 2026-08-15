@@ -31,15 +31,16 @@ export class ChannelsCleanupTask {
       }
 
       
-      const pendingGames = await Game.find({ state: 'pending' });
-      const allValidGames = [...pendingGames];
+      const activeGames = await Game.find({ state: { $in: ['pending', 'active'] } });
 
       
       const validChannelIds = new Set<string>();
       
-      for (const game of allValidGames) {
+      for (const game of activeGames) {
         if (game.channels.text) validChannelIds.add(game.channels.text);
         if (game.channels.picking) validChannelIds.add(game.channels.picking);
+        if (game.channels.team1Voice) validChannelIds.add(game.channels.team1Voice);
+        if (game.channels.team2Voice) validChannelIds.add(game.channels.team2Voice);
       }
 
       

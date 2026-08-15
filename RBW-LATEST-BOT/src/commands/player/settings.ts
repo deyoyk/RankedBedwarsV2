@@ -69,7 +69,7 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
     time: 5 * 60 * 1000
   });
 
-  let changedSettings: Record<SettingKey, boolean> = { ...user.settings };
+  const changedSettings: Record<SettingKey, boolean> = { ...user.settings };
   let currentEmbed = embedObj.builder;
 
   const updateEmbed = async (componentInteraction?: any) => {
@@ -107,7 +107,7 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
       await i.reply({ content: 'This button is not for you!', flags: 64 }); 
       return;
     }
-    user.settings = changedSettings;
+    Object.assign(user.settings, changedSettings);
     await user.save();
     if (interaction.guild) {
       await fix(interaction.guild, userId);

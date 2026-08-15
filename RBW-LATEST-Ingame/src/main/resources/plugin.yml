@@ -2,8 +2,8 @@ name: rankedbedwars
 version: '${project.version}'
 main: com.deyo.rbw.RankedBedwars
 api-version: 1.13
-depend: [PlaceholderAPI]
-softdepend: [MBedwars, BedWars1058]
+depend: []
+softdepend: [PlaceholderAPI, MBedwars, BedWars1058]
 authors: [Deyo]
 description: Integration plugin for ranked Bedwars with Discord
 

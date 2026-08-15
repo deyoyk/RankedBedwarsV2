@@ -30,11 +30,6 @@
             <id>marcely-repo</id>
             <url>https://repo.marcely.de/repository/maven-public/</url>
         </repository>
-
-        <repository>
-            <id>andrei1058-repo</id>
-            <url>https://repo.andrei1058.dev/releases/</url>
-        </repository>
         
         <repository>
             <id>placeholderapi</id>
@@ -85,7 +80,8 @@
             <groupId>com.andrei1058.bedwars</groupId>
             <artifactId>bedwars-api</artifactId>
             <version>25.6</version>
-            <scope>provided</scope>
+            <systemPath>${project.basedir}/src/main/java/com/deyo/rbw/libs/bedwars-api-25.6.jar</systemPath>
+            <scope>system</scope>
         </dependency>
         
         <dependency>
@@ -93,6 +89,19 @@
             <artifactId>placeholderapi</artifactId>
             <version>2.11.6</version>
             <scope>provided</scope>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.10.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

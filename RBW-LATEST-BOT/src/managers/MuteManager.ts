@@ -47,22 +47,25 @@ export class MuteManager {
         throw new Error(`User ${targetId} not found in database`);
       }
 
-      if (user.ismuted) {
-        console.warn(`[MuteManager] User ${targetId} is already muted`);
-        const lastMute = user.mutes[user.mutes.length - 1];
-        if (lastMute) {
-          lastMute.reason = reason;
-          lastMute.moderator = moderatorId;
-          lastMute.date = new Date();
-        }
-      }
-
-      const duration = parseDuration(durationStr);
-      if (duration && duration < 60000) {
+      const duration = durationStr ? parseDuration(durationStr) : null;
+      if (duration !== null && duration < 60000) {
         throw new Error('Mute duration must be at least 1 minute');
       }
-      if (duration && duration > 30 * 24 * 60 * 60 * 1000) {
+      if (duration !== null && duration > 30 * 24 * 60 * 60 * 1000) {
         throw new Error('Mute duration cannot exceed 30 days');
+      }
+
+      if (user.ismuted) {
+        console.warn(`[MuteManager] User ${targetId} is already muted, updating existing record`);
+        const lastMute = user.mutes[user.mutes.length - 1];
+        if (lastMute) {
+          lastMute.reason = reason.trim();
+          lastMute.moderator = moderatorId;
+          lastMute.date = new Date();
+          lastMute.duration = duration ? Math.ceil(duration / 60000) : 0;
+          await user.save();
+        }
+        return undefined;
       }
 
       const expires = duration ? new Date(Date.now() + duration) : undefined;

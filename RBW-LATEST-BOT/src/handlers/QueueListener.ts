@@ -36,8 +36,10 @@ export class QueueListener {
   private partyCache: Map<string, { members: string[], timestamp: number }> = new Map();
   private queueStates: Map<string, QueueState> = new Map();
   private processingLocks: Map<string, NodeJS.Timeout> = new Map();
+  private queueChannelCache: Map<string, { exists: boolean; ts: number }> = new Map();
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
+  private readonly CHANNEL_CACHE_TTL = 30000;
 
   constructor(client: Client, wsManager: WebSocketManager, gameManager: any) {
     this.client = client;
@@ -54,6 +56,11 @@ export class QueueListener {
       for (const [partyId, data] of this.partyCache.entries()) {
         if (now - data.timestamp > this.CACHE_TTL) {
           this.partyCache.delete(partyId);
+        }
+      }
+      for (const [channelId, data] of this.queueChannelCache.entries()) {
+        if (now - data.ts > this.CHANNEL_CACHE_TTL) {
+          this.queueChannelCache.delete(channelId);
         }
       }
     }, 60000);
@@ -118,7 +125,9 @@ export class QueueListener {
       state.lastUpdate = Date.now();
 
 
-      queuePlayers.set(queueId, validPlayers);
+      if (!state.processing) {
+        queuePlayers.set(queueId, validPlayers);
+      }
 
 
       if (validPlayers.length >= queue.maxPlayers && !state.processing) {
@@ -147,23 +156,19 @@ export class QueueListener {
       }
     } catch (error) {
       console.error('[QueueListener] Error in handleVoiceStateUpdate:', error);
-      try {
-        if (newState.member) {
-          const waitingVcId = config.voicechannels.waitingvc;
-          if (waitingVcId) {
-            await this.workersManager.moveMembers([newState.member.id], waitingVcId, 6);
-          }
-        }
-      } catch (moveError) {
-        console.error('[QueueListener] Failed to move user to waiting on error:', moveError);
-      }
     }
   }
 
   private async isQueueChannel(channelId: string | null | undefined): Promise<boolean> {
     if (!channelId) return false;
-    const queue = await Queue.findOne({ channelId });
-    return !!queue;
+    const cached = this.queueChannelCache.get(channelId);
+    if (cached && Date.now() - cached.ts < this.CHANNEL_CACHE_TTL) {
+      return cached.exists;
+    }
+    const queue = await Queue.findOne({ channelId }).select('_id').lean();
+    const exists = !!queue;
+    this.queueChannelCache.set(channelId, { exists, ts: Date.now() });
+    return exists;
   }
 
   private async handleQueueJoin(state: VoiceState): Promise<void> {
@@ -209,9 +214,11 @@ export class QueueListener {
           new Promise<{ online: boolean }>((_, reject) =>
             setTimeout(() => reject(new Error('Timeout')), 5000)
           )
-        ]).catch(() => ({ online: false }));
+        ]).catch(() => null);
 
-        if (!onlineCheck.online) {
+        if (onlineCheck === null) {
+          console.warn(`[QueueListener] Online check timed out for ${user.ign}, allowing queue join`);
+        } else if (!onlineCheck.online) {
           await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
           return;
         }
@@ -333,7 +340,7 @@ export class QueueListener {
       const membersInVC = partyMembers.filter(memberId => playersInVC.has(memberId));
 
       if (membersInVC.length !== partyMembers.length) {
-        await this.moveToWaiting(state, `Not all party members are in the queue channel`);
+        console.log(`[QueueListener] Party ${user.partyId}: waiting for ${partyMembers.length - membersInVC.length} member(s) to join queue ${queue.channelId}`);
         return { success: false };
       }
 
@@ -378,12 +385,19 @@ export class QueueListener {
       if (user.partyId) {
         await updatePartyActivity(user.partyId);
 
-
         const partyMembers = queueState.parties.get(user.partyId) || [];
-        queueState.players = queueState.players.filter(p => !partyMembers.includes(p));
-        queueState.parties.delete(user.partyId);
+        queueState.players = queueState.players.filter(p => p !== userId);
 
-        console.log(`[QueueListener] Party ${user.partyId} left queue ${queue.channelId}, removed ${partyMembers.length} members`);
+        if (partyMembers.length > 0) {
+          const remainingMembers = partyMembers.filter(p => p !== userId);
+          if (remainingMembers.length > 0) {
+            queueState.parties.set(user.partyId, remainingMembers);
+            console.log(`[QueueListener] Member ${userId} left party ${user.partyId} queue ${queue.channelId}, ${remainingMembers.length} member(s) remain`);
+          } else {
+            queueState.parties.delete(user.partyId);
+            console.log(`[QueueListener] Party ${user.partyId} left queue ${queue.channelId}`);
+          }
+        }
       } else {
 
         queueState.players = queueState.players.filter(p => p !== userId);
@@ -427,19 +441,22 @@ export class QueueListener {
       this.cancelQueueProcessing(queueId);
 
       const queueState = this.queueStates.get(queueId);
-      if (!queueState) return;
+      if (!queueState || queueState.processing) return;
 
       queueState.processing = true;
 
       const timeout = setTimeout(async () => {
         try {
           await this.matchmaker.processQueue(queueId);
+        } catch (error) {
+          console.error(`[QueueListener] Error processing queue ${queueId}:`, error);
         } finally {
           const state = this.queueStates.get(queueId);
           if (state) {
             state.processing = false;
           }
           this.processingLocks.delete(queueId);
+          await this.validateQueueState(queueId);
         }
       }, 1000);
 
@@ -455,11 +472,6 @@ export class QueueListener {
     if (timeout) {
       clearTimeout(timeout);
       this.processingLocks.delete(queueId);
-    }
-
-    const queueState = this.queueStates.get(queueId);
-    if (queueState) {
-      queueState.processing = false;
     }
   }
 

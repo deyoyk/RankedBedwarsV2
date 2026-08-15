@@ -42,7 +42,7 @@ export async function checkPermission(interaction: Message | ChatInputCommandInt
   }
 
   
-  let member = (interaction instanceof Message ? interaction.member : interaction.member) as GuildMember;
+  const member = (interaction instanceof Message ? interaction.member : interaction.member) as GuildMember;
   
   if (!member) {
     return false;

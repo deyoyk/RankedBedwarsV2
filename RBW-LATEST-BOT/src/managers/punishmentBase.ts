@@ -1,13 +1,8 @@
+import { randomBytes } from 'crypto';
 import User from '../models/User';
 
-const ID_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-
-export function generatePunishmentId(length = 9): string {
-  let result = '';
-  for (let i = 0; i < length; i++) {
-    result += ID_CHARS.charAt(Math.floor(Math.random() * ID_CHARS.length));
-  }
-  return result;
+export function generatePunishmentId(): string {
+  return randomBytes(12).toString('hex');
 }
 
 export async function fetchUserWithTimeout(discordId: string, timeoutMs = 5000): Promise<any> {

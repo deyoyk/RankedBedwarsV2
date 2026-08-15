@@ -12,6 +12,8 @@ const CounterSchema = new Schema<ICounter>({
 
 const Counter = mongoose.model<ICounter>('Counter', CounterSchema);
 
+export { Counter };
+
 export async function getNextSequence(name: string): Promise<number> {
   const result = await Counter.findByIdAndUpdate(
     name,

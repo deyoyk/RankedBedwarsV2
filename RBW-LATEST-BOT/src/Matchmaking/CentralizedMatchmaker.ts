@@ -1,12 +1,20 @@
 import { Client } from 'discord.js';
 import Queue from '../models/Queue';
 import User from '../models/User';
-import { QueueType, MatchmakingResult } from '../types/GameTypes';
+import { QueueType, MatchmakingResult, QueueProcessingResult } from '../types/GameTypes';
 import { GameManager } from './GameManager';
 import { RandomQueueManager } from './RandomQueueManager';
 import { PickingQueueManager } from './PickingQueueManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timeout`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 interface ProcessingState {
   isProcessing: boolean;
@@ -136,6 +144,9 @@ export class CentralizedMatchmaker {
           }
 
           if (state && state.isProcessing && now - state.lastProcessed > this.LOCK_TIMEOUT) {
+            if (queue.ispicking) {
+              return;
+            }
             console.warn(`[CentralizedMatchmaker] Queue ${queue.channelId} stuck for ${now - state.lastProcessed}ms, resetting`);
             this.resetProcessingState(queue.channelId);
             metrics.errorCount++;
@@ -198,7 +209,7 @@ export class CentralizedMatchmaker {
         successCount: 0,
         errorCount: 0,
         averageProcessingTime: 0,
-        lastProcessedAt: 0
+        lastProcessedAt: Date.now()
       };
       this.queueMetrics.set(queueId, metrics);
     }
@@ -221,11 +232,8 @@ export class CentralizedMatchmaker {
     const metrics = this.getOrCreateMetrics(queueId);
 
     if (state.isProcessing) {
-      const timeSinceStart = Date.now() - state.lastProcessed;
-      if (timeSinceStart < 500) {
-        console.log(`[CentralizedMatchmaker] Queue ${queueId} already processing recently (${timeSinceStart}ms ago)`);
-        return { success: false, gamesCreated: 0, errors: ['Queue already being processed'] };
-      }
+      console.log(`[CentralizedMatchmaker] Queue ${queueId} already being processed`);
+      return { success: false, gamesCreated: 0, errors: ['Queue already being processed'] };
     }
 
     const activeGames = this.gameManager.getActiveGameCount();
@@ -237,7 +245,6 @@ export class CentralizedMatchmaker {
 
     state.isProcessing = true;
     state.lastProcessed = Date.now();
-    state.priority = this.calculateQueuePriority(queuePlayers.get(queueId)?.length || 0, 1, metrics.lastProcessedAt);
 
     const errors: string[] = [];
     let gamesCreated = 0;
@@ -250,22 +257,18 @@ export class CentralizedMatchmaker {
       }
 
       const players = queuePlayers.get(queueId) || [];
+      state.priority = this.calculateQueuePriority(players.length, queue.maxPlayers, metrics.lastProcessedAt);
 
       if (players.length < queue.maxPlayers) {
         return { success: true, gamesCreated: 0 };
       }
 
-      const validationPromise = this.validatePlayers(players, queue);
-      const timeoutPromise = new Promise<string[]>((_, reject) =>
-        setTimeout(() => reject(new Error('Validation timeout')), 5000)
-      );
-
       let validPlayers: string[];
       try {
-        validPlayers = await Promise.race([validationPromise, timeoutPromise]);
-      } catch (validationError) {
+        validPlayers = await withTimeout(this.validatePlayers(players, queue), 5000, 'Validation');
+      } catch (validationError: any) {
         console.warn(`[CentralizedMatchmaker] Player validation failed for ${queueId}:`, validationError);
-        validPlayers = players;
+        return { success: false, gamesCreated: 0, errors: ['Player validation timed out'] };
       }
 
       if (validPlayers.length !== players.length) {
@@ -285,21 +288,20 @@ export class CentralizedMatchmaker {
         return { success: true, gamesCreated: 0 };
       }
 
-      const isPickingOverride = (queue.ispicking || queue.queueType === 'picking') && queue.maxPlayers <= 2;
-      if (isPickingOverride) {
+      const isPickingQueue = queueType === QueueType.PICKING;
+      if ((queue.ispicking || queue.queueType === 'picking') && queue.maxPlayers <= 2) {
         console.log(`[CentralizedMatchmaker] Using random queue for ${queue.maxPlayers}-player game (overriding picking mode)`);
       }
 
-      const processingPromise = queueType === QueueType.PICKING
+      const processingPromise: Promise<QueueProcessingResult> = isPickingQueue
         ? this.pickingQueueManager.processQueue(validPlayers, queue, maxGamesForThisQueue)
         : this.randomQueueManager.processQueue(validPlayers, queue, maxGamesForThisQueue);
 
-      const processingTimeoutPromise = new Promise<number>((_, reject) =>
-        setTimeout(() => reject(new Error('Processing timeout')), 30000)
-      );
-
+      let processingResult: QueueProcessingResult;
       try {
-        gamesCreated = await Promise.race([processingPromise, processingTimeoutPromise]);
+        processingResult = isPickingQueue
+          ? await processingPromise
+          : await withTimeout(processingPromise, 30000, 'Processing');
       } catch (processingError: any) {
         console.error(`[CentralizedMatchmaker] Processing error for ${queueId}:`, processingError);
         errors.push(`Processing failed: ${processingError.message}`);
@@ -320,15 +322,19 @@ export class CentralizedMatchmaker {
         return { success: false, gamesCreated: 0, errors };
       }
 
-      const usedPlayerCount = gamesCreated * queue.maxPlayers;
-      const remainingPlayers = validPlayers.slice(usedPlayerCount);
-      queuePlayers.set(queueId, remainingPlayers);
+      gamesCreated = processingResult.gamesCreated;
+
+      if (gamesCreated > 0) {
+        const usedPlayers = new Set(processingResult.usedPlayers);
+        const remainingPlayers = validPlayers.filter(p => !usedPlayers.has(p));
+        queuePlayers.set(queueId, remainingPlayers);
+      }
 
       state.retryCount = 0;
       state.errors = [];
       metrics.successCount++;
 
-      if (remainingPlayers.length >= queue.maxPlayers) {
+      if (gamesCreated > 0 && (queuePlayers.get(queueId)?.length || 0) >= queue.maxPlayers) {
         const delay = gamesCreated > 1 ? this.PROCESSING_DELAY * 1.5 : this.PROCESSING_DELAY;
         setTimeout(() => {
           this.scheduleQueueProcessing(queueId, false);
@@ -510,16 +516,18 @@ export class CentralizedMatchmaker {
         }
       }
 
-      const onlineCheck = await Promise.race([
-        this.wsManager.checkPlayerOnline(user.ign),
-        new Promise<{ online: boolean }>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout')), 3000)
-        )
-      ]).catch(() => ({ online: false }));
-
-      if (!onlineCheck.online) {
-        console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
-        return false;
+      try {
+        const onlineCheck = await withTimeout(
+          this.wsManager.checkPlayerOnline(user.ign),
+          3000,
+          'Online check'
+        );
+        if (!onlineCheck.online) {
+          console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
+          return false;
+        }
+      } catch (error: any) {
+        console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error.message}), keeping player in queue`);
       }
 
       return true;

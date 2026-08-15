@@ -30,12 +30,18 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ]
 });
 
 
 registerVcLeaveCleanupListener(client);
+
+if (!process.env.AUTH_KEY) {
+  console.error('[Bot] AUTH_KEY environment variable is not set. Refusing to start (WebSocket/API would be unauthenticated).');
+  process.exit(1);
+}
 
 const wsPort = parseInt(config.websocketport) || 8080; 
 const wsPath = '/rbw/websocket'; 
@@ -64,7 +70,14 @@ client.once('ready', async () => {
     const dbname = config.dbname;
     
     console.log('[MongoDB] Attempting MongoDB connection...');
-    console.log('[MongoDB] URI:', mongouri);
+    try {
+      const maskedUri = new URL(mongouri);
+      if (maskedUri.password) maskedUri.password = '***';
+      if (maskedUri.username) maskedUri.username = '***';
+      console.log('[MongoDB] URI:', maskedUri.toString());
+    } catch (uriError) {
+      console.log('[MongoDB] URI:', mongouri.split('@').pop());
+    }
 
 
     
@@ -110,14 +123,27 @@ client.once('ready', async () => {
     setInterval(async () => {
       const guild = client.guilds.cache.first();
       if (guild) {
-        await BanManager.autoUnban(guild);
-        await MuteManager.autoUnmute(guild);
+        try {
+          await BanManager.autoUnban(guild);
+          await MuteManager.autoUnmute(guild);
+        } catch (intervalError) {
+          console.error('[Bot] Error in auto-unban/unmute interval:', intervalError);
+        }
       }
     }, 60 * 1000); 
   } catch (error) {
     console.error('Error during startup:', error);
     process.exit(1);
   }
+});
+
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Bot] Unhandled promise rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[Bot] Uncaught exception:', error);
 });
 
 

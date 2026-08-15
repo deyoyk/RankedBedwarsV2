@@ -7,16 +7,15 @@ import UserModel from '../../models/User';
 export async function party(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let action: string;
   let targetUser: DiscordUser | undefined;
+  let extraArgs: string[] | undefined;
 
   if (interaction instanceof ChatInputCommandInteraction) {
     action = interaction.options.getString('action', true);
-    const targetUserId = interaction.options.getUser('user')?.id;
-    if (targetUserId) {
-      const foundUser = await UserModel.findOne({ discordId: targetUserId });
-      if (foundUser) {
-        targetUser = interaction.client.users.cache.get(foundUser.discordId);
-      }
-    }
+    targetUser = interaction.options.getUser('user') || undefined;
+    const partyId = interaction.options.getString('party_id');
+    const argsString = interaction.options.getString('args');
+    if (partyId) extraArgs = ['join', partyId];
+    else if (argsString) extraArgs = argsString.split(/\s+/);
   } else {
     if (!args || args.length < 1) {
       await safeReply(interaction, errorEmbed('Usage: =party <action> [user]', 'Party Usage Error'));
@@ -24,9 +23,17 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
     }
     action = args[0];
     if (args[1]) {
-      const foundUser = await UserModel.findOne({ discordId: args[1] });
-      if (foundUser) {
-        targetUser = interaction.client.users.cache.get(foundUser.discordId);
+      const mentionMatch = args[1].match(/^<@!?(\d+)>$/);
+      if (mentionMatch) {
+        const foundUser = await UserModel.findOne({ discordId: mentionMatch[1] });
+        if (foundUser) {
+          targetUser = interaction.client.users.cache.get(foundUser.discordId);
+        }
+      } else {
+        const foundUser = await UserModel.findOne({ discordId: args[1] });
+        if (foundUser) {
+          targetUser = interaction.client.users.cache.get(foundUser.discordId);
+        }
       }
     }
   }
@@ -75,17 +82,20 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
         await handlePromoteToLeader(interaction, userId, targetUser.id);
         break;
       case 'settings':
-        await handlePartySettings(interaction, userId, args?.slice(1));
+        await handlePartySettings(interaction, userId, extraArgs);
         break;
       case 'list':
         await handleListParties(interaction);
         break;
       case 'join':
-        if (!args || args.length < 2) {
+        const partyIdToJoin = interaction instanceof ChatInputCommandInteraction
+          ? interaction.options.getString('party_id')
+          : extraArgs?.[1];
+        if (!partyIdToJoin) {
           await safeReply(interaction, errorEmbed('Usage: =party join <partyId>', 'Party Usage Error'));
           return;
         }
-        await handleJoinParty(interaction, userId, args[1], guild);
+        await handleJoinParty(interaction, userId, partyIdToJoin, guild);
         break;
       default:
         await safeReply(interaction, errorEmbed('Invalid action! Use: create, invite, leave, info, disband, kick, promote, settings, list, or join', 'Party Error'));

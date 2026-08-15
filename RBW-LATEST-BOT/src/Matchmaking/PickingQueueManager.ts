@@ -13,7 +13,7 @@ import {
 import User from '../models/User';
 import Party from '../models/Party';
 import config from '../config/config';
-import { PickingSession, GameResources } from '../types/GameTypes';
+import { PickingSession, GameResources, QueueProcessingResult } from '../types/GameTypes';
 import { GameManager } from './GameManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
@@ -237,9 +237,10 @@ export class PickingQueueManager {
     players: string[], 
     queueData: any, 
     maxGames: number = 5
-  ): Promise<number> {
+  ): Promise<QueueProcessingResult> {
     try {
       let gamesCreated = 0;
+      const usedPlayers: string[] = [];
       let availablePlayers = [...players];
 
       console.log(`[PickingQueue] Processing ${availablePlayers.length} players, max ${maxGames} games`);
@@ -264,6 +265,7 @@ export class PickingQueueManager {
           if (pickingResult.success) {
             
             availablePlayers = availablePlayers.filter(p => !selectedPlayers.includes(p));
+            usedPlayers.push(...selectedPlayers);
             gamesCreated++;
 
             console.log(`[PickingQueue] Created game ${gameId}, ${availablePlayers.length} players remaining`);
@@ -283,11 +285,11 @@ export class PickingQueueManager {
         }
       }
 
-      return gamesCreated;
+      return { gamesCreated, usedPlayers };
 
     } catch (error) {
       console.error(`[PickingQueue] Error processing queue:`, error);
-      return 0;
+      return { gamesCreated: 0, usedPlayers: [] };
     }
   }
 
@@ -321,8 +323,8 @@ export class PickingQueueManager {
         }
       }
       
-      let team1 = [captains[0]];
-      let team2 = [captains[1]];
+      const team1 = [captains[0]];
+      const team2 = [captains[1]];
       let remainingPlayers = players.filter(p => !captains.includes(p));
 
       if (partyInfo.size > 0) {
@@ -1061,9 +1063,9 @@ export class PickingQueueManager {
       const allPlayers = [...session.team1, ...session.team2, ...session.remainingPlayers];
       const uniquePlayers = [...new Set(allPlayers)];
       
-      let emergencyTeam1 = [captains[0]];
-      let emergencyTeam2 = [captains[1]];
-      let remaining = uniquePlayers.filter(p => !captains.includes(p));
+      const emergencyTeam1 = [captains[0]];
+      const emergencyTeam2 = [captains[1]];
+      const remaining = uniquePlayers.filter(p => !captains.includes(p));
       
       
       for (let i = 0; i < remaining.length; i++) {

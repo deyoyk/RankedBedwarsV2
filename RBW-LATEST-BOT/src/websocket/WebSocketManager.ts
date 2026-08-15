@@ -305,6 +305,7 @@ export class WebSocketManager {
   private globalHandlers: { [type: string]: ((msg: any) => void) | undefined } = {};
   private gameManager: any = null;
   private queueStatusInterval: NodeJS.Timeout | null = null;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
 
   // fallow-ignore-next-line unused-class-member
@@ -322,6 +323,14 @@ export class WebSocketManager {
       });
       this.send({ type: 'screensharedontlog', ign, uuid });
     });
+  }
+
+  public registerScreenshareThread(info: { ign: string; sessionId: string; threadId: string; expiresAt: number }): void {
+    activeScreenshareThreads[info.ign.toLowerCase()] = info;
+  }
+
+  public unregisterScreenshareThread(ign: string): void {
+    delete activeScreenshareThreads[String(ign).toLowerCase()];
   }
   
   private permissions: Record<string, string[]> = {};
@@ -352,6 +361,14 @@ export class WebSocketManager {
       
       // Store the connection but don't assign to this.client until authenticated
       let isAuthenticated = false;
+
+      ws.on('error', (error) => {
+        console.error('[WebSocketManager] WebSocket connection error:', error.message || error);
+        try {
+          ws.close();
+        } catch (closeError) {
+        }
+      });
       
       ws.on('message', (data) => {
         if (!isAuthenticated) {
@@ -366,9 +383,19 @@ export class WebSocketManager {
             return;
           }
           
-          if (msg.type === 'auth' && msg.auth_key === process.env.AUTH_KEY) {
+          if (msg.type === 'auth' && process.env.AUTH_KEY && msg.auth_key === process.env.AUTH_KEY) {
             isAuthenticated = true;
+            if (this.client && this.client !== ws) {
+              console.warn('[WebSocketManager] Replacing existing authenticated client with new connection');
+              try {
+                this.client.removeAllListeners('close');
+                this.client.close();
+              } catch (oldClientError: any) {
+                console.warn('[WebSocketManager] Failed to close previous client:', oldClientError.message || oldClientError);
+              }
+            }
             this.client = ws; 
+            this.startQueueStatusBroadcast();
             console.log('[WebSocketManager] Client authenticated successfully');
             ws.send(JSON.stringify({ type: 'auth_success', message: 'Authentication successful' }));
           } else {
@@ -385,14 +412,36 @@ export class WebSocketManager {
       ws.on('close', () => {
         if (this.client === ws) {
           this.client = null;
+          this.stopQueueStatusBroadcast();
         }
-        this.stopQueueStatusBroadcast();
       });
     });
     
     
     this.startServer(port, path);
     this.startQueueStatusBroadcast();
+    this.startHeartbeat();
+  }
+  
+  private startHeartbeat(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+    }
+    this.heartbeatInterval = setInterval(async () => {
+      const client = this.client;
+      if (!client || client.readyState !== client.OPEN) return;
+      const ping = await this.getPing().catch(() => null);
+      if (ping === null && this.client === client) {
+        console.warn('[WebSocketManager] Client heartbeat failed, closing dead connection');
+        this.client = null;
+        try {
+          client.removeAllListeners('close');
+          client.close();
+        } catch (closeError) {
+        }
+        this.stopQueueStatusBroadcast();
+      }
+    }, 30000);
   }
   
   private startServer(port: number, path?: string): void {
@@ -420,7 +469,7 @@ export class WebSocketManager {
     
     if (msg.type === 'auth') {
       const authMsg = msg as { type: 'auth'; auth_key: string };
-      if (authMsg.auth_key === process.env.AUTH_KEY) {
+      if (process.env.AUTH_KEY && authMsg.auth_key === process.env.AUTH_KEY) {
         this.send({ type: 'auth_success', message: 'Authentication successful' });
         console.log('[WebSocketManager] Authentication successful');
       } else {
@@ -525,7 +574,7 @@ export class WebSocketManager {
     (async () => {
       try {
         const gameIdRaw = msg.game_id || msg.gameid;
-        let gameId = gameIdRaw;
+        const gameId = gameIdRaw;
 
         const Game = (await import('../models/Game')).default;
         const game = await Game.findOne({ gameId: parseInt(gameId) });
@@ -590,7 +639,7 @@ export class WebSocketManager {
   }
 
   private handlePlayerStatus(msg: any) {
-    const ign = msg.ign;
+    const ign = typeof msg.ign === 'string' ? msg.ign.toLowerCase() : '';
     const cb = this.checkPlayerCallbacks.get(ign);
     if (cb) {
       cb(msg.online, msg.original_ign_case);
@@ -609,14 +658,14 @@ export class WebSocketManager {
     }
   }
 
-  private determineWinningTeam(msg: any): number {
-    if (msg.winningTeamNumber) return msg.winningTeamNumber;
+  private determineWinningTeam(msg: any): number | undefined {
+    if (msg.winningTeamNumber != null && msg.winningTeamNumber !== 0) return msg.winningTeamNumber;
     if (msg.winningteamignlist && Array.isArray(msg.winningteamignlist)) {
-      console.log(`[WebSocketManager] Winning team IGNs: ${msg.winningteamignlist.join(', ')}`);
-      return 1;
+      console.log(`[WebSocketManager] Winning team determined from IGNs: ${msg.winningteamignlist.join(', ')}`);
+      return undefined;
     }
     console.error('[WebSocketManager] No winning team information provided');
-    return 1;
+    return undefined;
   }
 
   private calculateMvpsFromStats(players: any, msgMvps?: string[]): string[] {
@@ -656,7 +705,7 @@ export class WebSocketManager {
   }
 
   private handleScoring(msg: any) {
-    console.log('[WebSocketManager] Received scoring JSON:', JSON.stringify(msg, null, 2));
+    console.log(`[WebSocketManager] Received scoring message for game ${msg.gameid}`);
     
     if (!this.gameManager) {
       console.error('[WebSocketManager] GameManager not available for scoring');
@@ -664,17 +713,23 @@ export class WebSocketManager {
     }
     
     const { gameid, winningteamignlist, players, mvps: msgMvps, bedsbroken: msgBedsbroken } = msg;
+    const gameIdNum = parseInt(gameid, 10);
+    if (isNaN(gameIdNum) || gameIdNum <= 0) {
+      console.error('[WebSocketManager] Invalid game ID in scoring message:', gameid);
+      return;
+    }
+
     const winningTeam = this.determineWinningTeam(msg);
     const mvps = this.calculateMvpsFromStats(players, msgMvps);
-    const bedbreaks: string[] = msgBedsbroken || [];
+    const bedbreaks: string[] = Array.isArray(msgBedsbroken) ? msgBedsbroken : [];
     const playerData = this.buildPlayerData(players, bedbreaks);
 
     (async () => {
       try {
         await this.gameManager!.scoreGame({
-          gameId: parseInt(gameid),
+          gameId: gameIdNum,
           winningTeam,
-          winningTeamIGNs: winningteamignlist || [],
+          winningTeamIGNs: Array.isArray(winningteamignlist) ? winningteamignlist : [],
           mvps,
           bedbreaks,
           playerData,
@@ -724,20 +779,25 @@ export class WebSocketManager {
 
   public send(payload: object) {
     if (this.client && this.client.readyState === this.client.OPEN) {
-      this.client.send(JSON.stringify(payload));
+      try {
+        this.client.send(JSON.stringify(payload));
+      } catch (error: any) {
+        console.error('[WebSocketManager] Failed to send message:', error.message || error);
+      }
     }
   }
   // WIERD ASS AUTH METHOD. IF IT WORKS IT WORKS.
   public async checkPlayerOnline(ign: string): Promise<{ online: boolean; original_ign_case?: string }> {
     return new Promise((resolve) => {
+      const normalizedIgn = ign.toLowerCase();
       const timeout = setTimeout(() => {
-        this.checkPlayerCallbacks.delete(ign);
+        this.checkPlayerCallbacks.delete(normalizedIgn);
         resolve({ online: false });
       }, 10000);
 
-      this.checkPlayerCallbacks.set(ign, (online, original_ign_case) => {
+      this.checkPlayerCallbacks.set(normalizedIgn, (online, original_ign_case) => {
         clearTimeout(timeout);
-        this.checkPlayerCallbacks.delete(ign);
+        this.checkPlayerCallbacks.delete(normalizedIgn);
         resolve({ online, original_ign_case });
       });
       this.send({ type: 'check_player', ign });
@@ -1007,6 +1067,7 @@ export class WebSocketManager {
       
       const Queue = (await import('../models/Queue')).default;
       const suitableQueues = await Queue.find({
+        isActive: true,
         minElo: { $lte: user.elo },
         maxElo: { $gte: user.elo }
       });
@@ -1108,6 +1169,9 @@ export class WebSocketManager {
   }
 
   private startQueueStatusBroadcast(): void {
+    if (this.queueStatusInterval) {
+      return;
+    }
     
     this.queueStatusInterval = setInterval(async () => {
       try {
@@ -1115,7 +1179,7 @@ export class WebSocketManager {
       } catch (error) {
         console.error('[WebSocketManager] Error broadcasting queue status:', error);
       }
-    }, 1000); 
+    }, 3000); 
 
     console.log('[WebSocketManager] Queue status broadcast started');
   }

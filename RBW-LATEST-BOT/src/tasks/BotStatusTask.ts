@@ -13,6 +13,8 @@ export class BotStatusTask {
   private startTime: Date;
   private statusImagePath: string;
   private statusImageCdnUrl: string | null = null;
+  private lastCpuSample: { idle: number; total: number } | null = null;
+  private isUpdating = false;
 
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
@@ -33,9 +35,9 @@ export class BotStatusTask {
       
       this.updateInterval = setInterval(async () => {
         await this.updateStatusEmbed();
-      }, 5 * 1000); 
+      }, 30 * 1000); 
 
-      console.log('[BotStatusTask] Started with 5-second updates');
+      console.log('[BotStatusTask] Started with 30-second updates');
     } catch (error) {
       console.error('[BotStatusTask] Error starting status task:', error);
     }
@@ -64,6 +66,8 @@ export class BotStatusTask {
   }
 
   private async updateStatusEmbed() {
+    if (this.isUpdating) return;
+    this.isUpdating = true;
     try {
       if (!this.statusMessage) {
         console.log('[BotStatusTask] No status message found, creating new one');
@@ -78,6 +82,8 @@ export class BotStatusTask {
       console.error('[BotStatusTask] Error updating status embed:', error);
       
       await this.sendStatusEmbed();
+    } finally {
+      this.isUpdating = false;
     }
   }
 
@@ -182,7 +188,7 @@ export class BotStatusTask {
       const Queue = (await import('../models/Queue')).default;
       const queues = await Queue.find();
       
-      let total = queues.length;
+      const total = queues.length;
       let ranked = 0;
       let unranked = 0;
 
@@ -276,12 +282,20 @@ export class BotStatusTask {
     
     const idle = totalIdle / cpus.length;
     const total = totalTick / cpus.length;
-    
-    
-    const usage = 100 - ~~(100 * idle / total);
-    
-    
-    return Math.max(0.5, Math.min(3.0, usage || 1.0));
+
+    if (!this.lastCpuSample) {
+      this.lastCpuSample = { idle, total };
+      return 0;
+    }
+
+    const idleDelta = idle - this.lastCpuSample.idle;
+    const totalDelta = total - this.lastCpuSample.total;
+    this.lastCpuSample = { idle, total };
+
+    if (totalDelta <= 0) return 0;
+    const usage = 100 - (100 * idleDelta) / totalDelta;
+
+    return Math.max(0, Math.min(100, usage));
   }
 
   private getEnvironmentStatus() {

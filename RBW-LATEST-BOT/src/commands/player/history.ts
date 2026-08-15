@@ -118,9 +118,14 @@ Moderator: ${item.moderator}
     const row = buildPaginationRow(currentPage);
 
     const message = await safeReply(interaction, { embeds: [embed], components: [row], fetchReply: true });
+    const ownerId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
     const collector = message.createMessageComponentCollector({ time: 60000 });
 
     collector.on('collect', async (buttonInteraction) => {
+      if (buttonInteraction.user.id !== ownerId) {
+        await buttonInteraction.reply({ content: 'You can only use your own history buttons!', ephemeral: true });
+        return;
+      }
       if (buttonInteraction.customId === 'prev_page' && currentPage > 0) {
         currentPage--;
       } else if (buttonInteraction.customId === 'next_page' && currentPage < Math.ceil(historyItems.length / itemsPerPage) - 1) {

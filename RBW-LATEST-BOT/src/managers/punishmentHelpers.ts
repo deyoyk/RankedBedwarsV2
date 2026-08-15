@@ -151,26 +151,35 @@ export async function autoExpirePunishments(
   config: AutoExpireConfig
 ): Promise<number> {
   const now = new Date();
-  const users = await User.find({
-    [config.statusField]: true,
-    [`${config.recordsField}.0`]: { $exists: true }
-  }).select(`discordId ${config.recordsField} ign`).limit(100);
-
   const expiredUsers: Array<{ user: any; lastRecord: any }> = [];
+  const BATCH_SIZE = 100;
 
-  for (const user of users) {
-    try {
-      const records = user[config.recordsField] as any[];
-      const lastRecord = records[records.length - 1];
-      if (lastRecord && lastRecord.duration > 0) {
-        const expiry = new Date(lastRecord.date.getTime() + lastRecord.duration * 60000);
-        if (now >= expiry) {
-          expiredUsers.push({ user, lastRecord });
+  let skip = 0;
+  while (true) {
+    const users = await User.find({
+      [config.statusField]: true,
+      [`${config.recordsField}.0`]: { $exists: true }
+    }).select(`discordId ${config.recordsField} ign`).limit(BATCH_SIZE).skip(skip);
+
+    if (users.length === 0) break;
+    skip += users.length;
+
+    for (const user of users) {
+      try {
+        const records = user[config.recordsField] as any[];
+        const lastRecord = records[records.length - 1];
+        if (lastRecord && lastRecord.duration > 0) {
+          const expiry = new Date(lastRecord.date.getTime() + lastRecord.duration * 60000);
+          if (now >= expiry) {
+            expiredUsers.push({ user, lastRecord });
+          }
         }
+      } catch (error) {
+        console.error(`[${config.logPrefix}] Error checking expiry for user ${user.discordId}:`, error);
       }
-    } catch (error) {
-      console.error(`[${config.logPrefix}] Error checking expiry for user ${user.discordId}:`, error);
     }
+
+    if (users.length < BATCH_SIZE) break;
   }
 
   const count = await batchProcessExpired(

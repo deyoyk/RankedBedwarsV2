@@ -57,7 +57,21 @@ public class SsCmd implements CommandExecutor {
 
         addPendingRequest(uuid, player);
         player.sendMessage(ChatColor.GREEN + "SS request sent to " + ChatColor.YELLOW + targetIgn + ChatColor.GREEN + "! Waiting for response...");
+        scheduleRequestExpiry(uuid);
         return true;
+    }
+
+    /**
+     * Cleans up the pending request after a timeout so the map never grows
+     * unbounded when the bot never replies.
+     */
+    private void scheduleRequestExpiry(String uuid) {
+        plugin.getServer().getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+            Player pending = pendingSsRequests.remove(uuid);
+            if (pending != null && pending.isOnline()) {
+                pending.sendMessage(ChatColor.RED + "SS request timed out.");
+            }
+        }, 20L * 30);
     }
 
     public void handleAutossSuccess(String uuid) {

@@ -85,8 +85,8 @@ export async function fix(guild: Guild, discordId: string) {
         nickname = `[${user.elo}] ${user.ign}`;
       }
 
-      if (user.nick && user.nick.trim() !== '') {
-        nickname += ` | ${user.nick}`;
+      if (user.settings?.nick && user.settings.nick.trim() !== '') {
+        nickname += ` | ${user.settings.nick}`;
       }
     }
 

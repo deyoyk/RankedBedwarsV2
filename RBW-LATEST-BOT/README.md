@@ -6,5 +6,13 @@ this bot was originally made for HestiaRBW since the owner was a dickhead i quit
 
 please follow same structure and variables naming method as the current codebase. before making any pull requests make sure the code is well tested and error free (logical and run time)
 
+# testing
+
+```bash
+npm test        # run the jest test suite (tests/ directory)
+npm run lint    # eslint (flat config, eslint.config.mjs)
+npm run build   # tsup build to dist/
+```
+
 
 

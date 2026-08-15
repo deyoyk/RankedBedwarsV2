@@ -405,7 +405,10 @@ export class PartyService {
     try {
       const member = await guild.members.fetch(memberId);
       if (member) {
-        await member.roles.remove([roles[2], roles[3], roles[4]]);
+        const roleIdsToRemove = [roles[2], roles[3], roles[4]].filter((roleId): roleId is string => !!roleId);
+        if (roleIdsToRemove.length > 0) {
+          await member.roles.remove(roleIdsToRemove);
+        }
         if (targetRole) {
           await member.roles.add(targetRole);
         }
@@ -421,9 +424,9 @@ export class PartyService {
       const partySize = memberIds.length;
       const targetRole = partySize >= 4 ? roles[4] : partySize >= 3 ? roles[3] : partySize >= 2 ? roles[2] : null;
 
-      for (const memberId of memberIds) {
-        await this.updateRolesForMember(memberId, guild, roles, targetRole);
-      }
+      await Promise.allSettled(memberIds.map(memberId =>
+        this.updateRolesForMember(memberId, guild, roles, targetRole)
+      ));
     } catch (error) {
       console.error('[PartyService] Error updating party roles:', error);
     }
@@ -433,9 +436,9 @@ export class PartyService {
     try {
       const roles = this.getPartyRoles();
 
-      for (const memberId of memberIds) {
-        await this.updateRolesForMember(memberId, guild, roles, null);
-      }
+      await Promise.allSettled(memberIds.map(memberId =>
+        this.updateRolesForMember(memberId, guild, roles, null)
+      ));
     } catch (error) {
       console.error('[PartyService] Error removing party roles:', error);
     }

@@ -27,18 +27,23 @@ export async function paginate(interaction: Message | ChatInputCommandInteractio
 
   try {
     const skip = Math.max(0, (page - 1) * config.perPage);
-    const { items, total, buildEmbed } = await config.fetchPage(skip, config.perPage);
+    let { items, total, buildEmbed } = await config.fetchPage(skip, config.perPage);
+
+    const totalPages = Math.max(1, Math.ceil(total / config.perPage));
+    if (page < 1) page = 1;
+    if (page > totalPages) {
+      page = totalPages;
+      const clampedResult = await config.fetchPage((page - 1) * config.perPage, config.perPage);
+      items = clampedResult.items;
+      buildEmbed = clampedResult.buildEmbed;
+    }
 
     if (items.length === 0) {
       await safeReply(interaction, errorEmbed(config.emptyMessage, config.emptyTitle));
       return;
     }
 
-    const totalPages = Math.max(1, Math.ceil(total / config.perPage));
-    if (page < 1) page = 1;
-    if (page > totalPages) page = totalPages;
-
-    const embed = buildEmbed(items, page, totalPages, total, skip);
+    const embed = buildEmbed(items, page, totalPages, total, (page - 1) * config.perPage);
     const row = buildPaginationRow(config.commandName, page, totalPages);
 
     const response = await safeReply(interaction, {

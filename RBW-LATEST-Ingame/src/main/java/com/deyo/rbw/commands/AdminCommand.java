@@ -156,7 +156,9 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         CommandSender sender = pingSenders.remove(pingId);
         if (sent != null && sender != null) {
             long latency = System.currentTimeMillis() - sent;
-            sender.sendMessage(ChatColor.GOLD + "WebSocket server ping: " + ChatColor.GREEN + latency + " ms");
+            plugin.getServer().getScheduler().runTask(plugin, () ->
+                sender.sendMessage(ChatColor.GOLD + "WebSocket server ping: " + ChatColor.GREEN + latency + " ms")
+            );
         }
     }
 

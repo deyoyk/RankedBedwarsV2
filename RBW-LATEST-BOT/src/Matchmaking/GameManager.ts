@@ -3,6 +3,7 @@ import Game, { IGame } from '../models/Game';
 import User, { IUser } from '../models/User';
 import Queue from '../models/Queue';
 import EloRank, { IEloRank } from '../models/EloRank';
+import { getNextSequence, Counter } from '../models/Counter';
 import config from '../config/config';
 import { GameState, GameResources, WarpRequestData, GameResult, VoidResult, PlayerData } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
@@ -17,7 +18,6 @@ import { WorkersManager } from '../managers/WorkersManager';
 import { updateDailyElo } from '../utils/userStats';
 
 import axios from 'axios';
-import { getNextSequence } from '../models/Counter';
 
 interface PlayerScoreData {
   player: IUser;
@@ -239,7 +239,13 @@ export class GameManager {
     } catch (error) {
       console.error('[GameManager] Error getting next game ID:', error);
       const lastGame = await Game.findOne().sort({ gameId: -1 }).select('gameId');
-      return (lastGame?.gameId || 0) + 1;
+      const nextId = (lastGame?.gameId || 0) + 1;
+      try {
+        await Counter.updateOne({ _id: 'gameId' }, { $set: { seq: nextId } }, { upsert: true });
+      } catch (counterError) {
+        console.error('[GameManager] Failed to persist fallback game ID counter:', counterError);
+      }
+      return nextId;
     }
   }
 
@@ -274,18 +280,7 @@ export class GameManager {
       const team1IGNs = await this.getPlayerIGNs(game.team1);
       const team2IGNs = await this.getPlayerIGNs(game.team2);
 
-      this.wsManager.send({
-        type: 'warp_players',
-        game_id: gameId.toString(),
-        map: game.map,
-        is_ranked: game.isRanked || false,
-        team1: {
-          players: team1IGNs
-        },
-        team2: {
-          players: team2IGNs
-        }
-      });
+      this.sendWarpRequest(gameId.toString(), game.map, game.isRanked || false, team1IGNs, team2IGNs);
 
       console.log(`[GameManager] Initiated warp request for game ${gameId} with map ${game.map}`);
     } catch (error) {
@@ -664,12 +659,22 @@ export class GameManager {
       const warpData = this.warpRequests.get(gameId);
       if (!warpData) return;
 
+      if (warpData.retrying) {
+        console.log(`[GameManager] Warp retry already in progress for game ${gameId}, ignoring duplicate failure`);
+        return;
+      }
+
+      clearTimeout(warpData.timeout);
+
       if (warpData.attempts < this.MAX_WARP_RETRIES) {
 
         warpData.attempts++;
+        warpData.retrying = true;
+        warpData.timeout = setTimeout(() => this.handleWarpTimeout(gameId), this.WARP_TIMEOUT);
         console.log(`[GameManager] Retrying warp for game ${gameId} (attempt ${warpData.attempts})`);
 
         setTimeout(() => {
+          warpData.retrying = false;
           this.wsManager.send({
             type: 'warp_players',
             game_id: gameId,
@@ -688,6 +693,7 @@ export class GameManager {
       } else {
 
         console.log(`[GameManager] Max warp retries reached for game ${gameId}, voiding game`);
+        this.warpRequests.delete(gameId);
         await this.voidGame(parseInt(gameId), `Warp failed: ${reason}`);
       }
 
@@ -875,7 +881,7 @@ export class GameManager {
 
       for (const player of players) {
         if (player.ign) {
-          ignToId[player.ign] = player.discordId;
+          ignToId[player.ign.toLowerCase()] = player.discordId;
           idToIgn[player.discordId] = player.ign;
         }
       }
@@ -884,8 +890,12 @@ export class GameManager {
 
       if (gameResult.winningTeamIGNs && gameResult.winningTeamIGNs.length > 0) {
         const winningPlayerIds = gameResult.winningTeamIGNs
-          .map(ign => ignToId[ign])
+          .map(ign => ignToId[String(ign).toLowerCase()])
           .filter(Boolean);
+
+        if (winningPlayerIds.length === 0) {
+          throw new Error(`Winning team could not be determined from IGNs: ${gameResult.winningTeamIGNs.join(', ')}`);
+        }
 
         if (winningPlayerIds.length > 0) {
           const team1Winners = winningPlayerIds.filter(id => game.team1.includes(id));
@@ -898,7 +908,7 @@ export class GameManager {
           } else if (team1Winners.length > 0) {
             winningTeam = 1;
           } else {
-            winningTeam = 2;
+            throw new Error('Winning team could not be determined from IGNs');
           }
 
           console.log(`[GameManager] Determined winning team ${winningTeam} from IGNs: ${gameResult.winningTeamIGNs.join(', ')}`);
@@ -909,8 +919,13 @@ export class GameManager {
         throw new Error('Winning team must be 1 or 2');
       }
 
-      const mvpsIds = gameResult.mvps.map(ign => ignToId[ign]).filter(Boolean);
-      const bedbreaksIds = (gameResult.bedbreaks || []).map(ign => ignToId[ign]).filter(Boolean);
+      const mvpsIds = (gameResult.mvps || []).map(ign => ignToId[String(ign).toLowerCase()]).filter(Boolean);
+      const bedbreaksIds = (gameResult.bedbreaks || []).map(ign => ignToId[String(ign).toLowerCase()]).filter(Boolean);
+
+      const playerData: Record<string, PlayerData> = {};
+      for (const [ign, data] of Object.entries(gameResult.playerData || {})) {
+        playerData[ign.toLowerCase()] = data;
+      }
 
       return {
         game,
@@ -921,7 +936,7 @@ export class GameManager {
         mvpsIds,
         bedbreaksIds,
         winningTeam,
-        playerData: gameResult.playerData || {}
+        playerData
       };
 
     } catch (error) {
@@ -999,9 +1014,9 @@ export class GameManager {
       }
 
       const playerIgn = context.idToIgn[player.discordId];
-      const stats = { ...(context.playerData[playerIgn] || {}) };
+      const stats = { ...(playerIgn ? context.playerData[playerIgn.toLowerCase()] || {} : {}) };
       if (isBedBreaker) {
-        stats.bedBroken = (typeof stats.bedBroken === 'number' ? stats.bedBroken : 0) + 1;
+        stats.bedBroken = Math.max(typeof stats.bedBroken === 'number' ? stats.bedBroken : 0, 1);
       }
 
       return this.buildPlayerScoreData(player, isWinner, isMvp, isBedBreaker, eloChange, stats);
@@ -1197,6 +1212,8 @@ export class GameManager {
         queueid: typeof game.queueId === 'number' ? game.queueId : parseInt(game.queueId as any, 10),
         map: game.map,
         eloGain: scoreData.eloChange,
+        oldElo: scoreData.oldElo,
+        newElo: scoreData.newElo,
         kills: scoreData.stats.kills || 0,
         deaths: scoreData.stats.deaths || 0,
         bedBroken: scoreData.stats.bedBroken || 0,
@@ -1425,6 +1442,7 @@ export class GameManager {
 
       const oldElo = player.elo;
       let eloChange = 0;
+      let restoredElo: number | null = null;
       let gameStats: any = null;
       let experienceToRevert = 0;
 
@@ -1435,7 +1453,11 @@ export class GameManager {
         gameStats = recentGame;
 
         if (recentGame.state === 'scored') {
-          eloChange = -recentGame.eloGain;
+          if (typeof recentGame.oldElo === 'number') {
+            restoredElo = recentGame.oldElo;
+          } else {
+            eloChange = -recentGame.eloGain;
+          }
 
           experienceToRevert = this.calculateExperienceGained(
             recentGame.won || false,
@@ -1454,7 +1476,7 @@ export class GameManager {
         experienceToRevert = 0;
       }
 
-      const newElo = Math.max(0, player.elo + eloChange);
+      const newElo = restoredElo !== null ? restoredElo : Math.max(0, player.elo + eloChange);
 
       const currentExperience = player.experience || 0;
       const newExperience = Math.max(0, currentExperience - experienceToRevert);
@@ -1512,8 +1534,10 @@ export class GameManager {
     }
     if (gameStats.won === true) {
       player.wins = Math.max(0, (player.wins || 0) - 1);
+      player.winstreak = Math.max(0, (player.winstreak || 0) - 1);
     } else if (gameStats.won === false) {
       player.losses = Math.max(0, (player.losses || 0) - 1);
+      player.losestreak = Math.max(0, (player.losestreak || 0) - 1);
     }
     if (gameStats.ismvp) {
       player.mvps = Math.max(0, (player.mvps || 0) - 1);
@@ -1531,6 +1555,7 @@ export class GameManager {
 
       if (gameStats.state !== 'scored') {
         console.warn(`[GameManager] Game ${gameStats.gameId} for player ${player.discordId} is not in scored state: ${gameStats.state}`);
+        player.games = Math.max(0, (player.games || 0) - 1);
         return;
       }
 
@@ -1671,7 +1696,8 @@ export class GameManager {
 
       const voidedSummary = playerVoidData.map(formatPlayer).join('\n');
       const rawMap = context.game.map; 
-      const mapName = rawMap.split(/(\d+v\d+)/).pop(); 
+      const versionMatch = rawMap.match(/(\d+v\d+)/);
+      const mapName = versionMatch ? rawMap.slice(0, versionMatch.index).trim() || rawMap : rawMap;
       return new EmbedBuilder()
         .setTitle(`Game #${context.game.gameId} Voided`)
         .setDescription(`**Reason:** ${context.reason}\n**Map:** ${mapName}`)

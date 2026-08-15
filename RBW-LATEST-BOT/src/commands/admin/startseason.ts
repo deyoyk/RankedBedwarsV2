@@ -7,6 +7,8 @@ export async function executeStartSeason(interaction: ChatInputCommandInteractio
   const name = interaction.options.getString('name', true);
   const description = interaction.options.getString('description') || '';
 
+  await interaction.deferReply({ ephemeral: true });
+
   try {
     const result = await SeasonManager.startSeason({
       seasonNumber,
@@ -16,18 +18,14 @@ export async function executeStartSeason(interaction: ChatInputCommandInteractio
     });
 
     if (result.embed) {
-      await interaction.reply({ embeds: [result.embed], ephemeral: !result.success });
+      await interaction.editReply({ embeds: [result.embed] });
     } else {
-      await interaction.reply({ content: result.message, ephemeral: !result.success });
+      await interaction.editReply({ content: result.message });
     }
   } catch (error) {
     console.error('Error starting season:', error);
-    
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ 
-        content: 'An error occurred while starting the season. Please check the logs and try again.', 
-        ephemeral: true 
-      });
-    }
+    await interaction.editReply({
+      content: 'An error occurred while starting the season. Please check the logs and try again.'
+    }).catch(() => {});
   }
 }

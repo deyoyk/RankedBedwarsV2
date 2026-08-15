@@ -148,4 +148,8 @@ public class APIClient {
     private LeaderboardEntry createDefaultLeaderboardEntry() {
         return new LeaderboardEntry("Unknown", 0.0);
     }
+
+    public void shutdown() {
+        executor.shutdownNow();
+    }
 }

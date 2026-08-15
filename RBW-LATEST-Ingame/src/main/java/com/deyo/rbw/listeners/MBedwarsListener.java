@@ -143,7 +143,7 @@ public class MBedwarsListener implements Listener {
         String arenaName = arena.getName();
         plugin.debug("Round ended in arena: " + arenaName);
         GameInstance gameInstance = gameInstances.get(arenaName);
-        if (gameInstance == null || event.getArena().getPlayers().isEmpty()) return;
+        if (gameInstance == null) return;
         Team winningTeam = null;
         for (Team team : arena.getEnabledTeams()) {
             if (!arena.isBedDestroyed(team) || arena.getPlayersInTeam(team).size() > 0) {

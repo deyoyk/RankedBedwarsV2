@@ -18,10 +18,11 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
     targetId = user.id;
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =lose <userId>', 'Lose Usage Error'));
+      await safeReply(interaction, errorEmbed('Usage: =lose <@user>', 'Lose Usage Error'));
       return;
     }
-    targetId = args[0];
+    const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
+    targetId = mentionMatch ? mentionMatch[1] : args[0];
   }
 
   try {

@@ -22,6 +22,7 @@ export interface WarpRequestData {
   gameId: string;
   timeout: NodeJS.Timeout;
   attempts: number;
+  retrying?: boolean;
   team1IGNs: string[];
   team2IGNs: string[];
   map: string;
@@ -61,6 +62,11 @@ export interface MatchmakingResult {
   success: boolean;
   gamesCreated: number;
   errors?: string[];
+}
+
+export interface QueueProcessingResult {
+  gamesCreated: number;
+  usedPlayers: string[];
 }
 
 export interface TeamBalanceResult {

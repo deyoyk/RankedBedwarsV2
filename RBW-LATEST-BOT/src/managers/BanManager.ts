@@ -47,22 +47,25 @@ export class BanManager {
         throw new Error(`User ${targetId} not found in database`);
       }
 
-      if (user.isbanned) {
-        console.warn(`[BanManager] User ${targetId} is already banned`);
-        const lastBan = user.bans[user.bans.length - 1];
-        if (lastBan) {
-          lastBan.reason = reason;
-          lastBan.moderator = moderatorId;
-          lastBan.date = new Date();
-        }
-      }
-
-      const duration = parseDuration(durationStr);
-      if (duration && duration < 60000) {
+      const duration = durationStr ? parseDuration(durationStr) : null;
+      if (duration !== null && duration < 60000) {
         throw new Error('Ban duration must be at least 1 minute');
       }
-      if (duration && duration > 365 * 24 * 60 * 60 * 1000) {
+      if (duration !== null && duration > 365 * 24 * 60 * 60 * 1000) {
         throw new Error('Ban duration cannot exceed 1 year');
+      }
+
+      if (user.isbanned) {
+        console.warn(`[BanManager] User ${targetId} is already banned, updating existing record`);
+        const lastBan = user.bans[user.bans.length - 1];
+        if (lastBan) {
+          lastBan.reason = reason.trim();
+          lastBan.moderator = moderatorId;
+          lastBan.date = new Date();
+          lastBan.duration = duration ? Math.ceil(duration / 60000) : 0;
+          await user.save();
+        }
+        return undefined;
       }
 
       const expires = duration ? new Date(Date.now() + duration) : undefined;

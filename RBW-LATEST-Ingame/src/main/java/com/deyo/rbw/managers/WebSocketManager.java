@@ -44,13 +44,8 @@ public class WebSocketManager {
         reconnectDelay = 5;
         
         plugin.getLogger().info("Initializing WebSocket connection...");
-        if (explicitPortConfigured) {
-            plugin.getLogger().info("Target server: " + host + ":" + port);
-            plugin.getLogger().info("Full WebSocket URL: ws://" + host + ":" + port + "/rbw/websocket");
-        } else {
-            plugin.getLogger().info("Target server: " + host);
-            plugin.getLogger().info("Full WebSocket URL: ws://" + host + "/rbw/websocket");
-        }
+        plugin.getLogger().info("Target server: " + host);
+        plugin.getLogger().info("Full WebSocket URL: " + buildWebSocketUri());
         plugin.getLogger().info("If connection fails, ensure the RankedBedwars bot is running and accessible");
         
         // Test basic connectivity first
@@ -59,6 +54,34 @@ public class WebSocketManager {
         }
         
         connect();
+    }
+
+    /**
+     * Builds the WebSocket URI from the configured host.
+     * Handles hosts that already include a scheme (ws:// or wss://) so a
+     * default config value like "ws://localhost:8080" never becomes
+     * "ws://ws://localhost:8080/...".
+     */
+    public static String buildWebSocketUri(String host) {
+        String base = host == null ? "" : host.trim();
+        String scheme = "ws";
+        if (base.startsWith("wss://")) {
+            base = base.substring(6);
+            scheme = "wss";
+        } else if (base.startsWith("ws://")) {
+            base = base.substring(5);
+        }
+        while (base.endsWith("/")) {
+            base = base.substring(0, base.length() - 1);
+        }
+        if (base.isEmpty()) {
+            base = "localhost";
+        }
+        return scheme + "://" + base + "/rbw/websocket";
+    }
+
+    private String buildWebSocketUri() {
+        return buildWebSocketUri(host);
     }
     
     private void testConnectivity() {
@@ -103,9 +126,7 @@ public class WebSocketManager {
         }
         
         try {
-            URI serverUri = new URI(explicitPortConfigured
-                    ? ("ws://" + host + ":" + port + "/rbw/websocket")
-                    : ("ws://" + host + "/rbw/websocket"));
+            URI serverUri = new URI(buildWebSocketUri());
             client = new WebSocketClient(serverUri) {
                 @Override
                 public void onOpen(ServerHandshake handshake) {
@@ -121,10 +142,8 @@ public class WebSocketManager {
                     Bukkit.getScheduler().runTask(plugin, WebSocketManager.this::displayConnectionSuccess);
                     
                     if (wasReconnecting) {
-                        plugin.getLogger().info("WebSocket connection re-established after " + (wasReconnecting ? "reconnection attempts" : "initial connection"));
-                        Bukkit.getOnlinePlayers().stream()
-                            .filter(p -> p.hasPermission("rankedbedwars.admin") || p.isOp())
-                            .forEach(p -> p.sendMessage("§a[RankedBedwars] §2WebSocket connection re-established successfully."));
+                        plugin.getLogger().info("WebSocket connection re-established after reconnection attempts");
+                        notifyAdmins("§a[RankedBedwars] §2WebSocket connection re-established successfully.");
                     }
                     
                     sendInitialData();
@@ -194,12 +213,8 @@ public class WebSocketManager {
             boolean connected = client.connectBlocking(30, java.util.concurrent.TimeUnit.SECONDS);
             if (!connected) {
                 plugin.getLogger().warning("WebSocket connection timed out after 30 seconds");
-                plugin.getLogger().info("Trying alternative connection method...");
-                
-                // Fallback to non-blocking connection
-                client.connect();
-                
-                // Give it a bit more time
+
+                // Give the already-started connection thread a bit more time
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (client == null || !client.isOpen()) {
                         plugin.getLogger().warning("Alternative connection method also failed");
@@ -209,9 +224,13 @@ public class WebSocketManager {
             }
         } catch (URISyntaxException e) {
             plugin.getLogger().log(Level.SEVERE, "Invalid WebSocket URI", e);
+            scheduleReconnect();
         } catch (InterruptedException e) {
             plugin.getLogger().log(Level.WARNING, "WebSocket connection interrupted", e);
             Thread.currentThread().interrupt();
+            scheduleReconnect();
+        } catch (IllegalStateException e) {
+            plugin.getLogger().log(Level.WARNING, "WebSocket client was already used for a connection attempt", e);
             scheduleReconnect();
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Unexpected error during WebSocket connection", e);
@@ -484,9 +503,7 @@ public class WebSocketManager {
             plugin.getLogger().warning("Cannot send WebSocket message: connection is closed");
             
             if (!reconnectScheduled) {
-                Bukkit.getOnlinePlayers().stream()
-                    .filter(p -> p.hasPermission("rankedbedwars.admin") || p.isOp())
-                    .forEach(p -> p.sendMessage("§c[RankedBedwars] §4WebSocket connection is closed. Cannot send messages to the bot. Please contact deyo."));
+                notifyAdmins("§c[RankedBedwars] §4WebSocket connection is closed. Cannot send messages to the bot. Please contact deyo.");
                 
                 if (plugin.isEnabled()) {
                     scheduleReconnect();
@@ -530,17 +547,21 @@ public class WebSocketManager {
             json.add("players", playersJson);
             
             int winningTeamNumber = game.getWinningTeamNumber();
-            JsonArray winningTeamIgnList = new JsonArray();
-            if (winningTeamNumber == 1) {
-                for (String player : game.getTeam1()) {
-                    winningTeamIgnList.add(player);
+            if (winningTeamNumber == 1 || winningTeamNumber == 2) {
+                JsonArray winningTeamIgnList = new JsonArray();
+                if (winningTeamNumber == 1) {
+                    for (String player : game.getTeam1()) {
+                        winningTeamIgnList.add(player);
+                    }
+                } else {
+                    for (String player : game.getTeam2()) {
+                        winningTeamIgnList.add(player);
+                    }
                 }
+                json.add("winningteamignlist", winningTeamIgnList);
             } else {
-                for (String player : game.getTeam2()) {
-                    winningTeamIgnList.add(player);
-                }
+                plugin.getLogger().warning("Not sending winning team for game " + game.getGameId() + ": winner not tracked");
             }
-            json.add("winningteamignlist", winningTeamIgnList);
             
             sendMessage(json.toString());
 
@@ -624,19 +645,15 @@ public class WebSocketManager {
         
         plugin.getLogger().info("Scheduling WebSocket reconnection in " + currentDelay + " seconds (Attempt " + reconnectAttempts + ")");
         
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        if (reconnectAttempts == MAX_RECONNECT_ATTEMPTS) {
             plugin.getLogger().severe("Failed to connect to WebSocket server after " + reconnectAttempts + " attempts");
             plugin.getLogger().severe("The RankedBedwars bot appears to be offline. Please contact deyo.");
-            
-            Bukkit.getOnlinePlayers().stream()
-                .filter(p -> p.hasPermission("rankedbedwars.admin") || p.isOp())
-                .forEach(p -> p.sendMessage("§4[RankedBedwars] §cFailed to connect to WebSocket after " + 
-                    reconnectAttempts + " attempts. The bot is likely offline. Please contact deyo."));
-            
-            reconnectScheduled = false;
-            return;
+            notifyAdmins("§4[RankedBedwars] §cFailed to connect to WebSocket after " +
+                reconnectAttempts + " attempts. The bot is likely offline. Please contact deyo.");
         }
-        
+
+        // Keep retrying indefinitely (capped delay) instead of giving up forever;
+        // the bot may come back online at any time.
         Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
             if (!plugin.isEnabled()) {
                 plugin.getLogger().warning("Plugin is disabled, aborting scheduled WebSocket reconnection.");
@@ -651,13 +668,21 @@ public class WebSocketManager {
             }
             
             reconnectScheduled = false;
-            if (client == null || !client.isOpen()) {
-                plugin.getLogger().info("Attempting to reconnect to WebSocket server... (Attempt " + reconnectAttempts + ")");
-                connect();
-            } else {
-                plugin.debug("WebSocket is already connected, skipping reconnection attempt");
-            }
+            plugin.getLogger().info("Attempting to reconnect to WebSocket server... (Attempt " + reconnectAttempts + ")");
+            connect();
         }, currentDelay * 20L);
+    }
+
+    /**
+     * Sends a message to all admins/ops on the Bukkit main thread. Safe to
+     * call from any thread (WebSocket threads, async scheduler threads).
+     */
+    private void notifyAdmins(String message) {
+        Bukkit.getScheduler().runTask(plugin, () ->
+            Bukkit.getOnlinePlayers().stream()
+                .filter(p -> p.hasPermission("rankedbedwars.admin") || p.isOp())
+                .forEach(p -> p.sendMessage(message))
+        );
     }
     public boolean isConnected() {
         return client != null && client.isOpen();
@@ -668,13 +693,9 @@ public class WebSocketManager {
         reconnectScheduled = false;
         
         if (client != null && client.isOpen()) {
-            try {
-                client.closeBlocking();
-                plugin.getLogger().info("WebSocket connection closed");
-            } catch (InterruptedException e) {
-                plugin.getLogger().log(Level.WARNING, "Error closing WebSocket connection", e);
-                Thread.currentThread().interrupt();
-            }
+            // Non-blocking close: onDisable runs on the main thread and
+            // closeBlocking() can hang the server shutdown forever.
+            client.close(1000, "Plugin disabling");
         }
         client = null;
     }
@@ -875,7 +896,7 @@ public class WebSocketManager {
         } else {
             command = String.format("ban %s %s", ign, reason);
         }
-        org.bukkit.Bukkit.dispatchCommand(org.bukkit.Bukkit.getConsoleSender(), command);
+        dispatchCommandOnMainThread(command);
     }
 
     public void handleBotMute(JsonObject json) {
@@ -893,7 +914,7 @@ public class WebSocketManager {
         } else {
             command = String.format("mute %s %s", ign, reason);
         }
-        org.bukkit.Bukkit.dispatchCommand(org.bukkit.Bukkit.getConsoleSender(), command);
+        dispatchCommandOnMainThread(command);
     }
 
     public void handleBotUnban(JsonObject json) {
@@ -905,7 +926,7 @@ public class WebSocketManager {
         String reason = json.get("reason").getAsString();
         // String targetId = json.get("id").getAsString(); // not used
         String command = String.format("unban %s %s", ign, reason);
-        org.bukkit.Bukkit.dispatchCommand(org.bukkit.Bukkit.getConsoleSender(), command);
+        dispatchCommandOnMainThread(command);
     }
 
     public void handleBotUnmute(JsonObject json) {
@@ -917,11 +938,24 @@ public class WebSocketManager {
         String reason = json.get("reason").getAsString();
         // String targetId = json.get("id").getAsString(); // not used
         String command = String.format("unmute %s %s", ign, reason);
-        org.bukkit.Bukkit.dispatchCommand(org.bukkit.Bukkit.getConsoleSender(), command);
+        dispatchCommandOnMainThread(command);
+    }
+
+    /**
+     * Runs a console command on the Bukkit main thread. dispatchCommand is not
+     * thread-safe and executes synchronously, so it must never run on a
+     * WebSocket or async scheduler thread.
+     */
+    private void dispatchCommandOnMainThread(String command) {
+        if (Bukkit.isPrimaryThread()) {
+            Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command);
+        } else {
+            Bukkit.getScheduler().runTask(plugin, () -> Bukkit.dispatchCommand(Bukkit.getConsoleSender(), command));
+        }
     }
 
 	private void handleScoringSuccess(JsonObject json) {
-		int gameId = json.has("gameid") ? json.get("gameid").getAsInt() : -1;
+		int gameId = parseGameId(json);
 		if (!json.has("players") || !json.get("players").isJsonArray()) {
 			plugin.getLogger().warning("scoringsuccess missing players array");
 			return;
@@ -938,7 +972,7 @@ public class WebSocketManager {
 	}
 
 	private void handleGameVoided(JsonObject json) {
-		int gameId = json.has("gameid") ? json.get("gameid").getAsInt() : -1;
+		int gameId = parseGameId(json);
 		String reason = json.has("reason") && !json.get("reason").isJsonNull() ? json.get("reason").getAsString() : "unspecified";
 		if (!json.has("players") || !json.get("players").isJsonArray()) {
 			plugin.getLogger().warning("gamevoided missing players array");
@@ -952,6 +986,25 @@ public class WebSocketManager {
 			if (player != null && player.isOnline()) {
 				player.sendMessage(message);
 			}
+		}
+	}
+
+	/**
+	 * Parses the gameid from a bot message. The bot may send it as a number or
+	 * as a string; non-numeric ids are tolerated and reported as -1 instead of
+	 * throwing NumberFormatException.
+	 */
+	static int parseGameId(JsonObject json) {
+		if (!json.has("gameid") || json.get("gameid").isJsonNull()) {
+			return -1;
+		}
+		JsonElement gameIdElement = json.get("gameid");
+		try {
+			return gameIdElement.isJsonPrimitive() && gameIdElement.getAsJsonPrimitive().isNumber()
+					? gameIdElement.getAsInt()
+					: Integer.parseInt(gameIdElement.getAsString());
+		} catch (NumberFormatException e) {
+			return -1;
 		}
 	}
 }

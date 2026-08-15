@@ -1,0 +1,21 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Build output
+RBW-LATEST-Ingame/target/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Archives
+*.zip
+*.rar
+
+# IDE / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store

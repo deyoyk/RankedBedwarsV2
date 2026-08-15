@@ -8,8 +8,10 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "migrate:users": "node scripts/migrateUsers.js",
-    "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix"
+    "lint": "eslint src",
+    "lint:fix": "eslint src --fix",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch"
   },
   "dependencies": {
     "@types/cors": "^2.8.19",
@@ -29,6 +31,8 @@
     "yaml": "^2.3.4"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.11.16",
     "@types/node-fetch": "^2.6.12",
     "@types/ws": "^8.18.1",
@@ -36,8 +40,15 @@
     "@typescript-eslint/parser": "^8.62.0",
     "esbuild": "^0.25.5",
     "eslint": "^10.6.0",
+    "globals": "^17.11.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.0",
     "typescript": "^5.3.3"
+  },
+  "allowScripts": {
+    "canvas@3.1.0": true,
+    "esbuild@0.25.5": true
   }
 }

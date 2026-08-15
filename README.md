@@ -159,6 +159,18 @@ npm run dev
 mvn clean package
 ```
 
+## Testing
+
+```bash
+# Discord Bot (Jest)
+cd RBW-LATEST-BOT
+npm test
+
+# Minecraft Plugin (JUnit 5)
+cd RBW-LATEST-Ingame
+mvn test
+```
+
 ## Support
 
 For issues and support, contact [confessingtoday](https://discord.gg/ygueB6rZRX) on Discord.

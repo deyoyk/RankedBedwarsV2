@@ -245,7 +245,7 @@ export class SeasonManager {
           }
         }, { session });
 
-        await Game.deleteMany({}, { session });
+        await Game.deleteMany({ state: { $ne: 'pending' } }, { session });
 
         activeSeason.endDate = new Date();
         activeSeason.isActive = false;

@@ -237,7 +237,7 @@ public class BedWars1058Implementation implements BedwarsAPI {
         public List<String> getTeam2() { return team2; }
     }
     
-    public static TeamAssignment getTeamAssignment(String arenaName) {
+    public TeamAssignment getTeamAssignment(String arenaName) {
         return teamAssignments.get(arenaName);
     }
     

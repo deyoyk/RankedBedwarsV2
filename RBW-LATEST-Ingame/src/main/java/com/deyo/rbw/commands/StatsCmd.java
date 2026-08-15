@@ -33,22 +33,29 @@ public class StatsCmd implements CommandExecutor {
         player.sendMessage(ChatColor.GRAY + "Fetching your stats...");
         CompletableFuture<UserData> future = apiClient.getUserData(ign);
         future.thenAccept(userData -> {
-            if (userData == null) {
-                player.sendMessage(ChatColor.RED + "Failed to fetch your stats from the API.");
-                return;
-            }
-            player.sendMessage(ChatColor.GOLD + "--- Your Ranked Bedwars Stats ---");
-            player.sendMessage(ChatColor.YELLOW + "ELO: " + ChatColor.WHITE + userData.getElo());
-            player.sendMessage(ChatColor.YELLOW + "Wins: " + ChatColor.WHITE + userData.getWins());
-            player.sendMessage(ChatColor.YELLOW + "Losses: " + ChatColor.WHITE + userData.getLosses());
-            player.sendMessage(ChatColor.YELLOW + "Games: " + ChatColor.WHITE + userData.getGames());
-            player.sendMessage(ChatColor.YELLOW + "MVPs: " + ChatColor.WHITE + userData.getMvps());
-            player.sendMessage(ChatColor.YELLOW + "Kills: " + ChatColor.WHITE + userData.getKills());
-            player.sendMessage(ChatColor.YELLOW + "Deaths: " + ChatColor.WHITE + userData.getDeaths());
-            player.sendMessage(ChatColor.YELLOW + "Beds Broken: " + ChatColor.WHITE + userData.getBedBroken());
-            player.sendMessage(ChatColor.YELLOW + "Final Kills: " + ChatColor.WHITE + userData.getFinalKills());
-            player.sendMessage(ChatColor.YELLOW + "WLR: " + ChatColor.WHITE + userData.getWlr());
-            player.sendMessage(ChatColor.YELLOW + "KDR: " + ChatColor.WHITE + userData.getKdr());
+            // The future completes on the APIClient executor thread; all Bukkit
+            // API calls must run on the main thread.
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    return;
+                }
+                if (userData == null) {
+                    player.sendMessage(ChatColor.RED + "Failed to fetch your stats from the API.");
+                    return;
+                }
+                player.sendMessage(ChatColor.GOLD + "--- Your Ranked Bedwars Stats ---");
+                player.sendMessage(ChatColor.YELLOW + "ELO: " + ChatColor.WHITE + userData.getElo());
+                player.sendMessage(ChatColor.YELLOW + "Wins: " + ChatColor.WHITE + userData.getWins());
+                player.sendMessage(ChatColor.YELLOW + "Losses: " + ChatColor.WHITE + userData.getLosses());
+                player.sendMessage(ChatColor.YELLOW + "Games: " + ChatColor.WHITE + userData.getGames());
+                player.sendMessage(ChatColor.YELLOW + "MVPs: " + ChatColor.WHITE + userData.getMvps());
+                player.sendMessage(ChatColor.YELLOW + "Kills: " + ChatColor.WHITE + userData.getKills());
+                player.sendMessage(ChatColor.YELLOW + "Deaths: " + ChatColor.WHITE + userData.getDeaths());
+                player.sendMessage(ChatColor.YELLOW + "Beds Broken: " + ChatColor.WHITE + userData.getBedBroken());
+                player.sendMessage(ChatColor.YELLOW + "Final Kills: " + ChatColor.WHITE + userData.getFinalKills());
+                player.sendMessage(ChatColor.YELLOW + "WLR: " + ChatColor.WHITE + userData.getWlr());
+                player.sendMessage(ChatColor.YELLOW + "KDR: " + ChatColor.WHITE + userData.getKdr());
+            });
         });
         return true;
     }

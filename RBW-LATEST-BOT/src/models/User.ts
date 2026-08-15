@@ -14,12 +14,12 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
   ismuted?: boolean;
   isfrozen?: boolean;
   isbanned?: boolean;
-  nick?: string;
   settings: {
     toggleprefix: boolean;
     togglescoreping: boolean;
     togglepartyinvites: boolean;
     togglestaticnick: boolean;
+    nick: string;
   };
   recentGames: IRecentGame[];
   partyId?: string;
@@ -48,7 +48,7 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
 
 const UserSchema: Schema = new Schema({
   discordId: { type: String, required: true, unique: true, index: true },
-  ign: { type: String, index: true },
+  ign: { type: String },
   ...coreStatFields,
   elo: { ...coreStatFields.elo, index: true },
   ownedThemes: { type: [String], default: [] },
@@ -67,7 +67,7 @@ const UserSchema: Schema = new Schema({
     nick: { type: String, default: '' },
   },
   recentGames: [recentGameSubdoc],
-  partyId: { type: String, index: true },
+  partyId: { type: String },
   dailyElo: [dailyEloSubdoc],
   strikes: [{
     id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },

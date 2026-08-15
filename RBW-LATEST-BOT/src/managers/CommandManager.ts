@@ -49,6 +49,7 @@ import { changeThemeData, executeChangeTheme } from '../commands/player/changeth
 import { themesData, executeThemes } from '../commands/player/themes';
 import { themeManageData, executeThemeManage } from '../commands/admin/thememanage';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
+import { ScreenshareService } from '../services/ScreenshareService';
 import { fixall } from '../commands/admin/fixall';
 import { executeStartSeason } from '../commands/admin/startseason';
 import { executeEndSeason } from '../commands/admin/endseason';
@@ -111,6 +112,11 @@ export class CommandManager {
           await handleScreenshareFreeze(interaction);
           return;
         }
+
+        if (interaction.isButton() && interaction.customId.startsWith('ss_cancel_')) {
+          await this.handleScreenshareCancel(interaction);
+          return;
+        }
       } catch (error) {
         console.error('Error handling interaction:', error);
 
@@ -142,6 +148,65 @@ export class CommandManager {
 
   private reg(name: string, description: string, execute: Command['execute'], options: any[] = []) {
     this.commands.set(name, { name, description, options, execute });
+  }
+
+  private async handleScreenshareCancel(interaction: any): Promise<void> {
+    try {
+      if (!interaction.guild) {
+        await interaction.reply({ content: 'This can only be used in a server.', ephemeral: true });
+        return;
+      }
+
+      const sessionId = interaction.customId.replace('ss_cancel_', '');
+      if (!sessionId) {
+        await interaction.reply({ content: 'Invalid session ID.', ephemeral: true });
+        return;
+      }
+
+      const session = await ScreenshareService.getSessionById(sessionId);
+      if (!session) {
+        await interaction.reply({ content: 'Screenshare session not found or already closed.', ephemeral: true });
+        return;
+      }
+
+      if (session.status !== 'pending') {
+        await interaction.reply({ content: `This screenshare session is already ${session.status}.`, ephemeral: true });
+        return;
+      }
+
+      if (session.requesterId !== interaction.user.id) {
+        await interaction.reply({ content: 'Only the requester can cancel this screenshare request.', ephemeral: true });
+        return;
+      }
+
+      const result = await ScreenshareService.closeSession(
+        interaction.guild,
+        sessionId,
+        interaction.user.id,
+        'Request cancelled by requester'
+      );
+
+      if (!result.success) {
+        await interaction.reply({ content: result.error || 'Failed to cancel the screenshare request.', ephemeral: true });
+        return;
+      }
+
+      try {
+        const originalMessage = interaction.message;
+        if (originalMessage) {
+          await originalMessage.edit({ components: [] });
+        }
+      } catch (editError) {
+        console.warn('[CommandManager] Failed to update cancelled screenshare message:', editError);
+      }
+
+      await interaction.reply({ content: 'Screenshare request cancelled.', ephemeral: true });
+    } catch (error) {
+      console.error('[CommandManager] Error handling screenshare cancel:', error);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: 'There was an error cancelling the screenshare request.', ephemeral: true }).catch(() => {});
+      }
+    }
   }
 
   private regChat(name: string, description: string, execute: (interaction: ChatInputCommandInteraction) => Promise<any>, options: any[] = []) {
@@ -209,14 +274,13 @@ export class CommandManager {
     this.reg('edit', 'Edit user statistics', edit, [
       { name: 'user', description: 'User to edit', type: 6, required: true },
       { name: 'stat', description: 'Statistic to edit', type: 3, required: true, choices: [
-        { name: 'IGN', value: 'ign' }, { name: 'ELO', value: 'elo' }, { name: 'Wins', value: 'wins' },
+        { name: 'ELO', value: 'elo' }, { name: 'Wins', value: 'wins' },
         { name: 'Losses', value: 'losses' }, { name: 'Games', value: 'games' }, { name: 'MVPs', value: 'mvps' },
         { name: 'Kills', value: 'kills' }, { name: 'Deaths', value: 'deaths' }, { name: 'Bed Broken', value: 'bedBroken' },
         { name: 'Final Kills', value: 'finalKills' }, { name: 'Diamonds', value: 'diamonds' }, { name: 'Irons', value: 'irons' },
         { name: 'Gold', value: 'gold' }, { name: 'Emeralds', value: 'emeralds' }, { name: 'Blocks Placed', value: 'blocksPlaced' },
         { name: 'Win Streak', value: 'winstreak' }, { name: 'Lose Streak', value: 'losestreak' },
-        { name: 'KDR', value: 'kdr' }, { name: 'WLR', value: 'wlr' }, { name: 'Level', value: 'level' },
-        { name: 'Experience', value: 'experience' }, { name: 'Nick', value: 'nick' }
+        { name: 'KDR', value: 'kdr' }, { name: 'WLR', value: 'wlr' }
       ]},
       { name: 'value', description: 'New value for the statistic', type: 3, required: true }
     ]);
@@ -284,9 +348,8 @@ export class CommandManager {
       { name: 'reason', type: 3, description: 'The reason for voiding the game.', required: true }
     ]);
     this.regChat('screenshare', 'Request a screenshare on a user', screenshare, [
-      { name: 'target', description: 'User to screenshare', type: 6, required: true },
-      { name: 'reason', description: 'Reason for screenshare', type: 3, required: true },
-      { name: 'image', description: 'Image evidence', type: 11, required: true }
+      { name: 'user', description: 'User to screenshare', type: 6, required: true },
+      { name: 'reason', description: 'Reason for the screenshare', type: 3, required: true }
     ]);
     this.regChat('level', 'View level and experience information', level, [
       { name: 'user', description: 'User to view level for (leave empty for yourself)', type: 6, required: false }
@@ -306,28 +369,28 @@ export class CommandManager {
       { name: 'gameid', description: 'Game ID', type: 4, required: true },
       { name: 'reason', description: 'Reason for voiding the game', type: 3, required: true }
     ]);
-    this.regChat('ban', 'Ban a user from the server', ban, [
+    this.reg('ban', 'Ban a user from the server', ban, [
       { name: 'user', description: 'User to ban (ID or mention)', type: 6, required: true },
       { name: 'duration', description: 'Ban duration (e.g. 1d, 1h)', type: 3, required: true },
       { name: 'reason', description: 'Reason for ban', type: 3, required: true }
     ]);
-    this.regChat('mute', 'Mute a user in the server', mute, [
+    this.reg('mute', 'Mute a user in the server', mute, [
       { name: 'user', description: 'User to mute (ID or mention)', type: 6, required: true },
       { name: 'duration', description: 'Mute duration (e.g. 1d, 1h)', type: 3, required: true },
       { name: 'reason', description: 'Reason for mute', type: 3, required: true }
     ]);
-    this.regChat('unmute', 'Unmute a user in the server', unmute, [
+    this.reg('unmute', 'Unmute a user in the server', unmute, [
       { name: 'userid', description: 'User ID to unmute', type: 3, required: true }
     ]);
-    this.regChat('strike', 'Issue a strike to a user', strike, [
+    this.reg('strike', 'Issue a strike to a user', strike, [
       { name: 'user', description: 'User to strike (ID or mention)', type: 6, required: true },
       { name: 'reason', description: 'Reason for strike', type: 3, required: false }
     ]);
-    this.regChat('unstrike', 'Remove a strike from a user', unstrike, [
+    this.reg('unstrike', 'Remove a strike from a user', unstrike, [
       { name: 'user', description: 'User to remove strike from (ID or mention)', type: 6, required: true },
       { name: 'reason', description: 'Reason for removing strike', type: 3, required: false }
     ]);
-    this.regChat('unban', 'Unban a user from the server', unban, [
+    this.reg('unban', 'Unban a user from the server', unban, [
       { name: 'userid', description: 'User ID to unban', type: 3, required: true }
     ]);
     this.reg('forcevoid', 'Force void the game associated with this channel', forcevoid);

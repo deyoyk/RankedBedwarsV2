@@ -105,9 +105,6 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
     if (statToEdit === 'wins' || statToEdit === 'losses') {
       user.wlr = user.losses > 0 ? parseFloat((user.wins / user.losses).toFixed(2)) : user.wins;
     }
-    if (statToEdit === 'wins' || statToEdit === 'losses') {
-      user.games = user.wins + user.losses;
-    }
 
     await user.save();
 

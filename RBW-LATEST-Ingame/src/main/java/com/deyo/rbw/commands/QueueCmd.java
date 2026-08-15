@@ -83,14 +83,22 @@ public class QueueCmd implements CommandExecutor {
     public void handleQueueSuccess(String uuid) {
         PendingQueue pending = pendingQueues.remove(uuid);
         if (pending != null && pending.player.isOnline()) {
-            pending.player.sendMessage(ChatColor.GREEN + "Successfully joined the queue!");
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (pending.player.isOnline()) {
+                    pending.player.sendMessage(ChatColor.GREEN + "Successfully joined the queue!");
+                }
+            });
         }
     }
 
     public void handleQueueFailure(String uuid, String reason) {
         PendingQueue pending = pendingQueues.remove(uuid);
         if (pending != null && pending.player.isOnline()) {
-            pending.player.sendMessage(ChatColor.RED + "Queue failed: " + reason);
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (pending.player.isOnline()) {
+                    pending.player.sendMessage(ChatColor.RED + "Queue failed: " + reason);
+                }
+            });
         }
     }
 }

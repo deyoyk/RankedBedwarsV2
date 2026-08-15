@@ -17,6 +17,10 @@ export async function retry(interaction: Message | ChatInputCommandInteraction, 
     return;
   }
   gameId = game.gameId;
+  if (game.state !== 'pending') {
+    await safeReply(interaction, errorEmbed(`Game \`${gameId}\` is ${game.state} and can no longer be retried.`, 'Error'));
+    return;
+  }
   if ((retryCounts[gameId] = (retryCounts[gameId] || 0) + 1) > 2) {
     await safeReply(interaction, errorEmbed(`Game \`${gameId}\` has already been retried twice.`, 'Error'));
     return;

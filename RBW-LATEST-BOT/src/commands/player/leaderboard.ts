@@ -37,7 +37,7 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
 
   if (interaction instanceof ChatInputCommandInteraction) {
     mode = interaction.options.getString('mode') || 'elo';
-    page = interaction.options.getInteger('page') || 0;
+    page = Math.max((interaction.options.getInteger('page') || 1) - 1, 0);
   } else if (args && args.length > 0) {
     mode = args[0] || 'elo';
     if (args[1]) {

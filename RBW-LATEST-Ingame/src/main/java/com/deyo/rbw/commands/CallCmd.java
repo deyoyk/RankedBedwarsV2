@@ -130,14 +130,22 @@ public class CallCmd implements CommandExecutor, TabCompleter {
     public void handleCallSuccess(String callId) {
         PendingCall pending = pendingCalls.remove(callId);
         if (pending != null && pending.player.isOnline()) {
-            pending.player.sendMessage(ChatColor.GREEN + "Call successful! The target player has been notified.");
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (pending.player.isOnline()) {
+                    pending.player.sendMessage(ChatColor.GREEN + "Call successful! The target player has been notified.");
+                }
+            });
         }
     }
 
     public void handleCallFailure(String callId, String reason) {
         PendingCall pending = pendingCalls.remove(callId);
         if (pending != null && pending.player.isOnline()) {
-            pending.player.sendMessage(ChatColor.RED + "Call failed: " + reason);
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (pending.player.isOnline()) {
+                    pending.player.sendMessage(ChatColor.RED + "Call failed: " + reason);
+                }
+            });
         }
     }
 }

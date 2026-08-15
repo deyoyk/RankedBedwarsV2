@@ -47,6 +47,17 @@ public class BedWars1058Listener implements Listener {
         recentPvpKills.entrySet().removeIf(entry -> (now - entry.getValue()) > 300_000);
     }
 
+    /**
+     * Returns the BedWars API provider, or null when it is not registered yet
+     * (e.g. BedWars1058 is still loading or was reloaded).
+     */
+    private com.andrei1058.bedwars.api.BedWars getBedwarsAPI() {
+        org.bukkit.plugin.ServicesManager services = Bukkit.getServicesManager();
+        org.bukkit.plugin.RegisteredServiceProvider<com.andrei1058.bedwars.api.BedWars> registration =
+                services.getRegistration(com.andrei1058.bedwars.api.BedWars.class);
+        return registration == null ? null : registration.getProvider();
+    }
+
     @EventHandler
     public void onTeamAssign(TeamAssignEvent event){
         IArena arena = event.getArena();
@@ -191,7 +202,6 @@ public class BedWars1058Listener implements Listener {
             }
             
             int currentAmount = resourceMap.getOrDefault(player, 0);
-            if (amount > 64) return; 
             resourceMap.put(player, currentAmount + amount);
         }
         
@@ -256,7 +266,7 @@ public class BedWars1058Listener implements Listener {
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
-        com.andrei1058.bedwars.api.BedWars bedwarsAPI = Bukkit.getServicesManager().getRegistration(com.andrei1058.bedwars.api.BedWars.class).getProvider();
+        com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         
         IArena arena = bedwarsAPI.getArenaUtil().getArenaByPlayer(player);
@@ -284,7 +294,7 @@ public class BedWars1058Listener implements Listener {
         
         if (killer == null) return;
         
-        com.andrei1058.bedwars.api.BedWars bedwarsAPI = Bukkit.getServicesManager().getRegistration(com.andrei1058.bedwars.api.BedWars.class).getProvider();
+        com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         
         IArena arena = bedwarsAPI.getArenaUtil().getArenaByPlayer(killer);
@@ -323,11 +333,11 @@ public class BedWars1058Listener implements Listener {
         plugin.debug("Game ended in arena: " + arenaName);
         
         BW1058GameTracker gameTracker = gameTrackers.get(arenaName);
-        if (gameTracker == null || arena.getPlayers().isEmpty()) return;
+        if (gameTracker == null) return;
         
         ITeam winningTeam = null;
         try {
-            winningTeam = event.getWinningTeam();
+            winningTeam = event.getTeamWinner();
         } catch (Exception ignored) {}
         
         if (winningTeam == null) {
@@ -361,14 +371,11 @@ public class BedWars1058Listener implements Listener {
     }
     
     private ITeam findLastStandingTeam(IArena arena) {
-        ITeam lastTeam = null;
         for (ITeam team : arena.getTeams()) {
-            if (team.getMembers().isEmpty()) continue;
-            if (!team.getBed() || !team.getMembers().isEmpty()) {
-                lastTeam = team;
+            if (!team.getMembers().isEmpty() && !team.isBedDestroyed()) {
+                return team;
             }
         }
-        if (lastTeam != null) return lastTeam;
         for (ITeam team : arena.getTeams()) {
             if (!team.getMembers().isEmpty()) {
                 return team;
@@ -446,7 +453,7 @@ public class BedWars1058Listener implements Listener {
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
         Player player = event.getPlayer();
-        com.andrei1058.bedwars.api.BedWars bedwarsAPI = Bukkit.getServicesManager().getRegistration(com.andrei1058.bedwars.api.BedWars.class).getProvider();
+        com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         
         IArena arena = bedwarsAPI.getArenaUtil().getArenaByPlayer(player);
@@ -474,7 +481,7 @@ public class BedWars1058Listener implements Listener {
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
-        com.andrei1058.bedwars.api.BedWars bedwarsAPI = Bukkit.getServicesManager().getRegistration(com.andrei1058.bedwars.api.BedWars.class).getProvider();
+        com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         
         IArena arena = bedwarsAPI.getArenaUtil().getArenaByPlayer(player);
@@ -490,7 +497,7 @@ public class BedWars1058Listener implements Listener {
     @EventHandler
     public void onPlayerPickupItem(PlayerPickupItemEvent event) {
         Player player = event.getPlayer();
-        com.andrei1058.bedwars.api.BedWars bedwarsAPI = Bukkit.getServicesManager().getRegistration(com.andrei1058.bedwars.api.BedWars.class).getProvider();
+        com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         
         IArena arena = bedwarsAPI.getArenaUtil().getArenaByPlayer(player);
@@ -540,7 +547,7 @@ public class BedWars1058Listener implements Listener {
                     plugin.debug("Sent retry notification for game #" + gameId + " (Attempt " + (retryCount + 1) + "/" + maxRetries + ")");
                 });
                 
-                com.andrei1058.bedwars.api.BedWars bedwarsAPI = Bukkit.getServicesManager().getRegistration(com.andrei1058.bedwars.api.BedWars.class).getProvider();
+                com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
                 IArena arena = bedwarsAPI.getArenaUtil().getArenaByName(arenaName);
                 if (arena != null) {
                     for (Player p : arena.getPlayers()) {

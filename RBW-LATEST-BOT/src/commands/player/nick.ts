@@ -25,18 +25,18 @@ export async function nick(interaction: Message | ChatInputCommandInteraction, a
       await safeReply(interaction, errorEmbed('Please provide a nickname to set.', 'Nickname Error'));
       return;
     }
-    user.nick = nickname;
+    user.settings.nick = nickname;
     await user.save();
     if (interaction.guild) {
       await fix(interaction.guild, userId);
     }
     await safeReply(interaction, successEmbed(`Your nickname has been set to: **${nickname}**`, 'Nickname Set'));
   } else if (action === 'remove') {
-    if (!user.nick) {
+    if (!user.settings.nick) {
       await safeReply(interaction, errorEmbed('You do not have a nickname set.', 'Nickname Error'));
       return;
     }
-    user.nick = undefined;
+    user.settings.nick = '';
     await user.save();
     if (interaction.guild) {
       await fix(interaction.guild, userId);

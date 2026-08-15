@@ -63,8 +63,8 @@ async function validateStrikeRequest(data: StrikeRequestData): Promise<{ isValid
     return { isValid: false, error: 'Game not found.' };
   }
 
-  if (game.state !== 'active' && game.state !== 'scored') {
-    return { isValid: false, error: 'Strike requests can only be made for active or scored games.' };
+  if (game.state !== 'pending' && game.state !== 'active' && game.state !== 'scored') {
+    return { isValid: false, error: 'Strike requests can only be made for ongoing or scored games.' };
   }
 
   const team = game.getTeamOfPlayer(data.requesterId);

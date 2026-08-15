@@ -10,6 +10,7 @@ interface WorkerTask {
   timestamp: number;
   resolve?: (value: any) => void;
   reject?: (error: any) => void;
+  timeout?: NodeJS.Timeout;
 }
 
 interface WorkerStats {
@@ -82,7 +83,8 @@ export class WorkersManager {
               'Guilds',
               'GuildMessages',
               'GuildVoiceStates',
-              'MessageContent'
+              'MessageContent',
+              'GuildMembers'
             ]
           });
 
@@ -206,6 +208,10 @@ export class WorkersManager {
     const startTime = Date.now();
     worker.currentTasks.add(task.id);
     this.processingTasks.set(task.id, task);
+    if (task.timeout) {
+      clearTimeout(task.timeout);
+      task.timeout = undefined;
+    }
 
     try {
       let result: any;
@@ -457,10 +463,16 @@ export class WorkersManager {
       this.taskQueue.get(task.priority)?.push(task);
 
       
-      setTimeout(() => {
-        if (this.processingTasks.has(task.id)) {
-          this.processingTasks.delete(task.id);
-          reject(new Error('Task timeout'));
+      task.timeout = setTimeout(() => {
+        if (!this.processingTasks.has(task.id)) {
+          const queue = this.taskQueue.get(task.priority);
+          if (queue) {
+            const index = queue.indexOf(task);
+            if (index !== -1) {
+              queue.splice(index, 1);
+            }
+          }
+          reject(new Error(`Task timeout (${type})`));
         }
       }, this.TASK_TIMEOUT);
     });

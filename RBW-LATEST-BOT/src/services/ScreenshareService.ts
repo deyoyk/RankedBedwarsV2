@@ -55,6 +55,9 @@ export class ScreenshareService {
         return { hasPermission: false, error: 'Screensharer role not configured' };
       }
 
+      if (!member.roles.cache.has(screensharerRoleId)) {
+        return { hasPermission: false, error: 'You do not have the screensharer role' };
+      }
 
       return { hasPermission: true };
     } catch (error) {

@@ -32,7 +32,7 @@ export async function addelo(interaction: Message | ChatInputCommandInteraction,
     }
   } else {
     if (!args || args.length < 6) {
-      await safeReply(interaction, errorEmbed('Usage: =addelo <roleId> <startElo> <endElo> <mvpElo> <winElo> <loseElo> [bedElo]', 'ELO Rank Creation Error'));
+      await safeReply(interaction, errorEmbed('Usage: =addelo <roleId> <startElo> <endElo> <winElo> <loseElo> <mvpElo> [bedElo]', 'ELO Rank Creation Error'));
       return;
     }
     roleId = args[0];

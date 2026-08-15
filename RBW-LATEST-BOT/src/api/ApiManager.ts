@@ -208,6 +208,10 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing ban id' });
         return;
       }
+      if (!/^[0-9a-fA-F]{24}$/.test(banId)) {
+        res.status(404).json({ error: 'Ban not found' });
+        return;
+      }
       
       const user = await User.findOne({ 'bans.id': banId });
       if (!user || !Array.isArray(user.bans)) {
@@ -395,7 +399,7 @@ export class ApiManager {
     try {
       const queues = await Queue.find();
       const guild = this.client.guilds.cache.first();
-      let rolesMap: Record<string, string> = {};
+      const rolesMap: Record<string, string> = {};
       if (guild) {
         const roles = await guild.roles.fetch();
         if (roles) {
@@ -438,7 +442,7 @@ export class ApiManager {
     try {
       const eloranks = await EloRank.find();
       const guild = this.client.guilds.cache.first();
-      let rolesMap: Record<string, { name: string, color: string | null }> = {};
+      const rolesMap: Record<string, { name: string, color: string | null }> = {};
       if (guild) {
         const roles = await guild.roles.fetch();
         if (roles) {
@@ -470,7 +474,7 @@ export class ApiManager {
       const mode = this.validateMode(req, res);
       if (!mode) return;
 
-      const page = parseInt(req.query.page as string) || 1;
+      const page = Math.max(parseInt(req.query.page as string) || 1, 1);
       const pageSize = 10;
       const skip = (page - 1) * pageSize;
 
@@ -526,9 +530,9 @@ export class ApiManager {
       }
       const users = await User.find({ [`${type}.0`]: { $exists: true } }).select(`discordId ign ${type}`);
 
-      let staffIds: Set<string> = new Set();
-      let targetIds: Set<string> = new Set();
-      let punishments: any[] = [];
+      const staffIds: Set<string> = new Set();
+      const targetIds: Set<string> = new Set();
+      const punishments: any[] = [];
 
       for (const user of users) {
         const arr = Array.isArray((user as any)[type]) ? (user as any)[type] : [];
@@ -808,7 +812,7 @@ export class ApiManager {
   private getTopStats = async (req: Request, res: Response): Promise<void> => {
     try {
       const stat = req.query.stat as string || 'elo';
-      const limit = parseInt(req.query.limit as string) || 10;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
 
       const validStats = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
         'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'bedBroken', 'mvps',
@@ -849,8 +853,8 @@ export class ApiManager {
   private getUserGames = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
+      const page = Math.max(parseInt(req.query.page as string) || 1, 1);
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
       const skip = (page - 1) * limit;
 
       const Game = await this.getGameModel();
@@ -1131,7 +1135,7 @@ export class ApiManager {
       const mode = this.validateMode(req, res);
       if (!mode) return;
 
-      const limit = parseInt(req.query.limit as string) || 50;
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
 
       const sortObj: Record<string, 1 | -1> = {};
       sortObj[mode] = -1;
@@ -1320,10 +1324,13 @@ export class ApiManager {
   
   private getMaps = async (req: Request, res: Response): Promise<void> => {
     try {
-      const reservedMaps = this.wsManager.getReservedMaps();
+      const allMaps = this.wsManager.getAllMaps();
       res.json({
-        totalMaps: reservedMaps.length,
-        maps: reservedMaps
+        totalMaps: allMaps.length,
+        reservedCount: this.wsManager.getReservedMaps().length,
+        lockedCount: this.wsManager.getLockedMaps().length,
+        disabledCount: this.wsManager.getDisabledMaps().length,
+        maps: allMaps
       });
     } catch (error) {
       console.error('Error fetching maps:', error);
@@ -1380,21 +1387,20 @@ export class ApiManager {
   private getUserEloHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-      const data = await this.fetchUserWithGameHistory(discordid, 20);
-      if (!data) {
+      const user = await User.findOne({ discordId: discordid });
+      if (!user) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-      const { user, recentGames } = data;
 
+      const recentGames = (user.recentGames || []).slice(0, 20);
       const eloHistory = recentGames.map((game: any, index: number) => ({
         gameId: game.gameId,
-        date: game.startTime,
-        won: game.winners.includes(discordid),
-        
-        estimatedEloChange: game.winners.includes(discordid) ?
-          Math.floor(Math.random() * 20) + 10 :
-          -(Math.floor(Math.random() * 20) + 10)
+        date: game.date,
+        won: game.won,
+        eloChange: typeof game.eloGain === 'number' ? game.eloGain : null,
+        oldElo: typeof game.oldElo === 'number' ? game.oldElo : null,
+        newElo: typeof game.newElo === 'number' ? game.newElo : null
       }));
 
       res.json({
