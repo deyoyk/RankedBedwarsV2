@@ -7,11 +7,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      create_release:
-        description: 'Create a GitHub release from the current build (tag v<version> from pom.xml)'
-        type: boolean
-        default: false
+
+# Serialize runs so a rolling release never races itself.
+concurrency:
+  group: build-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   bot-tests:
@@ -49,6 +49,7 @@ jobs:
         run: npm run build
 
   build:
+    needs: bot-tests
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -93,9 +94,17 @@ jobs:
           name: RankedBedwars-${{ steps.version.outputs.version }}.jar
           path: RBW-LATEST-Ingame/target/RankedBedwars-*.jar
           retention-days: 30
+
+      # Every push to main replaces the previous release with the fresh JAR.
+      # No tags or manual steps needed.
+      - name: Delete previous rolling release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: gh release delete "v${{ steps.version.outputs.version }}" --yes --cleanup-tag || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
       - name: Create Release
-        if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v1
         with:
           files: RBW-LATEST-Ingame/target/RankedBedwars-*.jar
@@ -115,4 +124,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
