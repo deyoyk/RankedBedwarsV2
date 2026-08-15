@@ -7,6 +7,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub release from the current build (tag v<version> from pom.xml)'
+        type: boolean
+        default: false
 
 jobs:
   bot-tests:
@@ -45,7 +50,9 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -88,7 +95,7 @@ jobs:
           retention-days: 30
       
       - name: Create Release
-        if: github.event_name == 'push' && github.ref_type == 'tag'
+        if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v1
         with:
           files: RBW-LATEST-Ingame/target/RankedBedwars-*.jar
