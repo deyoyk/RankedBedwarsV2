@@ -294,4 +294,25 @@ describe('ApiManager', () => {
     expect(body.endpoints).not.toContain('/rbw/api/knockback/votes');
     expect(body.endpoints).not.toContain('/rbw/api/knockback/vote');
   });
+
+  it('serves the web UI at / and exposes /rbw/web/config without auth', async () => {
+    const { app } = makeManager();
+    const base = await boot(app);
+
+    const index = await fetch(`${base}/`);
+    expect(index.status).toBe(200);
+    const html = await index.text();
+    expect(html).toContain('Ranked Bedwars');
+    expect(html).toContain('app.js');
+
+    const configRes = await fetch(`${base}/rbw/web/config`);
+    expect(configRes.status).toBe(200);
+    const config = await configRes.json();
+    expect(config.apiBase).toBe('');
+    expect(typeof config.apiKeyRequired).toBe('boolean');
+
+    const asset = await fetch(`${base}/styles.css`);
+    expect(asset.status).toBe(200);
+    expect(asset.headers.get('content-type') || '').toContain('text/css');
+  });
 });

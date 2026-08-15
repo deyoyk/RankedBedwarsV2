@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Ranked Bedwars — stats, game recaps, leaderboards and player comparisons.">
+  <title>Ranked Bedwars</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23000'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='13' font-weight='700' fill='%23fff' text-anchor='middle'%3ERBW%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="#/">
+        <span class="brand-mark">RBW</span>
+        <span class="brand-name">Ranked Bedwars</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#/leaderboard?mode=elo&page=1" data-nav>Leaderboards</a>
+        <a href="#/games" data-nav>Games</a>
+        <a href="#/seasons" data-nav>Seasons</a>
+        <a href="#/compare" data-nav>Compare</a>
+      </nav>
+      <div id="search" class="nav-search"></div>
+    </div>
+  </header>
+
+  <main id="main" class="main" aria-live="polite"></main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>Ranked Bedwars</span>
+      <span id="api-status" class="muted"></span>
+    </div>
+  </footer>
+
+  <script src="config.js"></script>
+  <script src="components.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

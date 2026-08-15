@@ -398,7 +398,26 @@ curl -H "x-api-key: your_auth_key" "http://localhost:25565/rbw/api/user?ign=Notc
 
 ---
 
-## 11. Testing
+## 11. Website
+
+A dependency-free web UI ships in `RBW-LATEST-WEB/` (player stats, game recaps
+with the full event timeline, leaderboards for every stat, season boards and
+player comparison). The bot serves it automatically on the same port:
+
+- Visit `http://your-host:25565/` — static files are served before auth/rate
+  limiting, so they never count against API limits.
+- For a public site set `RBW_PUBLIC_API=true` in the bot's env (read-only API
+  access without a key; a wrong key is still rejected). Otherwise put your
+  `AUTH_KEY` in `RBW-LATEST-WEB/config.js`.
+- Each page is a lazily-loaded ES module; API responses are cached in memory +
+  localStorage with TTLs, so navigating the site barely touches the backend.
+- Hosting the site elsewhere: copy `RBW-LATEST-WEB/`, set `apiBase` in
+  `config.js` to the bot's URL, and deploy as static files anywhere
+  (Vercel/Netlify/GitHub Pages).
+
+---
+
+## 12. Testing
 
 ```bash
 npm test        # Jest unit tests (runInBand)

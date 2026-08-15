@@ -1,10 +1,12 @@
 import express, { Request, Response } from 'express';
 import { Server } from 'http';
+import path from 'path';
+import fs from 'fs';
+import { rateLimit } from 'express-rate-limit';
 import User from '../models/User';
 import { Client } from 'discord.js';
 import config from '../config/config';
 import cors from 'cors';
-import { rateLimit } from 'express-rate-limit';
 import Queue from '../models/Queue';
 import EloRank from '../models/EloRank';
 import Season from '../models/Season';
@@ -55,6 +57,24 @@ export class ApiManager {
 
     this.wsManager.app.use(cors());
 
+    // Serve the RankedBedwars web UI (if present) before auth/rate limiting so
+    // static assets never count against API limits. The SPA uses hash routing,
+    // so a single index.html fallback is enough.
+    const webDir = this.resolveWebDir();
+    if (webDir) {
+      this.wsManager.app.use(express.static(webDir, { index: 'index.html', maxAge: '1h' }));
+      console.log(`[API] Serving web UI from ${webDir}`);
+    }
+
+    this.wsManager.app.get('/rbw/web/config', (req: Request, res: Response) => {
+      res.json({
+        apiBase: '',
+        apiKeyRequired: process.env.RBW_PUBLIC_API !== 'true',
+        rateLimited: true,
+        siteVersion: 1
+      });
+    });
+
     this.wsManager.app.use(this.globalLimiter);
 
     this.wsManager.app.use((req, res, next) => {
@@ -68,7 +88,8 @@ export class ApiManager {
     this.wsManager.app.use((req, res, next) => {
       const apiKey = req.headers['x-api-key'] || req.query.key;
       const authKey = process.env.AUTH_KEY;
-      if (authKey && apiKey !== authKey) {
+      const publicReadOnly = process.env.RBW_PUBLIC_API === 'true';
+      if (authKey && apiKey !== authKey && !(publicReadOnly && !apiKey)) {
         res.status(401).json({ error: 'Unauthorized' });
         return;
       }
@@ -86,6 +107,32 @@ export class ApiManager {
       /^\/rbw\/api\/user\/[^/]+\/compare\/[^/]+$/.test(path) ||
       path === '/rbw/api/search/users'
     );
+  }
+
+  /**
+   * Locates the web UI directory. Checks, in order: RBW_WEB_DIR env override,
+   * ../RBW-LATEST-WEB relative to the process cwd (repo layout), and the
+   * repo-root-relative path from the compiled dist/ location.
+   */
+  private resolveWebDir(): string | null {
+    const candidates = [
+      process.env.RBW_WEB_DIR,
+      path.resolve(process.cwd(), '..', 'RBW-LATEST-WEB'),
+      path.resolve(process.cwd(), 'RBW-LATEST-WEB'),
+      path.resolve(__dirname, '..', '..', 'RBW-LATEST-WEB'),
+      path.resolve(__dirname, '..', 'RBW-LATEST-WEB')
+    ];
+    for (const candidate of candidates) {
+      if (!candidate) continue;
+      try {
+        if (fs.existsSync(path.join(candidate, 'index.html'))) {
+          return candidate;
+        }
+      } catch (error) {
+        // ignore and try the next candidate
+      }
+    }
+    return null;
   }
 
   private async getCached<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
