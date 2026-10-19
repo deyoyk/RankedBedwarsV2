@@ -34,6 +34,14 @@ export interface SeasonEndResult {
 
 export class SeasonManager {
 
+  private static readonly MIGRATION_BATCH_SIZE = 100;
+
+  private static async runInBatches(tasks: Array<() => Promise<unknown>>): Promise<void> {
+    for (let i = 0; i < tasks.length; i += SeasonManager.MIGRATION_BATCH_SIZE) {
+      await Promise.all(tasks.slice(i, i + SeasonManager.MIGRATION_BATCH_SIZE).map(run => run()));
+    }
+  }
+
   public static async startSeason(
     options: SeasonStartOptions
   ): Promise<{ success: boolean; message: string; embed?: EmbedBuilder }> {
@@ -173,7 +181,7 @@ export class SeasonManager {
 
         const users = await User.find({}).session(session);
 
-        await Promise.all(users.map(user =>
+        await SeasonManager.runInBatches(users.map(user => () =>
           new SeasonStats({
             discordId: user.discordId,
             seasonNumber,
@@ -209,9 +217,9 @@ export class SeasonManager {
 
         const games = await Game.find({}).session(session);
 
-        await Promise.all(games.map(game => {
+        await SeasonManager.runInBatches(games.map(game => {
           const { _id, __v, ...gameData } = game.toObject();
-          return new SeasonGames({
+          return () => new SeasonGames({
             ...gameData,
             seasonNumber,
             chapterNumber
