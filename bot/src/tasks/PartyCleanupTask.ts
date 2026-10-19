@@ -6,6 +6,7 @@ import { PartyService } from '../services/PartyService';
 export class PartyCleanupTask {
   private client: Client;
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private isRunning = false;
   private readonly INACTIVITY_THRESHOLD = 2 * 60 * 60 * 1000;
 
   constructor(client: Client) {
@@ -13,6 +14,9 @@ export class PartyCleanupTask {
   }
 
   public start() {
+    if (this.cleanupInterval) {
+      return;
+    }
     this.cleanupInterval = setInterval(async () => {
       await this.cleanupInactiveParties();
     }, 30 * 60 * 1000);
@@ -20,7 +24,18 @@ export class PartyCleanupTask {
     console.log('[PartyCleanupTask] Started party cleanup task (runs every 30 minutes)');
   }
 
+  public stop() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+  }
+
   private async cleanupInactiveParties() {
+    if (this.isRunning) {
+      return;
+    }
+    this.isRunning = true;
     try {
       const cutoffTime = new Date(Date.now() - this.INACTIVITY_THRESHOLD);
       
@@ -48,6 +63,8 @@ export class PartyCleanupTask {
       console.log(`[PartyCleanupTask] Successfully disbanded ${inactiveParties.length} inactive parties`);
     } catch (error) {
       console.error('[PartyCleanupTask] Error during party cleanup:', error);
+    } finally {
+      this.isRunning = false;
     }
   }
 

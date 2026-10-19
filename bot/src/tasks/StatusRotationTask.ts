@@ -23,23 +23,33 @@ export class StatusRotationTask {
   }
 
   public start() {
+    if (this.statusInterval) {
+      return;
+    }
     this.statusInterval = setInterval(() => {
-      this.rotateStatus();
+      void this.rotateStatus().catch((error) => {
+        console.error('[StatusRotationTask] Error rotating status:', error);
+      });
     }, 10000);
 
-    this.rotateStatus();
+    void this.rotateStatus().catch((error) => {
+      console.error('[StatusRotationTask] Error rotating status:', error);
+    });
     console.log('[StatusRotationTask] Started status rotation (changes every 10 seconds)');
   }
 
-  private rotateStatus() {
-    try {
-      const status = this.statuses[this.currentIndex];
-      this.client.user?.setActivity(status.name, { type: status.type });
-      this.client.user?.setStatus('idle');
-      
-      this.currentIndex = (this.currentIndex + 1) % this.statuses.length;
-    } catch (error) {
-      console.error('[StatusRotationTask] Error rotating status:', error);
+  public stop() {
+    if (this.statusInterval) {
+      clearInterval(this.statusInterval);
+      this.statusInterval = null;
     }
+  }
+
+  private async rotateStatus() {
+    const status = this.statuses[this.currentIndex];
+    await this.client.user?.setActivity(status.name, { type: status.type });
+    await this.client.user?.setStatus('idle');
+
+    this.currentIndex = (this.currentIndex + 1) % this.statuses.length;
   }
 }

@@ -12,12 +12,21 @@ export class ChannelsCleanupTask {
   }
 
   public start() {
-    
+    if (this.cleanupInterval) {
+      return;
+    }
     this.cleanupInterval = setInterval(async () => {
       await this.cleanupOrphanedChannels();
     }, this.CLEANUP_INTERVAL);
 
     console.log('[ChannelsCleanupTask] Started channel cleanup task (runs every 3 hours)');
+  }
+
+  public stop() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
   }
 
   private async cleanupOrphanedChannels() {

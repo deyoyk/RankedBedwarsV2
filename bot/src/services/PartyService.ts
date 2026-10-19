@@ -190,8 +190,24 @@ export class PartyService {
       return { success: false, message: 'Party is full' };
     }
 
-    party.members.push(userId);
-    await party.save();
+    const updated = await Party.findOneAndUpdate(
+      {
+        partyId: party.partyId,
+        members: { $ne: userId },
+        $expr: { $lt: [{ $size: '$members' }, '$maxMembers'] }
+      },
+      { $push: { members: userId } },
+      { new: true }
+    );
+
+    if (!updated) {
+      const fresh = await Party.findOne({ partyId: party.partyId });
+      if (fresh && fresh.members.includes(userId)) {
+        return { success: false, message: 'Already in this party' };
+      }
+      return { success: false, message: 'Party is full' };
+    }
+    party.members = updated.members;
 
     user.partyId = party.partyId;
     await user.save();

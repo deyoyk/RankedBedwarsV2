@@ -25,7 +25,10 @@ export class BotStatusTask {
 
   public async start() {
     try {
-      
+      if (this.updateInterval) {
+        return;
+      }
+
       await this.sendStatusEmbed();
       if (!this.statusMessage) {
         console.error('[BotStatusTask] Skipping status updates: missing access or channel invalid');
@@ -40,6 +43,13 @@ export class BotStatusTask {
       console.log('[BotStatusTask] Started with 30-second updates');
     } catch (error) {
       console.error('[BotStatusTask] Error starting status task:', error);
+    }
+  }
+
+  public stop() {
+    if (this.updateInterval) {
+      clearInterval(this.updateInterval);
+      this.updateInterval = null;
     }
   }
 
