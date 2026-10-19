@@ -28,9 +28,18 @@ export type DefaultTemplateInput = {
 
 const WIDTH = 1400;
 const HEIGHT = 940;
-const PANEL = '#101014';
-const LINE = '#26262e';
+const PANEL = '#11141d';
+const LINE = '#232936';
 const MUTED = '#8a8a95';
+const CYAN = '#22d3ee';
+
+function grain(): VNode {
+  return h('svg', { width: WIDTH, height: HEIGHT, style: { position: 'absolute', left: 0, top: 0 } },
+    h('filter', { id: 'defaultgrain' },
+      h('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.9', numOctaves: '2' }),
+      h('feColorMatrix', { type: 'saturate', values: '0' })),
+    h('rect', { width: WIDTH, height: HEIGHT, filter: 'url(#defaultgrain)', opacity: '0.05' }));
+}
 
 function diamond(cx: number, cy: number, size: number, color: string): VNode {
   const s = size / 2;
@@ -38,21 +47,45 @@ function diamond(cx: number, cy: number, size: number, color: string): VNode {
     h('polygon', { points: `${s},0 ${size},${s} ${s},${size} 0,${s}`, fill: color }));
 }
 
-function grain(): VNode {
-  return h('svg', { width: WIDTH, height: HEIGHT, style: { position: 'absolute', left: 0, top: 0 } },
-    h('filter', { id: 'defaultgrain' },
-      h('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.9', numOctaves: '2' }),
-      h('feColorMatrix', { type: 'saturate', values: '0' })),
-    h('rect', { width: WIDTH, height: HEIGHT, filter: 'url(#defaultgrain)', opacity: '0.04' }));
+function levelRing(progress: number, level: number, skin: string | null): VNode {
+  const r = 78;
+  const c = 2 * Math.PI * r;
+  const filled = Math.round(c * Math.min(1, Math.max(0, progress)));
+  return h('div', { style: { position: 'absolute', left: 70, top: 48, width: 180, height: 180 } },
+    h('svg', { width: 180, height: 180, style: { position: 'absolute', left: 0, top: 0 } },
+      h('circle', { cx: 90, cy: 90, r, fill: 'none', stroke: '#232936', strokeWidth: 10 }),
+      h('circle', { cx: 90, cy: 90, r, fill: 'none', stroke: CYAN, strokeWidth: 10, strokeDasharray: `${filled} ${Math.round(c)}`, strokeLinecap: 'round', transform: 'rotate(-90 90 90)' })),
+    h('div', { style: { position: 'absolute', left: 18, top: 18, width: 144, height: 144, borderRadius: 72, overflow: 'hidden', backgroundColor: '#15151c' } },
+      skin ? h('img', { src: skin, width: 144, height: 316, style: { position: 'absolute', left: 0, top: -12 } }) : null),
+    h('div', {
+      style: {
+        position: 'absolute', left: 45, top: 188 - 48, width: 90, height: 34, borderRadius: 17,
+        backgroundColor: '#0e7490', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'PoppinsMedium', fontSize: 20, color: '#FFFFFF',
+      },
+    }, `LVL ${level}`));
 }
 
-function emblem(): VNode {
-  return h('svg', { width: 110, height: 110, style: { position: 'absolute', left: 1005, top: 55 } },
-    h('polygon', { points: '28,40 2,28 2,82', fill: '#a5f3fc' }),
-    h('polygon', { points: '82,40 108,28 108,82', fill: '#a5f3fc' }),
-    h('polygon', { points: '55,5 105,55 55,105 5,55', fill: '#00e5ff' }),
-    h('polygon', { points: '55,24 86,55 55,86 24,55', fill: '#ffffff' }),
-    h('polygon', { points: '55,38 72,55 55,72 38,55', fill: '#00e5ff' }));
+function statTile(x: number, y: number, t: DefaultTile): VNode {
+  return h('div', {
+    style: {
+      position: 'absolute', left: x, top: y, width: 300, height: 125,
+      backgroundColor: PANEL, borderRadius: 12,
+      borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
+    },
+  },
+    h('div', { style: { position: 'absolute', left: 0, top: 14, width: 5, height: 97, borderRadius: 3, backgroundColor: t.accent } }),
+    h('div', { style: { position: 'absolute', left: 28, top: 18, fontFamily: 'PoppinsMedium', fontSize: 54, color: '#FFFFFF', lineHeight: '56px' } }, t.value),
+    h('div', { style: { position: 'absolute', left: 28, top: 86, fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, t.label),
+    h('div', {
+      style: {
+        position: 'absolute', right: 14, top: 14, width: 74, height: 28, borderRadius: 14,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        borderWidth: 1, borderStyle: 'solid', borderColor: '#a78bfa',
+        fontFamily: 'PoppinsMedium', fontSize: 17, color: '#a78bfa',
+      },
+    }, t.rank),
+  );
 }
 
 function rightText(left: number, top: number, width: number, fontSize: number, font: string, color: string, text: string, height?: number): VNode {
@@ -64,113 +97,80 @@ function rightText(left: number, top: number, width: number, fontSize: number, f
   }, text);
 }
 
-function statTile(x: number, y: number, t: DefaultTile): VNode {
-  return h('div', {
-    style: {
-      position: 'absolute', left: x, top: y, width: 300, height: 125,
-      backgroundColor: PANEL, borderRadius: 12, overflow: 'hidden',
-      borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
-    },
-  },
-    h('div', { style: { position: 'absolute', left: 0, top: 0, width: 300, height: 4, backgroundColor: t.accent } }),
-    h('div', { style: { position: 'absolute', left: 25, top: 20, fontFamily: 'PoppinsMedium', fontSize: 54, color: '#FFFFFF', lineHeight: '56px' } }, t.value),
-    h('div', { style: { position: 'absolute', left: 25, top: 88, fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, t.label),
-    h('div', {
-      style: {
-        position: 'absolute', right: 12, top: 14, width: 76, height: 30, borderRadius: 6,
-        backgroundColor: '#241d4d', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'PoppinsMedium', fontSize: 18, color: '#a78bfa',
-      },
-    }, t.rank),
-  );
-}
-
-function combatTile(x: number, t: DefaultTile): VNode {
-  return h('div', {
-    style: {
-      position: 'absolute', left: x, top: 794, width: 384, height: 68,
-      backgroundColor: PANEL, borderRadius: 10, overflow: 'hidden',
-      borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
-    },
-  },
-    h('div', { style: { position: 'absolute', left: 0, top: 0, width: 384, height: 3, backgroundColor: '#8b5cf6' } }),
-    h('div', { style: { position: 'absolute', left: 20, top: 8, fontFamily: 'PoppinsMedium', fontSize: 36, color: '#FFFFFF', lineHeight: '38px' } }, t.value),
-    h('div', { style: { position: 'absolute', left: 20, top: 46, fontFamily: 'PoppinsRegular', fontSize: 15, color: MUTED } }, t.label),
-    h('div', {
-      style: {
-        position: 'absolute', right: 12, top: 10, width: 72, height: 28, borderRadius: 6,
-        backgroundColor: '#241d4d', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'PoppinsMedium', fontSize: 17, color: '#a78bfa',
-      },
-    }, t.rank),
-  );
-}
-
 export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; width: number; height: number } {
-  const barW = 1140;
+  const barW = 640;
   const greenW = Math.round(barW * Math.min(1, Math.max(0, input.winRate)));
-  const ignSize = input.ign.length <= 12 ? 62 : 44;
+  const ignSize = input.ign.length <= 12 ? 68 : 48;
   const tileXs = [70, 390, 710, 1030];
   const root = h('div', {
     style: {
-      display: 'flex', position: 'relative', width: WIDTH, height: HEIGHT, backgroundColor: '#0a0a0f',
+      display: 'flex', position: 'relative', width: WIDTH, height: HEIGHT,
+      backgroundImage: `linear-gradient(160deg, #0d1226 0%, #0b0e17 55%, #07090f 100%)`,
     },
   },
     grain(),
-    h('div', { style: { position: 'absolute', left: 70, top: 35, width: 150, height: 150, borderRadius: 8, overflow: 'hidden', backgroundColor: '#15151c' } },
-      input.skin ? h('img', { src: input.skin, width: 150, height: 330, style: { position: 'absolute', left: 0, top: -55 } }) : null),
+    h('div', { style: { position: 'absolute', left: 0, top: 0, width: WIDTH, height: 300, backgroundImage: `linear-gradient(180deg, rgba(34,211,238,0.07) 0%, rgba(34,211,238,0) 100%)` } }),
+    levelRing(input.xpProgress, input.level, input.skin),
+    h('div', { style: { position: 'absolute', left: 285, top: 62, fontFamily: 'PoppinsMedium', fontSize: ignSize, color: '#e8e8ef', lineHeight: '70px' } }, input.ign),
+    input.joined ? h('div', { style: { position: 'absolute', left: 287, top: 140, fontFamily: 'PoppinsRegular', fontSize: 22, color: MUTED } }, input.joined) : null,
+    h('div', { style: { position: 'absolute', left: 287, top: 182, fontFamily: 'PoppinsMedium', fontSize: 18, color: CYAN } }, 'LEVEL PROGRESS'),
+    rightText(560, 180, 190, 18, 'PoppinsRegular', MUTED, `${input.xpToNext} XP TO NEXT`, 24),
+    h('div', { style: { position: 'absolute', left: 287, top: 208, width: 463, height: 8, borderRadius: 4, backgroundColor: LINE } }),
+    h('svg', { width: 110, height: 110, style: { position: 'absolute', left: 990, top: 62 } },
+      h('polygon', { points: '26,42 4,30 4,80', fill: '#67e8f9' }),
+      h('polygon', { points: '84,42 106,30 106,80', fill: '#67e8f9' }),
+      h('polygon', { points: '55,8 102,55 55,102 8,55', fill: 'none', stroke: CYAN, strokeWidth: 7 }),
+      h('polygon', { points: '55,32 78,55 55,78 32,55', fill: CYAN })),
+    rightText(1115, 66, 215, 62, 'PoppinsMedium', CYAN, `${input.elo} RR`, 66),
+    rightText(1115, 138, 215, 22, 'PoppinsRegular', MUTED, `#${input.globalRank} GLOBAL`, 26),
     h('div', {
       style: {
-        position: 'absolute', left: 100, top: 158, width: 110, height: 36, borderRadius: 8,
-        backgroundColor: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'PoppinsMedium', fontSize: 22, color: '#FFFFFF',
-      },
-    }, `LVL ${input.level}`),
-    h('div', { style: { position: 'absolute', left: 270, top: 55, fontFamily: 'PoppinsMedium', fontSize: ignSize, color: '#d7d7de', lineHeight: '64px' } }, input.ign),
-    input.joined ? h('div', { style: { position: 'absolute', left: 270, top: 132, fontFamily: 'PoppinsRegular', fontSize: 22, color: MUTED } }, input.joined) : null,
-    h('div', { style: { position: 'absolute', left: 270, top: 178, fontFamily: 'PoppinsMedium', fontSize: 18, color: '#8b5cf6' } }, 'LEVEL PROGRESS'),
-    rightText(550, 176, 200, 18, 'PoppinsRegular', MUTED, `${input.xpToNext} XP TO NEXT`, 24),
-    h('div', { style: { position: 'absolute', left: 270, top: 204, width: 480, height: 8, borderRadius: 4, backgroundColor: LINE } }),
-    h('div', { style: { position: 'absolute', left: 270, top: 204, width: Math.round(480 * Math.min(1, Math.max(0, input.xpProgress))), height: 8, borderRadius: 4, backgroundColor: '#8b5cf6' } }),
-    emblem(),
-    rightText(1120, 62, 210, 62, 'PoppinsMedium', '#00e5ff', `${input.elo} RR`, 66),
-    rightText(1120, 134, 210, 22, 'PoppinsRegular', MUTED, `#${input.globalRank} GLOBAL`, 26),
-    h('div', {
-      style: {
-        position: 'absolute', left: 70, top: 250, width: 1260, height: 190,
-        backgroundColor: PANEL, borderRadius: 12, borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
+        position: 'absolute', left: 70, top: 268, width: 1260, height: 150,
+        backgroundColor: 'rgba(17,20,29,0.85)', borderRadius: 14,
+        borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
       },
     }),
-    diamond(108, 280, 16, '#8b5cf6'),
-    h('div', { style: { position: 'absolute', left: 124, top: 268, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, 'RECORD'),
-    h('div', { style: { position: 'absolute', left: 100, top: 295, fontFamily: 'PoppinsMedium', fontSize: 64, color: '#00e676', lineHeight: '66px' } }, input.wins),
-    h('div', { style: { position: 'absolute', left: 100, top: 366, fontFamily: 'PoppinsRegular', fontSize: 20, color: MUTED } }, 'WINS'),
-    rightText(1150, 295, 150, 64, 'PoppinsMedium', '#ff5252', input.losses, 66),
-    rightText(1150, 366, 150, 20, 'PoppinsRegular', MUTED, 'LOSSES', 24),
-    h('div', { style: { position: 'absolute', left: 100, top: 394, width: barW, height: 12, borderRadius: 6, overflow: 'hidden', backgroundColor: LINE } },
-      h('div', { style: { position: 'absolute', left: 0, top: 0, width: greenW, height: 12, backgroundColor: '#00c853' } }),
-      h('div', { style: { position: 'absolute', right: 0, top: 0, width: barW - greenW, height: 12, backgroundColor: '#ff5252' } })),
+    diamond(108, 296, 16, CYAN),
+    h('div', { style: { position: 'absolute', left: 124, top: 284, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, 'RECORD'),
+    h('div', { style: { position: 'absolute', left: 100, top: 306, fontFamily: 'PoppinsMedium', fontSize: 60, color: '#00e676', lineHeight: '62px' } }, input.wins),
+    h('div', { style: { position: 'absolute', left: 102, top: 372, fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, input.wins === '1' ? 'WIN' : 'WINS'),
+    rightText(1150, 306, 150, 60, 'PoppinsMedium', '#ff5252', input.losses, 62),
+    h('div', { style: { position: 'absolute', left: 330, top: 318, width: barW, height: 12, borderRadius: 6, overflow: 'hidden', backgroundColor: LINE } },
+      h('div', { style: { position: 'absolute', left: 0, top: 0, width: greenW, height: 12, borderRadius: 6, backgroundColor: '#00c853' } }),
+      h('div', { style: { position: 'absolute', right: 0, top: 0, width: barW - greenW, height: 12, borderRadius: 6, backgroundColor: '#ff5252' } })),
+    h('div', { style: { position: 'absolute', left: 430, top: 338, width: 440, textAlign: 'center', fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, input.winCaption),
+    h('div', { style: { position: 'absolute', left: 1150, top: 372, width: 150, textAlign: 'right', fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, 'LOSSES'),
+    ...input.tiles.slice(0, 4).map((t, i) => statTile(tileXs[i], 443, t)),
+    ...input.tiles.slice(4, 8).map((t, i) => statTile(tileXs[i], 588, t)),
     h('div', {
       style: {
-        position: 'absolute', left: 340, top: 412, width: 600, height: 24, textAlign: 'center',
-        fontFamily: 'PoppinsRegular', fontSize: 20, color: MUTED, lineHeight: '24px',
-      },
-    }, input.winCaption),
-    ...input.tiles.slice(0, 4).map((t, i) => statTile(tileXs[i], 465, t)),
-    ...input.tiles.slice(4, 8).map((t, i) => statTile(tileXs[i], 610, t)),
-    h('div', {
-      style: {
-        position: 'absolute', left: 70, top: 755, width: 1260, height: 115,
-        backgroundColor: PANEL, borderRadius: 12, borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
+        position: 'absolute', left: 70, top: 738, width: 1260, height: 110,
+        backgroundColor: 'rgba(17,20,29,0.85)', borderRadius: 14,
+        borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
       },
     }),
-    diamond(108, 776, 16, '#8b5cf6'),
-    h('div', { style: { position: 'absolute', left: 124, top: 764, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, 'COMBAT'),
-    ...[100, 496, 892].map((x, i) => combatTile(x, input.combat[i] || { value: '-', label: '', rank: '' })),
-    h('div', { style: { position: 'absolute', left: 70, top: 888, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, input.seasonLine1),
-    h('div', { style: { position: 'absolute', left: 70, top: 910, fontFamily: 'PoppinsRegular', fontSize: 18, color: '#55555e' } }, input.seasonLine2),
-    h('div', { style: { position: 'absolute', left: 1140, top: 886, fontFamily: 'PoppinsMedium', fontSize: 36, color: '#55555e' } }, 'R'),
-    h('div', { style: { position: 'absolute', left: 1180, top: 894, fontFamily: 'PoppinsMedium', fontSize: 26, color: '#55555e' } }, 'RBW.GG'),
+    diamond(108, 762, 15, CYAN),
+    h('div', { style: { position: 'absolute', left: 124, top: 751, fontFamily: 'PoppinsMedium', fontSize: 19, color: MUTED } }, 'COMBAT'),
+    ...[130, 520, 910].map((x, i) => {
+      const t = input.combat[i] || { value: '-', label: '', rank: '' };
+      return h('div', { style: { position: 'absolute', left: x, top: 786, width: 300 } },
+        h('div', { style: { fontFamily: 'PoppinsMedium', fontSize: 40, color: '#FFFFFF', lineHeight: '42px' } }, t.value,
+          h('span', { style: { marginLeft: 12, fontFamily: 'PoppinsRegular', fontSize: 18, color: MUTED } }, t.label)),
+        h('div', {
+          style: {
+            position: 'absolute', right: 0, top: 6, width: 72, height: 28, borderRadius: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1, borderStyle: 'solid', borderColor: '#a78bfa',
+            fontFamily: 'PoppinsMedium', fontSize: 17, color: '#a78bfa',
+          },
+        }, t.rank),
+        i < 2 ? h('div', { style: { position: 'absolute', right: -45, top: 0, width: 1, height: 52, backgroundColor: LINE } }) : null,
+      );
+    }),
+    h('div', { style: { position: 'absolute', left: 70, top: 872, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, input.seasonLine1),
+    h('div', { style: { position: 'absolute', left: 70, top: 894, fontFamily: 'PoppinsRegular', fontSize: 18, color: '#55555e' } }, input.seasonLine2),
+    h('div', { style: { position: 'absolute', left: 1140, top: 870, fontFamily: 'PoppinsMedium', fontSize: 36, color: '#55555e' } }, 'R'),
+    h('div', { style: { position: 'absolute', left: 1180, top: 878, fontFamily: 'PoppinsMedium', fontSize: 26, color: '#55555e' } }, 'RBW.GG'),
   );
   return { root, width: WIDTH, height: HEIGHT };
 }
