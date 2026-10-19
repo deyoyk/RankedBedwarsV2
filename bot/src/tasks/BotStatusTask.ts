@@ -68,11 +68,33 @@ export class BotStatusTask {
       }
 
       const embed = await this.createStatusEmbed();
+      const adopted = await this.findOwnStatusMessage(channel);
+      if (adopted) {
+        this.statusMessage = adopted;
+        await adopted.edit({ embeds: [embed] });
+        return;
+      }
       this.statusMessage = await channel.send({ embeds: [embed], files: [{ attachment: this.statusImagePath, name: 'rbw.gif' }] });
       this.statusImageCdnUrl = this.statusMessage.attachments?.first()?.url || null;
     } catch (error) {
       console.error('[BotStatusTask] Error sending status embed:', error);
     }
+  }
+
+  private async findOwnStatusMessage(channel: TextChannel): Promise<any> {
+    try {
+      const ownId = this.client.user?.id;
+      if (!ownId) return null;
+      const messages = await channel.messages.fetch({ limit: 10 });
+      for (const message of messages.values()) {
+        if (message.author?.id === ownId && message.embeds?.length) {
+          return message;
+        }
+      }
+    } catch (error) {
+      console.error('[BotStatusTask] Error finding status message:', error);
+    }
+    return null;
   }
 
   private async updateStatusEmbed() {
