@@ -166,6 +166,24 @@ describe('MuteManager.mute', () => {
     expect(user.ismuted).toBe(true);
   });
 
+  it('rejects durations over 30 days', async () => {
+    const user = mockUser();
+    UserModel.findOne.mockResolvedValue(user);
+
+    await expect(MuteManager.mute(guildMock() as any, '123', 'mod', '31d', 'Spamming'))
+      .rejects.toThrow('Mute duration cannot exceed 30 days');
+    expect(user.mutes).toHaveLength(0);
+  });
+
+  it('rejects durations under 1 minute', async () => {
+    const user = mockUser();
+    UserModel.findOne.mockResolvedValue(user);
+
+    await expect(MuteManager.mute(guildMock() as any, '123', 'mod', '30s', 'Spamming'))
+      .rejects.toThrow('Mute duration must be at least 1 minute');
+    expect(user.mutes).toHaveLength(0);
+  });
+
   it('rejects invalid durations', async () => {
     const user = mockUser();
     UserModel.findOne.mockResolvedValue(user);
@@ -194,6 +212,53 @@ describe('MuteManager.mute', () => {
   });
 });
 
+describe('MuteManager.unmute', () => {
+  it('clears the mute status and saves', async () => {
+    const user = mockUser();
+    user.ismuted = true;
+    UserModel.findOne.mockResolvedValue(user);
+
+    await MuteManager.unmute(guildMock() as any, '123', 'mod', 'Expired');
+
+    expect(user.ismuted).toBe(false);
+    expect(mockSave).toHaveBeenCalled();
+  });
+
+  it('does nothing for users who are not muted', async () => {
+    const user = mockUser();
+    UserModel.findOne.mockResolvedValue(user);
+
+    await MuteManager.unmute(guildMock() as any, '123', 'mod');
+    expect(mockSave).not.toHaveBeenCalled();
+  });
+});
+
+describe('BanManager Discord hooks', () => {
+  it('Discord-bans on permanent bans only', async () => {
+    const permanent = mockUser();
+    UserModel.findOne.mockResolvedValue(permanent);
+    const guild = guildMock();
+
+    await BanManager.ban(guild as any, '123', 'mod', '', 'Cheating');
+    expect(guild.members.ban).toHaveBeenCalledTimes(1);
+
+    const timed = mockUser();
+    UserModel.findOne.mockResolvedValue(timed);
+    const guild2 = guildMock();
+
+    await BanManager.ban(guild2 as any, '123', 'mod', '1h', 'Toxic');
+    expect(guild2.members.ban).not.toHaveBeenCalled();
+  });
+
+  it('rejects durations over 1 year', async () => {
+    const user = mockUser();
+    UserModel.findOne.mockResolvedValue(user);
+
+    await expect(BanManager.ban(guildMock() as any, '123', 'mod', '400d', 'test'))
+      .rejects.toThrow('Ban duration cannot exceed 1 year');
+    expect(user.bans).toHaveLength(0);
+  });
+});
 describe('StrikeManager.strike', () => {
   it('persists a strike with a valid ObjectId', async () => {
     const user = mockUser();
