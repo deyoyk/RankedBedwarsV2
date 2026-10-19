@@ -274,8 +274,6 @@ export class CentralizedMatchmaker {
       }
 
       if (validPlayers.length !== players.length) {
-        // Preserve players who joined the queue while validation was running:
-        // the snapshot we validated must not silently drop concurrent joins.
         const currentQueuePlayers = queuePlayers.get(queueId) || [];
         const snapshotSet = new Set(players);
         const joinedDuringValidation = currentQueuePlayers.filter(p => !snapshotSet.has(p));

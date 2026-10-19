@@ -44,7 +44,6 @@ public class WebSocketUriTest {
 
     @Test
     public void theDefaultConfigValueWorks() {
-        // config.yml ships with host: "ws://localhost:8080"
         assertEquals("ws://localhost:8080/rbw/websocket", WebSocketManager.buildWebSocketUri("ws://localhost:8080"));
     }
 }

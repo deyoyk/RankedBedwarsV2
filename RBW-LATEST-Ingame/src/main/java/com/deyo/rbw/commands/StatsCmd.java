@@ -33,8 +33,6 @@ public class StatsCmd implements CommandExecutor {
         player.sendMessage(ChatColor.GRAY + "Fetching your stats...");
         CompletableFuture<UserData> future = apiClient.getUserData(ign);
         future.thenAccept(userData -> {
-            // The future completes on the APIClient executor thread; all Bukkit
-            // API calls must run on the main thread.
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (!player.isOnline()) {
                     return;

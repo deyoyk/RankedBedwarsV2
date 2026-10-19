@@ -70,7 +70,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     )
   );
 
-  // Stat strip.
   const winners = game.winnersign || [];
   const losers = game.losersign || [];
   const mvpCount = (game.mvpsign || []).length;
@@ -84,7 +83,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
   ]);
   statsSkeleton.replaceWith(statsStrip);
 
-  // Teams.
   function teamCard(title, igns, isWinner, playersInfo) {
     const body = igns.length
       ? igns.map(ign => {
@@ -107,7 +105,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     );
   }
 
-  // Per-player info from timeline + game fields.
   const playersInfo = {};
   for (const ign of [...(game.team1ign || []), ...(game.team2ign || [])]) {
     playersInfo[ign] = { mvp: (game.mvpsign || []).includes(ign), bed: (game.bedbreaksign || []).includes(ign) };
@@ -129,7 +126,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     teamCard('Team 2', t2, t2Won && t1Won !== t2Won, playersInfo)
   );
 
-  // Timeline.
   const timeline = timelineData.timeline || [];
   const holder = timelineSkeleton.querySelector('.card');
   if (!timeline.length) {

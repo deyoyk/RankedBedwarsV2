@@ -27,7 +27,6 @@ interface QueueState {
   processing: boolean;
 }
 
-// fallow-ignore-next-line unused-export
 export class QueueListener {
   private client: Client;
   private matchmaker: CentralizedMatchmaker;

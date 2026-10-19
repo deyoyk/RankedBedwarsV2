@@ -11,7 +11,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
   const season = segments[1];
   const chapter = segments[2];
 
-  // Season list view.
   if (!season || !chapter) {
     const head = UI.el('div', { class: 'page-head' },
       UI.el('h1', { text: 'Seasons' }),
@@ -45,7 +44,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     return;
   }
 
-  // Season leaderboard view.
   const mode = MODES.includes(params.get('mode')) ? params.get('mode') : 'elo';
   const page = Math.max(1, parseInt(params.get('page') || '1', 10) || 1);
 

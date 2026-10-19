@@ -33,7 +33,6 @@ a:hover { color: var(--accent); }
 .muted { color: var(--text-2); }
 .num { font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
 
-/* ---------- nav ---------- */
 
 .nav {
   position: sticky; top: 0; z-index: 50;
@@ -93,7 +92,6 @@ a:hover { color: var(--accent); }
 }
 .search-results a:hover { background: var(--surface-2); color: var(--text); }
 
-/* ---------- layout ---------- */
 
 .main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 64px; min-height: calc(100vh - var(--nav-h) - 80px); }
 
@@ -107,7 +105,6 @@ a:hover { color: var(--accent); }
 .page-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.3px; }
 .page-head .sub { color: var(--text-2); margin-top: 4px; font-size: 13.5px; }
 
-/* ---------- primitives ---------- */
 
 .btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -140,7 +137,6 @@ a:hover { color: var(--accent); }
 }
 .card-body { padding: 16px; }
 
-/* ---------- skeleton ---------- */
 
 .skeleton {
   border-radius: 4px;
@@ -150,7 +146,6 @@ a:hover { color: var(--accent); }
 }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
-/* ---------- tables ---------- */
 
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -167,7 +162,6 @@ td.num, th.num { text-align: right; }
 td.rank { color: var(--text-3); font-family: ui-monospace, Menlo, monospace; }
 td.rank.top { color: var(--text); }
 
-/* ---------- stat grid ---------- */
 
 .stat-grid {
   display: grid;
@@ -182,7 +176,6 @@ td.rank.top { color: var(--text); }
 .stat-cell .value.ok { color: var(--ok); }
 .stat-cell .value.bad { color: var(--bad); }
 
-/* ---------- hero ---------- */
 
 .hero { padding: 72px 0 48px; text-align: center; }
 .hero h1 { font-size: 44px; font-weight: 700; letter-spacing: -1px; }
@@ -191,7 +184,6 @@ td.rank.top { color: var(--text); }
 .hero .search-input { padding: 12px 16px; font-size: 15px; }
 .hero .search-results { text-align: left; }
 
-/* ---------- player ---------- */
 
 .player-head { display: flex; align-items: flex-end; gap: 24px; padding: 28px; }
 .player-head .ign { font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
@@ -202,7 +194,6 @@ td.rank.top { color: var(--text); }
 .section { margin-top: 28px; }
 .section-title { font-size: 15px; font-weight: 600; margin-bottom: 12px; letter-spacing: 0.2px; }
 
-/* ---------- game ---------- */
 
 .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .team { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
@@ -215,7 +206,6 @@ td.rank.top { color: var(--text); }
 .tag-mvp { color: var(--warn); }
 .tag-bed { color: var(--ok); }
 
-/* timeline */
 .timeline { position: relative; padding-left: 24px; }
 .timeline::before {
   content: ""; position: absolute; left: 6px; top: 4px; bottom: 4px; width: 1px; background: var(--border-strong);
@@ -239,7 +229,6 @@ td.rank.top { color: var(--text); }
 .tl-event[data-type="resource_pickup"] .tl-type { color: #58a6ff; }
 .tl-event[data-type="game_end"] .tl-type { color: var(--text); }
 
-/* ---------- compare ---------- */
 
 .compare-row { display: grid; grid-template-columns: 1fr 120px 1fr; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); }
 .compare-row:last-child { border-bottom: none; }
@@ -248,7 +237,6 @@ td.rank.top { color: var(--text); }
 .compare-row.winner-b .b { color: var(--ok); font-weight: 600; }
 .compare-row .a, .compare-row .b { font-variant-numeric: tabular-nums; }
 
-/* ---------- misc ---------- */
 
 .error-box { padding: 32px; text-align: center; color: var(--text-2); }
 .error-box h2 { color: var(--text); margin-bottom: 8px; }

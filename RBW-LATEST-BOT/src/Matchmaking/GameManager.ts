@@ -146,7 +146,6 @@ export class GameManager {
       }
       await this.validateGameForScoring(context.game);
 
-      // Atomic claim: exactly one concurrent score/void call may settle this game.
       const claimedGame = await this.claimGameForSettling(context.game.gameId, (game) => {
         game.state = GameState.SCORED;
         game.mvps = context.mvpsIds;
@@ -209,12 +208,8 @@ export class GameManager {
       const context = await this.loadGameVoidContext(gameId, reason);
       await this.validateGameForVoiding(context.game);
 
-      // Compute the revert data from the pre-transition document (it still
-      // holds winners/mvps/bedbreaks needed for the revert).
       const playerVoidData = await this.processAllPlayersForVoiding(context);
 
-      // Atomic claim: exactly one concurrent score/void call may settle this
-      // game. Only the winner of the claim may revert stats.
       const claimedGame = await this.claimGameForSettling(gameId, (game) => {
         game.state = GameState.VOIDED;
         game.reason = reason;

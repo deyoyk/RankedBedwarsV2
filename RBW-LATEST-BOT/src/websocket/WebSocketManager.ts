@@ -308,7 +308,6 @@ export class WebSocketManager {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
 
-  // fallow-ignore-next-line unused-class-member
   public async requestDontLog(ign: string, uuid: string): Promise<{ online: boolean; dontlog: boolean }> {
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
@@ -359,7 +358,6 @@ export class WebSocketManager {
     this.wss.on('connection', (ws, req) => {
       console.log('[WebSocketManager] New WebSocket connection established');
       
-      // Store the connection but don't assign to this.client until authenticated
       let isAuthenticated = false;
 
       ws.on('error', (error) => {
@@ -372,7 +370,6 @@ export class WebSocketManager {
       
       ws.on('message', (data) => {
         if (!isAuthenticated) {
-          // First message must be authentication
           let msg;
           try {
             msg = JSON.parse(data.toString());
@@ -794,7 +791,6 @@ export class WebSocketManager {
       }
     }
   }
-  // WIERD ASS AUTH METHOD. IF IT WORKS IT WORKS.
   public async checkPlayerOnline(ign: string): Promise<{ online: boolean; original_ign_case?: string }> {
     return new Promise((resolve) => {
       const normalizedIgn = ign.toLowerCase();
@@ -826,7 +822,6 @@ export class WebSocketManager {
     });
   }
 
-  // fallow-ignore-next-line unused-class-member
   public getPermission(command: string): string[] {
     return this.permissions[command] || [];
   }

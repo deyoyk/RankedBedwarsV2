@@ -38,7 +38,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
 
   main.replaceChildren(head, headerCard, statsCard, grid, recent);
 
-  // Resolve IGN → discordId when needed.
   let discordId = query;
   try {
     if (!isNumeric) {
@@ -58,7 +57,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
 
   document.title = `${p.ign} — Ranked Bedwars`;
 
-  // Rank from elo ranges.
   let rankName = null;
   let rankColor = null;
   try {
@@ -113,7 +111,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     UI.el('div', { class: 'stat-grid' }, cells)
   );
 
-  // Elo sparkline.
   (async () => {
     try {
       const daily = (overview.dailyElo || []).map(d => d.elo);
@@ -126,7 +123,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     } catch (e) {}
   })();
 
-  // Season history.
   (async () => {
     try {
       const seasons = overview.seasonHistory?.seasons || [];
@@ -153,7 +149,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     } catch (e) {}
   })();
 
-  // Recent games (last 10 from overview).
   (async () => {
     const games = overview.recentGames || [];
     const holder = recent.querySelector('.card');

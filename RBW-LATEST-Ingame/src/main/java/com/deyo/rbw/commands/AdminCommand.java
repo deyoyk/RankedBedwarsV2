@@ -247,14 +247,12 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         }
         
         try {
-            // Reload the permission file
             java.io.File permissionFile = new java.io.File(plugin.getDataFolder(), "permission.yml");
             if (!permissionFile.exists()) {
                 plugin.saveResource("permission.yml", false);
                 sender.sendMessage(ChatColor.GREEN + "Created default permission.yml file.");
             }
             
-            // Send updated permissions to WebSocket
             if (plugin.getWebSocketManager() != null && plugin.getWebSocketManager().isConnected()) {
                 plugin.getWebSocketManager().resendPermissionsData();
                 sender.sendMessage(ChatColor.GREEN + "Permissions reloaded and sent to WebSocket server successfully!");

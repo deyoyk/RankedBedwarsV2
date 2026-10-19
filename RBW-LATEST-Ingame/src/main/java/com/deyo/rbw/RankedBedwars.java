@@ -61,7 +61,6 @@ public class RankedBedwars extends JavaPlugin {
         queueCommand = new QueueCmd(this);
         getCommand("queue").setExecutor(queueCommand);
 
-        // Register /ss command
         com.deyo.rbw.commands.SsCmd ssCmd = new com.deyo.rbw.commands.SsCmd(this);
         getCommand("ss").setExecutor(ssCmd);
 

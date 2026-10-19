@@ -57,9 +57,6 @@ export class ApiManager {
 
     this.wsManager.app.use(cors());
 
-    // Serve the RankedBedwars web UI (if present) before auth/rate limiting so
-    // static assets never count against API limits. The SPA uses hash routing,
-    // so a single index.html fallback is enough.
     const webDir = this.resolveWebDir();
     if (webDir) {
       this.wsManager.app.use(express.static(webDir, { index: 'index.html', maxAge: '1h' }));
@@ -129,7 +126,6 @@ export class ApiManager {
           return candidate;
         }
       } catch (error) {
-        // ignore and try the next candidate
       }
     }
     return null;

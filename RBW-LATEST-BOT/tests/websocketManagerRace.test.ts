@@ -21,11 +21,9 @@ describe('WebSocketManager race conditions', () => {
   it('concurrent checks for the same IGN each resolve with their own result', async () => {
     const promises = Array.from({ length: 5 }, () => manager.checkPlayerOnline('Steve'));
 
-    // All five should have registered a callback and sent a check_player.
     const checks = sent.filter(m => m.type === 'check_player');
     expect(checks).toHaveLength(5);
 
-    // Simulate the plugin responding once per queued check.
     for (let i = 0; i < 5; i++) {
       (manager as any).handlePlayerStatus({ ign: 'steve', online: true, original_ign_case: 'Steve' });
     }

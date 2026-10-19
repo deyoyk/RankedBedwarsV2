@@ -5,7 +5,6 @@ export async function executeEndSeason(interaction: ChatInputCommandInteraction)
     await interaction.deferReply();
 
     try {
-        //const embed = new EmbedBuilder().setColor('#00ff00').setTitle('Ending Season!').setDescription('Please wait while the season is ended and data is migrated...');
         const result = await SeasonManager.endSeason();
         
 

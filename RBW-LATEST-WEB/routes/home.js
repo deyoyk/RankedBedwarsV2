@@ -32,7 +32,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
 
   main.replaceChildren(hero, statsWrap, grid);
 
-  // --- quick stats (independent of everything else) ---
   (async () => {
     try {
       const [global, online] = await Promise.all([
@@ -52,7 +51,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     }
   })();
 
-  // --- recent games ---
   (async () => {
     try {
       const games = await apiGet('/rbw/api/games/recent?limit=8', { ttl: 30000 });
@@ -87,7 +85,6 @@ export async function render(main, segments, params, { apiGet, UI }) {
     }
   })();
 
-  // --- live queues ---
   (async () => {
     try {
       const queues = await apiGet('/rbw/api/queues', { ttl: 15000 });

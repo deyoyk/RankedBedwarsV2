@@ -43,8 +43,6 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
     gamesplayed: user.games || 0,
   };
 
-  // bruh this sorting logic is absolutely unhinged but it works (don't question it)
-  // we're sorting recent games by date in descending order - newest games first fr fr
   const sortedRecent = [...(user.recentGames || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const recentGames = sortedRecent.slice(0, 10).map(g => {
     let result: string | undefined;

@@ -198,7 +198,6 @@ describe('GameManager timeline + new user stats', () => {
   it('tracks peakElo as the max elo ever achieved and never decreases it', async () => {
     const manager = makeManager();
 
-    // Game 1: elo 1000, win +30 -> newElo 1030, peakElo becomes 1030.
     const game1 = makeGameDoc();
     const players1 = [makeUser('a', 1000), makeUser('b'), makeUser('c'), makeUser('d')];
     setupGame(players1, game1);
@@ -207,8 +206,6 @@ describe('GameManager timeline + new user stats', () => {
     expect(playerA.elo).toBe(1030);
     expect(playerA.peakElo).toBe(1030);
 
-    // Game 2: same player, fresh doc carrying elo 1030 / peakElo 1030,
-    // win +30 -> newElo 1060, peakElo takes the new max.
     const game2 = makeGameDoc();
     const players2 = [
       { ...makeUser('a', 1030), peakElo: 1030 },
@@ -220,7 +217,6 @@ describe('GameManager timeline + new user stats', () => {
     expect(playerA2.elo).toBe(1060);
     expect(playerA2.peakElo).toBe(1060);
 
-    // Game 3: peak already 1060, player loses (-20) -> peakElo stays 1060.
     const game3 = makeGameDoc();
     const players3 = [
       { ...makeUser('a', 1030), peakElo: 1060 },

@@ -160,7 +160,6 @@ describe('GameManager race conditions', () => {
     expect(failed).toHaveLength(1);
     expect(failed[0].reason).toMatch(/already settled/);
 
-    // Stats must have been applied exactly once: winner +winElo+mvpElo, loser -loseElo+bedElo.
     const winner = players.find(p => p.discordId === 'a')!;
     const loser = players.find(p => p.discordId === 'c')!;
     expect(winner.elo).toBe(1000 + 30 + 10);
@@ -222,7 +221,6 @@ describe('GameManager race conditions', () => {
     const gameDoc = makeGameDoc('scored');
     const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
     setupGame(players, gameDoc);
-    // No claim available: DB already has it scored.
     nextClaimAvailable = false;
     const manager = makeManager();
 

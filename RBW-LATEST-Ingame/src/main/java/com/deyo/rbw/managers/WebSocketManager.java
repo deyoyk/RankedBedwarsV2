@@ -49,7 +49,6 @@ public class WebSocketManager {
         plugin.getLogger().info("Full WebSocket URL: " + buildWebSocketUri());
         plugin.getLogger().info("If connection fails, ensure the RankedBedwars bot is running and accessible");
         
-        // Test basic connectivity first
         if (explicitPortConfigured) {
             testConnectivity();
         }
@@ -91,7 +90,7 @@ public class WebSocketManager {
                 plugin.getLogger().info("Testing basic connectivity to " + host + ":" + port + "...");
                 
                 java.net.Socket testSocket = new java.net.Socket();
-                testSocket.setSoTimeout(10000); // 10 second timeout
+                testSocket.setSoTimeout(10000);
                 testSocket.connect(new java.net.InetSocketAddress(host, port), 10000);
                 testSocket.close();
                 
@@ -199,10 +198,8 @@ public class WebSocketManager {
                 }
             };
             
-            // Set connection timeout (30 seconds)
             client.setConnectionLostTimeout(30);
             
-            // Set TCP no delay for better responsiveness
             client.setTcpNoDelay(true);
             
             // Add additional logging for debugging
@@ -210,18 +207,16 @@ public class WebSocketManager {
             plugin.getLogger().info("Connection timeout set to 30 seconds");
             plugin.getLogger().info("TCP NoDelay enabled for better performance");
             
-            // Connect with timeout
             boolean connected = client.connectBlocking(30, java.util.concurrent.TimeUnit.SECONDS);
             if (!connected) {
                 plugin.getLogger().warning("WebSocket connection timed out after 30 seconds");
 
-                // Give the already-started connection thread a bit more time
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     if (client == null || !client.isOpen()) {
                         plugin.getLogger().warning("Alternative connection method also failed");
                         scheduleReconnect();
                     }
-                }, 20L * 10); // Wait 10 more seconds
+                }, 20L * 10);
             }
         } catch (URISyntaxException e) {
             plugin.getLogger().log(Level.SEVERE, "Invalid WebSocket URI", e);
@@ -368,7 +363,6 @@ public class WebSocketManager {
         if (player != null && player.isOnline()) {
             player.sendMessage("§c[RankedBedwars] §eYou are being requested for screenshare, do not log off the server.");
             
-            //sendActionBar(player, "§cYOU ARE BEING SCREENSHARED DO NOT LOG OFF");
             
             JsonObject response = new JsonObject();
             response.addProperty("type", "screensharedontlog_success");
@@ -669,8 +663,6 @@ public class WebSocketManager {
                 reconnectAttempts + " attempts. The bot is likely offline. Please contact deyo.");
         }
 
-        // Keep retrying indefinitely (capped delay) instead of giving up forever;
-        // the bot may come back online at any time.
         Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
             if (!plugin.isEnabled()) {
                 plugin.getLogger().warning("Plugin is disabled, aborting scheduled WebSocket reconnection.");
@@ -710,8 +702,6 @@ public class WebSocketManager {
         reconnectScheduled = false;
         
         if (client != null && client.isOpen()) {
-            // Non-blocking close: onDisable runs on the main thread and
-            // closeBlocking() can hang the server shutdown forever.
             client.close(1000, "Plugin disabling");
         }
         client = null;
@@ -777,7 +767,6 @@ public class WebSocketManager {
         plugin.getLogger().info("Reconnect Attempts: " + reconnectAttempts);
         plugin.getLogger().info("Reconnect Scheduled: " + reconnectScheduled);
         
-        // Test basic connectivity
         testConnectivity();
         
         plugin.getLogger().info("=== End Diagnosis ===");
@@ -905,7 +894,6 @@ public class WebSocketManager {
             return;
         }
         String reason = json.get("reason").getAsString();
-        // String banId = json.get("id").getAsString(); // not used
         String command;
         if (json.has("duration") && !json.get("duration").isJsonNull()) {
             int duration = json.get("duration").getAsInt();
@@ -923,7 +911,6 @@ public class WebSocketManager {
             return;
         }
         String reason = json.get("reason").getAsString();
-        // String muteId = json.get("id").getAsString(); // not used
         String command;
         if (json.has("duration") && !json.get("duration").isJsonNull()) {
             int duration = json.get("duration").getAsInt();
@@ -941,7 +928,6 @@ public class WebSocketManager {
             return;
         }
         String reason = json.get("reason").getAsString();
-        // String targetId = json.get("id").getAsString(); // not used
         String command = String.format("unban %s %s", ign, reason);
         dispatchCommandOnMainThread(command);
     }
@@ -953,7 +939,6 @@ public class WebSocketManager {
             return;
         }
         String reason = json.get("reason").getAsString();
-        // String targetId = json.get("id").getAsString(); // not used
         String command = String.format("unmute %s %s", ign, reason);
         dispatchCommandOnMainThread(command);
     }

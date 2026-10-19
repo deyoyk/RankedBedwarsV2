@@ -39,7 +39,6 @@ export class SeasonManager {
   ): Promise<{ success: boolean; message: string; embed?: EmbedBuilder }> {
     try {
 
-      // Basic inline validation (replacement for validation.ts)
       if (
         !Number.isInteger(options.seasonNumber) || options.seasonNumber <= 0 ||
         !Number.isInteger(options.chapterNumber) || options.chapterNumber <= 0 ||

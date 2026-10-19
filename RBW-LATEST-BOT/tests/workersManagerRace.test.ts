@@ -23,7 +23,6 @@ describe('WorkersManager race conditions', () => {
     await expect(taskPromise).rejects.toThrow('Task timeout');
     expect((manager as any).taskQueue.get(5)).toHaveLength(0);
 
-    // Even if a worker appears later, the task must not execute.
     jest.advanceTimersByTime(60000);
     expect((manager as any).taskQueue.get(5)).toHaveLength(0);
     jest.useRealTimers();
@@ -69,7 +68,6 @@ describe('WorkersManager race conditions', () => {
     (manager as any).workers = [fakeWorker];
 
     const executeSpy = jest.spyOn(manager as any, 'executeTask').mockImplementation(async () => {
-      // Simulate a slow execution that would previously have raced the timeout.
       await new Promise(r => setTimeout(r, 1000));
     });
 

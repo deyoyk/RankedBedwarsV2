@@ -140,7 +140,6 @@ public class BedWars1058Implementation implements BedwarsAPI {
                     return;
                 }
                 
-                // Find Green and Red teams specifically - Team1 = Green, Team2 = Red
                 ITeam greenTeam = null;
                 ITeam redTeam = null;
                 
@@ -153,7 +152,6 @@ public class BedWars1058Implementation implements BedwarsAPI {
                     }
                 }
                 
-                // If specific teams not found, use first two available teams
                 if (greenTeam == null || redTeam == null) {
                     List<ITeam> teams = new ArrayList<>(availableTeams);
                     if (greenTeam == null) greenTeam = teams.get(0);

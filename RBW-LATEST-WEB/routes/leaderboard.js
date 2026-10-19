@@ -37,7 +37,7 @@ export async function render(main, segments, params, { apiGet, UI }) {
     { content: UI.formatValue(mode, e.value), attrs: { class: 'num' } }
   ]);
 
-  const totalPages = page + 1; // API doesn't return totals; next-page hint from row count
+  const totalPages = page + 1;
   body.replaceChildren(
     UI.table(
       [{ label: 'Rank', align: 'num' }, { label: 'Player' }, { label: mode, align: 'num' }],

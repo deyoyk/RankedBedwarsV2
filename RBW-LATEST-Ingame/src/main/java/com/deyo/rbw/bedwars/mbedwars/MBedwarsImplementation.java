@@ -142,7 +142,6 @@ public class MBedwarsImplementation implements BedwarsAPI {
                 return;
             }
             
-            // Team1 = Green, Team2 = Red
             for (String playerName : team1Players) {
                 Player player = Bukkit.getPlayerExact(playerName);
                 if (player != null) {
@@ -150,7 +149,6 @@ public class MBedwarsImplementation implements BedwarsAPI {
                 }
             }
             
-            // Team2 = Red
             for (String playerName : team2Players) {
                 Player player = Bukkit.getPlayerExact(playerName);
                 if (player != null) {

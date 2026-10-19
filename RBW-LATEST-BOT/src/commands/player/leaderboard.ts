@@ -51,7 +51,6 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
     let totalUsers = 0;
     const { title, field: valueField } = getModeConfig(mode);
 
-    // searching for a player by IGN? we got you fam
     if (searchIGN) {
       const user = await User.findOne({ ign: searchIGN });
       if (!user) {
@@ -59,7 +58,6 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
         await replyEmbed(embedObj);
         return;
       }
-      // now we gotta find where this player ranks (the grind is real)
       const allUsers = await User.find({}).sort({ [valueField]: -1 });
       const pos = allUsers.findIndex(u => u.ign === searchIGN);
       if (pos === -1) {
@@ -67,11 +65,9 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
         await replyEmbed(embedObj);
         return;
       }
-      // calculate which page this absolute legend is on
       page = Math.floor(pos / usersPerPage);
     }
 
-    // jumping to a specific position? bet, let's calculate the page
     if (searchPosition !== null) {
       page = Math.floor((searchPosition - 1) / usersPerPage);
     }

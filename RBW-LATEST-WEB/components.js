@@ -1,5 +1,3 @@
-// Shared UI components for the Ranked Bedwars web app.
-// Pure DOM helpers — no framework, no dependencies.
 
 const UI = (() => {
   function el(tag, attrs = {}, children = []) {
@@ -96,7 +94,6 @@ const UI = (() => {
     );
   }
 
-  // Inline SVG sparkline from an array of numbers. No chart library.
   function sparkline(values, opts = {}) {
     const w = opts.width || 560;
     const h = opts.height || 72;

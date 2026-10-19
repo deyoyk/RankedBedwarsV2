@@ -143,8 +143,6 @@ public class GameInstance {
         }
         
         
-        // A pickup event carries the stack size (1-64); there is no legitimate
-        // reason to discard the amount, so no upper-bound check is applied.
         int currentAmount = resourceMap.getOrDefault(player, 0);
         resourceMap.put(player, currentAmount + amount);
         addTimelineEvent("resource_pickup", player, null, amount, null);

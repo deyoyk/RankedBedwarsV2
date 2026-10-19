@@ -1,5 +1,3 @@
-// Ranked Bedwars web app — router, API client with local caching, nav/search.
-// Each route is a lazily-imported module, loaded only when visited.
 
 (() => {
   const main = document.getElementById('main');
@@ -14,7 +12,6 @@
   }
   let cfg = loadConfig();
 
-  // When served by the bot, pull the canonical config from /rbw/web/config.
   fetch('rbw/web/config')
     .then(r => (r.ok ? r.json() : null))
     .then(remote => {
@@ -27,7 +24,6 @@
     })
     .catch(() => {});
 
-  // ------------------------------------------------------------ api client
 
   const memoryCache = new Map();
   const LS_PREFIX = 'rbw-cache:';
@@ -67,7 +63,6 @@
       }
       localStorage.setItem(LS_PREFIX + key, JSON.stringify(entry));
     } catch (e) {
-      // storage full or unavailable — in-memory cache still works
     }
   }
 
@@ -117,7 +112,6 @@
     return value;
   }
 
-  // ------------------------------------------------------------- rendering
 
   function renderError(err) {
     main.replaceChildren(UI.errorBox(err.message || 'Something went wrong.', ''));
@@ -133,7 +127,6 @@
     );
   }
 
-  // --------------------------------------------------------------- router
 
   const routes = {
     '': () => import('./routes/home.js'),
@@ -176,7 +169,6 @@
   window.addEventListener('hashchange', navigate);
   window.addEventListener('DOMContentLoaded', navigate);
 
-  // ---------------------------------------------------------- nav + search
 
   function highlightNav() {
     const seg = (location.hash.slice(1) || '/').split('?')[0].split('/')[1] || 'home';
@@ -226,7 +218,6 @@
           );
           searchBox.append(dropdown);
         } catch (e) {
-          // ignore search failures silently
         }
       }, 250);
     });
