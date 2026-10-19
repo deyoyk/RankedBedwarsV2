@@ -3,11 +3,12 @@ import { safeReply } from '../../utils/safeReply';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { fix, safeFix } from '../../utils/fix';
+import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
 
- 
+
 
 export async function forcerename(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
-  let targetUser: string;
+  let targetUser: string | null;
   let newIgn: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {
@@ -19,8 +20,17 @@ export async function forcerename(interaction: Message | ChatInputCommandInterac
       await safeReply(interaction, errorEmbed('Usage: =forcerename <user> <newign>', 'Force Rename Error'));
       return;
     }
-    targetUser = args[0].replace(/[<@!>]/g, ''); 
+    targetUser = parseDiscordId(args[0]);
+    if (!targetUser) {
+      await safeReply(interaction, errorEmbed('Please mention a valid user or ID.', 'Force Rename Error'));
+      return;
+    }
     newIgn = args[1];
+  }
+
+  if (!isValidIgn(newIgn)) {
+    await safeReply(interaction, errorEmbed('IGN must be 3-16 characters of letters, numbers or underscores.', 'Force Rename Error'));
+    return;
   }
 
   try {

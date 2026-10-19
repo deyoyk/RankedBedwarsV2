@@ -83,8 +83,8 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
 
     if (statType === 'number') {
       const numValue = parseFloat(newValue);
-      if (isNaN(numValue)) {
-        await safeReply(interaction, errorEmbed(`"${newValue}" is not a valid number for stat "${statToEdit}".`, 'Edit Command Error'));
+      if (!Number.isFinite(numValue) || numValue < 0) {
+        await safeReply(interaction, errorEmbed(`"${newValue}" is not a valid non-negative number for stat "${statToEdit}".`, 'Edit Command Error'));
         return;
       }
       convertedValue = numValue;

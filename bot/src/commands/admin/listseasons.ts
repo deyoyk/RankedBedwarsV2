@@ -15,24 +15,29 @@ export async function executeListSeasons(interaction: ChatInputCommandInteractio
       return interaction.reply({ embeds: [embed] });
     }
 
-    const embed = new EmbedBuilder()
-      .setColor('#00AAAA')
-      .setTitle('All Seasons')
-      .setDescription('List of all seasons in the system')
-      .setTimestamp();
+    const embeds = [];
+    for (let i = 0; i < seasons.length; i += 25) {
+      const chunk = seasons.slice(i, i + 25);
+      const chunkEmbed = new EmbedBuilder()
+        .setColor('#00AAAA')
+        .setTitle(i === 0 ? 'All Seasons' : `All Seasons (${i + 1}-${i + chunk.length})`)
+        .setDescription('List of all seasons in the system')
+        .setTimestamp();
 
-    seasons.forEach(season => {
-      const status = season.isActive ? '🟢 Active' : '🔴 Ended';
-      const endDate = season.endDate ? `<t:${Math.floor(season.endDate.getTime() / 1000)}:D>` : 'N/A';
-      
-      embed.addFields({
-        name: `Season ${season.seasonNumber} Chapter ${season.chapterNumber}: ${season.name}`,
-        value: `${status}\n**Start:** <t:${Math.floor(season.startDate.getTime() / 1000)}:D>\n**End:** ${endDate}\n**Description:** ${season.description || 'No description'}`,
-        inline: false
+      chunk.forEach(season => {
+        const status = season.isActive ? '🟢 Active' : '🔴 Ended';
+        const endDate = season.endDate ? `<t:${Math.floor(season.endDate.getTime() / 1000)}:D>` : 'N/A';
+
+        chunkEmbed.addFields({
+          name: `Season ${season.seasonNumber} Chapter ${season.chapterNumber}: ${season.name}`,
+          value: `${status}\n**Start:** <t:${Math.floor(season.startDate.getTime() / 1000)}:D>\n**End:** ${endDate}\n**Description:** ${season.description || 'No description'}`,
+          inline: false
+        });
       });
-    });
+      embeds.push(chunkEmbed);
+    }
 
-    safeReply(interaction, { embeds: [embed] });
+    safeReply(interaction, { embeds });
   } catch (error) {
     console.error('Error listing seasons:', error);
     

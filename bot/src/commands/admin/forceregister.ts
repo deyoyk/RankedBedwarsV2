@@ -3,11 +3,13 @@ import { safeReply } from '../../utils/safeReply';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { fix, safeFix } from '../../utils/fix';
+import { escapeRegex } from '../../utils/regexEscape';
+import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
 
- 
+
 
 export async function forceregister(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
-  let targetUser: string;
+  let targetUser: string | null;
   let ign: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {
@@ -19,13 +21,22 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
       await safeReply(interaction, errorEmbed('Usage: =forceregister <user> <ign>', 'Force Register Error'));
       return;
     }
-    targetUser = args[0].replace(/[<@!>]/g, ''); 
+    targetUser = parseDiscordId(args[0]);
+    if (!targetUser) {
+      await safeReply(interaction, errorEmbed('Please mention a valid user or ID.', 'Force Register Error'));
+      return;
+    }
     ign = args[1];
+  }
+
+  if (!isValidIgn(ign)) {
+    await safeReply(interaction, errorEmbed('IGN must be 3-16 characters of letters, numbers or underscores.', 'Force Register Error'));
+    return;
   }
 
   try {
     
-    const ignTaken = await User.findOne({ ign: { $regex: `^${ign}$`, $options: 'i' }, discordId: { $ne: targetUser } });
+    const ignTaken = await User.findOne({ ign: { $regex: `^${escapeRegex(ign)}$`, $options: 'i' }, discordId: { $ne: targetUser } });
     if (ignTaken) {
       await safeReply(interaction, errorEmbed('This IGN is already registered to another user.', 'Force Register Error'));
       return;

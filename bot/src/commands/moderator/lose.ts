@@ -22,7 +22,11 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
       return;
     }
     const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
-    targetId = mentionMatch ? mentionMatch[1] : args[0];
+    if (!mentionMatch) {
+      await safeReply(interaction, errorEmbed('Please provide a user mention (e.g. <@1234567890>).', 'Lose Usage Error'));
+      return;
+    }
+    targetId = mentionMatch[1];
   }
 
   try {

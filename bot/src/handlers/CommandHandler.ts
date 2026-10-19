@@ -105,7 +105,12 @@ export class CommandHandler {
       await command(interaction, undefined, this.wsManager);
     } catch (error) {
       console.error(`Error executing slash command ${commandName}:`, error);
-      
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.editReply('Something went wrong running that command.');
+        }
+      } catch {
+      }
     }
   }
 }

@@ -20,7 +20,11 @@ export async function voidGame(interaction: Message | ChatInputCommandInteractio
       await safeReply(interaction, errorEmbed('Usage: =void <gameId> [reason]', 'Void Command Error'));
       return;
     }
-    gameId = parseInt(args[0]);
+    gameId = parseInt(args[0], 10);
+    if (!Number.isInteger(gameId) || gameId <= 0) {
+      await safeReply(interaction, errorEmbed('Usage: =void <gameId> [reason]', 'Void Command Error'));
+      return;
+    }
     reason = args.slice(1).join(' ') || `voided by <@${interaction.author.id}>: no reason provided`;
   }
 
@@ -49,6 +53,6 @@ export async function voidGame(interaction: Message | ChatInputCommandInteractio
     await safeReply(interaction, successEmbed(`Game ${gameId} has been voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game channels will be deleted in 30 seconds.`, 'Game Voided'));
   } catch (error) {
     console.error('Error in void command:', error);
-    await safeReply(interaction, errorEmbed(error instanceof Error ? error.message : 'There was an error voiding the game.', 'Void Command Error'));
+    await safeReply(interaction, errorEmbed('There was an error voiding the game.', 'Void Command Error'));
   }
 }

@@ -32,11 +32,13 @@ function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args
     };
   } else {
     if (!args || args.length < 3) return null;
-    const gameId = parseInt(args[0]);
-    const winningTeam = parseInt(args[1]) as 1 | 2;
+    const gameId = parseInt(args[0], 10);
+    const winningTeam = parseInt(args[1], 10);
+    if (!Number.isInteger(gameId) || gameId <= 0) return null;
+    if (winningTeam !== 1 && winningTeam !== 2) return null;
     return {
       gameId,
-      winningTeam,
+      winningTeam: winningTeam as 1 | 2,
       mvps: args[2] ? args[2].split(',').map(id => id.trim()).filter(Boolean) : [],
       bedbreaks: args[3] ? args[3].split(',').map(id => id.trim()).filter(Boolean) : [],
       reason: args[4] ? args.slice(4).join(' ') : `scored by <@${interaction.author.id}>: no reason provided`

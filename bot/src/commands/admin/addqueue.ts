@@ -28,19 +28,37 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
       bypassRoles = bypassRolesStr.split(',').map(id => id.trim());
     }
   } else {
-    if (!args || args.length < 7) {
+    if (!args || args.length < 6) {
       await safeReply(interaction, errorEmbed('Usage: =addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <ispicking> [bypassRoles]', 'Queue Creation Error'));
       return;
     }
     channelId = args[0];
-    maxPlayers = parseInt(args[1]);
-    minElo = parseInt(args[2]);
-    maxElo = parseInt(args[3]);
+    maxPlayers = parseInt(args[1], 10);
+    minElo = parseInt(args[2], 10);
+    maxElo = parseInt(args[3], 10);
     isRanked = args[4].toLowerCase() === 'true';
     ispicking = args[5].toLowerCase() === 'true';
-    if (args.length > 7) {
-      bypassRoles = args[7].split(',').map(id => id.trim());
+    if (args.length > 6) {
+      bypassRoles = args[6].split(',').map(id => id.trim());
     }
+  }
+
+  if (!/^\d{17,20}$/.test(channelId)) {
+    await safeReply(interaction, errorEmbed('channelId must be a Discord voice channel ID (17-20 digits).', 'Queue Creation Error'));
+    return;
+  }
+  if (!Number.isInteger(maxPlayers) || maxPlayers < 2) {
+    await safeReply(interaction, errorEmbed('maxPlayers must be an integer of at least 2.', 'Queue Creation Error'));
+    return;
+  }
+  if (!Number.isInteger(minElo) || !Number.isInteger(maxElo) || minElo < 0 || maxElo < 0 || minElo > maxElo) {
+    await safeReply(interaction, errorEmbed('minElo and maxElo must be integers with minElo no greater than maxElo.', 'Queue Creation Error'));
+    return;
+  }
+  const badBypass = bypassRoles.find(id => !/^\d{17,20}$/.test(id));
+  if (badBypass) {
+    await safeReply(interaction, errorEmbed(`Bypass role "${badBypass}" is not a valid Discord role ID.`, 'Queue Creation Error'));
+    return;
   }
 
   try {

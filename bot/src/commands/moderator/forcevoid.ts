@@ -59,13 +59,13 @@ export async function forcevoid(interaction: Message | ChatInputCommandInteracti
     console.error('Error in forcevoid command:', error);
     if (interaction instanceof ChatInputCommandInteraction) {
       await safeReply(interaction, errorEmbed(
-        error instanceof Error ? error.message : 'There was an error force voiding the game.',
+        'There was an error force voiding the game.',
         'Error',
         true
       ));
     } else {
       await safeReply(interaction, errorEmbed(
-        error instanceof Error ? error.message : 'There was an error force voiding the game.',
+        'There was an error force voiding the game.',
         'Error',
         false
       ));
