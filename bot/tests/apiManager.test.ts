@@ -292,6 +292,8 @@ describe('ApiManager', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('online');
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
+    expect(body.version).toBe(require('../package.json').version);
     expect(body.endpoints).toContain('/rbw/api/user/:discordid/overview');
     expect(body.endpoints).toContain('/rbw/api/game/:gameid/timeline');
     expect(body.endpoints).not.toContain('/rbw/api/knockback/votes');

@@ -1,6 +1,6 @@
 {
   "name": "rankedbedwars",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Ranked Bedwars System for Discord with websocket support",
   "main": "dist/index.js",
   "scripts": {

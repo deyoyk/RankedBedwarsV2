@@ -17,6 +17,7 @@ import { queuePlayers } from '../types/queuePlayersMemory';
 import { getLevelInfo } from '../utils/levelSystem';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { escapeRegex } from '../utils/regexEscape';
+import botPackage from '../../package.json';
 
 interface CacheEntry {
   value: any;
@@ -198,7 +199,7 @@ export class ApiManager {
           '/rbw/api/user/:discordid/winstreak-history',
           '/rbw/api/user/:discordid/elo-history',
         ],
-        version: '1.0.0'
+        version: botPackage.version
       });
     });
 
