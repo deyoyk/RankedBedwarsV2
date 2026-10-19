@@ -36,6 +36,7 @@ export class QueueListener {
   private queueStates: Map<string, QueueState> = new Map();
   private processingLocks: Map<string, NodeJS.Timeout> = new Map();
   private queueChannelCache: Map<string, { exists: boolean; ts: number }> = new Map();
+  private rescanKeys: Map<string, { key: string; ts: number }> = new Map();
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
   private readonly CHANNEL_CACHE_TTL = 30000;
@@ -60,6 +61,11 @@ export class QueueListener {
       for (const [channelId, data] of this.queueChannelCache.entries()) {
         if (now - data.ts > this.CHANNEL_CACHE_TTL) {
           this.queueChannelCache.delete(channelId);
+        }
+      }
+      for (const [channelId, data] of this.rescanKeys.entries()) {
+        if (now - data.ts > 300000) {
+          this.rescanKeys.delete(channelId);
         }
       }
     }, 60000);
@@ -128,13 +134,65 @@ export class QueueListener {
         queuePlayers.set(queueId, validPlayers);
       }
 
+      await this.rescanParties(queueId, state, queue, voiceChannel, playersInVC);
 
-      if (validPlayers.length >= queue.maxPlayers && !state.processing) {
+      if (!state.processing) {
+        queuePlayers.set(queueId, [...state.players]);
+      }
+
+
+      if (state.players.length >= queue.maxPlayers && !state.processing) {
         await this.scheduleQueueProcessing(queueId);
       }
 
     } catch (error) {
       console.error(`[QueueListener] Error validating queue state for ${queueId}:`, error);
+    }
+  }
+
+  private async rescanParties(
+    queueId: string,
+    queueState: QueueState,
+    queue: any,
+    voiceChannel: any,
+    playersInVC: Set<string>
+  ): Promise<void> {
+    try {
+      const inParty = new Set([...queueState.parties.values()].flat());
+      const uncovered = [...playersInVC].filter(id => !inParty.has(id));
+      if (uncovered.length === 0) {
+        this.rescanKeys.delete(queueId);
+        return;
+      }
+      const key = uncovered.slice().sort().join(',');
+      const prev = this.rescanKeys.get(queueId);
+      if (prev && prev.key === key) return;
+      this.rescanKeys.set(queueId, { key, ts: Date.now() });
+
+      const users = await User.find({ discordId: { $in: uncovered } }).select('discordId partyId').lean();
+      const presentByParty = new Map<string, string[]>();
+      for (const user of users) {
+        if (!user?.partyId || queueState.parties.has(user.partyId)) continue;
+        const present = presentByParty.get(user.partyId) ?? [];
+        present.push(user.discordId);
+        presentByParty.set(user.partyId, present);
+      }
+
+      for (const [partyId, present] of presentByParty) {
+        let roster = this.partyCache.get(partyId)?.members;
+        if (!roster) {
+          const party = await Party.findOne({ partyId });
+          if (!party?.members) continue;
+          roster = party.members;
+          this.partyCache.set(partyId, { members: roster, timestamp: Date.now() });
+        }
+        if (!roster.every(id => playersInVC.has(id))) continue;
+        const member = voiceChannel.members.get(present[0]);
+        if (!member) continue;
+        await this.handlePartyJoin({ member } as VoiceState, { partyId } as any, queueState, queue);
+      }
+    } catch (error) {
+      console.error(`[QueueListener] Error rescanning parties for queue ${queueId}:`, error);
     }
   }
 
