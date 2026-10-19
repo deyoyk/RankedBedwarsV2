@@ -7,6 +7,8 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
   ign: string;
   kdr?: number;
   wlr?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
   ownedThemes?: string[];
   currentTheme?: string;
   seasonNumber?: number;
@@ -89,7 +91,7 @@ const UserSchema: Schema = new Schema({
     duration: { type: Number, required: true },
     moderator: { type: String, required: true },
   }],
-});
+}, { timestamps: true });
 
 UserSchema.index({ ign: 1 }, { collation: { locale: 'en', strength: 2 } });
 UserSchema.index({ elo: -1 });

@@ -1,6 +1,6 @@
 import { loadSkinDataUrl } from '../images/assets';
 import { renderPng } from '../images/renderer';
-import { themeTemplate, ThemeRecentGame } from '../images/templates/theme';
+import { defaultTemplate, DefaultTile } from '../images/templates/default';
 
 export type PlayerData = {
   discordid: string;
@@ -22,64 +22,65 @@ export type Helpers = {
   calculatePosition: (discordId: string) => number | string | Promise<number | string>;
 };
 
-function mvpRate(player: PlayerData): number {
-  const mvps = player.mvps || 0;
-  const gamesPlayed = player.gamesplayed || 0;
-  if (gamesPlayed <= 0) return 0;
-  return (mvps / gamesPlayed) * 100;
-}
+export type EnrichedPlayerData = PlayerData & {
+  joined?: string;
+  level?: number;
+  xpToNext?: number;
+  xpProgress?: number;
+  games?: number;
+  winRate?: number;
+  winCaption?: string;
+  tiles?: DefaultTile[];
+  combat?: DefaultTile[];
+  seasonLine1?: string;
+  seasonLine2?: string;
+};
 
-function wlRatio(player: PlayerData): string {
-  const wins = player.wins || 0;
-  const losses = player.losses || 0;
-  const ratio = wins / Math.max(1, losses);
-  return ratio.toFixed(1);
-}
+const FALLBACK_TILES: DefaultTile[] = [
+  { value: '0', label: 'Wins', accent: '#00e676', rank: '#-' },
+  { value: '0', label: 'Losses', accent: '#ff5252', rank: '#-' },
+  { value: '0.00', label: 'W/L ratio', accent: '#8b5cf6', rank: '#-' },
+  { value: '0', label: 'Total Kills', accent: '#8b5cf6', rank: '#-' },
+  { value: '0.00', label: 'K/D ratio', accent: '#00e5ff', rank: '#-' },
+  { value: '0', label: 'MVPs', accent: '#ffd600', rank: '#-' },
+  { value: '0', label: 'Streak', accent: '#ff9100', rank: '#-' },
+  { value: '0m', label: 'Playtime', accent: '#ffd600', rank: '#-' },
+];
 
-function getRecentColor(result?: string): string {
-  switch ((result || '').toLowerCase()) {
-    case 'win': return '#4CAF50';
-    case 'lose':
-    case 'loss': return '#F44336';
-    case 'voided': return '#FFC107';
-    case 'pending': return '#FFC107';
-    case 'submitted': return '#FF9800';
-    default: return '#777777';
-  }
-}
+const FALLBACK_COMBAT: DefaultTile[] = [
+  { value: '0', label: 'Final Kills', accent: '#8b5cf6', rank: '#-' },
+  { value: '0', label: 'Beds Broken', accent: '#8b5cf6', rank: '#-' },
+  { value: '0', label: 'Final Deaths', accent: '#8b5cf6', rank: '#-' },
+];
 
 export async function generateThemeImage(
-  themeName: string,
   playerData: PlayerData,
   recentGames: RecentGame[],
   helpers: Helpers
 ): Promise<Buffer> {
-  const serverName = process.env.SERVER_NAME || 'ZeroCode';
-  const inviteLink = process.env.INVITE_LINK || 'discord.gg/zerocode';
+  void recentGames;
+  const enriched = playerData as EnrichedPlayerData;
+  const games = enriched.games ?? (playerData.wins || 0) + (playerData.losses || 0);
+  const winRate = enriched.winRate ?? (games > 0 ? (playerData.wins || 0) / games : 0);
+  const positionValue = await Promise.resolve(helpers.calculatePosition(String((playerData as any).discordid)));
 
-  const positionValue = await Promise.resolve(helpers.calculatePosition(String(playerData.discordid)));
-  const rating = helpers.calculateRating ? helpers.calculateRating(playerData) : playerData.elo;
-
-  const padded: RecentGame[] = [...recentGames];
-  while (padded.length < 10) padded.push(null);
-  const recent: ThemeRecentGame[] = padded.slice(0, 10).map((g) => ({
-    label: g ? `Game #${g.gameid ?? 'N/A'}` : 'No Game',
-    color: getRecentColor(g?.result),
-  }));
-
-  const tpl = themeTemplate({
-    theme: themeName,
-    serverName,
-    inviteLink,
-    ign: playerData.ign || '',
+  const tpl = defaultTemplate({
+    ign: playerData.ign || 'Player',
+    joined: enriched.joined || '',
+    level: enriched.level || 1,
+    xpToNext: enriched.xpToNext ?? 0,
+    xpProgress: enriched.xpProgress ?? 0,
     skin: await loadSkinDataUrl(playerData.ign || ''),
-    wins: String(playerData.wins),
-    rank: `#${positionValue}`,
-    mvps: String(playerData.mvps),
-    rating: String(rating),
-    wlr: `${wlRatio(playerData)} W/L`,
-    mvpRate: `${Math.round(mvpRate(playerData))}% RATE`,
-    recent,
+    elo: playerData.elo || 0,
+    globalRank: positionValue,
+    wins: String(playerData.wins || 0),
+    losses: String(playerData.losses || 0),
+    winRate,
+    winCaption: enriched.winCaption || `${(winRate * 100).toFixed(1)}% win rate · ${games} games`,
+    tiles: enriched.tiles && enriched.tiles.length === 8 ? enriched.tiles : FALLBACK_TILES,
+    combat: enriched.combat && enriched.combat.length === 3 ? enriched.combat : FALLBACK_COMBAT,
+    seasonLine1: enriched.seasonLine1 || '',
+    seasonLine2: enriched.seasonLine2 || '',
   });
   return renderPng(tpl.root, tpl.width, tpl.height);
 }

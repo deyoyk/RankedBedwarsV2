@@ -1,9 +1,9 @@
 import { generateScoreImageBuffer } from '../src/utils/scoreImage';
 import { generateThemeImage } from '../src/themes/base';
 import { scoreTemplate } from '../src/images/templates/score';
-import { themeTemplate } from '../src/images/templates/theme';
+import { defaultTemplate } from '../src/images/templates/default';
 import { staticImageDataUrl } from '../src/images/assets';
-import { themes } from '../src/themes';
+import { themes, resolveTheme } from '../src/themes';
 
 jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
 
@@ -37,6 +37,49 @@ function player(username: string, mvp = false) {
   return { discordId: username, username, team: 'winning' as const, oldElo: 1000, newElo: 1030, mvp };
 }
 
+function enrichedPlayer() {
+  return {
+    discordid: '123',
+    ign: 'TestPlayer',
+    wins: 5,
+    losses: 0,
+    mvps: 0,
+    elo: 50,
+    gamesplayed: 5,
+    games: 5,
+    joined: 'Joined Jun 15, 2026',
+    level: 3,
+    xpToNext: 70,
+    xpProgress: 0.3,
+    winRate: 1,
+    winCaption: '100.0% win rate · 5 games',
+    tiles: [
+      { value: '5', label: 'Wins', accent: '#00e676', rank: '#278' },
+      { value: '0', label: 'Losses', accent: '#ff5252', rank: '#1167' },
+      { value: '5.00', label: 'W/L ratio', accent: '#8b5cf6', rank: '#26' },
+      { value: '42', label: 'Total Kills', accent: '#8b5cf6', rank: '#328' },
+      { value: '0.95', label: 'K/D ratio', accent: '#00e5ff', rank: '#416' },
+      { value: '0', label: 'MVPs', accent: '#ffd600', rank: '#456' },
+      { value: '+5', label: 'Streak', accent: '#ff9100', rank: '#34' },
+      { value: '49m', label: 'Playtime', accent: '#ffd600', rank: '#406' },
+    ],
+    combat: [
+      { value: '3', label: 'Final Kills', accent: '#8b5cf6', rank: '#377' },
+      { value: '0', label: 'Beds Broken', accent: '#8b5cf6', rank: '#488' },
+      { value: '7', label: 'Final Deaths', accent: '#8b5cf6', rank: '#290' },
+    ],
+    seasonLine1: 'YEAR 26 SEASON 1',
+    seasonLine2: 'July 22, 2026',
+  };
+}
+
+describe('single default theme', () => {
+  it('exposes only the default theme', () => {
+    expect(themes).toEqual(['default']);
+    expect(resolveTheme('elite')).toBe(resolveTheme('anything-else'));
+  });
+});
+
 describe('score template', () => {
   it('keeps user input as text and marks only the mvp', () => {
     const tpl = scoreTemplate({
@@ -63,45 +106,40 @@ describe('html image rendering', () => {
     expect(ms).toBeLessThan(15000);
   }, 20000);
 
-  it.each(themes)('renders the %s theme at 1240x698', async (theme) => {
+  it('renders the default card at 1400x940 with all sections', async () => {
     const t0 = Date.now();
-    const buf = await generateThemeImage(theme, {
-      discordid: '123',
-      ign: 'TestPlayer',
-      wins: 12,
-      losses: 4,
-      mvps: 3,
-      elo: 1450,
-      gamesplayed: 16,
-    }, [
-      { gameid: 1, result: 'win' },
-      { gameid: 2, result: 'lose' },
-      { gameid: 3, result: 'voided' },
-    ], {
-      calculatePosition: () => 5,
-      calculateRating: (pd) => pd.elo,
+    const buf = await generateThemeImage(enrichedPlayer(), [], {
+      calculatePosition: () => 106,
+      calculateRating: (pd: any) => pd.elo,
     });
     const ms = Date.now() - t0;
-    expect(pngSize(buf)).toEqual({ width: 1240, height: 698 });
+    expect(pngSize(buf)).toEqual({ width: 1400, height: 940 });
     expect(buf.length).toBeGreaterThan(20000);
     expect(ms).toBeLessThan(15000);
   }, 20000);
 
-  it('theme template keeps the ign as text', () => {
-    const tpl = themeTemplate({
-      theme: 'elite',
-      serverName: 'S',
-      inviteLink: 'I',
+  it('default template keeps raw values as text nodes', () => {
+    const tpl = defaultTemplate({
       ign: '<Hacker>',
+      joined: 'Joined Jun 15, 2026',
+      level: 3,
+      xpToNext: 70,
+      xpProgress: 0.3,
       skin: null,
-      wins: '1',
-      rank: '#1',
-      mvps: '0',
-      rating: '1000',
-      wlr: '1.0 W/L',
-      mvpRate: '0% RATE',
-      recent: [],
+      elo: 50,
+      globalRank: 106,
+      wins: '5',
+      losses: '0',
+      winRate: 1,
+      winCaption: '100.0% win rate · 5 games',
+      tiles: enrichedPlayer().tiles,
+      combat: enrichedPlayer().combat,
+      seasonLine1: 'YEAR 26 SEASON 1',
+      seasonLine2: 'July 22, 2026',
     });
-    expect(texts(tpl.root)).toContain('<Hacker>');
+    const all = texts(tpl.root);
+    for (const expected of ['<Hacker>', 'RECORD', 'COMBAT', 'W/L ratio', 'RBW.GG', '#278', '50 RR', 'Final Deaths', 'LEVEL PROGRESS']) {
+      expect(all).toContain(expected);
+    }
   });
 });
