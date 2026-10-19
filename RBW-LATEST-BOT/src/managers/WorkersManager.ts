@@ -66,6 +66,25 @@ export class WorkersManager {
     return WorkersManager.instance;
   }
 
+  public async waitForWorkerReady(worker: WorkerClient, timeoutMs = 30000): Promise<boolean> {
+    if (worker.isReady) return true;
+    return new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        console.warn('[WorkersManager] Timed out waiting for a worker to become ready, continuing without it');
+        resolve(false);
+      }, timeoutMs);
+      const checkReady = () => {
+        if (worker.isReady) {
+          clearTimeout(timer);
+          resolve(true);
+        } else {
+          setTimeout(checkReady, 100);
+        }
+      };
+      checkReady();
+    });
+  }
+
   public async initialize(): Promise<void> {
     if (!this.isEnabled) {
       console.log('[WorkersManager] Workers disabled in config, using main client only');
@@ -132,22 +151,7 @@ export class WorkersManager {
       await Promise.allSettled(initPromises);
 
       
-      const readyPromises = this.workers.map(worker =>
-        new Promise<void>((resolve) => {
-          if (worker.isReady) {
-            resolve();
-          } else {
-            const checkReady = () => {
-              if (worker.isReady) {
-                resolve();
-              } else {
-                setTimeout(checkReady, 100);
-              }
-            };
-            checkReady();
-          }
-        })
-      );
+      const readyPromises = this.workers.map(worker => this.waitForWorkerReady(worker));
 
       await Promise.all(readyPromises);
 

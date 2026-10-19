@@ -143,6 +143,11 @@ export class ApiManager {
       for (const [k, e] of this.cache) {
         if (e.expiresAt <= now) this.cache.delete(k);
       }
+      while (this.cache.size > 100) {
+        const oldest = this.cache.keys().next();
+        if (oldest.done) break;
+        this.cache.delete(oldest.value);
+      }
     }
     return value;
   }
