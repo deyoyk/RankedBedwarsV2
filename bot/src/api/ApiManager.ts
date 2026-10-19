@@ -107,12 +107,6 @@ export class ApiManager {
     );
   }
 
-  /**
-   * Locates the web UI directory. Checks, in order: RBW_WEB_DIR env override,
-   * ../web relative to the process cwd (repo layout), and the
-   * repo-root-relative path from the compiled dist/ location.
-   * Prefers the Next.js static export (out/) when it exists.
-   */
   private resolveWebDir(): string | null {
     const bases = [
       process.env.RBW_WEB_DIR,
