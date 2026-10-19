@@ -26,7 +26,8 @@ public class WebSocketManager {
     private WebSocketClient client;
     private String host;
     private int port;
-    private boolean explicitPortConfigured = false;
+    private String scheme;
+    private String authKey;
     private int reconnectDelay;
     private boolean reconnectScheduled = false;
 
@@ -37,51 +38,76 @@ public class WebSocketManager {
     public void initialize() {
         
         FileConfiguration config = plugin.getConfig();
-        host = config.getString("websocket.host", "rbw.deyo.lol");
-        explicitPortConfigured = config.contains("websocket.port");
-        if (explicitPortConfigured) {
-            port = config.getInt("websocket.port");
+        String configured = config.getString("bot_url", null);
+        if (configured == null || configured.trim().isEmpty()) {
+            String legacyHost = config.getString("websocket.host", "rbw.deyo.lol");
+            if (config.contains("websocket.port")) {
+                String[] legacy = parseTarget(legacyHost);
+                legacyHost = legacy[0] + "://" + legacy[1] + ":" + config.getInt("websocket.port");
+            }
+            configured = legacyHost;
+            plugin.getLogger().warning("bot_url is not set in config.yml, falling back to legacy websocket.host. Set bot_url instead, e.g. bot_url: \"127.0.0.1:25565\"");
         }
+        String[] target = parseTarget(configured);
+        scheme = target[0];
+        host = target[1];
+        port = Integer.parseInt(target[2]);
+        String authEnv = System.getenv("AUTH_KEY");
+        String authDefault = authEnv != null ? authEnv : "change_me_in_production";
+        authKey = config.getString("auth_key", config.getString("websocket.auth_key", authDefault));
         reconnectDelay = 5;
         
         plugin.getLogger().info("Initializing WebSocket connection...");
-        plugin.getLogger().info("Target server: " + host);
+        plugin.getLogger().info("Target bot: " + host + ":" + port);
         plugin.getLogger().info("Full WebSocket URL: " + buildWebSocketUri());
         plugin.getLogger().info("If connection fails, ensure the RankedBedwars bot is running and accessible");
         
-        if (explicitPortConfigured) {
-            testConnectivity();
-        }
+        testConnectivity();
         
         connect();
     }
 
+    static String[] parseTarget(String botUrl) {
+        String raw = botUrl == null ? "" : botUrl.trim();
+        String parsedScheme = "ws";
+        if (raw.regionMatches(true, 0, "wss://", 0, 6)) {
+            parsedScheme = "wss";
+            raw = raw.substring(6);
+        } else if (raw.regionMatches(true, 0, "ws://", 0, 5)) {
+            raw = raw.substring(5);
+        }
+        while (raw.endsWith("/")) {
+            raw = raw.substring(0, raw.length() - 1);
+        }
+        if (raw.isEmpty()) {
+            raw = "localhost";
+        }
+        String parsedHost = raw;
+        String parsedPort = "25565";
+        int colon = raw.lastIndexOf(':');
+        if (colon >= 0 && raw.substring(colon + 1).matches("\\d+")) {
+            parsedHost = raw.substring(0, colon);
+            parsedPort = raw.substring(colon + 1);
+            if (parsedHost.isEmpty()) {
+                parsedHost = "localhost";
+            }
+        }
+        return new String[]{parsedScheme, parsedHost, parsedPort};
+    }
+
     /**
-     * Builds the WebSocket URI from the configured host.
-     * Handles hosts that already include a scheme (ws:// or wss://) so a
-     * default config value like "ws://localhost:8080" never becomes
-     * "ws://ws://localhost:8080/...".
+     * Builds the WebSocket URI from the configured bot address.
+     * Accepts a plain "host:port" value and adds the scheme itself, so
+     * config files never need a "ws://" prefix. A missing port defaults
+     * to the bot default of 25565.
      */
-    public static String buildWebSocketUri(String host) {
-        String base = host == null ? "" : host.trim();
-        String scheme = "ws";
-        if (base.startsWith("wss://")) {
-            base = base.substring(6);
-            scheme = "wss";
-        } else if (base.startsWith("ws://")) {
-            base = base.substring(5);
-        }
-        while (base.endsWith("/")) {
-            base = base.substring(0, base.length() - 1);
-        }
-        if (base.isEmpty()) {
-            base = "localhost";
-        }
-        return scheme + "://" + base + "/rbw/websocket";
+    public static String buildWebSocketUri(String botUrl) {
+        String[] target = parseTarget(botUrl);
+        return target[0] + "://" + target[1] + ":" + target[2] + "/rbw/websocket";
     }
 
     private String buildWebSocketUri() {
-        return buildWebSocketUri(host);
+        return scheme + "://" + host + ":" + port + "/rbw/websocket";
     }
     
     private void testConnectivity() {
@@ -136,7 +162,7 @@ public class WebSocketManager {
                     
                     JsonObject authMsg = new JsonObject();
                     authMsg.addProperty("type", "auth");
-                    authMsg.addProperty("auth_key", plugin.getConfig().getString("websocket.auth_key", System.getenv("AUTH_KEY") != null ? System.getenv("AUTH_KEY") : "change_me_in_production"));
+                    authMsg.addProperty("auth_key", authKey);
                     send(authMsg.toString());
                     
                     Bukkit.getScheduler().runTask(plugin, WebSocketManager.this::displayConnectionSuccess);

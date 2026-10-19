@@ -15,12 +15,11 @@ To build it yourself: `cd plugin` then `mvn clean package`. The jar lands in `ta
 Open `plugins/rankedbedwars/config.yml` and set these two values:
 
 ```yaml
-websocket:
-  host: "ws://YOUR-BOT-IP:25565"
-  auth_key: "same-secret-as-bot-AUTH_KEY"
+bot_url: "YOUR-BOT-IP:25565"
+auth_key: "same-secret-as-bot-AUTH_KEY"
 ```
 
-`host` must point at your bot. `auth_key` must match the bot `AUTH_KEY` exactly. Then run `/rbw reload` in game.
+`bot_url` is your bot address with port. The port defaults to 25565 when omitted. `auth_key` must match the bot `AUTH_KEY` exactly. Then run `/rbw reload` in game.
 
 Check it worked:
 

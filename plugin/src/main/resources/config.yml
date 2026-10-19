@@ -1,6 +1,5 @@
-websocket:
-  host: "ws://localhost:8080"
-  auth_key: "change_me_in_production"
+bot_url: "127.0.0.1:25565"
+auth_key: "change_me_in_production"
 
 api:
   host: "websocket.deyo.lol"
