@@ -1,4 +1,4 @@
-import { Client, TextChannel, VoiceChannel, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+﻿import { Client, TextChannel, VoiceChannel, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import Game, { IGame } from '../models/Game';
 import User, { IUser } from '../models/User';
 import Queue from '../models/Queue';
@@ -1602,7 +1602,7 @@ export class GameManager {
       player.kdr = player.deaths && player.deaths > 0 ? Number((player.kills / player.deaths).toFixed(2)) : (player.kills || 0);
       player.wlr = player.losses && player.losses > 0 ? Number((player.wins / player.losses).toFixed(2)) : (player.wins || 0);
 
-      console.log(`[GameManager] Reverted stats for player ${player.discordId}: -${voidData.experienceToRevert} XP (Lv.${voidData.oldLevel}→${voidData.newLevel}), ${voidData.eloChange} ELO`);
+      console.log(`[GameManager] Reverted stats for player ${player.discordId}: -${voidData.experienceToRevert} XP (Lv.${voidData.oldLevel}â†’${voidData.newLevel}), ${voidData.eloChange} ELO`);
     } catch (error) {
       console.error(`[GameManager] Error reverting game stats for player ${player.discordId}:`, error);
     }
@@ -1709,8 +1709,8 @@ export class GameManager {
       const formatPlayer = (voidData: PlayerVoidData): string => {
         const eloChangeStr = voidData.eloChange >= 0 ? `+${voidData.eloChange}` : `${voidData.eloChange}`;
         const expChangeStr = voidData.experienceToRevert > 0 ? ` (-${voidData.experienceToRevert} XP)` : '';
-        const levelChangeStr = voidData.oldLevel !== voidData.newLevel ? ` (Lv.${voidData.oldLevel}→${voidData.newLevel})` : '';
-        return `<@${voidData.player.discordId}>: ${voidData.oldElo} → ${voidData.newElo} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
+        const levelChangeStr = voidData.oldLevel !== voidData.newLevel ? ` (Lv.${voidData.oldLevel}â†’${voidData.newLevel})` : '';
+        return `<@${voidData.player.discordId}>: ${voidData.oldElo} â†’ ${voidData.newElo} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
       };
 
       const voidedSummary = playerVoidData.map(formatPlayer).join('\n');
@@ -1756,125 +1756,6 @@ export class GameManager {
     } catch (error) {
       console.error('[GameManager] Error sending to voiding channel:', error);
     }
-  }
-
-  private applyScoringStats(user: any, stats: any, isWinner: boolean, isMvp: boolean, eloChange: number): void {
-    user.kills = (user.kills || 0) + (stats.kills ?? 0);
-    user.deaths = (user.deaths || 0) + (stats.deaths ?? 0);
-    user.finalKills = (user.finalKills || 0) + (stats.finalKills ?? 0);
-    user.bedBroken = (user.bedBroken || 0) + (stats.bedBroken ?? 0);
-    user.diamonds = (user.diamonds || 0) + (stats.diamonds ?? 0);
-    user.irons = (user.irons || 0) + (stats.irons ?? 0);
-    user.gold = (user.gold || 0) + (stats.gold ?? 0);
-    user.emeralds = (user.emeralds || 0) + (stats.emeralds ?? 0);
-    user.blocksPlaced = (user.blocksPlaced || 0) + (stats.blocksPlaced ?? 0);
-    if (isWinner) {
-      user.wins = (user.wins || 0) + 1;
-      user.winstreak = (user.winstreak || 0) + 1;
-      user.losestreak = 0;
-    } else {
-      user.losses = (user.losses || 0) + 1;
-      user.losestreak = (user.losestreak || 0) + 1;
-      user.winstreak = 0;
-    }
-    if (isMvp) user.mvps = (user.mvps || 0) + 1;
-    user.kdr = user.deaths && user.deaths > 0 ? user.kills / user.deaths : user.kills;
-    user.wlr = user.losses && user.losses > 0 ? user.wins / user.losses : user.wins;
-    user.elo = Math.max(0, user.elo + eloChange);
-    user.games = (user.games || 0) + 1;
-  }
-
-  private updateRecentGamesForScoring(user: any, game: any, stats: any, eloChange: number, isWinner: boolean, isMvp: boolean, now: Date): void {
-    if (!user.recentGames) user.recentGames = [];
-    const idx = user.recentGames.findIndex((g: any) => g.gameId === game.gameId);
-    const entry = {
-      gameId: game.gameId,
-      queueid: typeof game.queueId === 'number' ? game.queueId : parseInt(game.queueId, 10),
-      map: game.map,
-      eloGain: eloChange,
-      kills: stats.kills ?? 0,
-      deaths: stats.deaths ?? 0,
-      bedBroken: stats.bedBroken ?? 0,
-      finalKills: stats.finalKills ?? 0,
-      won: isWinner,
-      ismvp: isMvp,
-      date: now,
-      state: 'scored',
-      startTime: game.startTime,
-      endTime: now,
-      diamonds: stats.diamonds ?? 0,
-      irons: stats.irons ?? 0,
-      gold: stats.gold ?? 0,
-      emeralds: stats.emeralds ?? 0,
-      blocksPlaced: stats.blocksPlaced ?? 0
-    };
-    if (idx !== -1) {
-      user.recentGames[idx] = entry;
-    } else {
-      user.recentGames.unshift(entry);
-    }
-  }
-
-  private async updateAllUsersForScoring(context: GameScoreContext, gameResult: GameResult): Promise<void> {
-    const { game, playerData, idToIgn, players: contextPlayers } = context;
-    const User = (await import('../models/User')).default;
-    const users = contextPlayers && contextPlayers.length
-      ? contextPlayers
-      : await User.find({ discordId: { $in: [...game.team1, ...game.team2] } });
-    const now = new Date();
-    const updatePromises = users.map(async (user) => {
-      const userIgn = idToIgn[user.discordId];
-      const stats = (userIgn && playerData[userIgn]) || {};
-      const isWinner = (context.winningTeam === 1 && game.team1.includes(user.discordId)) || (context.winningTeam === 2 && game.team2.includes(user.discordId));
-      const isMvp = userIgn ? (gameResult.mvps || []).map(x => x.toLowerCase()).includes(userIgn.toLowerCase()) : false;
-      const isBedBreaker = userIgn ? (gameResult.bedbreaks || []).map(x => x.toLowerCase()).includes(userIgn.toLowerCase()) : false;
-      const rank = context.eloRanks.find((r: any) => user.elo >= r.startElo && user.elo <= r.endElo);
-      let eloChange = 0;
-      if (rank) eloChange = this.calculateScoreElo(user, rank, isWinner, isMvp, isBedBreaker);
-
-      this.applyScoringStats(user, stats, isWinner, isMvp, eloChange);
-
-      const experienceGained = this.calculateExperienceGained(isWinner, isMvp, isBedBreaker, stats);
-      const oldExperience = user.experience || 0;
-      const newExperience = oldExperience + experienceGained;
-      const levelUpInfo = checkLevelUp(oldExperience, newExperience);
-      user.experience = newExperience;
-      user.level = levelUpInfo.newLevel;
-
-      
-      if (levelUpInfo.leveledUp) {
-        console.log(`[GameManager] Player ${user.ign || user.discordId} leveled up from ${levelUpInfo.oldLevel} to ${levelUpInfo.newLevel}!`);
-
-        
-        
-        
-        
-        
-        
-        
-      }
-      await this.updatePlayerDailyElo(user);
-      this.updateRecentGamesForScoring(user, game, stats, eloChange, isWinner, isMvp, now);
-      await user.save();
-    });
-    await Promise.allSettled(updatePromises);
-  }
-
-  private async getPlayerScoreDataForContext(context: GameScoreContext, gameResult: GameResult): Promise<PlayerScoreData[]> {
-    const { players, winningTeam, mvpsIds, bedbreaksIds, idToIgn, playerData, eloRanks, game } = context;
-    return players.map(player => {
-      const isWinner = (winningTeam === 1 && game.team1.includes(player.discordId)) || (winningTeam === 2 && game.team2.includes(player.discordId));
-      const isMvp = mvpsIds.includes(player.discordId);
-      const isBedBreaker = bedbreaksIds.includes(player.discordId);
-      const rank = eloRanks.find(r => player.elo >= r.startElo && player.elo <= r.endElo);
-      let eloChange = 0;
-      if (rank) eloChange = this.calculateScoreElo(player, rank, isWinner, isMvp, isBedBreaker);
-
-      const playerIgn = idToIgn[player.discordId];
-      const stats = playerData[playerIgn] || {};
-
-      return this.buildPlayerScoreData(player, isWinner, isMvp, isBedBreaker, eloChange, stats);
-    });
   }
 
   private async scheduleGameChannelCleanup(game: IGame, gameId: number): Promise<void> {

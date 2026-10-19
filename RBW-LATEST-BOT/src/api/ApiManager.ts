@@ -352,6 +352,11 @@ export class ApiManager {
     }
   }
 
+  private punishmentTime(value: unknown): number {
+    const time = new Date(value as string).getTime();
+    return Number.isNaN(time) ? 0 : time;
+  }
+
   private getMuteInfo = async (req: Request, res: Response): Promise<void> => {
     try {
       const user = await this.findUserByQuery(req);
@@ -363,7 +368,7 @@ export class ApiManager {
       let current = null;
       if (user.ismuted && user.mutes.length > 0) {
         const lastMute = user.mutes[user.mutes.length - 1];
-        if (lastMute.duration === 0 || (lastMute.date.getTime() + lastMute.duration * 60000 > now.getTime())) {
+        if (lastMute.duration === 0 || (this.punishmentTime(lastMute.date) + lastMute.duration * 60000 > now.getTime())) {
           current = lastMute;
         }
       }
@@ -399,6 +404,7 @@ export class ApiManager {
 
   private buildUserWithLevel(user: any) {
     const levelInfo = getLevelInfo(user.experience || 0);
+    const span = levelInfo.totalExperienceForLevel > 0 ? levelInfo.totalExperienceForLevel : 1;
     return {
       ...user,
       levelInfo: {
@@ -408,7 +414,7 @@ export class ApiManager {
         experienceForNextLevel: levelInfo.experienceForNextLevel,
         experienceNeededForNext: levelInfo.experienceNeededForNext,
         totalExperienceForLevel: levelInfo.totalExperienceForLevel,
-        progressPercentage: ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100).toFixed(2)
+        progressPercentage: ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / span * 100).toFixed(2)
       }
     };
   }
@@ -693,8 +699,8 @@ export class ApiManager {
           let expired = false;
           if (type === 'bans' || type === 'mutes') {
             if (p.duration > 0) {
-              const end = new Date(p.date.getTime() + p.duration * 60000);
-              if (end < new Date()) expired = true;
+              const end = this.punishmentTime(p.date) + p.duration * 60000;
+              if (end < Date.now()) expired = true;
             }
           }
           if (!expired) {
@@ -713,7 +719,7 @@ export class ApiManager {
         }
       }
 
-      punishments.sort((a, b) => b.date.getTime() - a.date.getTime());
+      punishments.sort((a, b) => this.punishmentTime(b.date) - this.punishmentTime(a.date));
 
       const allIds = Array.from(new Set([...staffIds, ...targetIds]));
       const idToIgn: Record<string, string> = {};

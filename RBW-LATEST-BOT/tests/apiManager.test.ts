@@ -315,4 +315,69 @@ describe('ApiManager', () => {
     expect(asset.status).toBe(200);
     expect(asset.headers.get('content-type') || '').toContain('text/css');
   });
+
+  it('GET /rbw/api/muteinfo tolerates string dates', async () => {
+    UserModel.findOne.mockImplementation(() => mockQuery(makeUserDoc({
+      ismuted: true,
+      mutes: [{ id: 'm1', date: '2020-01-01T00:00:00.000Z', duration: 60, reason: 'old' }]
+    })));
+    const { app } = makeManager();
+    const base = await boot(app);
+
+    const res = await fetch(`${base}/rbw/api/muteinfo?discordid=1001`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.current).toBeNull();
+    expect(body.history).toHaveLength(1);
+  });
+
+  it('GET /rbw/api/muteinfo flags an active string-dated mute', async () => {
+    UserModel.findOne.mockImplementation(() => mockQuery(makeUserDoc({
+      ismuted: true,
+      mutes: [{ id: 'm2', date: new Date(Date.now() + 3600000).toISOString(), duration: 120, reason: 'active' }]
+    })));
+    const { app } = makeManager();
+    const base = await boot(app);
+
+    const res = await fetch(`${base}/rbw/api/muteinfo?discordid=1001`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.current).toMatchObject({ id: 'm2' });
+  });
+
+  it('GET /rbw/api/punishments/mutes sorts mixed Date and string dates', async () => {
+    UserModel.find.mockImplementation((query: any) => {
+      if (query?.discordId?.$in) {
+        return mockQuery([
+          { discordId: '1001', ign: 'PlayerOne' },
+          { discordId: 'mod1', ign: 'Mod' }
+        ]);
+      }
+      return mockQuery([makeUserDoc({
+        mutes: [
+          { id: 'old', date: '2020-01-01T00:00:00.000Z', duration: 0, reason: 'old', moderator: 'mod1' },
+          { id: 'new', date: new Date(Date.now() + 3600000), duration: 0, reason: 'new', moderator: 'mod1' }
+        ]
+      })]);
+    });
+    const { app } = makeManager();
+    const base = await boot(app);
+
+    const res = await fetch(`${base}/rbw/api/punishments/mutes`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const list = Array.isArray(body) ? body : body.punishments;
+    expect(list.map((p: any) => p.id)).toEqual(['new', 'old']);
+  });
+
+  it('GET /rbw/api/user reports a numeric progress percentage', async () => {
+    UserModel.findOne.mockImplementation(() => mockQuery(makeUserDoc({ experience: 250 })));
+    const { app } = makeManager();
+    const base = await boot(app);
+
+    const res = await fetch(`${base}/rbw/api/user?discordid=1001`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.levelInfo.progressPercentage).toMatch(/^\d+\.\d{2}$/);
+  });
 });
