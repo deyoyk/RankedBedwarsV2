@@ -112,9 +112,14 @@ export class GameManager {
   ): Promise<GameResources> {
     let reserved = false;
     try {
+      const raw1 = (team1 ?? []).map(id => (id ?? '').trim()).filter(Boolean);
+      const raw2 = (team2 ?? []).map(id => (id ?? '').trim()).filter(Boolean);
+      if (new Set(raw1).size !== raw1.length || new Set(raw2).size !== raw2.length) throw new Error('Duplicate players inside a team');
+      if (raw1.some(id => raw2.includes(id))) throw new Error('Player cannot be on both teams');
       const teams = normalizeTeams(team1, team2);
       if (teams.team1.length === 0 || teams.team2.length === 0) throw new Error('Both teams must have at least one player');
       if (teams.team1.length !== teams.team2.length) throw new Error('Teams must be equal size');
+      if (queueData?.maxPlayers && teams.team1.length * 2 !== queueData.maxPlayers) throw new Error(`Teams must match queue size ${queueData.maxPlayers}`);
       if (this.activeGames.has(gameId)) throw new Error(`Game ${gameId} is already being created`);
       if (this.activeGames.size >= this.MAX_CONCURRENT_GAMES) throw new Error('Server is at max concurrent games');
       this.activeGames.set(gameId, {} as GameResources);
@@ -202,8 +207,8 @@ export class GameManager {
       console.log(`[GameManager] Successfully scored game ${gameResult.gameId}`);
       return {
         gameId: gameResult.gameId,
-        winningTeam: gameResult.winningTeam,
-        mvps: gameResult.mvps,
+        winningTeam: context.winningTeam,
+        mvps: context.mvpsIds.map(id => context.idToIgn[id] ?? id),
         updatedPlayers: context.players.map(p => ({ discordId: p.discordId, elo: p.elo }))
       };
     } catch (error) {

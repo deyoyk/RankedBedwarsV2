@@ -475,6 +475,7 @@ export class CentralizedMatchmaker {
     try {
       const validPlayers: string[] = [];
       const checkedParties = new Set<string>();
+      const invalidParties = new Set<string>();
       
       for (const playerId of playerIds) {
         try {
@@ -488,7 +489,7 @@ export class CentralizedMatchmaker {
             continue;
           }
 
-          const isValid = await this.validateSinglePlayer(playerId, queue, playerIds, checkedParties);
+          const isValid = await this.validateSinglePlayer(playerId, queue, playerIds, checkedParties, invalidParties);
           
           this.validationCache.set(cacheKey, { valid: isValid, timestamp: Date.now() });
           
@@ -513,7 +514,8 @@ export class CentralizedMatchmaker {
     playerId: string, 
     queue: any, 
     allPlayersInQueue: string[],
-    checkedParties: Set<string>
+    checkedParties: Set<string>,
+    invalidParties: Set<string>
   ): Promise<boolean> {
     try {
       const user = await User.findOne({ discordId: playerId }).lean();
@@ -538,13 +540,16 @@ export class CentralizedMatchmaker {
         return false;
       }
 
-      if (user.partyId && !checkedParties.has(user.partyId)) {
-        checkedParties.add(user.partyId);
-        
-        const partyValidation = await this.validateParty(user.partyId, queue, allPlayersInQueue);
-        if (!partyValidation.valid) {
-          console.warn(`[CentralizedMatchmaker] Party ${user.partyId} validation failed: ${partyValidation.reason}`);
-          return false;
+      if (user.partyId) {
+        if (invalidParties.has(user.partyId)) return false;
+        if (!checkedParties.has(user.partyId)) {
+          checkedParties.add(user.partyId);
+          const partyValidation = await this.validateParty(user.partyId, queue, allPlayersInQueue);
+          if (!partyValidation.valid) {
+            console.warn(`[CentralizedMatchmaker] Party ${user.partyId} validation failed: ${partyValidation.reason}`);
+            invalidParties.add(user.partyId);
+            return false;
+          }
         }
       }
 

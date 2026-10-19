@@ -30,31 +30,39 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
   }
 
   try {
-    const user = await User.findOne({ discordId: targetId });
-    if (!user) {
+    const existing = await User.findOne({ discordId: targetId });
+    if (!existing) {
       await safeReply(interaction, errorEmbed('User not found.'));
       return;
     }
 
     const eloRank = await EloRank.findOne({
-      startElo: { $lte: user.elo },
-      endElo: { $gte: user.elo },
+      startElo: { $lte: existing.elo },
+      endElo: { $gte: existing.elo },
     });
     if (!eloRank) {
       await safeReply(interaction, errorEmbed('Elo rank not found.'));
       return;
     }
 
-    ensureUserStats(user);
+    ensureUserStats(existing);
 
-    user.elo = Math.max(0, user.elo - eloRank.loseElo);
-    user.losses += 1;
-    user.games += 1;
-    user.losestreak = (user.losestreak ?? 0) + 1;
-    user.winstreak = 0;
-    user.wlr = computeWlr(user.wins, user.losses);
+    const newElo = Math.max(0, existing.elo - eloRank.loseElo);
+    const newLosestreak = (existing.losestreak ?? 0) + 1;
+    const newWlr = computeWlr(existing.wins, existing.losses + 1);
+    const user = await User.findOneAndUpdate(
+      { discordId: targetId },
+      {
+        $set: { elo: newElo, losestreak: newLosestreak, winstreak: 0, wlr: newWlr },
+        $inc: { losses: 1, games: 1 },
+      },
+      { new: true }
+    );
+    if (!user) {
+      await safeReply(interaction, errorEmbed('User not found.'));
+      return;
+    }
     updateDailyElo(user, user.elo);
-
     await user.save();
 
     if (interaction.guild) {

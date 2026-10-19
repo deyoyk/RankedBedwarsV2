@@ -158,18 +158,25 @@ export class PartyService {
   }
 
   private static async removeMemberFromParty(party: any, userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
-    party.members = party.members.filter((id: string) => id !== userId);
-    await party.save();
+    const updated = await Party.findOneAndUpdate(
+      { partyId: party.partyId, members: userId },
+      { $pull: { members: userId } },
+      { new: true }
+    );
+    if (!updated) {
+      await this.cleanupUserParty(userId);
+      return { success: true, party };
+    }
 
     await UserModel.updateOne(
       { discordId: userId },
       { $unset: { partyId: "" } }
     );
 
-    await this.updatePartyRoles(guild, party.members);
-    await this.updatePartyActivity(party.partyId);
+    await this.updatePartyRoles(guild, updated.members);
+    await this.updatePartyActivity(updated.partyId);
 
-    return { success: true, party };
+    return { success: true, party: updated };
   }
 
   private static async addMemberToParty(party: any, userId: string, guild: Guild): Promise<{ success: boolean; message?: string }> {
@@ -252,6 +259,10 @@ export class PartyService {
 
       await this.removePartyRoles(guild, party.members);
       await Party.deleteOne({ partyId: party.partyId });
+      await UserModel.updateMany(
+        { partyId: party.partyId },
+        { $unset: { partyId: "" } }
+      );
 
       return { success: true, party };
     } catch (error) {
