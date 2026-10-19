@@ -1,4 +1,4 @@
-import { loadSkinDataUrl, staticImageDataUrl } from '../images/assets';
+import { loadSkinDataUrl } from '../images/assets';
 import { renderPng } from '../images/renderer';
 import { themeTemplate, ThemeRecentGame } from '../images/templates/theme';
 
@@ -68,7 +68,7 @@ export async function generateThemeImage(
   }));
 
   const tpl = themeTemplate({
-    bg: staticImageDataUrl('themes', `${themeName}.png`),
+    theme: themeName,
     serverName,
     inviteLink,
     ign: playerData.ign || '',

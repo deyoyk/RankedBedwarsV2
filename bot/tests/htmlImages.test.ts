@@ -20,17 +20,18 @@ function texts(node: any): string[] {
   return (Array.isArray(kids) ? kids : [kids]).flatMap(texts);
 }
 
-function countImgs(node: any, src: string): number {
+function countText(node: any, text: string): number {
   if (!node || typeof node !== 'object') return 0;
-  let n = node.type === 'img' && node.props?.src === src ? 1 : 0;
+  let n = 0;
   const kids = node.props?.children;
-  for (const k of (Array.isArray(kids) ? kids : [kids])) n += countImgs(k, src);
+  for (const k of (Array.isArray(kids) ? kids : [kids])) {
+    if (k === text) n += 1;
+    else n += countText(k, text);
+  }
   return n;
 }
 
 const avatar = staticImageDataUrl('fallbacks', 'steve.png');
-const bg = staticImageDataUrl('games', 'scored.png');
-const mvpBadge = staticImageDataUrl('games', 'mvp.png');
 
 function player(username: string, mvp = false) {
   return { discordId: username, username, team: 'winning' as const, oldElo: 1000, newElo: 1030, mvp };
@@ -44,13 +45,11 @@ describe('score template', () => {
       losers: [{ ...player('Eve'), avatar }],
       serverName: 'Test',
       inviteLink: 'discord.gg/test',
-      bg,
-      mvpBadge,
     });
     const all = texts(tpl.root);
     expect(all).toContain('GAME #7');
     expect(all).toContain('<Bob>');
-    expect(countImgs(tpl.root, mvpBadge)).toBe(1);
+    expect(countText(tpl.root, 'MVP')).toBe(1);
   });
 });
 
@@ -90,7 +89,7 @@ describe('html image rendering', () => {
 
   it('theme template keeps the ign as text', () => {
     const tpl = themeTemplate({
-      bg: staticImageDataUrl('themes', 'elite.png'),
+      theme: 'elite',
       serverName: 'S',
       inviteLink: 'I',
       ign: '<Hacker>',

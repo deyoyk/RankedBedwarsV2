@@ -1,4 +1,4 @@
-import { loadAvatarDataUrl, staticImageDataUrl } from '../images/assets';
+import { loadAvatarDataUrl } from '../images/assets';
 import { renderPng } from '../images/renderer';
 import { scoreTemplate, ScoreTemplatePlayer } from '../images/templates/score';
 
@@ -39,8 +39,6 @@ export async function generateScoreImageBuffer(
     losers: loserRows,
     serverName,
     inviteLink,
-    bg: staticImageDataUrl('games', 'scored.png'),
-    mvpBadge: staticImageDataUrl('games', 'mvp.png'),
   });
   return renderPng(tpl.root, tpl.width, tpl.height);
 }
