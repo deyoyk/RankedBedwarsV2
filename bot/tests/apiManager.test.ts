@@ -3,6 +3,9 @@ import { queuePlayers } from '../src/types/queuePlayersMemory';
 import { AddressInfo } from 'net';
 
 const express = require('express');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
 jest.mock('../src/models/User', () => ({
   __esModule: true,
@@ -295,25 +298,34 @@ describe('ApiManager', () => {
     expect(body.endpoints).not.toContain('/rbw/api/knockback/vote');
   });
 
-  it('serves the web UI at / and exposes /rbw/web/config without auth', async () => {
-    const { app } = makeManager();
-    const base = await boot(app);
+  it('serves the RBW_WEB_DIR ui and exposes /rbw/web/config without auth', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rbw-web-'));
+    fs.writeFileSync(path.join(dir, 'index.html'), '<html><head><title>Ranked Bedwars Fixture</title></head><body>hi</body></html>');
+    fs.writeFileSync(path.join(dir, 'styles.css'), 'body { color: red; }');
+    const prev = process.env.RBW_WEB_DIR;
+    process.env.RBW_WEB_DIR = dir;
+    try {
+      const { app } = makeManager();
+      const base = await boot(app);
 
-    const index = await fetch(`${base}/`);
-    expect(index.status).toBe(200);
-    const html = await index.text();
-    expect(html).toContain('Ranked Bedwars');
-    expect(html).toContain('app.js');
+      const index = await fetch(`${base}/`);
+      expect(index.status).toBe(200);
+      expect(await index.text()).toContain('Ranked Bedwars Fixture');
 
-    const configRes = await fetch(`${base}/rbw/web/config`);
-    expect(configRes.status).toBe(200);
-    const config = await configRes.json();
-    expect(config.apiBase).toBe('');
-    expect(typeof config.apiKeyRequired).toBe('boolean');
+      const asset = await fetch(`${base}/styles.css`);
+      expect(asset.status).toBe(200);
+      expect(asset.headers.get('content-type') || '').toContain('text/css');
 
-    const asset = await fetch(`${base}/styles.css`);
-    expect(asset.status).toBe(200);
-    expect(asset.headers.get('content-type') || '').toContain('text/css');
+      const configRes = await fetch(`${base}/rbw/web/config`);
+      expect(configRes.status).toBe(200);
+      const config = await configRes.json();
+      expect(config.apiBase).toBe('');
+      expect(typeof config.apiKeyRequired).toBe('boolean');
+    } finally {
+      if (prev === undefined) delete process.env.RBW_WEB_DIR;
+      else process.env.RBW_WEB_DIR = prev;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('GET /rbw/api/muteinfo tolerates string dates', async () => {

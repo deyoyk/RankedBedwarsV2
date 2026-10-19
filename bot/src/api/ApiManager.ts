@@ -110,20 +110,24 @@ export class ApiManager {
    * Locates the web UI directory. Checks, in order: RBW_WEB_DIR env override,
    * ../web relative to the process cwd (repo layout), and the
    * repo-root-relative path from the compiled dist/ location.
+   * Prefers the Next.js static export (out/) when it exists.
    */
   private resolveWebDir(): string | null {
-    const candidates = [
+    const bases = [
       process.env.RBW_WEB_DIR,
       path.resolve(process.cwd(), '..', 'web'),
       path.resolve(process.cwd(), 'web'),
       path.resolve(__dirname, '..', '..', 'web'),
       path.resolve(__dirname, '..', 'web')
     ];
-    for (const candidate of candidates) {
-      if (!candidate) continue;
+    for (const base of bases) {
+      if (!base) continue;
       try {
-        if (fs.existsSync(path.join(candidate, 'index.html'))) {
-          return candidate;
+        if (fs.existsSync(path.join(base, 'out', 'index.html'))) {
+          return path.join(base, 'out');
+        }
+        if (fs.existsSync(path.join(base, 'index.html'))) {
+          return base;
         }
       } catch (error) {
       }

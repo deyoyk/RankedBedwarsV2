@@ -1,18 +1,28 @@
 # Web
 
-Stats website for Ranked Bedwars. Player stats, game recaps, leaderboards, seasons.
+Stats website for Ranked Bedwars. Player stats, game recaps, leaderboards, seasons. Built with Next.js and exported as static files.
 
 ## Start it
 
-Nothing to install. The bot serves this folder automatically. Open:
+The bot serves the built site automatically. Build it once, then open it:
 
+```bash
+cd web
+npm install
+npm run build
 ```
-http://your-bot-host:25565/
+
+Then open `http://your-bot-host:25565/`. Rebuild after pulling site changes.
+
+Run it locally while developing:
+
+```bash
+npm run dev
 ```
 
 ## Config it
 
-To host the site somewhere else (Vercel, Netlify, any static host), copy this folder and edit `config.js`:
+To host the site somewhere else (Vercel, Netlify, any static host), deploy the `out/` folder produced by `npm run build` and edit `public/config.js` before building:
 
 ```js
 const RBW_CONFIG = {
