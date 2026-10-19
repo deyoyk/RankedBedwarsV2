@@ -24,6 +24,7 @@ export type DefaultTemplateInput = {
   combat: DefaultTile[];
   seasonLine1: string;
   seasonLine2: string;
+  footerBrand: string;
 };
 
 const WIDTH = 1400;
@@ -164,8 +165,7 @@ export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; wid
     }),
     h('div', { style: { position: 'absolute', left: 70, top: 872, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, input.seasonLine1),
     h('div', { style: { position: 'absolute', left: 70, top: 894, fontFamily: 'PoppinsRegular', fontSize: 18, color: '#55555e' } }, input.seasonLine2),
-    h('div', { style: { position: 'absolute', left: 1140, top: 870, fontFamily: 'PoppinsMedium', fontSize: 36, color: '#55555e' } }, 'R'),
-    h('div', { style: { position: 'absolute', left: 1180, top: 878, fontFamily: 'PoppinsMedium', fontSize: 26, color: '#55555e' } }, 'RBW.GG'),
+    input.footerBrand ? rightText(1090, 878, 240, 26, 'PoppinsMedium', '#55555e', input.footerBrand, 32) : null,
   );
   return { root, width: WIDTH, height: HEIGHT };
 }

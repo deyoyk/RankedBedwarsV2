@@ -136,9 +136,10 @@ describe('html image rendering', () => {
       combat: enrichedPlayer().combat,
       seasonLine1: 'YEAR 26 SEASON 1',
       seasonLine2: 'July 22, 2026',
+      footerBrand: 'play.deyo.lol',
     });
     const all = texts(tpl.root);
-    for (const expected of ['<Hacker>', 'RECORD', 'COMBAT', 'W/L ratio', 'RBW.GG', '#278', '50 RR', 'Final Deaths', 'LEVEL PROGRESS']) {
+    for (const expected of ['<Hacker>', 'RECORD', 'COMBAT', 'W/L ratio', 'play.deyo.lol', '#278', '50 RR', 'Final Deaths', 'LEVEL PROGRESS']) {
       expect(all).toContain(expected);
     }
   });
