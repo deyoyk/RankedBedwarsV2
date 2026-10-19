@@ -53,6 +53,21 @@ export class StrikeManager {
       }
 
       const strikeId = generatePunishmentId();
+      const strikeCount = user.strikes.length + 1;
+
+      const strikeConfig = config.strikes || {};
+      const action = strikeConfig[strikeCount] || strikeConfig['default'] || 'warn';
+
+      let banDuration: string | null = null;
+      if (action !== 'warn') {
+        try {
+          parseDuration(action);
+          banDuration = action;
+        } catch {
+          throw new Error(`Invalid strike action for strike ${strikeCount}: "${action}" (expected "warn" or a duration)`);
+        }
+      }
+
       const strikeRecord = {
         id: strikeId,
         reason: reason.trim(),
@@ -63,15 +78,11 @@ export class StrikeManager {
       user.strikes.push(strikeRecord);
       await user.save();
 
-      const strikeCount = user.strikes.length;
-      const strikeConfig = config.strikes || {};
-      const action = strikeConfig[strikeCount] || strikeConfig['default'] || 'warn';
-
       let actionTaken = 'Warning issued';
       operation.actionTaken = actionTaken;
 
       try {
-        if (!action || action === 'warn') {
+        if (banDuration === null) {
           const promises: Promise<any>[] = [];
           sendPunishmentNotification(promises, {
             guild, targetId, moderatorId, reason, type: 'strike'
@@ -80,9 +91,8 @@ export class StrikeManager {
           actionTaken = `Warning issued (Strike ${strikeCount})`;
         } else {
           try {
-            const duration = parseDuration(action);
-            await BanManager.ban(guild, targetId, moderatorId, action, `Strike ${strikeCount}: ${reason}`);
-            actionTaken = `Banned for ${action} (Strike ${strikeCount})`;
+            await BanManager.ban(guild, targetId, moderatorId, banDuration, `Strike ${strikeCount}: ${reason}`);
+            actionTaken = `Banned for ${banDuration} (Strike ${strikeCount})`;
             instance.stats.escalatedStrikes++;
           } catch (banError) {
             console.error(`[StrikeManager] Failed to escalate strike to ban for ${targetId}:`, banError);

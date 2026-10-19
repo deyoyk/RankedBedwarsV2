@@ -284,4 +284,35 @@ describe('StrikeManager.strike', () => {
     expect(result.strikeCount).toBe(1);
     expect(result.removedStrike.reason).toBe('b');
   });
+
+  it('escalates to a ban when the strike action is a duration', async () => {
+    const user = mockUser();
+    user.strikes = [
+      { id: new mongoose.Types.ObjectId().toString(), reason: 'a', date: new Date(), moderator: 'm1' }
+    ];
+    UserModel.findOne.mockResolvedValue(user);
+
+    const result = await StrikeManager.strike(guildMock() as any, '123', 'mod', 'Cheating');
+
+    expect(result.strikeCount).toBe(2);
+    expect(result.actionTaken).toBe('Banned for 10h (Strike 2)');
+    expect(user.isbanned).toBe(true);
+    expect(user.bans).toHaveLength(1);
+  });
+
+  it('rejects without recording when the strike action is invalid', async () => {
+    const configMock = require('../src/config/config').default;
+    const prev = configMock.strikes;
+    configMock.strikes = { 1: 'bogus', default: 'warn' };
+    try {
+      const user = mockUser();
+      UserModel.findOne.mockResolvedValue(user);
+
+      await expect(StrikeManager.strike(guildMock() as any, '123', 'mod', 'Cheating'))
+        .rejects.toThrow('Invalid strike action for strike 1');
+      expect(user.strikes).toHaveLength(0);
+    } finally {
+      configMock.strikes = prev;
+    }
+  });
 });
