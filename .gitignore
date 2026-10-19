@@ -3,7 +3,7 @@ node_modules/
 npm-debug.log*
 
 # Build output
-RBW-LATEST-Ingame/target/
+plugin/target/
 
 # Env & secrets
 .env

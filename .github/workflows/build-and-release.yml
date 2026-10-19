@@ -25,26 +25,26 @@ jobs:
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: RBW-LATEST-BOT/package-lock.json
+          cache-dependency-path: bot/package-lock.json
 
       - name: Install dependencies
-        working-directory: RBW-LATEST-BOT
+        working-directory: bot
         run: npm ci
 
       - name: Typecheck
-        working-directory: RBW-LATEST-BOT
+        working-directory: bot
         run: npx tsc --noEmit
 
       - name: Run tests
-        working-directory: RBW-LATEST-BOT
+        working-directory: bot
         run: npm test
 
       - name: Lint
-        working-directory: RBW-LATEST-BOT
+        working-directory: bot
         run: npm run lint
 
       - name: Build
-        working-directory: RBW-LATEST-BOT
+        working-directory: bot
         run: npm run build
 
   build:
@@ -65,12 +65,12 @@ jobs:
           cache: maven
       
       - name: Build and test with Maven
-        working-directory: RBW-LATEST-Ingame
+        working-directory: plugin
         run: mvn clean package
       
       - name: Get version from pom.xml
         id: version
-        working-directory: RBW-LATEST-Ingame
+        working-directory: plugin
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
@@ -91,7 +91,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: RankedBedwars-${{ steps.version.outputs.version }}.jar
-          path: RBW-LATEST-Ingame/target/RankedBedwars-*.jar
+          path: plugin/target/RankedBedwars-*.jar
           retention-days: 30
 
       - name: Delete previous rolling release
@@ -104,7 +104,7 @@ jobs:
         if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v1
         with:
-          files: RBW-LATEST-Ingame/target/RankedBedwars-*.jar
+          files: plugin/target/RankedBedwars-*.jar
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
           body: |

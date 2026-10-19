@@ -108,16 +108,16 @@ export class ApiManager {
 
   /**
    * Locates the web UI directory. Checks, in order: RBW_WEB_DIR env override,
-   * ../RBW-LATEST-WEB relative to the process cwd (repo layout), and the
+   * ../web relative to the process cwd (repo layout), and the
    * repo-root-relative path from the compiled dist/ location.
    */
   private resolveWebDir(): string | null {
     const candidates = [
       process.env.RBW_WEB_DIR,
-      path.resolve(process.cwd(), '..', 'RBW-LATEST-WEB'),
-      path.resolve(process.cwd(), 'RBW-LATEST-WEB'),
-      path.resolve(__dirname, '..', '..', 'RBW-LATEST-WEB'),
-      path.resolve(__dirname, '..', 'RBW-LATEST-WEB')
+      path.resolve(process.cwd(), '..', 'web'),
+      path.resolve(process.cwd(), 'web'),
+      path.resolve(__dirname, '..', '..', 'web'),
+      path.resolve(__dirname, '..', 'web')
     ];
     for (const candidate of candidates) {
       if (!candidate) continue;
