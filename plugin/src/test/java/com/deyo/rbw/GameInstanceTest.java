@@ -127,4 +127,33 @@ public class GameInstanceTest {
 
         assertEquals(Collections.singletonList("A"), game.getMVPs());
     }
+
+    @Test
+    public void ignoresNullOrEmptyKillersAndVictims() {
+        Player a = mockPlayer("A");
+        Player b = mockPlayer("B");
+        GameInstance game = createGame(a, b, mockPlayer("C"), mockPlayer("D"));
+
+        game.recordKill(null, "B", false);
+        game.recordKill("", "B", false);
+        game.recordKill("A", null, false);
+        game.recordKill("A", "", true);
+
+        assertTrue(!game.getGame().getPlayerKills().containsKey(null));
+        assertTrue(!game.getGame().getPlayerKills().containsKey(""));
+        assertTrue(!game.getGame().getPlayerDeaths().containsKey(null));
+        assertEquals(0, game.getGame().getPlayerDeaths().get("B"));
+    }
+
+    @Test
+    public void toleratesNullWinnerAsDraw() {
+        Player a = mockPlayer("A");
+        Player b = mockPlayer("B");
+        GameInstance game = createGame(a, b, mockPlayer("C"), mockPlayer("D"));
+
+        game.recordGameEnd(null);
+
+        assertTrue(game.getWinningTeamPlayers().isEmpty());
+        assertTrue(game.getLosingTeamPlayers().isEmpty());
+    }
 }

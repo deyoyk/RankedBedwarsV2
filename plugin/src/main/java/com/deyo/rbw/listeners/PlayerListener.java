@@ -29,12 +29,14 @@ public class PlayerListener implements Listener {
 
     private void sendPlayerStatusUpdate(Player player, boolean online) {
         if (plugin.getWebSocketManager() == null || !plugin.getWebSocketManager().isConnected()) return;
+        String ign = player.getName();
+        if (ign == null || ign.isEmpty()) return;
         org.bukkit.Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             com.google.gson.JsonObject json = new com.google.gson.JsonObject();
             json.addProperty("type", "player_status_update");
-            json.addProperty("ign", player.getName());
+            json.addProperty("ign", ign);
             json.addProperty("online", online);
-            json.addProperty("original_ign_case", player.getName());
+            json.addProperty("original_ign_case", ign);
             plugin.getWebSocketManager().sendMessage(json.toString());
         });
     }

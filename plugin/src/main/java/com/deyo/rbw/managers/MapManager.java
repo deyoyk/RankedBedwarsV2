@@ -395,8 +395,17 @@ public class MapManager {
         }
 
         if (BedwarsAPIManager.isAvailable()) {
-            BedwarsAPIManager.getImplementation().warpPlayersToGame(gameId, physicalArenaToUse, team1Json, team2Json, isRanked);
+            try {
+                BedwarsAPIManager.getImplementation().warpPlayersToGame(gameId, physicalArenaToUse, team1Json, team2Json, isRanked);
+            } catch (Exception e) {
+                unlockMap(physicalArenaToUse);
+                gameIdToPhysicalArenaMap.remove(gameId);
+                sendWarpFailureUnknown(gameId);
+                plugin.getLogger().warning("Warp threw for game #" + gameId + ", map unlocked: " + e.getMessage());
+            }
         } else {
+            unlockMap(physicalArenaToUse);
+            gameIdToPhysicalArenaMap.remove(gameId);
             sendWarpFailureUnknown(gameId);
             plugin.getLogger().warning("Cannot warp players: No BedWars implementation is available");
         }
@@ -489,7 +498,7 @@ public class MapManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
             response.addProperty("type", "warp_failure_unknown");
-            response.addProperty("gameid", gameId);
+            response.addProperty("gameId", gameId);
             if (plugin.getWebSocketManager() != null) {
                 plugin.getWebSocketManager().sendMessage(response.toString());
             }

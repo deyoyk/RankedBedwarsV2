@@ -124,7 +124,6 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GOLD + "/rbw ping " + ChatColor.GRAY + "- Show server tick ping (mspt)");
         sender.sendMessage(ChatColor.GOLD + "/rbw disablemap <map> " + ChatColor.GRAY + "- Disable a map for play");
         sender.sendMessage(ChatColor.GOLD + "/rbw enablemap <map> " + ChatColor.GRAY + "- Enable a previously disabled map");
-        sender.sendMessage(ChatColor.GOLD + "/rbw groups [reload] " + ChatColor.GRAY + "- Show/reload arena group configuration");
         sender.sendMessage(ChatColor.GOLD + "/rbw reloadpermissions " + ChatColor.GRAY + "- Reload permissions and send to WebSocket");
         sender.sendMessage(ChatColor.GOLD + "/rbw clearcache " + ChatColor.GRAY + "- Clear PlaceholderAPI cache");
     }
@@ -272,16 +271,13 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             return Collections.emptyList();
         }
         if (args.length == 1) {
-            List<String> completions = Arrays.asList("reload", "status", "maps", "refresh", "test", "ping", "disablemap", "enablemap", "groups", "reloadpermissions", "clearcache");
+            List<String> completions = Arrays.asList("reload", "status", "maps", "refresh", "test", "ping", "disablemap", "enablemap", "reloadpermissions", "clearcache");
             return completions.stream().filter(s -> s.startsWith(args[0].toLowerCase())).collect(Collectors.toList());
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("disablemap") || args[0].equalsIgnoreCase("enablemap"))) {
             if (plugin.getMapManager() != null) {
                 return plugin.getMapManager().getMapNames().stream().filter(s -> s.startsWith(args[1])).collect(Collectors.toList());
             }
-        }
-        if (args.length == 2 && args[0].equalsIgnoreCase("groups")) {
-            return Collections.singletonList("reload");
         }
         return Collections.emptyList();
     }

@@ -89,6 +89,9 @@ public class GameInstance {
     }
 
     public void recordKill(String killer, String victim, boolean isFinal) {
+        if (killer == null || killer.isEmpty() || victim == null || victim.isEmpty()) {
+            return;
+        }
         game.getPlayerKills().put(killer, game.getPlayerKills().getOrDefault(killer, 0) + 1);
         addTimelineEvent("kill", killer, victim, null, null);
         if (isFinal) {
@@ -149,6 +152,9 @@ public class GameInstance {
     }
 
     public void recordGameEnd(Team winningTeam) {
+        if (winningTeam == null) {
+            return;
+        }
         this.winningTeam = winningTeam;
         this.endTime = System.currentTimeMillis();
         String winningTeamName = getTeamName(winningTeam);
