@@ -1,6 +1,9 @@
-# Ranked Bedwars
 
-Ranked Bedwars matchmaking. A Discord bot runs queues and ELO, a Minecraft plugin runs the games. They talk over WebSocket.
+**Ranked BedWars** developed by the one and only **Deyo**.
+
+**Discord:** deyodyalan
+
+**Note:** I only accept paid setup requests. I do not work for free.
 
 ## Parts
 
@@ -12,6 +15,8 @@ Ranked Bedwars matchmaking. A Discord bot runs queues and ELO, a Minecraft plugi
 
 1. Start the bot.
 2. Put the plugin jar on your Minecraft server.
-3. Open the site at `http://your-bot-host:25565`.
+3. Config the bot
+4. Config the plugin
+5. Voila :3 
 
 Plugin jar download: https://github.com/deyoyk/RankedBedwarsV2/releases
