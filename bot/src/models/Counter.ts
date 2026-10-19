@@ -1,6 +1,6 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
 
-interface ICounter extends Document {
+interface ICounter {
   _id: string;
   seq: number;
 }
