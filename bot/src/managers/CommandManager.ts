@@ -45,9 +45,6 @@ import { queue } from '../commands/queue/queue';
 import { history } from '../commands/moderation/history';
 import { screenshare } from '../commands/moderation/screenshare';
 import { ssclose } from '../commands/moderation/ssclose';
-import { changeThemeData, executeChangeTheme } from '../commands/season/changetheme';
-import { themesData, executeThemes } from '../commands/season/themes';
-import { themeManageData, executeThemeManage } from '../commands/season/thememanage';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
 import { ScreenshareService } from '../services/ScreenshareService';
 import { fixall } from '../commands/account/fixall';
@@ -437,9 +434,7 @@ export class CommandManager {
     this.regChat('endseason', 'End the current active season and migrate data', executeEndSeason);
     this.regChat('listseasons', 'List all seasons', executeListSeasons);
     this.reg('seasoninfo', 'Show current season information and allowed items', seasoninfo);
-    this.regChat('changetheme', 'Change your stats image theme', executeChangeTheme, changeThemeData.toJSON().options || []);
-    this.regChat('themes', 'List your owned themes and current theme', executeThemes, themesData.toJSON().options || []);
-    this.regChat('thememanage', 'Admin: give or take a user theme', executeThemeManage, themeManageData.toJSON().options || []);
+    this.reg('seasoninfo', 'Show current season information and allowed items', seasoninfo);
   }
 
   public async registerSlashCommands() {
