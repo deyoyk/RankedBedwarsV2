@@ -1,16 +1,40 @@
 import User from '../models/User';
 import { MapService } from '../managers/MapManager';
 
+export function normalizeIdList(ids: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of ids) {
+    const id = (raw ?? '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
+export function normalizeTeams(team1: string[], team2: string[]): { team1: string[]; team2: string[] } {
+  const t1 = normalizeIdList(team1);
+  const t2 = normalizeIdList(team2).filter(id => !t1.includes(id));
+  return { team1: t1, team2: t2 };
+}
+
+export function normalizeIgnKey(ign: string): string {
+  return (ign ?? '').trim().toLowerCase();
+}
+
 export async function calculateTeamAverageElo(playerIds: string[]): Promise<number> {
   try {
-    if (playerIds.length === 0) return 0;
+    const ids = normalizeIdList(playerIds);
+    if (ids.length === 0) return 0;
 
     const users = await User.find({
-      discordId: { $in: playerIds }
+      discordId: { $in: ids }
     }).select('elo');
 
+    if (users.length === 0) return 0;
     const totalElo = users.reduce((sum, user) => sum + (user.elo || 0), 0);
-    return Math.round(totalElo / playerIds.length);
+    return Math.round(totalElo / users.length);
   } catch (error) {
     console.error('[MatchmakingUtils] Error calculating team average ELO:', error);
     return 0;
@@ -49,8 +73,10 @@ export async function selectRandomMap(mapService: MapService, queueData: any): P
 
 export async function getPlayerIGNs(playerIds: string[]): Promise<Map<string, string>> {
   try {
+    const ids = normalizeIdList(playerIds);
+    if (ids.length === 0) return new Map();
     const users = await User.find({
-      discordId: { $in: playerIds }
+      discordId: { $in: ids }
     }).select('discordId ign');
 
     return new Map(users.map(u => [u.discordId, u.ign]));

@@ -17,6 +17,7 @@ function cleanColor(color: string | number) {
     return 0x5865F2; 
   }
   if (typeof color === 'number' && !isNaN(color)) {
+    if (!Number.isInteger(color) || color < 0 || color > 0xffffff) return 0x5865F2;
     return color;
   }
   
@@ -48,7 +49,10 @@ export function betterEmbed(
     .setColor(safeColor)
     .setTitle(finalTitle)
     .setDescription(finalText);
-  if (finalFooter) builder.setFooter({ text: finalFooter, iconURL: finalIcon });
+  if (finalFooter) {
+    if (finalIcon) builder.setFooter({ text: finalFooter, iconURL: finalIcon });
+    else builder.setFooter({ text: finalFooter });
+  }
   return {
     embeds: [builder],
     flags: finalEphemeral ? 64 : 0, 

@@ -1,7 +1,7 @@
 import { registerVcLeaveCleanupListener } from './handlers/VcLeaveCleanupListener';
 import { Client, GatewayIntentBits, ChatInputCommandInteraction, Interaction, RepliableInteraction, Message } from 'discord.js';
 import mongoose from 'mongoose';
-import config from './config/config';
+import config, { validateConfig } from './config/config';
 import { QueueListener } from './handlers/QueueListener';
 import { CommandManager } from './managers/CommandManager';
 import { WebSocketManager } from './websocket/WebSocketManager';
@@ -40,6 +40,14 @@ registerVcLeaveCleanupListener(client);
 
 if (!process.env.AUTH_KEY) {
   console.error('[Bot] AUTH_KEY environment variable is not set. Refusing to start (WebSocket/API would be unauthenticated).');
+  process.exit(1);
+}
+
+const configErrors = validateConfig(config);
+if (configErrors.length > 0) {
+  console.error('[Bot] Invalid configuration:');
+  for (const e of configErrors) console.error(`  - ${e}`);
+  console.error('[Bot] Fix .env (see .env.example) and restart.');
   process.exit(1);
 }
 

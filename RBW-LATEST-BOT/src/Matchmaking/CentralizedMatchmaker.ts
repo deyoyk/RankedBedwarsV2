@@ -454,8 +454,8 @@ export class CentralizedMatchmaker {
       
       for (const playerId of playerIds) {
         try {
-          const cacheKey = `${playerId}_${Date.now()}`;
-          const cached = this.validationCache.get(playerId);
+          const cacheKey = `${queue.channelId}:${playerId}`;
+          const cached = this.validationCache.get(cacheKey);
           
           if (cached && Date.now() - cached.timestamp < this.VALIDATION_CACHE_TTL) {
             if (cached.valid) {
@@ -466,7 +466,7 @@ export class CentralizedMatchmaker {
 
           const isValid = await this.validateSinglePlayer(playerId, queue, playerIds, checkedParties);
           
-          this.validationCache.set(playerId, { valid: isValid, timestamp: Date.now() });
+          this.validationCache.set(cacheKey, { valid: isValid, timestamp: Date.now() });
           
           if (isValid) {
             validPlayers.push(playerId);

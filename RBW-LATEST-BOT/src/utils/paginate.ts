@@ -77,11 +77,23 @@ export async function paginate(interaction: Message | ChatInputCommandInteractio
         }
 
         const newSkip = Math.max(0, (newPage - 1) * config.perPage);
-        const result = await config.fetchPage(newSkip, config.perPage);
+        let result;
+        try {
+          result = await config.fetchPage(newSkip, config.perPage);
+        } catch (err) {
+          console.error(`Pagination fetch failed for ${config.commandName} page ${newPage}:`, err);
+          await buttonInteraction.reply({ content: 'Failed to load that page.', ephemeral: true }).catch(() => {});
+          return;
+        }
         const newEmbed = result.buildEmbed(result.items, newPage, totalPages, total, newSkip);
         const newRow = buildPaginationRow(config.commandName, newPage, totalPages);
 
-        await buttonInteraction.update({ embeds: [newEmbed], components: [newRow] });
+        try {
+          await buttonInteraction.update({ embeds: [newEmbed], components: [newRow] });
+        } catch (err) {
+          console.error(`Pagination update failed for ${config.commandName}:`, err);
+          return;
+        }
         page = newPage;
       });
 

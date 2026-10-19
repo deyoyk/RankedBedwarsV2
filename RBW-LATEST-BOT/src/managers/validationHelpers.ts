@@ -13,7 +13,10 @@ export function validatePageLimit(page: any, limit: any): { page: number; limit:
 }
 
 export function computePagination(page: number, limit: number, total: number) {
-  const skip = (page - 1) * limit;
-  const totalPages = Math.ceil(total / limit);
+  const safePage = Number.isInteger(page) && page > 0 ? page : 1;
+  const safeLimit = Number.isInteger(limit) && limit > 0 ? limit : 10;
+  const safeTotal = Number.isInteger(total) && total >= 0 ? total : 0;
+  const skip = (safePage - 1) * safeLimit;
+  const totalPages = safeTotal === 0 ? 0 : Math.ceil(safeTotal / safeLimit);
   return { skip, totalPages };
 }

@@ -831,14 +831,21 @@ export class WebSocketManager {
     if (!client || client.readyState !== client.OPEN) return null;
     return new Promise((resolve) => {
       const localTimestamp = Date.now();
-      const pongHandler = (data: any) => {
+      const parseData = (data: any): any => {
         try {
-          const msg = typeof data === 'string' ? JSON.parse(data) : data;
-          if (msg.type === 'pong') {
-            client.off('message', pongHandler);
-            resolve(Date.now() - localTimestamp);
-          }
-        } catch (e) {
+          if (typeof data === 'string') return JSON.parse(data);
+          if (Buffer.isBuffer(data)) return JSON.parse(data.toString('utf8'));
+          if (data instanceof ArrayBuffer) return JSON.parse(Buffer.from(data).toString('utf8'));
+          return data;
+        } catch {
+          return null;
+        }
+      };
+      const pongHandler = (data: any) => {
+        const msg = parseData(data);
+        if (msg && msg.type === 'pong') {
+          client.off('message', pongHandler);
+          resolve(Date.now() - localTimestamp);
         }
       };
       client.on('message', pongHandler);

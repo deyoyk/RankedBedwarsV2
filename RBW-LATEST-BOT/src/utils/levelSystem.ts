@@ -11,43 +11,25 @@ export interface LevelInfo {
 
 function getExperienceForLevel(level: number): number {
   if (level <= 1) return 0;
-  
-  let totalExp = 0;
-  let expIncrement = 100; 
-  
-  for (let i = 2; i <= level; i++) {
-    totalExp += expIncrement;
-    expIncrement += 25; 
-  }
-  
-  return totalExp;
+  const n = level - 1;
+  return 100 * n + 25 * (n * (n - 1)) / 2;
 }
 
 
 function getExperienceForLevelUp(fromLevel: number): number {
   if (fromLevel < 1) return 100;
-  
+
   const baseIncrement = 100;
   const incrementIncrease = 25;
-  
+
   return baseIncrement + (incrementIncrease * (fromLevel - 1));
 }
 
 
 function getLevelFromExperience(experience: number): number {
   if (experience < 100) return 1;
-  
-  let level = 1;
-  let totalExpNeeded = 0;
-  let expIncrement = 100;
-  
-  while (totalExpNeeded + expIncrement <= experience) {
-    totalExpNeeded += expIncrement;
-    level++;
-    expIncrement += 25;
-  }
-  
-  return level;
+  const n = Math.floor((-175 + Math.sqrt(30625 + 200 * experience)) / 50);
+  return Math.max(1, n + 1);
 }
 
 

@@ -385,18 +385,10 @@ export class QueueListener {
         await updatePartyActivity(user.partyId);
 
         const partyMembers = queueState.parties.get(user.partyId) || [];
-        queueState.players = queueState.players.filter(p => p !== userId);
-
-        if (partyMembers.length > 0) {
-          const remainingMembers = partyMembers.filter(p => p !== userId);
-          if (remainingMembers.length > 0) {
-            queueState.parties.set(user.partyId, remainingMembers);
-            console.log(`[QueueListener] Member ${userId} left party ${user.partyId} queue ${queue.channelId}, ${remainingMembers.length} member(s) remain`);
-          } else {
-            queueState.parties.delete(user.partyId);
-            console.log(`[QueueListener] Party ${user.partyId} left queue ${queue.channelId}`);
-          }
-        }
+        const partyInQueue = partyMembers.length > 0 ? partyMembers : [userId];
+        queueState.players = queueState.players.filter(p => !partyInQueue.includes(p));
+        queueState.parties.delete(user.partyId);
+        console.log(`[QueueListener] Party ${user.partyId} removed from queue ${queue.channelId} after member ${userId} left`);
       } else {
 
         queueState.players = queueState.players.filter(p => p !== userId);

@@ -187,6 +187,12 @@ export class RandomQueueManager {
         throw new Error('No users found in database');
       }
 
+      const foundIds = new Set(users.map(u => u.discordId));
+      const missing = players.filter(p => !foundIds.has(p));
+      if (missing.length > 0) {
+        throw new Error(`${missing.length} queued player(s) missing from database, aborting draft`);
+      }
+
       for (const user of users) {
         if (user.partyId) {
           userPartyMap.set(user.discordId, user.partyId);

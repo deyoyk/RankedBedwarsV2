@@ -8,6 +8,7 @@ import config from '../config/config';
 import { GameState, GameResources, WarpRequestData, GameResult, VoidResult, PlayerData } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { fix } from '../utils/fix';
+import { normalizeTeams } from './utils';
 import { generateScoreImageBuffer } from '../utils/scoreImage';
 import {
   getLevelInfo,
@@ -75,7 +76,7 @@ export class GameManager {
   private activeGames: Map<number, GameResources> = new Map();
   private cleaningGames: Set<number> = new Set();
   private warpRequests: Map<string, WarpRequestData> = new Map();
-  private readonly MAX_CONCURRENT_GAMES = 50;
+  private readonly MAX_CONCURRENT_GAMES = 100;
   private readonly WARP_TIMEOUT = 60000;
   private readonly MAX_WARP_RETRIES = 3;
   private readonly WARP_RETRY_DELAY = 5000;
@@ -110,6 +111,12 @@ export class GameManager {
     selectedMap: string
   ): Promise<GameResources> {
     try {
+      const teams = normalizeTeams(team1, team2);
+      if (teams.team1.length === 0 || teams.team2.length === 0) throw new Error('Both teams must have at least one player');
+      if (teams.team1.length !== teams.team2.length) throw new Error('Teams must be equal size');
+      if (this.activeGames.size >= this.MAX_CONCURRENT_GAMES) throw new Error('Server is at max concurrent games');
+      team1 = teams.team1;
+      team2 = teams.team2;
       console.log(`[GameManager] Creating game ${gameId} with map ${selectedMap}`);
       const guild = await this.getGuild();
       if (!guild) throw new Error('Guild not found');
@@ -980,17 +987,17 @@ export class GameManager {
    * an error. Returns the claimed (pre-transition) game document.
    */
   private async claimGameForSettling(gameId: number, mutate: (game: IGame) => void): Promise<IGame> {
-    const game = await Game.findOneAndUpdate(
-      { gameId, state: { $nin: [GameState.SCORED, GameState.VOIDED] } },
-      { $set: { endTime: new Date() } },
-      { new: false }
+    const claimed = await Game.findOneAndUpdate(
+      { gameId, state: GameState.PENDING },
+      { $set: { endTime: new Date(), state: GameState.SCORING } },
+      { new: true }
     );
-    if (!game) {
+    if (!claimed) {
       throw new Error(`Game ${gameId} is already settled (scored or voided)`);
     }
-    mutate(game);
-    await game.save();
-    return game;
+    mutate(claimed);
+    await claimed.save();
+    return claimed;
   }
 
   private async processAllPlayers(context: GameScoreContext): Promise<PlayerScoreData[]> {
