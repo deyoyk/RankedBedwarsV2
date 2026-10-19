@@ -91,6 +91,18 @@ export class CentralizedMatchmaker {
     });
   }
 
+  private async getPresentMembers(queueId: string): Promise<Set<string> | null> {
+    try {
+      const guild = this.client.guilds.cache.first();
+      if (!guild) return null;
+      const channel = await guild.channels.fetch(queueId).catch(() => null);
+      if (!channel || !channel.isVoiceBased()) return null;
+      return new Set(channel.members.keys());
+    } catch {
+      return null;
+    }
+  }
+
   private startCacheCleanup(): void {
     this.cacheCleanupInterval = setInterval(() => {
       const now = Date.now();
@@ -280,6 +292,16 @@ export class CentralizedMatchmaker {
         queuePlayers.set(queueId, [...validPlayers, ...joinedDuringValidation]);
       }
 
+      const present = await this.getPresentMembers(queueId);
+      if (present) {
+        const before = validPlayers.length;
+        validPlayers = validPlayers.filter(p => present.has(p));
+        if (validPlayers.length !== before) {
+          console.log(`[CentralizedMatchmaker] Dropped ${before - validPlayers.length} player(s) who left queue ${queueId} during validation`);
+        }
+        queuePlayers.set(queueId, (queuePlayers.get(queueId) || []).filter(p => present.has(p)));
+      }
+
       if (validPlayers.length < queue.maxPlayers) {
         return { success: true, gamesCreated: 0 };
       }
@@ -333,8 +355,10 @@ export class CentralizedMatchmaker {
         const usedPlayers = new Set(processingResult.usedPlayers);
         const currentQueuePlayers = queuePlayers.get(queueId) || [];
         const snapshotSet = new Set(validPlayers);
-        const joinedDuringProcessing = currentQueuePlayers.filter(p => !snapshotSet.has(p));
-        const remainingPlayers = validPlayers.filter(p => !usedPlayers.has(p));
+        const presentAfter = await this.getPresentMembers(queueId);
+        const stillPresent = (p: string) => !presentAfter || presentAfter.has(p);
+        const joinedDuringProcessing = currentQueuePlayers.filter(p => !snapshotSet.has(p) && stillPresent(p));
+        const remainingPlayers = validPlayers.filter(p => !usedPlayers.has(p) && stillPresent(p));
         queuePlayers.set(queueId, [...remainingPlayers, ...joinedDuringProcessing]);
       }
 

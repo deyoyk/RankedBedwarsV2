@@ -308,5 +308,71 @@ describe('CentralizedMatchmaker race conditions', () => {
       expect(bSet.has(id)).toBe(false);
     }
   });
+
+  function makeVoiceClient(presentIds: string[], fetchFails = false): any {
+    const members = new Map(presentIds.map(id => [id, { id }]));
+    const voiceChannel = { isVoiceBased: () => true, members };
+    return {
+      guilds: {
+        cache: {
+          first: () => ({
+            channels: {
+              fetch: fetchFails
+                ? async () => { throw new Error('fetch failed'); }
+                : async () => voiceChannel
+            }
+          })
+        }
+      },
+      channels: { cache: { get: () => undefined } }
+    };
+  }
+
+  function makeVoiceMatchmaker(presentIds: string[], fetchFails = false): CentralizedMatchmaker {
+    const mm = new CentralizedMatchmaker(makeVoiceClient(presentIds, fetchFails), wsManagerMock, gameManagerMock);
+    matchmakers.push(mm);
+    return mm;
+  }
+
+  it('a player who left voice is evicted instead of stalling the queue', async () => {
+    const queue = makeQueue('queue-G', 4);
+    resetState(['g1', 'g2', 'g3', 'g4'], queue);
+    const matchmaker = makeVoiceMatchmaker(['g1', 'g2', 'g3']);
+
+    const result = await matchmaker.processQueue('queue-G');
+
+    expect(result.gamesCreated).toBe(0);
+    expect(gameManagerMock.createGame).not.toHaveBeenCalled();
+    expect(queuePlayers.get('queue-G')).toEqual(['g1', 'g2', 'g3']);
+  });
+
+  it('a leaver is drafted into no game and kept out of the remainder', async () => {
+    const queue = makeQueue('queue-H', 4);
+    const players = Array.from({ length: 8 }, (_, i) => `h${i}`);
+    resetState(players, queue);
+    const matchmaker = makeVoiceMatchmaker(players.filter(p => p !== 'h7'));
+
+    const result = await matchmaker.processQueue('queue-H');
+
+    expect(result.gamesCreated).toBe(1);
+    const drafted = createdGames.flatMap(g => [...g.t1, ...g.t2]);
+    expect(drafted).toHaveLength(4);
+    expect(drafted).not.toContain('h7');
+    const remaining = queuePlayers.get('queue-H') || [];
+    expect(remaining).toHaveLength(3);
+    expect(remaining).not.toContain('h7');
+  }, 30000);
+
+  it('a failed presence check keeps the previous behavior', async () => {
+    const queue = makeQueue('queue-I', 4);
+    const players = ['i1', 'i2', 'i3', 'i4'];
+    resetState(players, queue);
+    const matchmaker = makeVoiceMatchmaker([], true);
+
+    const result = await matchmaker.processQueue('queue-I');
+
+    expect(result.gamesCreated).toBe(1);
+    expect(queuePlayers.get('queue-I')).toEqual([]);
+  }, 30000);
 });
 
