@@ -70,7 +70,7 @@ npm run validate
 `npm run setup` creates `.env` from `.env.example` and generates a random `AUTH_KEY`. `npm run validate` checks required vars and snowflake IDs before you start. Or use Docker:
 
 ```bash
-cp .env.example .env
+npm run setup
 docker compose up -d --build
 ```
 
@@ -131,9 +131,8 @@ Copy `.env.example` to `.env` and fill it in. Every variable read by the code:
 | `GUILD_ID` | `` | ID of the Discord server the bot runs in | Yes (single-guild bot) |
 | `DBNAME` | `deyorbw` | MongoDB database name | |
 | `WEBSOCKETPORT` | `25565` | Port for the WebSocket **and** REST API (they share it) | |
-| `APIPORT` | `3000` | Accepted but **not used** — the API serves on `WEBSOCKETPORT` | |
-| `PREFIX_ENABLED` | `false` | Enable legacy message commands (`=ban`, `=stats`, ...) | |
-| `PREFIX` | `=` | Prefix for message commands | |
+| `PREFIX_ENABLED` | `false` | Enable legacy message commands (`!ban`, `!stats`, ...) | |
+| `PREFIX` | `!` | Prefix for message commands | |
 | `WORKERS_ENABLED` | `false` | Use additional bot accounts for high load | |
 | `WORKER_TOKEN_1` … `WORKER_TOKEN_N` | — | Tokens of worker bots (all detected automatically) | |
 | `WAITING_ROOM_ID` | `` | Voice channel users are moved to when they can't join a queue | |
@@ -164,7 +163,7 @@ Copy `.env.example` to `.env` and fill it in. Every variable read by the code:
 | `BOT_STATS_TEXT` | `DEYO RANKED BEDWARS` | Bot status text | |
 | `EMBED_DEFAULT_*` / `EMBED_ERROR_*` / `EMBED_SUCCESS_*` | see `.env.example` | Embed text, color, title, footer, ephemeral per embed type | |
 
-> `SERVER_NAME` and `INVITE_LINK` exist in `.env.example` but are **not** read by the code.
+> `SERVER_NAME` and `INVITE_LINK` brand the stats images and theme footers (read in `src/utils/scoreImage.ts` and `src/themes/base.ts`).
 
 ---
 
@@ -210,7 +209,7 @@ The `config.roles.*` env vars are the *runtime* roles the bot assigns to users: 
 
 ## 5. Commands
 
-All commands are slash commands, plus the same commands work with the prefix when `PREFIX_ENABLED=true` (e.g. `=ban`, `=stats`, `=help`).
+All commands are slash commands, plus the same commands work with the prefix when `PREFIX_ENABLED=true` (e.g. `!ban`, `!stats`, `!help`).
 
 ### Player
 

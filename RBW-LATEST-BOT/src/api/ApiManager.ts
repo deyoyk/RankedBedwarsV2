@@ -655,7 +655,7 @@ export class ApiManager {
   public start(): Promise<void> {
     return new Promise((resolve) => {
       try {
-        const port = parseInt(config.websocketport) || 25565;
+        const port = parseInt(config.websocketport, 10) || 25565;
 
         console.log(`[API] API endpoints initialized on port ${port}`);
         console.log(`[API] API endpoints available at:`);

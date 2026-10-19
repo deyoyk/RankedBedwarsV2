@@ -89,7 +89,6 @@ interface Config {
   mongoUri: string;
   dbname: string;
   websocketport: string;
-  apiport: string;
   CommonPartySize: number;
   PartyQueueSize: number;
 
@@ -172,7 +171,6 @@ const configuration: Config = {
   mongoUri: clean(process.env.MONGO_URI),
   dbname: clean(process.env.DBNAME) || 'deyorbw',
   websocketport: clean(process.env.WEBSOCKETPORT) || '25565',
-  apiport: clean(process.env.APIPORT) || '3000',
   CommonPartySize: Number.isInteger(parsedCommonPartySize) && parsedCommonPartySize > 0 ? parsedCommonPartySize : 8,
   PartyQueueSize: Number.isInteger(parsedPartyQueueSize) && parsedPartyQueueSize > 0 ? parsedPartyQueueSize : 1,
   strikes: {

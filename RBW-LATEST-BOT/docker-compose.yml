@@ -13,6 +13,8 @@ services:
     env_file: .env
     environment:
       MONGO_URI: mongodb://mongo:27017/deyorbw
+    ports:
+      - "25565:25565"
     restart: unless-stopped
 volumes:
   mongo-data:

@@ -21,7 +21,6 @@ const base = {
   mongoUri: 'mongodb://127.0.0.1:27017/deyorbw',
   dbname: 'deyorbw',
   websocketport: '25530',
-  apiport: '3000',
   CommonPartySize: 8,
   PartyQueueSize: 1,
   strikes: { 1: 'warn', default: 'warn' },

@@ -51,7 +51,7 @@ if (configErrors.length > 0) {
   process.exit(1);
 }
 
-const wsPort = parseInt(config.websocketport) || 8080; 
+const wsPort = parseInt(config.websocketport, 10) || 25565;
 const wsPath = '/rbw/websocket'; 
 
 const wsManager = new WebSocketManager(wsPort, client, wsPath); 

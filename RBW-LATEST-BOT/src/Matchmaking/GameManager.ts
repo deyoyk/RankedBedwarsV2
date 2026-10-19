@@ -110,11 +110,15 @@ export class GameManager {
     team2: string[],
     selectedMap: string
   ): Promise<GameResources> {
+    let reserved = false;
     try {
       const teams = normalizeTeams(team1, team2);
       if (teams.team1.length === 0 || teams.team2.length === 0) throw new Error('Both teams must have at least one player');
       if (teams.team1.length !== teams.team2.length) throw new Error('Teams must be equal size');
+      if (this.activeGames.has(gameId)) throw new Error(`Game ${gameId} is already being created`);
       if (this.activeGames.size >= this.MAX_CONCURRENT_GAMES) throw new Error('Server is at max concurrent games');
+      this.activeGames.set(gameId, {} as GameResources);
+      reserved = true;
       team1 = teams.team1;
       team2 = teams.team2;
       console.log(`[GameManager] Creating game ${gameId} with map ${selectedMap}`);
@@ -127,6 +131,7 @@ export class GameManager {
       console.log(`[GameManager] Successfully created game ${gameId}`);
       return resources;
     } catch (error) {
+      if (reserved) this.activeGames.delete(gameId);
       console.error(`[GameManager] Error creating game ${gameId}:`, error);
       throw error;
     }
@@ -266,7 +271,7 @@ export class GameManager {
       const lastGame = await Game.findOne().sort({ gameId: -1 }).select('gameId');
       const nextId = (lastGame?.gameId || 0) + 1;
       try {
-        await Counter.updateOne({ _id: 'gameId' }, { $set: { seq: nextId } }, { upsert: true });
+        await Counter.updateOne({ _id: 'gameId', seq: { $lt: nextId } }, { $set: { seq: nextId } }, { upsert: true });
       } catch (counterError) {
         console.error('[GameManager] Failed to persist fallback game ID counter:', counterError);
       }
