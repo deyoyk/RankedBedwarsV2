@@ -98,5 +98,6 @@ export interface PickingSession {
   partyInfo?: Map<string, string[]>;
   partyPlayers?: Set<string>;
   pickOrder?: string[];
+  pickingResources?: Partial<GameResources>;
 }
 

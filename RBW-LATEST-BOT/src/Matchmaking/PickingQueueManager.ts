@@ -343,7 +343,8 @@ export class PickingQueueManager {
         active: true,
         partyInfo,
         partyPlayers,
-        pickOrder
+        pickOrder,
+        pickingResources: resources
       };
 
       console.log(`[PickingQueue] Game ${gameId} - Initial teams: Team1(${team1.join(', ')}) Team2(${team2.join(', ')})`);
@@ -411,6 +412,7 @@ export class PickingQueueManager {
       }
 
       
+      await this.cleanupPickingChannels(resources);
       this.cleanupPickingSession(gameId);
 
       console.log(`[PickingQueue] Successfully completed picking for game ${gameId}`);
@@ -423,12 +425,7 @@ export class PickingQueueManager {
       if (session) {
         this.cleanupPickingSession(gameId);
       }
-      if (resources.pickingChannel) {
-        await this.workersManager.deleteChannel(resources.pickingChannel.id, 2);
-      }
-      if (resources.gameChannel) {
-        await this.workersManager.deleteChannel(resources.gameChannel.id, 2);
-      }
+      await this.cleanupPickingChannels(resources);
 
       return { success: false };
     }
@@ -890,9 +887,31 @@ export class PickingQueueManager {
   private handlePickingTimeout(gameId: number): void {
     try {
       console.log(`[PickingQueue] Picking session timeout for game ${gameId}`);
+      const session = this.activeSessions.get(gameId);
       this.cleanupPickingSession(gameId);
+      if (session?.pickingResources) {
+        this.cleanupPickingChannels(session.pickingResources).catch((error) => {
+          console.error(`[PickingQueue] Error deleting timed-out picking channels for game ${gameId}:`, error);
+        });
+      }
     } catch (error) {
       console.error(`[PickingQueue] Error handling picking timeout for game ${gameId}:`, error);
+    }
+  }
+
+  public async cleanupPickingChannels(resources: Partial<GameResources>): Promise<void> {
+    const deletions: Array<Promise<unknown>> = [];
+    if (resources.pickingChannel?.id) {
+      deletions.push(this.workersManager.deleteChannel(resources.pickingChannel.id, 2));
+    }
+    if (resources.gameChannel?.id) {
+      deletions.push(this.workersManager.deleteChannel(resources.gameChannel.id, 2));
+    }
+    const results = await Promise.allSettled(deletions);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.error('[PickingQueue] Failed to delete picking channel:', result.reason);
+      }
     }
   }
 
