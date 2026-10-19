@@ -104,17 +104,24 @@ export class SeasonManager {
         isActive: true
       });
 
-      await newSeason.save();
+      const session = await mongoose.startSession();
+      try {
+        await session.withTransaction(async () => {
+          await newSeason.save({ session });
 
-      await User.updateMany({}, {
-        seasonNumber: options.seasonNumber,
-        chapterNumber: options.chapterNumber
-      });
+          await User.updateMany({}, {
+            seasonNumber: options.seasonNumber,
+            chapterNumber: options.chapterNumber
+          }, { session });
 
-      await Game.updateMany({}, {
-        seasonNumber: options.seasonNumber,
-        chapterNumber: options.chapterNumber
-      });
+          await Game.updateMany({}, {
+            seasonNumber: options.seasonNumber,
+            chapterNumber: options.chapterNumber
+          }, { session });
+        });
+      } finally {
+        await session.endSession();
+      }
 
       const embed = new EmbedBuilder()
         .setColor('#00ff00')
