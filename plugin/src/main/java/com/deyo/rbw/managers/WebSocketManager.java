@@ -123,12 +123,7 @@ public class WebSocketManager {
                 plugin.getLogger().info("Basic connectivity test PASSED - server is reachable");
             } catch (java.io.IOException e) {
                 plugin.getLogger().warning("Basic connectivity test FAILED: " + e.getMessage());
-                plugin.getLogger().warning("This suggests the server/port is not accessible from this network");
-                plugin.getLogger().warning("Please verify:");
-                plugin.getLogger().warning("1. The server " + host + " is online");
-                plugin.getLogger().warning("2. Port " + port + " is open and accessible");
-                plugin.getLogger().warning("3. No firewall is blocking the connection");
-                plugin.getLogger().warning("4. Your network allows outbound connections to this port");
+                plugin.getLogger().warning("Check that " + host + ":" + port + " is reachable and no firewall blocks it");
             }
         });
     }
@@ -173,7 +168,6 @@ public class WebSocketManager {
                     }
                     
                     sendInitialData();
-                    notifyReconnection();
                 }
                 @Override
                 public void onMessage(String message) {
@@ -205,12 +199,7 @@ public class WebSocketManager {
                                 plugin.getLogger().warning("WebSocket connection refused - Bot server appears to be offline");
                                 plugin.getLogger().warning("Make sure the RankedBedwars bot is running on " + host + ":" + port);
                             } else if (message.contains("Connection timed out")) {
-                                plugin.getLogger().warning("WebSocket connection timed out - This could indicate:");
-                                plugin.getLogger().warning("1. Network connectivity issues");
-                                plugin.getLogger().warning("2. Firewall blocking the connection");
-                                plugin.getLogger().warning("3. Server overload or high latency");
-                                plugin.getLogger().warning("4. ISP throttling or blocking WebSocket connections");
-                                plugin.getLogger().warning("Consider using a VPN if the issue persists");
+                                plugin.getLogger().warning("WebSocket connection timed out - check network, firewall, and bot load");
                             } else {
                                 plugin.getLogger().warning("WebSocket connection error: " + message);
                             }
@@ -225,14 +214,10 @@ public class WebSocketManager {
             };
             
             client.setConnectionLostTimeout(30);
-            
             client.setTcpNoDelay(true);
-            
-            // Add additional logging for debugging
+
             plugin.getLogger().info("Attempting WebSocket connection to: " + serverUri.toString());
-            plugin.getLogger().info("Connection timeout set to 30 seconds");
-            plugin.getLogger().info("TCP NoDelay enabled for better performance");
-            
+
             boolean connected = client.connectBlocking(30, java.util.concurrent.TimeUnit.SECONDS);
             if (!connected) {
                 plugin.getLogger().warning("WebSocket connection timed out after 30 seconds");
@@ -244,15 +229,12 @@ public class WebSocketManager {
                     }
                 }, 20L * 10);
             }
-        } catch (URISyntaxException e) {
-            plugin.getLogger().log(Level.SEVERE, "Invalid WebSocket URI", e);
-            scheduleReconnect();
         } catch (InterruptedException e) {
             plugin.getLogger().log(Level.WARNING, "WebSocket connection interrupted", e);
             Thread.currentThread().interrupt();
             scheduleReconnect();
-        } catch (IllegalStateException e) {
-            plugin.getLogger().log(Level.WARNING, "WebSocket client was already used for a connection attempt", e);
+        } catch (URISyntaxException | IllegalStateException e) {
+            plugin.getLogger().log(Level.WARNING, "WebSocket connection failed", e);
             scheduleReconnect();
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Unexpected error during WebSocket connection", e);
@@ -353,21 +335,24 @@ public class WebSocketManager {
     }
 
     private void handleAutossSuccess(JsonObject json) {
-        String uuid = json.has("uuid") ? json.get("uuid").getAsString() : null;
-        if (uuid != null) {
-            org.bukkit.command.PluginCommand ssCmd = plugin.getServer().getPluginCommand("ss");
-            if (ssCmd != null && ssCmd.getExecutor() instanceof com.deyo.rbw.commands.SsCmd) {
-                ((com.deyo.rbw.commands.SsCmd) ssCmd.getExecutor()).handleAutossSuccess(uuid);
-            }
-        }
+        forwardAutoss(json, true);
     }
 
     private void handleAutossFail(JsonObject json) {
+        forwardAutoss(json, false);
+    }
+
+    private void forwardAutoss(JsonObject json, boolean success) {
         String uuid = json.has("uuid") ? json.get("uuid").getAsString() : null;
         if (uuid != null) {
             org.bukkit.command.PluginCommand ssCmd = plugin.getServer().getPluginCommand("ss");
             if (ssCmd != null && ssCmd.getExecutor() instanceof com.deyo.rbw.commands.SsCmd) {
-                ((com.deyo.rbw.commands.SsCmd) ssCmd.getExecutor()).handleAutossFail(uuid);
+                com.deyo.rbw.commands.SsCmd executor = (com.deyo.rbw.commands.SsCmd) ssCmd.getExecutor();
+                if (success) {
+                    executor.handleAutossSuccess(uuid);
+                } else {
+                    executor.handleAutossFail(uuid);
+                }
             }
         }
     }
@@ -378,29 +363,28 @@ public class WebSocketManager {
         String ign = json.has("ign") ? json.get("ign").getAsString() : null;
         String uuid = json.has("uuid") ? json.get("uuid").getAsString() : null;
         if (ign == null || uuid == null) {
-            JsonObject response = new JsonObject();
-            response.addProperty("type", "screensharedontlog_failure");
-            response.addProperty("reason", "Missing ign or uuid");
-            if (uuid != null) response.addProperty("uuid", uuid);
-            sendMessage(response.toString());
+            replyDontLog(uuid, false, "Missing ign or uuid");
             return;
         }
         org.bukkit.entity.Player player = Bukkit.getPlayerExact(ign);
         if (player != null && player.isOnline()) {
             player.sendMessage("§c[RankedBedwars] §eYou are being requested for screenshare, do not log off the server.");
-            
-            
-            JsonObject response = new JsonObject();
-            response.addProperty("type", "screensharedontlog_success");
-            response.addProperty("uuid", uuid);
-            sendMessage(response.toString());
+            replyDontLog(uuid, true, null);
         } else {
-            JsonObject response = new JsonObject();
-            response.addProperty("type", "screensharedontlog_failure");
-            response.addProperty("reason", "Player not online");
-            response.addProperty("uuid", uuid);
-            sendMessage(response.toString());
+            replyDontLog(uuid, false, "Player not online");
         }
+    }
+
+    private void replyDontLog(String uuid, boolean success, String reason) {
+        JsonObject response = new JsonObject();
+        response.addProperty("type", success ? "screensharedontlog_success" : "screensharedontlog_failure");
+        if (reason != null) {
+            response.addProperty("reason", reason);
+        }
+        if (uuid != null) {
+            response.addProperty("uuid", uuid);
+        }
+        sendMessage(response.toString());
     }
     private void handleVerification(JsonObject json) {
         String ign = json.get("ign").getAsString();
@@ -441,20 +425,8 @@ public class WebSocketManager {
 
         
         java.util.List<String> allPlayers = new java.util.ArrayList<>();
-        
-        if (team1Json.has("players")) {
-            JsonArray playersArray = team1Json.getAsJsonArray("players");
-            for (JsonElement playerElement : playersArray) {
-                allPlayers.add(playerElement.getAsString());
-            }
-        }
-        
-        if (team2Json.has("players")) {
-            JsonArray playersArray = team2Json.getAsJsonArray("players");
-            for (JsonElement playerElement : playersArray) {
-                allPlayers.add(playerElement.getAsString());
-            }
-        }
+        allPlayers.addAll(readTeamNames(team1Json));
+        allPlayers.addAll(readTeamNames(team2Json));
         
         java.util.List<String> offlinePlayers = new java.util.ArrayList<>();
         for (String ign : allPlayers) {
@@ -480,6 +452,15 @@ public class WebSocketManager {
         Bukkit.getScheduler().runTask(plugin, () -> {
             plugin.getMapManager().warpPlayersToGame(gameId, map, team1Json, team2Json, isRanked);
         });
+    }
+    private java.util.List<String> readTeamNames(JsonObject team) {
+        java.util.List<String> names = new java.util.ArrayList<>();
+        if (team.has("players")) {
+            for (JsonElement playerElement : team.getAsJsonArray("players")) {
+                names.add(playerElement.getAsString());
+            }
+        }
+        return names;
     }
     private void handleCheckPlayer(JsonObject json) {
         String ign = json.get("ign").getAsString();
@@ -539,18 +520,10 @@ public class WebSocketManager {
             json.addProperty("gameid", game.getGameId());
             
             if (game.getMvps() != null && !game.getMvps().isEmpty()) {
-                JsonArray mvpsArray = new JsonArray();
-                for (String mvp : game.getMvps()) {
-                    mvpsArray.add(mvp);
-                }
-                json.add("mvps", mvpsArray);
+                json.add("mvps", toJsonArray(game.getMvps()));
             }
             if (game.getBedBreakers() != null && !game.getBedBreakers().isEmpty()) {
-                JsonArray bedBreakersArray = new JsonArray();
-                for (String breaker : game.getBedBreakers()) {
-                    bedBreakersArray.add(breaker);
-                }
-                json.add("bedsbroken", bedBreakersArray);
+                json.add("bedsbroken", toJsonArray(game.getBedBreakers()));
             }
             JsonObject playersJson = new JsonObject();
             for (String playerName : game.getPlayerKills().keySet()) {
@@ -609,6 +582,13 @@ public class WebSocketManager {
             }
         });
     }
+    private JsonArray toJsonArray(java.util.Collection<String> values) {
+        JsonArray array = new JsonArray();
+        for (String value : values) {
+            array.add(value);
+        }
+        return array;
+    }
     private void sendInitialData() {
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
@@ -620,16 +600,13 @@ public class WebSocketManager {
                 sendMessage(statusMessage.toString());
                 
                 sendPermissionData();
-                
-                scheduleMapDataSending();
+
+                sendMapDataIfReady(0);
                 plugin.debug("Initial data sending process started");
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING, "Error sending initial data to WebSocket", e);
             }
         });
-    }
-    private void scheduleMapDataSending() {
-        sendMapDataIfReady(0);
     }
     private void sendMapDataIfReady(int attempt) {
         if (!isConnected()) {
@@ -645,11 +622,6 @@ public class WebSocketManager {
                 plugin.getLogger().warning("Failed to send map data after 3 attempts - MapManager may not be initialized");
             }
         }
-    }
-    private void notifyReconnection() {
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            plugin.debug("WebSocket reconnection notification - checking for additional data to send");
-        });
     }
     public void resendInitialData() {
         if (isConnected()) {
@@ -786,9 +758,8 @@ public class WebSocketManager {
     
     public void diagnoseConnection() {
         plugin.getLogger().info("=== WebSocket Connection Diagnosis ===");
-        plugin.getLogger().info("Target Host: " + host);
-        plugin.getLogger().info("Target Port: " + port);
-        plugin.getLogger().info("Full URL: ws://" + host + ":" + port + "/rbw/websocket");
+        plugin.getLogger().info("Target Bot: " + host + ":" + port);
+        plugin.getLogger().info("Full URL: " + buildWebSocketUri());
         plugin.getLogger().info("Current Connection State: " + (isConnected() ? "CONNECTED" : "DISCONNECTED"));
         plugin.getLogger().info("Reconnect Attempts: " + reconnectAttempts);
         plugin.getLogger().info("Reconnect Scheduled: " + reconnectScheduled);
@@ -799,40 +770,28 @@ public class WebSocketManager {
     }
     
     private void handleCallSuccess(JsonObject json) {
-        if (json.has("callId")) {
-            String callId = json.get("callId").getAsString();
-            if (plugin.getCallCommand() != null) {
-                plugin.getCallCommand().handleCallSuccess(callId);
-            }
+        if (json.has("callId") && plugin.getCallCommand() != null) {
+            plugin.getCallCommand().handleCallSuccess(json.get("callId").getAsString());
         }
     }
-    
+
     private void handleCallFailure(JsonObject json) {
-        if (json.has("callId")) {
-            String callId = json.get("callId").getAsString();
+        if (json.has("callId") && plugin.getCallCommand() != null) {
             String reason = json.has("reason") ? json.get("reason").getAsString() : "Unknown error";
-            if (plugin.getCallCommand() != null) {
-                plugin.getCallCommand().handleCallFailure(callId, reason);
-            }
+            plugin.getCallCommand().handleCallFailure(json.get("callId").getAsString(), reason);
         }
     }
-    
+
     private void handleQueueSuccess(JsonObject json) {
-        if (json.has("uuid")) {
-            String uuid = json.get("uuid").getAsString();
-            if (plugin.getQueueCommand() != null) {
-                plugin.getQueueCommand().handleQueueSuccess(uuid);
-            }
+        if (json.has("uuid") && plugin.getQueueCommand() != null) {
+            plugin.getQueueCommand().handleQueueSuccess(json.get("uuid").getAsString());
         }
     }
-    
+
     private void handleQueueFailure(JsonObject json) {
-        if (json.has("uuid")) {
-            String uuid = json.get("uuid").getAsString();
+        if (json.has("uuid") && plugin.getQueueCommand() != null) {
             String reason = json.has("reason") ? json.get("reason").getAsString() : "Unknown error";
-            if (plugin.getQueueCommand() != null) {
-                plugin.getQueueCommand().handleQueueFailure(uuid, reason);
-            }
+            plugin.getQueueCommand().handleQueueFailure(json.get("uuid").getAsString(), reason);
         }
     }
     
@@ -842,47 +801,37 @@ public class WebSocketManager {
                 if (!json.has("queues")) {
                     return;
                 }
-                
                 JsonObject queues = json.getAsJsonObject("queues");
-                
                 for (String queueId : queues.keySet()) {
-                    JsonObject queue = queues.getAsJsonObject(queueId);
-                    
-                    if (!queue.has("players")) {
-                        continue;
-                    }
-                    
-                    JsonArray playersArray = queue.getAsJsonArray("players");
-                    java.util.List<String> queuePlayers = new java.util.ArrayList<>();
-                    for (int i = 0; i < playersArray.size(); i++) {
-                        queuePlayers.add(playersArray.get(i).getAsString());
-                    }
-                    
-                    int minElo = queue.get("minElo").getAsInt();
-                    int maxElo = queue.get("maxElo").getAsInt();
-                    int currentPlayers = queue.get("currentPlayers").getAsInt();
-                    int maxPlayers = queue.get("maxPlayers").getAsInt();
-                    boolean isRanked = queue.get("isRanked").getAsBoolean();
-                    boolean isPicking = queue.get("isPicking").getAsBoolean();
-                    
-                    String queueMessage = String.format("§6In Queue [§e%d-%d§6] §f%d/%d §7Ranked: %s §7Picking: %s", 
-                        minElo, maxElo, currentPlayers, maxPlayers,
-                        isRanked ? "§atrue" : "§cfalse",
-                        isPicking ? "§atrue" : "§cfalse"
-                    );
-                    
-                    Bukkit.getScheduler().runTask(plugin, () -> {
-                        for (String playerName : queuePlayers) {
-                            org.bukkit.entity.Player player = Bukkit.getPlayerExact(playerName);
-                            if (player != null && player.isOnline()) {
-                                sendActionBar(player, queueMessage);
-                            }
-                        }
-                    });
+                    showQueueStatus(queues.getAsJsonObject(queueId));
                 }
-                
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING, "Error handling queue status", e);
+            }
+        });
+    }
+
+    private void showQueueStatus(JsonObject queue) {
+        if (!queue.has("players")) {
+            return;
+        }
+        JsonArray playersArray = queue.getAsJsonArray("players");
+        java.util.List<String> queuePlayers = new java.util.ArrayList<>();
+        for (int i = 0; i < playersArray.size(); i++) {
+            queuePlayers.add(playersArray.get(i).getAsString());
+        }
+        String queueMessage = String.format("§6In Queue [§e%d-%d§6] §f%d/%d §7Ranked: %s §7Picking: %s",
+            queue.get("minElo").getAsInt(), queue.get("maxElo").getAsInt(),
+            queue.get("currentPlayers").getAsInt(), queue.get("maxPlayers").getAsInt(),
+            queue.get("isRanked").getAsBoolean() ? "§atrue" : "§cfalse",
+            queue.get("isPicking").getAsBoolean() ? "§atrue" : "§cfalse"
+        );
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (String playerName : queuePlayers) {
+                org.bukkit.entity.Player player = Bukkit.getPlayerExact(playerName);
+                if (player != null && player.isOnline()) {
+                    sendActionBar(player, queueMessage);
+                }
             }
         });
     }
@@ -914,59 +863,41 @@ public class WebSocketManager {
     }
 
     public void handleBotBan(JsonObject json) {
-        String ign = json.get("ign").getAsString();
-        if (!isValidIgn(ign)) {
-            plugin.getLogger().warning("Rejected botban with invalid IGN: " + ign);
-            return;
-        }
-        String reason = json.get("reason").getAsString();
-        String command;
-        if (json.has("duration") && !json.get("duration").isJsonNull()) {
-            int duration = json.get("duration").getAsInt();
-            command = String.format("ban %s %d %s", ign, duration, reason);
-        } else {
-            command = String.format("ban %s %s", ign, reason);
-        }
-        dispatchCommandOnMainThread(command);
+        handleTimedPunishment(json, "ban", "botban");
     }
 
     public void handleBotMute(JsonObject json) {
-        String ign = json.get("ign").getAsString();
-        if (!isValidIgn(ign)) {
-            plugin.getLogger().warning("Rejected botmute with invalid IGN: " + ign);
-            return;
-        }
-        String reason = json.get("reason").getAsString();
-        String command;
-        if (json.has("duration") && !json.get("duration").isJsonNull()) {
-            int duration = json.get("duration").getAsInt();
-            command = String.format("mute %s %d %s", ign, duration, reason);
-        } else {
-            command = String.format("mute %s %s", ign, reason);
-        }
-        dispatchCommandOnMainThread(command);
+        handleTimedPunishment(json, "mute", "botmute");
     }
 
     public void handleBotUnban(JsonObject json) {
-        String ign = json.get("ign").getAsString();
-        if (!isValidIgn(ign)) {
-            plugin.getLogger().warning("Rejected botunban with invalid IGN: " + ign);
-            return;
-        }
-        String reason = json.get("reason").getAsString();
-        String command = String.format("unban %s %s", ign, reason);
-        dispatchCommandOnMainThread(command);
+        handleSimplePunishment(json, "unban", "botunban");
     }
 
     public void handleBotUnmute(JsonObject json) {
+        handleSimplePunishment(json, "unmute", "botunmute");
+    }
+
+    private void handleTimedPunishment(JsonObject json, String command, String logLabel) {
         String ign = json.get("ign").getAsString();
         if (!isValidIgn(ign)) {
-            plugin.getLogger().warning("Rejected botunmute with invalid IGN: " + ign);
+            plugin.getLogger().warning("Rejected " + logLabel + " with invalid IGN: " + ign);
             return;
         }
         String reason = json.get("reason").getAsString();
-        String command = String.format("unmute %s %s", ign, reason);
-        dispatchCommandOnMainThread(command);
+        String duration = json.has("duration") && !json.get("duration").isJsonNull()
+                ? " " + json.get("duration").getAsInt()
+                : "";
+        dispatchCommandOnMainThread(command + " " + ign + duration + " " + reason);
+    }
+
+    private void handleSimplePunishment(JsonObject json, String command, String logLabel) {
+        String ign = json.get("ign").getAsString();
+        if (!isValidIgn(ign)) {
+            plugin.getLogger().warning("Rejected " + logLabel + " with invalid IGN: " + ign);
+            return;
+        }
+        dispatchCommandOnMainThread(command + " " + ign + " " + json.get("reason").getAsString());
     }
 
     /**
@@ -983,31 +914,20 @@ public class WebSocketManager {
     }
 
 	private void handleScoringSuccess(JsonObject json) {
-		int gameId = parseGameId(json);
-		if (!json.has("players") || !json.get("players").isJsonArray()) {
-			plugin.getLogger().warning("scoringsuccess missing players array");
-			return;
-		}
-		JsonArray playersArray = json.getAsJsonArray("players");
-		String message = "§6§l[RBW] §aGame §e#" + gameId + " §ahas been scored.";
-		for (int i = 0; i < playersArray.size(); i++) {
-			String playerName = playersArray.get(i).getAsString();
-			org.bukkit.entity.Player player = Bukkit.getPlayerExact(playerName);
-			if (player != null && player.isOnline()) {
-				player.sendMessage(message);
-			}
-		}
+		notifyGamePlayers(json, "§6§l[RBW] §aGame §e#" + parseGameId(json) + " §ahas been scored.", "scoringsuccess missing players array");
 	}
 
 	private void handleGameVoided(JsonObject json) {
-		int gameId = parseGameId(json);
 		String reason = json.has("reason") && !json.get("reason").isJsonNull() ? json.get("reason").getAsString() : "unspecified";
+		notifyGamePlayers(json, "§6§l[RBW] §cGame §e#" + parseGameId(json) + " §chas been voided. §7Reason: §f" + reason, "gamevoided missing players array");
+	}
+
+    private void notifyGamePlayers(JsonObject json, String message, String missingPlayersWarning) {
 		if (!json.has("players") || !json.get("players").isJsonArray()) {
-			plugin.getLogger().warning("gamevoided missing players array");
+			plugin.getLogger().warning(missingPlayersWarning);
 			return;
 		}
 		JsonArray playersArray = json.getAsJsonArray("players");
-		String message = "§6§l[RBW] §cGame §e#" + gameId + " §chas been voided. §7Reason: §f" + reason;
 		for (int i = 0; i < playersArray.size(); i++) {
 			String playerName = playersArray.get(i).getAsString();
 			org.bukkit.entity.Player player = Bukkit.getPlayerExact(playerName);
