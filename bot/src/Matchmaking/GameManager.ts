@@ -177,11 +177,7 @@ export class GameManager {
 
       const playerScoreData = await this.processAllPlayers(context);
 
-      try {
-        await this.updatePlayerStats(playerScoreData, context.game);
-      } catch (e) {
-        console.error('[GameManager] Failed to persist player scoring updates:', e);
-      }
+      await this.updatePlayerStats(playerScoreData, context.game);
 
       await this.sendScoreNotifications(context, playerScoreData);
 
@@ -276,7 +272,7 @@ export class GameManager {
       const lastGame = await Game.findOne().sort({ gameId: -1 }).select('gameId');
       const nextId = (lastGame?.gameId || 0) + 1;
       try {
-        await Counter.updateOne({ _id: 'gameId', seq: { $lt: nextId } }, { $set: { seq: nextId } }, { upsert: true });
+        await Counter.updateOne({ _id: 'gameId' }, { $max: { seq: nextId } }, { upsert: true });
       } catch (counterError) {
         console.error('[GameManager] Failed to persist fallback game ID counter:', counterError);
       }
@@ -1162,63 +1158,51 @@ export class GameManager {
     try {
       const gameDurationSeconds = this.computeGameDurationSeconds(game);
       const updatePromises = playerScoreData.map(async (scoreData) => {
-        try {
-          const player = scoreData.player;
+        const player = scoreData.player;
 
-          
-          player.elo = scoreData.newElo;
+        player.elo = scoreData.newElo;
 
-          
-          player.experience = (player.experience || 0) + scoreData.experienceGained;
-          player.level = scoreData.newLevel;
+        player.experience = (player.experience || 0) + scoreData.experienceGained;
+        player.level = scoreData.newLevel;
 
+        if (scoreData.isWinner) {
+          player.wins = (player.wins || 0) + 1;
+          player.winstreak = (player.winstreak || 0) + 1;
+          player.losestreak = 0;
+        } else {
+          player.losses = (player.losses || 0) + 1;
+          player.losestreak = (player.losestreak || 0) + 1;
+          player.winstreak = 0;
+        }
 
-          if (scoreData.isWinner) {
-            player.wins = (player.wins || 0) + 1;
-            player.winstreak = (player.winstreak || 0) + 1;
-            player.losestreak = 0;
-          } else {
-            player.losses = (player.losses || 0) + 1;
-            player.losestreak = (player.losestreak || 0) + 1;
-            player.winstreak = 0;
-          }
+        if (scoreData.isMvp) {
+          player.mvps = (player.mvps || 0) + 1;
+        }
 
-          if (scoreData.isMvp) {
-            player.mvps = (player.mvps || 0) + 1;
-          }
+        this.updatePlayerGameStats(player, scoreData.stats);
 
-          this.updatePlayerGameStats(player, scoreData.stats);
+        player.finalDeaths = (player.finalDeaths || 0) + (scoreData.finalDeaths || 0);
+        player.playtimeSeconds = (player.playtimeSeconds || 0) + gameDurationSeconds;
+        player.peakElo = Math.max(player.peakElo || 0, scoreData.newElo);
 
-          player.finalDeaths = (player.finalDeaths || 0) + (scoreData.finalDeaths || 0);
-          player.playtimeSeconds = (player.playtimeSeconds || 0) + gameDurationSeconds;
-          player.peakElo = Math.max(player.peakElo || 0, scoreData.newElo);
+        player.kdr = player.deaths && player.deaths > 0 ? player.kills / player.deaths : player.kills;
+        player.wlr = player.losses && player.losses > 0 ? player.wins / player.losses : player.wins;
 
-          player.kdr = player.deaths && player.deaths > 0 ? player.kills / player.deaths : player.kills;
-          player.wlr = player.losses && player.losses > 0 ? player.wins / player.losses : player.wins;
+        await this.updatePlayerRecentGames(player, scoreData, game);
 
-          await this.updatePlayerRecentGames(player, scoreData, game);
+        await this.updatePlayerDailyElo(player);
 
-          await this.updatePlayerDailyElo(player);
+        await player.save();
 
-          await player.save();
-
-          
-          if (scoreData.leveledUp) {
-            console.log(`[GameManager] Player ${player.ign || player.discordId} leveled up from ${scoreData.oldLevel} to ${scoreData.newLevel}!`);
-
-            
-            
-            
-            
-            
-            
-            
-          }
-        } catch (error) {
-          console.error(`[GameManager] Error updating player ${scoreData.player.discordId}:`, error);
+        if (scoreData.leveledUp) {
+          console.log(`[GameManager] Player ${player.ign || player.discordId} leveled up from ${scoreData.oldLevel} to ${scoreData.newLevel}!`);
         }
       });
-      await Promise.allSettled(updatePromises);
+      const results = await Promise.allSettled(updatePromises);
+      const failures = results.filter(r => r.status === 'rejected');
+      if (failures.length > 0) {
+        throw new Error(`Failed to persist ${failures.length}/${results.length} player updates`);
+      }
     } catch (error) {
       console.error('[GameManager] Error updating player stats:', error);
       throw error;

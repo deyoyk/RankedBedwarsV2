@@ -700,7 +700,6 @@ export class CentralizedMatchmaker {
       this.validationCache.clear();
 
       this.gameManager.cleanup();
-      this.randomQueueManager.cleanup();
       this.pickingQueueManager.cleanup();
 
       console.log('[CentralizedMatchmaker] Production-grade cleanup completed');

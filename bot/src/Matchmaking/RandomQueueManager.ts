@@ -15,8 +15,6 @@ export class RandomQueueManager {
   private wsManager: WebSocketManager;
   private mapService: MapService;
   private workersManager: WorkersManager;
-  private partyCache: Map<string, { members: string[], timestamp: number }> = new Map();
-  private readonly CACHE_TTL = 30000;
 
 
 
@@ -26,19 +24,6 @@ export class RandomQueueManager {
     this.wsManager = wsManager;
     this.mapService = new MapService(wsManager);
     this.workersManager = WorkersManager.getInstance();
-    this.startCacheCleanup();
-  }
-
-
-  private startCacheCleanup(): void {
-    setInterval(() => {
-      const now = Date.now();
-      for (const [partyId, cache] of this.partyCache.entries()) {
-        if (now - cache.timestamp > this.CACHE_TTL) {
-          this.partyCache.delete(partyId);
-        }
-      }
-    }, 15000);
   }
 
   public async processQueue(
@@ -176,7 +161,6 @@ export class RandomQueueManager {
         throw new Error('Not enough players for team selection');
       }
 
-      const userPartyMap = new Map<string, string>();
       const partyGroups = new Map<string, string[]>();
 
       const users = await User.find({
@@ -195,7 +179,6 @@ export class RandomQueueManager {
 
       for (const user of users) {
         if (user.partyId) {
-          userPartyMap.set(user.discordId, user.partyId);
           if (!partyGroups.has(user.partyId)) {
             partyGroups.set(user.partyId, []);
           }
@@ -325,9 +308,5 @@ export class RandomQueueManager {
       .setFooter({ text: 'Season Beta' })
       .setTimestamp()
       .setColor('#00aaaa');
-  }
-
-  public cleanup(): void {
-    this.partyCache.clear();
   }
 }
