@@ -1,12 +1,12 @@
 import { ChatInputCommandInteraction } from 'discord.js';
-import { edit } from '../src/commands/admin/edit';
-import { forceregister } from '../src/commands/admin/forceregister';
-import { forcerename } from '../src/commands/admin/forcerename';
-import { addqueue } from '../src/commands/admin/addqueue';
-import { executeListSeasons } from '../src/commands/admin/listseasons';
-import { score } from '../src/commands/moderator/score';
-import { voidGame } from '../src/commands/moderator/void';
-import { lose } from '../src/commands/moderator/lose';
+import { edit } from '../src/commands/scoring/edit';
+import { forceregister } from '../src/commands/account/forceregister';
+import { forcerename } from '../src/commands/account/forcerename';
+import { addqueue } from '../src/commands/queue/addqueue';
+import { executeListSeasons } from '../src/commands/season/listseasons';
+import { score } from '../src/commands/scoring/score';
+import { voidGame } from '../src/commands/scoring/void';
+import { lose } from '../src/commands/scoring/lose';
 import { executeModerationAction } from '../src/utils/modCommands';
 import { CommandHandler } from '../src/handlers/CommandHandler';
 import { parseDiscordId, isValidIgn } from '../src/utils/inputValidation';
@@ -279,3 +279,4 @@ describe('listseasons field chunking', () => {
     expect(fields).toHaveLength(30);
   });
 });
+
