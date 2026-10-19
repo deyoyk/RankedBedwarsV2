@@ -47,6 +47,18 @@ jobs:
         working-directory: bot
         run: npm run build
 
+      - name: Package bot
+        run: |
+          cd bot
+          zip -r ../rankedbedwars-bot.zip . -x 'node_modules/*' '.env' '*.log'
+
+      - name: Upload bot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rankedbedwars-bot
+          path: rankedbedwars-bot.zip
+          retention-days: 30
+
   web-build:
     runs-on: ubuntu-latest
 
@@ -73,8 +85,20 @@ jobs:
         working-directory: web
         run: npm run build
 
+      - name: Package web
+        run: |
+          cd web
+          zip -r ../rbw-web.zip . -x 'node_modules/*' '.env*' '*.log'
+
+      - name: Upload web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rbw-web
+          path: rbw-web.zip
+          retention-days: 30
+
   build:
-    needs: bot-tests
+    needs: [bot-tests, web-build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -120,6 +144,12 @@ jobs:
           path: plugin/target/RankedBedwars-*.jar
           retention-days: 30
 
+      - name: Download bot and web packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: '{rankedbedwars-bot,rbw-web}'
+          path: release-assets
+
       - name: Delete previous rolling release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: gh release delete "v${{ steps.version.outputs.version }}" --yes --cleanup-tag || true
@@ -130,7 +160,10 @@ jobs:
         if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v1
         with:
-          files: plugin/target/RankedBedwars-*.jar
+          files: |
+            plugin/target/RankedBedwars-*.jar
+            release-assets/rankedbedwars-bot/rankedbedwars-bot.zip
+            release-assets/rbw-web/rbw-web.zip
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
           body: |
@@ -140,9 +173,9 @@ jobs:
             - See commit history for details
             
             ### Installation
-            1. Download the JAR file from the assets below
-            2. Place it in your server's `plugins` folder
-            3. Restart your server
+            1. Plugin: download the JAR from the assets below, place it in your server's `plugins` folder, restart your server
+            2. Bot: download `rankedbedwars-bot.zip`, extract, run `npm ci`, copy `.env.example` to `.env` and fill it in, then `npm start`
+            3. Web: download `rbw-web.zip`, extract, run `npm ci && npm run build`
           draft: false
           prerelease: false
         env:
