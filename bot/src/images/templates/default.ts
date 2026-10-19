@@ -56,7 +56,7 @@ function levelRing(progress: number, level: number, skin: string | null): VNode 
       h('circle', { cx: 90, cy: 90, r, fill: 'none', stroke: '#232936', strokeWidth: 10 }),
       h('circle', { cx: 90, cy: 90, r, fill: 'none', stroke: CYAN, strokeWidth: 10, strokeDasharray: `${filled} ${Math.round(c)}`, strokeLinecap: 'round', transform: 'rotate(-90 90 90)' })),
     h('div', { style: { position: 'absolute', left: 18, top: 18, width: 144, height: 144, borderRadius: 72, overflow: 'hidden', backgroundColor: '#15151c' } },
-      skin ? h('img', { src: skin, width: 144, height: 316, style: { position: 'absolute', left: 0, top: -12 } }) : null),
+      skin ? h('img', { src: skin, width: 144, height: 345, style: { position: 'absolute', left: 0, top: 0 } }) : null),
     h('div', {
       style: {
         position: 'absolute', left: 45, top: 188 - 48, width: 90, height: 34, borderRadius: 17,
@@ -116,11 +116,6 @@ export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; wid
     h('div', { style: { position: 'absolute', left: 287, top: 182, fontFamily: 'PoppinsMedium', fontSize: 18, color: CYAN } }, 'LEVEL PROGRESS'),
     rightText(560, 180, 190, 18, 'PoppinsRegular', MUTED, `${input.xpToNext} XP TO NEXT`, 24),
     h('div', { style: { position: 'absolute', left: 287, top: 208, width: 463, height: 8, borderRadius: 4, backgroundColor: LINE } }),
-    h('svg', { width: 110, height: 110, style: { position: 'absolute', left: 990, top: 62 } },
-      h('polygon', { points: '26,42 4,30 4,80', fill: '#67e8f9' }),
-      h('polygon', { points: '84,42 106,30 106,80', fill: '#67e8f9' }),
-      h('polygon', { points: '55,8 102,55 55,102 8,55', fill: 'none', stroke: CYAN, strokeWidth: 7 }),
-      h('polygon', { points: '55,32 78,55 55,78 32,55', fill: CYAN })),
     rightText(1115, 66, 215, 62, 'PoppinsMedium', CYAN, `${input.elo} RR`, 66),
     rightText(1115, 138, 215, 22, 'PoppinsRegular', MUTED, `#${input.globalRank} GLOBAL`, 26),
     h('div', {

@@ -64,5 +64,7 @@ export async function loadAvatarDataUrl(username: string): Promise<string> {
 }
 
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {
+  const heads = await fetchImageDataUrl(`https://mc-heads.net/body/${encodeURIComponent(ign)}/144`, 4000);
+  if (heads) return heads;
   return fetchImageDataUrl(`https://nmsr.nickac.dev/fullbody/${encodeURIComponent(ign)}`, 4000);
 }
