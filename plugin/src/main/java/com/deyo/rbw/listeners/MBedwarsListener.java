@@ -17,9 +17,9 @@ import de.marcely.bedwars.api.event.player.PlayerQuitArenaEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
-import org.bukkit.entity.ProjectileSource;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
@@ -108,7 +108,7 @@ public class MBedwarsListener implements Listener {
     private Player resolveDamager(Entity damager) {
         if (damager instanceof Player) return (Player) damager;
         if (damager instanceof Projectile) {
-            ProjectileSource shooter = ((Projectile) damager).getShooter();
+            LivingEntity shooter = ((Projectile) damager).getShooter();
             if (shooter instanceof Player) return (Player) shooter;
         }
         return null;
