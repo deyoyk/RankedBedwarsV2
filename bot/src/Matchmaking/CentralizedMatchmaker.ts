@@ -7,6 +7,7 @@ import { RandomQueueManager } from './RandomQueueManager';
 import { PickingQueueManager } from './PickingQueueManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
+import { PresenceService } from '../services/PresenceService';
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout;
@@ -553,18 +554,26 @@ export class CentralizedMatchmaker {
         }
       }
 
-      try {
-        const onlineCheck = await withTimeout(
-          this.wsManager.checkPlayerOnline(user.ign),
-          3000,
-          'Online check'
-        );
-        if (!onlineCheck.online) {
-          console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
-          return false;
+      const presence = PresenceService.evaluate(user.ign);
+      if (presence === 'offline') {
+        console.warn(`[CentralizedMatchmaker] User ${user.ign} is offline in Minecraft, skipping draft`);
+        return false;
+      }
+      if (presence === 'unknown') {
+        try {
+          const onlineCheck = await withTimeout(
+            this.wsManager.checkPlayerOnline(user.ign),
+            3000,
+            'Online check'
+          );
+          PresenceService.ingest(user.ign, onlineCheck.online === true);
+          if (!onlineCheck.online) {
+            console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
+            return false;
+          }
+        } catch (error: any) {
+          console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error.message}), keeping player in queue`);
         }
-      } catch (error: any) {
-        console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error.message}), keeping player in queue`);
       }
 
       return true;

@@ -8,6 +8,7 @@ const activeScreenshareThreads: {
 } = {};
 
 import { WebSocketServer, WebSocket } from 'ws';
+import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
 import * as http from 'http';
 import express from 'express';
@@ -393,6 +394,7 @@ export class WebSocketManager {
             }
             this.client = ws; 
             this.startQueueStatusBroadcast();
+            PresenceService.setConnected(true);
             console.log('[WebSocketManager] Client authenticated successfully');
             ws.send(JSON.stringify({ type: 'auth_success', message: 'Authentication successful' }));
           } else {
@@ -410,6 +412,7 @@ export class WebSocketManager {
         if (this.client === ws) {
           this.client = null;
           this.stopQueueStatusBroadcast();
+          PresenceService.setConnected(false);
         }
       });
     });
@@ -431,6 +434,7 @@ export class WebSocketManager {
       if (ping === null && this.client === client) {
         console.warn('[WebSocketManager] Client heartbeat failed, closing dead connection');
         this.client = null;
+        PresenceService.setConnected(false);
         try {
           client.removeAllListeners('close');
           client.close();
@@ -540,6 +544,9 @@ export class WebSocketManager {
   }
 
   private async handlePlayerStatusUpdate(msg: any) {
+    if (typeof msg.online === 'boolean') {
+      PresenceService.ingest(msg.ign, msg.online);
+    }
     const ignKey = msg.ign?.toLowerCase();
     const threadInfo = ignKey ? activeScreenshareThreads[ignKey] : undefined;
     if (threadInfo && Date.now() < threadInfo.expiresAt) {

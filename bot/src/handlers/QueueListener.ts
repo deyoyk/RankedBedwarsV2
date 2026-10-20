@@ -8,6 +8,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import { CentralizedMatchmaker } from '../Matchmaking/CentralizedMatchmaker';
 import { WorkersManager } from '../managers/WorkersManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
+import { PresenceService } from '../services/PresenceService';
 
 async function updatePartyActivity(partyId: string) {
   try {
@@ -25,6 +26,7 @@ interface QueueState {
   parties: Map<string, string[]>;
   lastUpdate: number;
   processing: boolean;
+  lastOfflineVersion?: number;
 }
 
 export class QueueListener {
@@ -40,6 +42,7 @@ export class QueueListener {
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
   private readonly CHANNEL_CACHE_TTL = 30000;
+  private readonly PRESENCE_SWEEP_INTERVAL = 30000;
 
   constructor(client: Client, wsManager: WebSocketManager, gameManager: any) {
     this.client = client;
@@ -48,6 +51,7 @@ export class QueueListener {
     this.matchmaker = new CentralizedMatchmaker(client, wsManager, gameManager);
     this.startCacheCleanup();
     this.startQueueMonitor();
+    this.startPresenceSweep();
   }
 
   private startCacheCleanup(): void {
@@ -75,6 +79,47 @@ export class QueueListener {
     setInterval(async () => {
       await this.checkAllQueues();
     }, this.QUEUE_CHECK_INTERVAL);
+  }
+
+  private startPresenceSweep(): void {
+    setInterval(async () => {
+      await this.sweepUnknownPresence().catch((error) => {
+        console.error('[QueueListener] Error in presence sweep:', error);
+      });
+    }, this.PRESENCE_SWEEP_INTERVAL);
+  }
+
+  private async sweepUnknownPresence(): Promise<void> {
+    if (!PresenceService.isConnected()) return;
+    const now = Date.now();
+    for (const [queueId, state] of this.queueStates) {
+      if (state.players.length === 0) continue;
+      let users: any[] = [];
+      try {
+        users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
+      } catch (error) {
+        console.error(`[QueueListener] Presence sweep lookup failed for ${queueId}:`, error);
+        continue;
+      }
+      const unknown: string[] = [];
+      for (const user of users) {
+        if (user?.ign && PresenceService.evaluate(user.ign, now) === 'unknown') {
+          unknown.push(user.ign);
+        }
+      }
+      if (unknown.length > 0) {
+        console.log(`[QueueListener] Presence sweep re-checking ${unknown.length} player(s) in queue ${queueId}`);
+      }
+      for (let i = 0; i < unknown.length; i += 5) {
+        const batch = unknown.slice(i, i + 5);
+        const results = await Promise.allSettled(batch.map((ign) => this.wsManager.checkPlayerOnline(ign)));
+        results.forEach((result, index) => {
+          if (result.status === 'fulfilled') {
+            PresenceService.ingest(batch[index], result.value.online === true);
+          }
+        });
+      }
+    }
   }
 
   private async checkAllQueues(): Promise<void> {
@@ -129,9 +174,10 @@ export class QueueListener {
       state.parties = validParties;
       state.lastUpdate = Date.now();
 
+      await this.evictOfflinePlayers(queueId, state, queue);
 
       if (!state.processing) {
-        queuePlayers.set(queueId, validPlayers);
+        queuePlayers.set(queueId, [...state.players]);
       }
 
       await this.rescanParties(queueId, state, queue, voiceChannel, playersInVC);
@@ -147,6 +193,64 @@ export class QueueListener {
 
     } catch (error) {
       console.error(`[QueueListener] Error validating queue state for ${queueId}:`, error);
+    }
+  }
+
+  private async evictOfflinePlayers(queueId: string, state: QueueState, queue: any): Promise<void> {
+    try {
+      if (!PresenceService.isConnected() || state.players.length === 0) return;
+      const offlineVersion = PresenceService.getOfflineVersion();
+      if (state.lastOfflineVersion === offlineVersion) return;
+      state.lastOfflineVersion = offlineVersion;
+
+      let users: any[] = [];
+      try {
+        users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
+      } catch (error) {
+        console.error(`[QueueListener] Offline eviction lookup failed for ${queueId}:`, error);
+        return;
+      }
+      const ignById = new Map(users.map((u: any) => [u.discordId, u.ign]));
+      const offline = state.players.filter((id) => {
+        const ign = ignById.get(id);
+        return !!ign && PresenceService.evaluate(ign) === 'offline';
+      });
+      if (offline.length === 0) return;
+
+      const wasQueueFull = state.players.length >= queue.maxPlayers;
+      const offlineSet = new Set(offline);
+      const evicted = new Set<string>(offline);
+      for (const [partyId, members] of state.parties) {
+        if (members.some((m) => offlineSet.has(m))) {
+          members.forEach((m) => evicted.add(m));
+          state.parties.delete(partyId);
+          console.log(`[QueueListener] Party ${partyId} removed from queue ${queueId}: member offline in Minecraft`);
+        }
+      }
+      state.players = state.players.filter((p) => !evicted.has(p));
+      state.lastUpdate = Date.now();
+      if (!state.processing) {
+        queuePlayers.set(queueId, [...state.players]);
+      }
+
+      const guild = this.client.guilds.cache.first();
+      for (const userId of evicted) {
+        try {
+          const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+          if (member) {
+            await this.moveToWaiting({ member } as VoiceState, 'you went offline on the Minecraft server, so you were removed from the queue. Rejoin the server and queue again!');
+          }
+        } catch (error) {
+          console.error(`[QueueListener] Error moving offline player ${userId} to waiting:`, error);
+        }
+      }
+
+      if (wasQueueFull && state.players.length < queue.maxPlayers) {
+        console.log(`[QueueListener] Queue ${queueId} dropped below full after offline eviction, stopping processing`);
+        this.cancelQueueProcessing(queueId);
+      }
+    } catch (error) {
+      console.error(`[QueueListener] Error evicting offline players for ${queueId}:`, error);
     }
   }
 
@@ -169,10 +273,12 @@ export class QueueListener {
       if (prev && prev.key === key) return;
       this.rescanKeys.set(queueId, { key, ts: Date.now() });
 
-      const users = await User.find({ discordId: { $in: uncovered } }).select('discordId partyId').lean();
+      const users = await User.find({ discordId: { $in: uncovered } }).select('discordId partyId ign').lean();
+      const ignById = new Map<string, string>();
       const presentByParty = new Map<string, string[]>();
       for (const user of users) {
         if (!user?.partyId || queueState.parties.has(user.partyId)) continue;
+        if (user.ign) ignById.set(user.discordId, user.ign);
         const present = presentByParty.get(user.partyId) ?? [];
         present.push(user.discordId);
         presentByParty.set(user.partyId, present);
@@ -187,6 +293,10 @@ export class QueueListener {
           this.partyCache.set(partyId, { members: roster, timestamp: Date.now() });
         }
         if (!roster.every(id => playersInVC.has(id))) continue;
+        if (PresenceService.isConnected() && present.some((id) => {
+          const ign = ignById.get(id);
+          return !!ign && PresenceService.evaluate(ign) === 'offline';
+        })) continue;
         const member = voiceChannel.members.get(present[0]);
         if (!member) continue;
         await this.handlePartyJoin({ member } as VoiceState, { partyId } as any, queueState, queue);
