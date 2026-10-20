@@ -16,9 +16,9 @@ import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.projectiles.ProjectileSource;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
@@ -391,7 +391,7 @@ public class BedWars1058Listener implements Listener {
     private Player resolveDamager(Entity damager) {
         if (damager instanceof Player) return (Player) damager;
         if (damager instanceof Projectile) {
-            LivingEntity shooter = ((Projectile) damager).getShooter();
+            ProjectileSource shooter = ((Projectile) damager).getShooter();
             if (shooter instanceof Player) return (Player) shooter;
         }
         return null;
