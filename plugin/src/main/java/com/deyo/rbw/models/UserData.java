@@ -29,6 +29,11 @@ public class UserData {
     private int losestreak;
     private double kdr;
     private double wlr;
+    private double damageDealt;
+    private double damageTaken;
+    private int assists;
+    private int bestStreak;
+    private int firstBloods;
 
     private int __v;
 

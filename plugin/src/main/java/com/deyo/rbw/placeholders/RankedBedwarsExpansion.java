@@ -33,7 +33,8 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     private static final Set<String> VALID_MODES = Set.of(
         "elo", "kills", "deaths", "wins", "losses", "games",
         "winstreak", "losestreak", "kdr", "wlr", "finalKills", "bedBroken", "mvps",
-        "diamonds", "irons", "gold", "emeralds", "blocksPlaced"
+        "diamonds", "irons", "gold", "emeralds", "blocksPlaced",
+        "damagedealt", "damagetaken", "assists", "beststreak", "firstbloods"
     );
     
     
@@ -122,6 +123,16 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
                 return getCachedUserStat(playerName, "emeralds");
             case "blocksplaced":
                 return getCachedUserStat(playerName, "blocksPlaced");
+            case "damagedealt":
+                return getCachedUserStat(playerName, "damageDealt");
+            case "damagetaken":
+                return getCachedUserStat(playerName, "damageTaken");
+            case "assists":
+                return getCachedUserStat(playerName, "assists");
+            case "beststreak":
+                return getCachedUserStat(playerName, "bestStreak");
+            case "firstbloods":
+                return getCachedUserStat(playerName, "firstBloods");
             default:
                 
                 return handleLeaderboardPlaceholder(params);
@@ -182,6 +193,16 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
                 return String.valueOf(userData.getEmeralds());
             case "blocksPlaced":
                 return String.valueOf(userData.getBlocksPlaced());
+            case "damageDealt":
+                return String.valueOf(Math.round(userData.getDamageDealt()));
+            case "damageTaken":
+                return String.valueOf(Math.round(userData.getDamageTaken()));
+            case "assists":
+                return String.valueOf(userData.getAssists());
+            case "bestStreak":
+                return String.valueOf(userData.getBestStreak());
+            case "firstBloods":
+                return String.valueOf(userData.getFirstBloods());
             default:
                 return "0";
         }
