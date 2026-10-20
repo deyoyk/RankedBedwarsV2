@@ -15,10 +15,14 @@ import com.deyo.rbw.models.Game;
 import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.ProjectileSource;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -130,6 +134,15 @@ public class BedWars1058Listener implements Listener {
         private final Map<String, Integer> playerEmeraldsCollected = new HashMap<>();
         private final Map<String, Integer> playerGoldCollected = new HashMap<>();
         private final Map<String, Integer> playerIronCollected = new HashMap<>();
+        private final Map<String, Double> playerDamageDealt = new HashMap<>();
+        private final Map<String, Double> playerDamageTaken = new HashMap<>();
+        private final Map<String, Integer> playerAssists = new HashMap<>();
+        private final Map<String, Integer> playerMaxStreak = new HashMap<>();
+        private final Map<String, Integer> playerCurrentStreak = new HashMap<>();
+        private final Map<String, Map<String, Game.FightStats>> playerFights = new HashMap<>();
+        private final Map<String, Map<String, Long>> lastDamageAt = new HashMap<>();
+        private String firstBlood;
+        private static final long ASSIST_WINDOW_MS = 10_000L;
         private final Map<String, Boolean> playerTeamWon = new HashMap<>();
         private final List<Map<String, Object>> timeline = new ArrayList<>();
         
@@ -155,6 +168,11 @@ public class BedWars1058Listener implements Listener {
                     playerEmeraldsCollected.put(player.getName(), 0);
                     playerGoldCollected.put(player.getName(), 0);
                     playerIronCollected.put(player.getName(), 0);
+                    playerDamageDealt.put(player.getName(), 0.0);
+                    playerDamageTaken.put(player.getName(), 0.0);
+                    playerAssists.put(player.getName(), 0);
+                    playerMaxStreak.put(player.getName(), 0);
+                    playerCurrentStreak.put(player.getName(), 0);
                 }
             }
             
@@ -179,7 +197,28 @@ public class BedWars1058Listener implements Listener {
             addTimelineEvent(System.currentTimeMillis() - startTime, type, player, target, amount, team);
         }
         
+        public void recordDamage(String dealer, String victim, double amount) {
+            if (dealer == null || dealer.isEmpty() || victim == null || victim.isEmpty()) {
+                return;
+            }
+            if (dealer.equals(victim) || amount <= 0) {
+                return;
+            }
+            playerDamageDealt.put(dealer, playerDamageDealt.getOrDefault(dealer, 0.0) + amount);
+            playerDamageTaken.put(victim, playerDamageTaken.getOrDefault(victim, 0.0) + amount);
+            Game.FightStats fight = playerFights
+                    .computeIfAbsent(dealer, k -> new HashMap<>())
+                    .computeIfAbsent(victim, k -> new Game.FightStats());
+            fight.setDamage(fight.getDamage() + amount);
+            lastDamageAt
+                    .computeIfAbsent(victim, k -> new HashMap<>())
+                    .put(dealer, System.currentTimeMillis());
+        }
+
         public void recordKill(String killer, String victim, boolean isFinal) {
+            if (killer == null || killer.isEmpty() || victim == null || victim.isEmpty()) {
+                return;
+            }
             playerKills.put(killer, playerKills.getOrDefault(killer, 0) + 1);
             addTimelineEvent("kill", killer, victim, null, null);
             if (isFinal) {
@@ -188,6 +227,43 @@ public class BedWars1058Listener implements Listener {
             }
             playerDeaths.put(victim, playerDeaths.getOrDefault(victim, 0) + 1);
             addTimelineEvent("death", victim, killer, null, null);
+            Game.FightStats fight = playerFights
+                    .computeIfAbsent(killer, k -> new HashMap<>())
+                    .computeIfAbsent(victim, k -> new Game.FightStats());
+            fight.setKills(fight.getKills() + 1);
+            if (firstBlood == null) {
+                firstBlood = killer;
+                addTimelineEvent("first_blood", killer, victim, null, null);
+            }
+            int streak = playerCurrentStreak.getOrDefault(killer, 0) + 1;
+            playerCurrentStreak.put(killer, streak);
+            if (streak > playerMaxStreak.getOrDefault(killer, 0)) {
+                playerMaxStreak.put(killer, streak);
+            }
+            playerCurrentStreak.put(victim, 0);
+            recordAssists(killer, victim);
+        }
+
+        private void recordAssists(String killer, String victim) {
+            Map<String, Long> damagers = lastDamageAt.get(victim);
+            if (damagers == null) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            for (Map.Entry<String, Long> entry : damagers.entrySet()) {
+                String damager = entry.getKey();
+                if (damager.equals(killer)) {
+                    continue;
+                }
+                if (now - entry.getValue() <= ASSIST_WINDOW_MS) {
+                    playerAssists.put(damager, playerAssists.getOrDefault(damager, 0) + 1);
+                    addTimelineEvent("assist", damager, victim, null, null);
+                }
+            }
+        }
+
+        public boolean isTracking(String playerName) {
+            return playerTeams.containsKey(playerName);
         }
         
         public void recordDeath(String player) {
@@ -296,6 +372,31 @@ public class BedWars1058Listener implements Listener {
         }
     }
     
+    @EventHandler
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        if (event.isCancelled()) return;
+        if (!(event.getEntity() instanceof Player)) return;
+        Player dealer = resolveDamager(event.getDamager());
+        if (dealer == null) return;
+        Player victim = (Player) event.getEntity();
+        if (dealer.getName().equals(victim.getName())) return;
+        for (BW1058GameTracker tracker : gameTrackers.values()) {
+            if (tracker.isTracking(victim.getName()) && tracker.isTracking(dealer.getName())) {
+                tracker.recordDamage(dealer.getName(), victim.getName(), event.getFinalDamage());
+                return;
+            }
+        }
+    }
+
+    private Player resolveDamager(Entity damager) {
+        if (damager instanceof Player) return (Player) damager;
+        if (damager instanceof Projectile) {
+            ProjectileSource shooter = ((Projectile) damager).getShooter();
+            if (shooter instanceof Player) return (Player) shooter;
+        }
+        return null;
+    }
+
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
@@ -462,6 +563,28 @@ public class BedWars1058Listener implements Listener {
         }
         for (Map.Entry<String, Integer> entry : tracker.playerIronCollected.entrySet()) {
             game.getPlayerIronCollected().put(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<String, Double> entry : tracker.playerDamageDealt.entrySet()) {
+            game.getPlayerDamageDealt().put(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<String, Double> entry : tracker.playerDamageTaken.entrySet()) {
+            game.getPlayerDamageTaken().put(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<String, Integer> entry : tracker.playerAssists.entrySet()) {
+            game.getPlayerAssists().put(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<String, Integer> entry : tracker.playerMaxStreak.entrySet()) {
+            game.getPlayerMaxStreak().put(entry.getKey(), entry.getValue());
+        }
+        for (Map.Entry<String, Map<String, Game.FightStats>> entry : tracker.playerFights.entrySet()) {
+            Map<String, Game.FightStats> copy = new HashMap<>();
+            for (Map.Entry<String, Game.FightStats> fight : entry.getValue().entrySet()) {
+                copy.put(fight.getKey(), new Game.FightStats(fight.getValue().getKills(), fight.getValue().getDamage()));
+            }
+            game.getPlayerFights().put(entry.getKey(), copy);
+        }
+        if (tracker.firstBlood != null) {
+            game.setFirstBlood(tracker.firstBlood);
         }
         for (Map.Entry<String, Boolean> entry : tracker.playerTeamWon.entrySet()) {
             game.getPlayerTeamWon().put(entry.getKey(), entry.getValue());

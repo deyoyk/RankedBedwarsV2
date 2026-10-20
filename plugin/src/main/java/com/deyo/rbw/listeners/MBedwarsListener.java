@@ -16,10 +16,14 @@ import de.marcely.bedwars.api.event.player.PlayerQuitArenaEvent;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.entity.ProjectileSource;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
@@ -83,6 +87,32 @@ public class MBedwarsListener implements Listener {
     }
 
     
+
+    @EventHandler
+    public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
+        if (event.isCancelled()) return;
+        if (!(event.getEntity() instanceof Player)) return;
+        Player dealer = resolveDamager(event.getDamager());
+        if (dealer == null) return;
+        Player victim = (Player) event.getEntity();
+        if (dealer.getName().equals(victim.getName())) return;
+        for (GameInstance gameInstance : gameInstances.values()) {
+            if (gameInstance.getPlayerTeams().containsKey(victim.getName())
+                    && gameInstance.getPlayerTeams().containsKey(dealer.getName())) {
+                gameInstance.recordDamage(dealer.getName(), victim.getName(), event.getFinalDamage());
+                return;
+            }
+        }
+    }
+
+    private Player resolveDamager(Entity damager) {
+        if (damager instanceof Player) return (Player) damager;
+        if (damager instanceof Projectile) {
+            ProjectileSource shooter = ((Projectile) damager).getShooter();
+            if (shooter instanceof Player) return (Player) shooter;
+        }
+        return null;
+    }
 
     @EventHandler
     public void onPlayerDeath(PlayerIngameDeathEvent event) {

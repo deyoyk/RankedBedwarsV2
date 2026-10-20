@@ -17,6 +17,9 @@ public class GameInstance {
     private final Map<String, String> playerTeams = new HashMap<>();
     private final List<String> bedBreakers = new ArrayList<>();
     private final Map<String, String> brokenBeds = new HashMap<>();
+    private final Map<String, Integer> playerCurrentStreak = new HashMap<>();
+    private final Map<String, Map<String, Long>> lastDamageAt = new HashMap<>();
+    private static final long ASSIST_WINDOW_MS = 10_000L;
     private Team winningTeam;
     private long endTime;
 
@@ -71,6 +74,11 @@ public class GameInstance {
                 game.getPlayerEmeraldsCollected().put(player.getName(), 0);
                 game.getPlayerGoldCollected().put(player.getName(), 0);
                 game.getPlayerIronCollected().put(player.getName(), 0);
+                game.getPlayerDamageDealt().put(player.getName(), 0.0);
+                game.getPlayerDamageTaken().put(player.getName(), 0.0);
+                game.getPlayerAssists().put(player.getName(), 0);
+                game.getPlayerMaxStreak().put(player.getName(), 0);
+                playerCurrentStreak.put(player.getName(), 0);
                 addTimelineEvent("player_join", player.getName(), null, null, null);
             }
         }
@@ -88,6 +96,24 @@ public class GameInstance {
         }
     }
 
+    public void recordDamage(String dealer, String victim, double amount) {
+        if (dealer == null || dealer.isEmpty() || victim == null || victim.isEmpty()) {
+            return;
+        }
+        if (dealer.equals(victim) || amount <= 0) {
+            return;
+        }
+        game.getPlayerDamageDealt().put(dealer, game.getPlayerDamageDealt().getOrDefault(dealer, 0.0) + amount);
+        game.getPlayerDamageTaken().put(victim, game.getPlayerDamageTaken().getOrDefault(victim, 0.0) + amount);
+        Game.FightStats fight = game.getPlayerFights()
+                .computeIfAbsent(dealer, k -> new HashMap<>())
+                .computeIfAbsent(victim, k -> new Game.FightStats());
+        fight.setDamage(fight.getDamage() + amount);
+        lastDamageAt
+                .computeIfAbsent(victim, k -> new HashMap<>())
+                .put(dealer, System.currentTimeMillis());
+    }
+
     public void recordKill(String killer, String victim, boolean isFinal) {
         if (killer == null || killer.isEmpty() || victim == null || victim.isEmpty()) {
             return;
@@ -100,6 +126,39 @@ public class GameInstance {
         }
         game.getPlayerDeaths().put(victim, game.getPlayerDeaths().getOrDefault(victim, 0) + 1);
         addTimelineEvent("death", victim, killer, null, null);
+        Game.FightStats fight = game.getPlayerFights()
+                .computeIfAbsent(killer, k -> new HashMap<>())
+                .computeIfAbsent(victim, k -> new Game.FightStats());
+        fight.setKills(fight.getKills() + 1);
+        if (game.getFirstBlood() == null) {
+            game.setFirstBlood(killer);
+            addTimelineEvent("first_blood", killer, victim, null, null);
+        }
+        int streak = playerCurrentStreak.getOrDefault(killer, 0) + 1;
+        playerCurrentStreak.put(killer, streak);
+        if (streak > game.getPlayerMaxStreak().getOrDefault(killer, 0)) {
+            game.getPlayerMaxStreak().put(killer, streak);
+        }
+        playerCurrentStreak.put(victim, 0);
+        recordAssists(killer, victim);
+    }
+
+    private void recordAssists(String killer, String victim) {
+        Map<String, Long> damagers = lastDamageAt.get(victim);
+        if (damagers == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (Map.Entry<String, Long> entry : damagers.entrySet()) {
+            String damager = entry.getKey();
+            if (damager.equals(killer)) {
+                continue;
+            }
+            if (now - entry.getValue() <= ASSIST_WINDOW_MS) {
+                game.getPlayerAssists().put(damager, game.getPlayerAssists().getOrDefault(damager, 0) + 1);
+                addTimelineEvent("assist", damager, victim, null, null);
+            }
+        }
     }
 
     public void recordDeath(String player) {

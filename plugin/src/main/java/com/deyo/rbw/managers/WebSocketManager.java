@@ -536,6 +536,20 @@ public class WebSocketManager {
                 playerJson.addProperty("irons", game.getPlayerIronCollected().getOrDefault(playerName, 0));
                 playerJson.addProperty("gold", game.getPlayerGoldCollected().getOrDefault(playerName, 0));
                 playerJson.addProperty("emeralds", game.getPlayerEmeraldsCollected().getOrDefault(playerName, 0));
+                playerJson.addProperty("damagedealt", game.getPlayerDamageDealt().getOrDefault(playerName, 0.0));
+                playerJson.addProperty("damagetaken", game.getPlayerDamageTaken().getOrDefault(playerName, 0.0));
+                playerJson.addProperty("assists", game.getPlayerAssists().getOrDefault(playerName, 0));
+                playerJson.addProperty("maxstreak", game.getPlayerMaxStreak().getOrDefault(playerName, 0));
+                playerJson.addProperty("firstblood", playerName.equals(game.getFirstBlood()));
+                JsonObject fightsJson = new JsonObject();
+                Map<String, Game.FightStats> fights = game.getPlayerFights().getOrDefault(playerName, java.util.Collections.emptyMap());
+                for (Map.Entry<String, Game.FightStats> fight : fights.entrySet()) {
+                    JsonObject fightJson = new JsonObject();
+                    fightJson.addProperty("kills", fight.getValue().getKills());
+                    fightJson.addProperty("damage", fight.getValue().getDamage());
+                    fightsJson.add(fight.getKey(), fightJson);
+                }
+                playerJson.add("fights", fightsJson);
                 playersJson.add(playerName, playerJson);
             }
             json.add("players", playersJson);

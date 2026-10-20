@@ -26,6 +26,12 @@ public class Game {
     private final Map<String, Integer> playerEmeraldsCollected = new HashMap<>();
     private final Map<String, Integer> playerGoldCollected = new HashMap<>();
     private final Map<String, Integer> playerIronCollected = new HashMap<>();
+    private final Map<String, Double> playerDamageDealt = new HashMap<>();
+    private final Map<String, Double> playerDamageTaken = new HashMap<>();
+    private final Map<String, Integer> playerAssists = new HashMap<>();
+    private final Map<String, Integer> playerMaxStreak = new HashMap<>();
+    private final Map<String, Map<String, FightStats>> playerFights = new HashMap<>();
+    private String firstBlood;
     private final Map<String, Boolean> playerTeamWon = new HashMap<>();
     private final Map<String, String> playerTeamName = new HashMap<>();
     private final Map<String, Boolean> playerBedBroken = new HashMap<>();
@@ -67,6 +73,31 @@ public class Game {
     public Map<String, Integer> getPlayerEmeraldsCollected() { return playerEmeraldsCollected; }
     public Map<String, Integer> getPlayerGoldCollected() { return playerGoldCollected; }
     public Map<String, Integer> getPlayerIronCollected() { return playerIronCollected; }
+    public Map<String, Double> getPlayerDamageDealt() { return playerDamageDealt; }
+    public Map<String, Double> getPlayerDamageTaken() { return playerDamageTaken; }
+    public Map<String, Integer> getPlayerAssists() { return playerAssists; }
+    public Map<String, Integer> getPlayerMaxStreak() { return playerMaxStreak; }
+    public Map<String, Map<String, FightStats>> getPlayerFights() { return playerFights; }
+    public String getFirstBlood() { return firstBlood; }
+    public void setFirstBlood(String firstBlood) { this.firstBlood = firstBlood; }
+
+    public static class FightStats {
+        private int kills;
+        private double damage;
+
+        public FightStats() {
+        }
+
+        public FightStats(int kills, double damage) {
+            this.kills = kills;
+            this.damage = damage;
+        }
+
+        public int getKills() { return kills; }
+        public void setKills(int kills) { this.kills = kills; }
+        public double getDamage() { return damage; }
+        public void setDamage(double damage) { this.damage = damage; }
+    }
     public Map<String, Boolean> getPlayerTeamWon() { return playerTeamWon; }
     public Map<String, String> getPlayerTeamName() { return playerTeamName; }
     public Map<String, Boolean> getPlayerBedBroken() { return playerBedBroken; }
