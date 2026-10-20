@@ -411,7 +411,9 @@ export class CommandManager {
         { name: 'Emeralds', value: 'emeralds' }, { name: 'Blocks Placed', value: 'blocksPlaced' },
         { name: 'Winstreak', value: 'winstreak' }, { name: 'Losestreak', value: 'losestreak' },
         { name: 'KDR', value: 'kdr' }, { name: 'WLR', value: 'wlr' }, { name: 'Level', value: 'level' },
-        { name: 'Experience', value: 'experience' }
+        { name: 'Experience', value: 'experience' }, { name: 'Damage Dealt', value: 'damageDealt' },
+        { name: 'Damage Taken', value: 'damageTaken' }, { name: 'Assists', value: 'assists' },
+        { name: 'Best Streak', value: 'bestStreak' }, { name: 'First Bloods', value: 'firstBloods' }
       ]},
       { name: 'page', description: 'Page number', type: 4, required: false }
     ]);

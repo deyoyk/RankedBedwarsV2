@@ -98,6 +98,18 @@ function GameInner() {
             bed: ((game.bedbreaksign as string[]) || []).includes(ign),
           };
         }
+        const combat = ((game.combatsign as Array<Record<string, unknown>>) || [])
+          .map((c) => ({
+            ign: String(c.playerign ?? c.player ?? '?'),
+            kills: Number(c.kills ?? 0),
+            deaths: Number(c.deaths ?? 0),
+            damageDealt: Math.round(Number(c.damageDealt ?? 0)),
+            damageTaken: Math.round(Number(c.damageTaken ?? 0)),
+            assists: Number(c.assists ?? 0),
+            fights: Array.isArray(c.fights) ? (c.fights as unknown[]).length : 0,
+            firstBlood: c.firstBlood === true,
+          }))
+          .sort((a, b) => b.damageDealt - a.damageDealt);
         const timeline = timelineData.timeline || [];
         for (const ev of timeline) {
           if (ev.type === 'kill' && ev.player && playersInfo[ev.player]) {
@@ -159,6 +171,34 @@ function GameInner() {
               <StatCell label="Winners" value={winners.length} tone="ok" />
               <StatCell label="MVPs" value={((game.mvpsign as string[]) || []).length} tone="accent" />
               <StatCell label="Beds broken" value={((game.bedbreaksign as string[]) || []).length} />
+            </div>
+            <div className="section">
+              <div className="section-title">Combat</div>
+              <div className="card">
+                {!combat.length ? (
+                  <EmptyBox text="No combat data recorded for this game." />
+                ) : (
+                  <DataTable
+                    headers={[
+                      { label: 'Player' }, { label: 'K', align: 'num' }, { label: 'D', align: 'num' },
+                      { label: 'Damage', align: 'num' }, { label: 'Taken', align: 'num' },
+                      { label: 'Assists', align: 'num' }, { label: 'Fights', align: 'num' },
+                    ]}
+                    rows={combat.map((c) => [
+                      <span key={`p${c.ign}`}>
+                        <PlayerLink ign={c.ign} />
+                        {c.firstBlood ? <span className="tag tag-mvp" style={{ marginLeft: 8 }}>FB</span> : null}
+                      </span>,
+                      <span key={`k${c.ign}`} className="num">{c.kills}</span>,
+                      <span key={`d${c.ign}`} className="num">{c.deaths}</span>,
+                      <span key={`dd${c.ign}`} className="num">{formatNumber(c.damageDealt)}</span>,
+                      <span key={`dt${c.ign}`} className="num">{formatNumber(c.damageTaken)}</span>,
+                      <span key={`a${c.ign}`} className="num">{c.assists}</span>,
+                      <span key={`f${c.ign}`} className="num">{c.fights}</span>,
+                    ])}
+                  />
+                )}
+              </div>
             </div>
             <div className="section">
               <div className="section-title">Timeline</div>

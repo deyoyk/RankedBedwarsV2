@@ -432,6 +432,9 @@ export class ApiManager {
       for (const id of [...(game.team1 || []), ...(game.team2 || []), ...(game.bedbreaks || []), ...(game.mvps || []), ...(game.winners || []), ...(game.losers || [])]) {
         allIds.add(id);
       }
+      for (const entry of (game.combat || [])) {
+        if (entry && entry.player) allIds.add(entry.player);
+      }
     }
     if (allIds.size === 0) return {};
     const users = await User.find({ discordId: { $in: Array.from(allIds) } }).select('discordId ign').lean();
@@ -448,7 +451,11 @@ export class ApiManager {
       bedbreaksign: map(game.bedbreaks),
       mvpsign: map(game.mvps),
       winnersign: map(game.winners),
-      losersign: map(game.losers)
+      losersign: map(game.losers),
+      combatsign: (game.combat || []).map((entry: any) => ({
+        ...entry,
+        playerign: idToIgn[entry.player] || entry.player
+      }))
     };
   }
 
@@ -995,7 +1002,8 @@ export class ApiManager {
       const validStats = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
         'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
         'bedBroken', 'mvps', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced',
-        'level', 'experience', 'playtimeSeconds', 'peakElo'];
+        'level', 'experience', 'playtimeSeconds', 'peakElo',
+        'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods'];
 
       if (!validStats.includes(stat)) {
         res.status(400).json({ error: 'Invalid stat parameter' });
@@ -1106,17 +1114,24 @@ export class ApiManager {
       })
         .sort({ gameId: -1 })
         .limit(limit)
-        .select('gameId map winners losers mvps bedbreaks team1 team2 startTime')
+        .select('gameId map winners losers mvps bedbreaks team1 team2 startTime combat')
         .lean();
 
-      const result = games.map((game: any) => ({
-        gameId: game.gameId,
-        map: game.map,
-        date: game.startTime,
-        won: game.winners.includes(discordid),
-        wasMVP: game.mvps.includes(discordid),
-        brokeABed: game.bedbreaks.includes(discordid)
-      }));
+      const result = games.map((game: any) => {
+        const entry = (game.combat || []).find((c: any) => c.player === discordid) || {};
+        return {
+          gameId: game.gameId,
+          map: game.map,
+          date: game.startTime,
+          won: game.winners.includes(discordid),
+          wasMVP: game.mvps.includes(discordid),
+          brokeABed: game.bedbreaks.includes(discordid),
+          damageDealt: entry.damageDealt || 0,
+          damageTaken: entry.damageTaken || 0,
+          assists: entry.assists || 0,
+          fights: Array.isArray(entry.fights) ? entry.fights.length : 0
+        };
+      });
 
       res.json(result);
     } catch (error) {
@@ -1345,7 +1360,7 @@ export class ApiManager {
       const users = await User.find()
         .sort(sortObj as any)
         .limit(limit)
-        .select('ign discordId elo wins losses kills deaths games mvps bedBroken experience level finalDeaths playtimeSeconds peakElo')
+        .select('ign discordId elo wins losses kills deaths games mvps bedBroken experience level finalDeaths playtimeSeconds peakElo damageDealt damageTaken assists bestStreak firstBloods')
         .lean();
 
       const topPlayers = users.map((user: any, index: number) => {

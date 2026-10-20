@@ -16,6 +16,8 @@ const STAT_ORDER: Array<[string, string]> = [
   ['losestreak', 'Losestreak'], ['level', 'Level'], ['experience', 'Experience'],
   ['playtimeSeconds', 'Playtime'], ['diamonds', 'Diamonds'], ['irons', 'Iron'],
   ['gold', 'Gold'], ['emeralds', 'Emeralds'], ['blocksPlaced', 'Blocks placed'],
+  ['damageDealt', 'Damage dealt'], ['damageTaken', 'Damage taken'], ['assists', 'Assists'],
+  ['bestStreak', 'Best streak'], ['firstBloods', 'First bloods'],
 ];
 
 interface Overview {
@@ -168,7 +170,8 @@ function PlayerInner() {
                     headers={[
                       { label: 'Game' }, { label: 'Map' }, { label: 'Result' }, { label: 'Elo', align: 'num' },
                       { label: 'Kills', align: 'num' }, { label: 'Finals', align: 'num' },
-                      { label: 'Beds', align: 'num' }, { label: 'When' },
+                      { label: 'Beds', align: 'num' }, { label: 'Damage', align: 'num' },
+                      { label: 'Fights', align: 'num' }, { label: 'When' },
                     ]}
                     rows={games.map((g) => {
                       const r = g as Record<string, number | string | boolean>;
@@ -182,6 +185,8 @@ function PlayerInner() {
                         <span key={`k${r.gameId}`} className="num">{formatNumber(r.kills as number ?? 0)}</span>,
                         <span key={`f${r.gameId}`} className="num">{formatNumber(r.finalKills as number ?? 0)}</span>,
                         <span key={`b${r.gameId}`} className="num">{formatNumber(r.bedBroken as number ?? 0)}</span>,
+                        <span key={`d${r.gameId}`} className="num">{formatNumber(Math.round(Number(r.damageDealt ?? 0)))}</span>,
+                        <span key={`t${r.gameId}`} className="num">{formatNumber(r.fights as number ?? 0)}</span>,
                         <span key={`w${r.gameId}`} className="muted">{timeAgo(r.date as string)}</span>,
                       ];
                     })}

@@ -22,6 +22,11 @@ const LEADERBOARD_MODES: Record<string, { title: string; field: string }> = {
   losestreak: { title: 'Losestreak Leaderboard', field: 'losestreak' },
   kdr: { title: 'KDR Leaderboard', field: 'kdr' },
   wlr: { title: 'WLR Leaderboard', field: 'wlr' },
+  damageDealt: { title: 'Damage Dealt Leaderboard', field: 'damageDealt' },
+  damageTaken: { title: 'Damage Taken Leaderboard', field: 'damageTaken' },
+  assists: { title: 'Assists Leaderboard', field: 'assists' },
+  bestStreak: { title: 'Best Streak Leaderboard', field: 'bestStreak' },
+  firstBloods: { title: 'First Bloods Leaderboard', field: 'firstBloods' },
 };
 
 function getModeConfig(mode: string) {

@@ -3,4 +3,5 @@ export const MODES = [
   'bedBroken', 'mvps', 'winstreak', 'losestreak', 'kdr', 'wlr',
   'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced',
   'level', 'experience', 'playtimeSeconds', 'peakElo',
+  'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods',
 ];
