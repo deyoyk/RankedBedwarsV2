@@ -13,7 +13,7 @@
     "migrate:users": "node scripts/migrateUsers.js",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
-    "test": "jest --runInBand",
+    "test": "jest --runInBand --silent",
     "test:watch": "jest --watch"
   },
   "dependencies": {
