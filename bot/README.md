@@ -64,3 +64,5 @@ Command permissions come from the plugin's `permission.yml`. See `plugin/README.
 npm test
 npm run lint
 ```
+
+Tests run on Jest with ts-jest. Use `npm test`; other runners (e.g. `bun test`) are not supported because the suite relies on Jest module mocking.
