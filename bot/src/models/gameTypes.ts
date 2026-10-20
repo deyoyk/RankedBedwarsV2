@@ -7,6 +7,26 @@ export interface ITimelineEvent {
   timestamp: number;
 }
 
+export interface IFight {
+  opponent: string;
+  kills: number;
+  deaths: number;
+  damageDealt: number;
+  damageTaken: number;
+}
+
+export interface ICombatEntry {
+  player: string;
+  kills: number;
+  deaths: number;
+  damageDealt: number;
+  damageTaken: number;
+  assists: number;
+  maxStreak: number;
+  firstBlood: boolean;
+  fights: IFight[];
+}
+
 export interface IGameBase {
   gameId: number;
   map: string;
@@ -30,4 +50,5 @@ export interface IGameBase {
   partiesInThisGame: string;
   reason: string;
   timeline?: ITimelineEvent[];
+  combat?: ICombatEntry[];
 }

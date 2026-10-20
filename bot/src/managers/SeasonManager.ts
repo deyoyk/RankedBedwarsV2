@@ -398,7 +398,8 @@ export class SeasonManager {
       const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
         'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths', 'bedBroken', 'mvps',
         'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience',
-        'playtimeSeconds', 'peakElo'];
+        'playtimeSeconds', 'peakElo',
+        'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods'];
 
       if (!validModes.includes(mode)) {
         throw new Error(`Invalid mode parameter. Valid modes: ${validModes.join(', ')}`);

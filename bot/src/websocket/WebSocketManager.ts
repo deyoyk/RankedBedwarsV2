@@ -698,10 +698,34 @@ export class WebSocketManager {
         irons: stats.irons ?? 0,
         gold: stats.gold ?? 0,
         emeralds: stats.emeralds ?? 0,
-        blocksPlaced: stats.blocksplaced ?? 0
+        blocksPlaced: stats.blocksplaced ?? 0,
+        damageDealt: stats.damagedealt ?? 0,
+        damageTaken: stats.damagetaken ?? 0,
+        assists: stats.assists ?? 0,
+        maxStreak: stats.maxstreak ?? 0,
+        firstBlood: stats.firstblood === true,
+        fights: this.buildFights(stats.fights)
       };
     }
     return playerData;
+  }
+
+  private buildFights(fightsRaw: any): Record<string, { kills: number; damageDealt: number }> {
+    const fights: Record<string, { kills: number; damageDealt: number }> = {};
+    if (!fightsRaw || typeof fightsRaw !== 'object') return fights;
+    let count = 0;
+    for (const [opponent, rowRaw] of Object.entries(fightsRaw)) {
+      if (typeof opponent !== 'string' || !opponent || opponent.length > 32) continue;
+      if (opponent === '__proto__' || opponent === 'constructor' || opponent === 'prototype') continue;
+      const row = rowRaw as any;
+      const kills = typeof row?.kills === 'number' && row.kills >= 0 ? Math.floor(row.kills) : 0;
+      const damageDealt = typeof row?.damageDealt === 'number' && row.damageDealt >= 0 ? row.damageDealt
+        : typeof row?.damage === 'number' && row.damage >= 0 ? row.damage : 0;
+      if (kills === 0 && damageDealt === 0) continue;
+      fights[opponent] = { kills, damageDealt };
+      if (++count >= 16) break;
+    }
+    return fights;
   }
 
   private handleScoring(msg: any) {

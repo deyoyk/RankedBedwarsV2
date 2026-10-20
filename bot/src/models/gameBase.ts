@@ -22,6 +22,12 @@ export interface IRecentGame {
   gold?: number;
   emeralds?: number;
   blocksPlaced?: number;
+  damageDealt?: number;
+  damageTaken?: number;
+  assists?: number;
+  maxStreak?: number;
+  firstBlood?: boolean;
+  fights?: number;
 }
 
 export interface IDailyElo {
@@ -51,6 +57,12 @@ export const recentGameSubdoc = {
   gold: { type: Number, default: 0 },
   emeralds: { type: Number, default: 0 },
   blocksPlaced: { type: Number, default: 0 },
+  damageDealt: { type: Number, default: 0 },
+  damageTaken: { type: Number, default: 0 },
+  assists: { type: Number, default: 0 },
+  maxStreak: { type: Number, default: 0 },
+  firstBlood: { type: Boolean, default: false },
+  fights: { type: Number, default: 0 },
 };
 
 export const dailyEloSubdoc = {
@@ -65,6 +77,26 @@ export const timelineEventSubdoc = {
   amount: { type: Number },
   team: { type: String },
   timestamp: { type: Number, required: true },
+};
+
+export const fightSubdoc = {
+  opponent: { type: String, required: true },
+  kills: { type: Number, default: 0 },
+  deaths: { type: Number, default: 0 },
+  damageDealt: { type: Number, default: 0 },
+  damageTaken: { type: Number, default: 0 },
+};
+
+export const combatEntrySubdoc = {
+  player: { type: String, required: true },
+  kills: { type: Number, default: 0 },
+  deaths: { type: Number, default: 0 },
+  damageDealt: { type: Number, default: 0 },
+  damageTaken: { type: Number, default: 0 },
+  assists: { type: Number, default: 0 },
+  maxStreak: { type: Number, default: 0 },
+  firstBlood: { type: Boolean, default: false },
+  fights: { type: [fightSubdoc], default: [] },
 };
 
 export const gameBaseFields = {
@@ -94,6 +126,7 @@ export const gameBaseFields = {
   partiesInThisGame: { type: String, default: '' },
   reason: { type: String, default: '' },
   timeline: { type: [timelineEventSubdoc], default: [] },
+  combat: { type: [combatEntrySubdoc], default: [] },
 };
 
 function getTeamOfPlayer(this: any, playerId: string): string[] | null {

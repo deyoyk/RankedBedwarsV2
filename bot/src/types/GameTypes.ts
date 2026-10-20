@@ -41,6 +41,12 @@ export interface PlayerData {
   gold?: number;
   emeralds?: number;
   blocksPlaced?: number;
+  damageDealt?: number;
+  damageTaken?: number;
+  assists?: number;
+  maxStreak?: number;
+  firstBlood?: boolean;
+  fights?: Record<string, { kills?: number; damageDealt?: number }>;
 }
 
 export interface GameResult {

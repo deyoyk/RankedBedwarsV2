@@ -283,7 +283,8 @@ export class ApiManager {
     const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
       'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
       'bedBroken', 'mvps', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced',
-      'level', 'experience', 'playtimeSeconds', 'peakElo'];
+      'level', 'experience', 'playtimeSeconds', 'peakElo',
+      'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods'];
     if (!validModes.includes(mode)) {
       res.status(400).json({ error: 'Invalid mode parameter' });
       return null;

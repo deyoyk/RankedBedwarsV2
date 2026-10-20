@@ -163,6 +163,8 @@ export class GameManager {
       }
       await this.validateGameForScoring(context.game);
 
+      const combatEntries = this.buildCombatEntries(context);
+
       const claimedGame = await this.claimGameForSettling(context.game.gameId, (game) => {
         game.state = GameState.SCORED;
         game.mvps = context.mvpsIds;
@@ -171,6 +173,7 @@ export class GameManager {
         game.timeline = gameResult.timeline || [];
         game.winners = (context.winningTeam === 1 ? game.team1 : game.team2);
         game.losers = (context.winningTeam === 1 ? game.team2 : game.team1);
+        game.combat = combatEntries;
         game.endTime = new Date();
       });
       context.game = claimedGame;
@@ -1006,6 +1009,53 @@ export class GameManager {
     return claimed;
   }
 
+  private buildCombatEntries(context: GameScoreContext): any[] {
+    try {
+      const statsByIgn: Record<string, PlayerData> = {};
+      for (const [key, value] of Object.entries(context.playerData || {})) {
+        statsByIgn[String(key).toLowerCase()] = value as PlayerData;
+      }
+      const fightsOf = (ign: string): Record<string, { kills?: number; damageDealt?: number }> => {
+        const stats = statsByIgn[ign.toLowerCase()];
+        return (stats && stats.fights && typeof stats.fights === 'object') ? stats.fights : {};
+      };
+      return context.players.map((player) => {
+        const ign = context.idToIgn[player.discordId] || '';
+        const stats = statsByIgn[ign.toLowerCase()] || {};
+        const ownFights = fightsOf(ign);
+        const fights = Object.entries(ownFights).slice(0, 16).map(([opponent, row]) => {
+          const mirrorRows = fightsOf(opponent) as Record<string, any>;
+          const mirrorKey = Object.keys(mirrorRows).find((k) => k.toLowerCase() === ign.toLowerCase());
+          const mirrorRow = mirrorKey ? mirrorRows[mirrorKey] : null;
+          const rowDamage = (row as any).damageDealt ?? (row as any).damage ?? 0;
+          return {
+            opponent,
+            kills: row.kills || 0,
+            deaths: mirrorRow && typeof mirrorRow.kills === 'number' ? mirrorRow.kills : 0,
+            damageDealt: typeof rowDamage === 'number' && rowDamage >= 0 ? rowDamage : 0,
+            damageTaken: mirrorRow && typeof (mirrorRow.damageDealt ?? mirrorRow.damage) === 'number'
+              ? (mirrorRow.damageDealt ?? mirrorRow.damage) : 0,
+          };
+        });
+        const num = (v: any): number => (typeof v === 'number' && v >= 0 ? v : 0);
+        return {
+          player: player.discordId,
+          kills: num((stats as any).kills),
+          deaths: num((stats as any).deaths),
+          damageDealt: num((stats as any).damageDealt),
+          damageTaken: num((stats as any).damageTaken),
+          assists: num((stats as any).assists),
+          maxStreak: num((stats as any).maxStreak),
+          firstBlood: (stats as any).firstBlood === true,
+          fights,
+        };
+      });
+    } catch (error) {
+      console.error('[GameManager] Error building combat entries:', error);
+      return [];
+    }
+  }
+
   private async processAllPlayers(context: GameScoreContext): Promise<PlayerScoreData[]> {
     try {
       const playerScoreData: PlayerScoreData[] = [];
@@ -1117,7 +1167,7 @@ export class GameManager {
     isWinner: boolean,
     isMvp: boolean,
     isBedBreaker: boolean,
-    stats: PlayerData
+    stats: { kills?: number; finalKills?: number }
   ): number {
     try {
       let experience = 0;
@@ -1227,6 +1277,11 @@ export class GameManager {
       if (typeof stats.gold === 'number') player.gold = (player.gold || 0) + stats.gold;
       if (typeof stats.emeralds === 'number') player.emeralds = (player.emeralds || 0) + stats.emeralds;
       if (typeof stats.blocksPlaced === 'number') player.blocksPlaced = (player.blocksPlaced || 0) + stats.blocksPlaced;
+      if (typeof stats.damageDealt === 'number') player.damageDealt = (player.damageDealt || 0) + stats.damageDealt;
+      if (typeof stats.damageTaken === 'number') player.damageTaken = (player.damageTaken || 0) + stats.damageTaken;
+      if (typeof stats.assists === 'number') player.assists = (player.assists || 0) + stats.assists;
+      if (typeof stats.maxStreak === 'number') player.bestStreak = Math.max(player.bestStreak || 0, stats.maxStreak);
+      if (stats.firstBlood === true) player.firstBloods = (player.firstBloods || 0) + 1;
     } catch (error) {
       console.error('[GameManager] Error updating player game stats:', error);
     }
@@ -1257,7 +1312,13 @@ export class GameManager {
         irons: scoreData.stats.irons || 0,
         gold: scoreData.stats.gold || 0,
         emeralds: scoreData.stats.emeralds || 0,
-        blocksPlaced: scoreData.stats.blocksPlaced || 0
+        blocksPlaced: scoreData.stats.blocksPlaced || 0,
+        damageDealt: scoreData.stats.damageDealt || 0,
+        damageTaken: scoreData.stats.damageTaken || 0,
+        assists: scoreData.stats.assists || 0,
+        maxStreak: scoreData.stats.maxStreak || 0,
+        firstBlood: scoreData.stats.firstBlood === true,
+        fights: scoreData.stats.fights ? Object.keys(scoreData.stats.fights).length : 0
       } as any;
 
       if (!player.recentGames) player.recentGames = [];
@@ -1551,7 +1612,7 @@ export class GameManager {
   }
 
   private revertStatFields(player: any, gameStats: any): void {
-    const statFields = ['kills', 'deaths', 'finalKills', 'finalDeaths', 'bedBroken', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced'];
+    const statFields = ['kills', 'deaths', 'finalKills', 'finalDeaths', 'bedBroken', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'damageDealt', 'damageTaken', 'assists'];
     for (const field of statFields) {
       if (typeof gameStats[field] === 'number') {
         player[field] = Math.max(0, (player[field] || 0) - gameStats[field]);
@@ -1566,6 +1627,9 @@ export class GameManager {
     }
     if (gameStats.ismvp) {
       player.mvps = Math.max(0, (player.mvps || 0) - 1);
+    }
+    if (gameStats.firstBlood) {
+      player.firstBloods = Math.max(0, (player.firstBloods || 0) - 1);
     }
     player.games = Math.max(0, (player.games || 0) - 1);
   }

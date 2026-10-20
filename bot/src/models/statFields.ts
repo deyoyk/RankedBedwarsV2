@@ -22,6 +22,11 @@ export interface IUserStats {
   wlr: number;
   playtimeSeconds: number;
   peakElo: number;
+  damageDealt: number;
+  damageTaken: number;
+  assists: number;
+  bestStreak: number;
+  firstBloods: number;
 }
 
 export type UserStatKey = keyof IUserStats;
@@ -50,4 +55,9 @@ export const coreStatFields = {
   wlr: { type: Number, default: 0 },
   playtimeSeconds: { type: Number, default: 0 },
   peakElo: { type: Number, default: 0 },
+  damageDealt: { type: Number, default: 0 },
+  damageTaken: { type: Number, default: 0 },
+  assists: { type: Number, default: 0 },
+  bestStreak: { type: Number, default: 0 },
+  firstBloods: { type: Number, default: 0 },
 };
