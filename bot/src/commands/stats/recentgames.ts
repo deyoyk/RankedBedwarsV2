@@ -1,21 +1,13 @@
 import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
-import { betterEmbed, errorEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
+import { IRecentGame } from '../../models/gameBase';
 
 interface RecentGamesData {
   page: number;
   gamesPerPage: number;
   userFilter?: string;
   requesterId: string;
-}
-
-interface GameDisplayData {
-  gameId: number;
-  state: string;
-  eloGain: number;
-  map?: string;
-  date?: Date;
 }
 
 export async function recentgames(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
@@ -104,7 +96,7 @@ function createNoGamesEmbed(userFilter?: string): EmbedBuilder {
   return embed;
 }
 
-function createRecentGamesEmbed(user: IUser, games: any[], currentPage: number, totalPages: number, startIndex: number, endIndex: number): EmbedBuilder {
+function createRecentGamesEmbed(user: IUser, games: IRecentGame[], currentPage: number, totalPages: number, startIndex: number, endIndex: number): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setTitle(`Recent Games - ${user.ign || user.discordId}`)
     .setDescription(`Showing games ${startIndex + 1}-${endIndex} of ${user.recentGames.length}`)
@@ -125,7 +117,7 @@ function createRecentGamesEmbed(user: IUser, games: any[], currentPage: number, 
   return embed;
 }
 
-function formatGamesList(games: any[]): string {
+function formatGamesList(games: IRecentGame[]): string {
   return games.map(game => {
     const stateEmoji = getStateEmoji(game.state);
     const eloText = game.eloGain >= 0 ? `+${game.eloGain}` : `${game.eloGain}`;

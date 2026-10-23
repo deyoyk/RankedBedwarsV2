@@ -1,5 +1,5 @@
 import { safeReply } from '../../utils/safeReply';
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
+import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, ComponentType } from 'discord.js';
 import Game from '../../models/Game';
 import { betterEmbed } from '../../utils/betterembed';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
@@ -139,7 +139,7 @@ async function renderChart(keys: string[], counts: Record<string, Record<string,
         },
         plugins: [{
             id: 'customCanvasBackgroundColor',
-            beforeDraw: (chart: any) => {
+            beforeDraw: (chart: { ctx: CanvasRenderingContext2D; width: number; height: number }) => {
                 const ctx = chart.ctx;
                 ctx.save();
                 ctx.globalCompositeOperation = 'destination-over';
@@ -171,17 +171,21 @@ async function renderChart(keys: string[], counts: Record<string, Record<string,
   embed.builder.setImage(chartImage);
   embed.builder.setTimestamp();
 
-  let sentMsg;
+  let sentMsg: Message;
   if (interaction instanceof ChatInputCommandInteraction) {
-    sentMsg = await safeReply(interaction, { embeds: [embed.builder], files: [{ attachment: chartBuffer, name: 'games_count_chart.png' }], components, fetchReply: true });
+    sentMsg = await safeReply(interaction, { embeds: [embed.builder], files: [{ attachment: chartBuffer, name: 'games_count_chart.png' }], components, fetchReply: true }) as Message;
   } else {
-    sentMsg = await (interaction.channel as any).send({ embeds: [embed.builder], files: [{ attachment: chartBuffer, name: 'games_count_chart.png' }], components });
+    const channel = interaction.channel;
+    if (!channel || !('send' in channel) || typeof channel.send !== 'function') {
+      throw new Error('Cannot send games count chart: channel is not sendable.');
+    }
+    sentMsg = await channel.send({ embeds: [embed.builder], files: [{ attachment: chartBuffer, name: 'games_count_chart.png' }], components });
   }
 
   const collector = sentMsg.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 5 * 60 * 1000 });
-  collector.on('collect', async (i: any) => {
+  collector.on('collect', async (i) => {
     if (i.user.id !== (interaction instanceof ChatInputCommandInteraction ? interaction.user.id : (interaction as Message).author.id)) {
-      await safeReply(i, { content: 'You cannot interact with this menu.', ephemeral: true });
+      await i.reply({ content: 'You cannot interact with this menu.', ephemeral: true });
       return;
     }
     if (i.isStringSelectMenu && i.isStringSelectMenu() && i.customId === 'gamescount_duration') {

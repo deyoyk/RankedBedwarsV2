@@ -5,6 +5,9 @@ import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './
 import {
   PunishmentOperation,
   PunishmentManagerStats,
+  PunishmentNotificationType,
+  PunishmentRecord,
+  WebSocketNotifier,
   createPendingOperation,
   addPunishmentRole,
   sendPunishmentNotification,
@@ -14,8 +17,8 @@ import {
 } from './punishmentHelpers';
 
 export interface TimedPunishmentKind {
-  type: string;
-  undoType: string;
+  type: PunishmentNotificationType;
+  undoType: PunishmentNotificationType;
   pastTense: string;
   undoPastTense: string;
   activeWord: string;
@@ -40,10 +43,10 @@ export abstract class TimedPunishmentManager {
   };
 
   protected abstract kind(): TimedPunishmentKind;
-  protected discordApply(promises: Promise<any>[], guild: Guild, targetId: string, reason: string, moderatorId: string, duration: number | null): void {}
-  protected discordUndo(promises: Promise<any>[], guild: Guild, targetId: string, reason: string, moderatorId: string): void {}
+  protected discordApply(_promises: Promise<unknown>[], _guild: Guild, _targetId: string, _reason: string, _moderatorId: string, _duration: number | null): void {}
+  protected discordUndo(_promises: Promise<unknown>[], _guild: Guild, _targetId: string, _reason: string, _moderatorId: string): void {}
 
-  public async apply(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | undefined> {
+  public async apply(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<Date | undefined> {
     const kind = this.kind();
     const operation = createPendingOperation(targetId, moderatorId, reason);
     this.pendingOperations.set(operation.id, operation);
@@ -68,7 +71,7 @@ export abstract class TimedPunishmentManager {
 
       if (user[kind.statusField]) {
         console.warn(`[${kind.logName}] User ${targetId} is already ${kind.activeWord}, updating existing record`);
-        const records = user[kind.recordsField] as any[];
+        const records = user[kind.recordsField] as PunishmentRecord[];
         const lastRecord = records[records.length - 1];
         if (lastRecord) {
           lastRecord.reason = reason.trim();
@@ -91,16 +94,16 @@ export abstract class TimedPunishmentManager {
         moderator: moderatorId
       };
 
-      (user[kind.recordsField] as any[]).push(record);
+      (user[kind.recordsField] as PunishmentRecord[]).push(record);
       user[kind.statusField] = true;
       await user.save();
 
-      const promises: Promise<any>[] = [];
+      const promises: Promise<unknown>[] = [];
 
-      addPunishmentRole(promises, guild, targetId, (config.roles as any)[kind.roleKey], 'add', kind.type);
+      addPunishmentRole(promises, guild, targetId, config.roles[kind.roleKey], 'add', kind.type);
       this.discordApply(promises, guild, targetId, reason, moderatorId, duration);
 
-      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.type as any, expires });
+      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.type, expires });
       sendWebSocketNotification(promises, wsManager, user, {
         type: kind.type,
         reason,
@@ -117,14 +120,14 @@ export abstract class TimedPunishmentManager {
       console.log(`[${kind.logName}] Successfully ${kind.pastTense} ${user.ign || targetId} (${recordId}) for ${durationStr || 'permanent'}: ${reason}`);
       return expires;
 
-    } catch (error: any) {
+    } catch (error) {
       handleOperationError(error, operation, this.stats, kind.type, targetId);
     } finally {
       cleanupOperation(this.pendingOperations, operation.id);
     }
   }
 
-  public async undo(guild: Guild, targetId: string, moderatorId: string, reason: string, wsManager?: any): Promise<void> {
+  public async undo(guild: Guild, targetId: string, moderatorId: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<void> {
     const kind = this.kind();
     const operation = createPendingOperation(targetId, moderatorId, reason);
     this.pendingOperations.set(operation.id, operation);
@@ -147,12 +150,12 @@ export abstract class TimedPunishmentManager {
       user[kind.statusField] = false;
       await user.save();
 
-      const promises: Promise<any>[] = [];
+      const promises: Promise<unknown>[] = [];
 
-      addPunishmentRole(promises, guild, targetId, (config.roles as any)[kind.roleKey], 'remove', kind.type);
+      addPunishmentRole(promises, guild, targetId, config.roles[kind.roleKey], 'remove', kind.type);
       this.discordUndo(promises, guild, targetId, reason, moderatorId);
 
-      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.undoType as any });
+      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.undoType });
       sendWebSocketNotification(promises, wsManager, user, {
         type: kind.undoType,
         reason,
@@ -166,7 +169,7 @@ export abstract class TimedPunishmentManager {
 
       console.log(`[${kind.logName}] Successfully ${kind.undoPastTense} ${user.ign || targetId}: ${reason}`);
 
-    } catch (error: any) {
+    } catch (error) {
       handleOperationError(error, operation, this.stats, kind.undoType, targetId);
     } finally {
       cleanupOperation(this.pendingOperations, operation.id);

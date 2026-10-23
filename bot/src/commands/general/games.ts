@@ -1,10 +1,10 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { betterEmbed } from '../../utils/betterembed';
-import Game from '../../models/Game';
+import Game, { IGame } from '../../models/Game';
 import { paginate } from '../../utils/paginate';
 
-export async function games(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
-  await paginate(interaction, {
+export async function games(interaction: Message | ChatInputCommandInteraction, _args?: string[]) {
+  await paginate<IGame>(interaction, {
     commandName: 'games',
     title: 'Game History',
     emptyMessage: 'There are no games in the database.',
@@ -24,7 +24,7 @@ export async function games(interaction: Message | ChatInputCommandInteraction, 
           );
 
           const gamesList = games.map(game => {
-            let statusText = '';
+            let statusText: string;
             switch (game.state) {
               case 'scored': statusText = '``scored``'; break;
               case 'voided': statusText = '``voided``'; break;

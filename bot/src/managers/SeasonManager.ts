@@ -32,6 +32,18 @@ export interface SeasonEndResult {
   };
 }
 
+export interface SeasonLevelInfo {
+  level: number;
+  experience: number;
+  experienceForCurrentLevel: number;
+  experienceForNextLevel: number;
+  experienceNeededForNext: number;
+  totalExperienceForLevel: number;
+  progressPercentage: string;
+}
+
+export type SeasonStatsWithLevel = ISeasonStats & { levelInfo?: SeasonLevelInfo };
+
 export class SeasonManager {
 
   private static readonly MIGRATION_BATCH_SIZE = 100;
@@ -225,7 +237,9 @@ export class SeasonManager {
         const games = await Game.find({}).session(session);
 
         await SeasonManager.runInBatches(games.map(game => {
-          const { _id, __v, ...gameData } = game.toObject();
+          const gameData: Record<string, unknown> = { ...game.toObject() };
+          delete gameData._id;
+          delete gameData.__v;
           return () => new SeasonGames({
             ...gameData,
             seasonNumber,
@@ -293,13 +307,7 @@ export class SeasonManager {
 
 
   public static async getCurrentSeason(): Promise<ISeason | null> {
-    try {
-      const season = await Season.findOne({ isActive: true });
-      return season;
-    } catch (error) {
-
-      throw error;
-    }
+    return Season.findOne({ isActive: true });
   }
 
 
@@ -322,43 +330,38 @@ export class SeasonManager {
     seasonNumber: number,
     chapterNumber: number
   ): Promise<ISeasonStats | null> {
-    try {
+    validatePositiveInt(seasonNumber, 'Season number');
+    validatePositiveInt(chapterNumber, 'Chapter number');
 
-      validatePositiveInt(seasonNumber, 'Season number');
-      validatePositiveInt(chapterNumber, 'Chapter number');
-
-      if (!discordId || typeof discordId !== 'string') {
-        throw new Error('Discord ID is required and must be a string');
-      }
-
-      const seasonStats = await SeasonStats.findOne({
-        discordId,
-        seasonNumber,
-        chapterNumber
-      });
-
-      if (!seasonStats) {
-        return null;
-      }
-
-      const levelInfo = getLevelInfo(seasonStats.experience || 0);
-      (seasonStats as any).levelInfo = {
-        level: levelInfo.level,
-        experience: levelInfo.experience,
-        experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
-        experienceForNextLevel: levelInfo.experienceForNextLevel,
-        experienceNeededForNext: levelInfo.experienceNeededForNext,
-        totalExperienceForLevel: levelInfo.totalExperienceForLevel,
-        progressPercentage: (
-          (levelInfo.experience - levelInfo.experienceForCurrentLevel) /
-          levelInfo.totalExperienceForLevel * 100
-        ).toFixed(2)
-      };
-
-      return seasonStats;
-    } catch (error) {
-      throw error;
+    if (!discordId || typeof discordId !== 'string') {
+      throw new Error('Discord ID is required and must be a string');
     }
+
+    const seasonStats = await SeasonStats.findOne({
+      discordId,
+      seasonNumber,
+      chapterNumber
+    });
+
+    if (!seasonStats) {
+      return null;
+    }
+
+    const levelInfo = getLevelInfo(seasonStats.experience || 0);
+    (seasonStats as SeasonStatsWithLevel).levelInfo = {
+      level: levelInfo.level,
+      experience: levelInfo.experience,
+      experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
+      experienceForNextLevel: levelInfo.experienceForNextLevel,
+      experienceNeededForNext: levelInfo.experienceNeededForNext,
+      totalExperienceForLevel: levelInfo.totalExperienceForLevel,
+      progressPercentage: (
+        (levelInfo.experience - levelInfo.experienceForCurrentLevel) /
+        levelInfo.totalExperienceForLevel * 100
+      ).toFixed(2)
+    };
+
+    return seasonStats;
   }
 
 
@@ -412,7 +415,7 @@ export class SeasonManager {
       sortObj[mode] = -1;
 
       const seasonStats = await SeasonStats.find({ seasonNumber, chapterNumber })
-        .sort(sortObj as any)
+        .sort(sortObj)
         .skip(skip)
         .limit(validLimit)
         .select(`ign ${mode}`);

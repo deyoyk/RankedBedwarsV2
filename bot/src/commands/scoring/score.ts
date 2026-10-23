@@ -3,7 +3,6 @@ import { GameManager } from '../../Matchmaking/GameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
 import User from '../../models/User';
-import { GameResult } from '../../types/GameTypes';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 

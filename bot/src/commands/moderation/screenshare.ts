@@ -89,10 +89,6 @@ export async function screenshare(interaction: ChatInputCommandInteraction) {
 
       if (screensharerRoleId) {
         await thread.setLocked(false);
-        try {
-          await (thread as any).setInvitable?.(false);
-        } catch (_) {
-        }
       }
 
       await thread.send({ 

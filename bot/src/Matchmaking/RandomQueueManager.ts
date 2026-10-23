@@ -1,13 +1,24 @@
 import { Client, TextChannel } from 'discord.js';
 import User from '../models/User';
-import Party from '../models/Party';
 import { TeamBalanceResult, QueueProcessingResult } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
 import { GameManager } from './GameManager';
 import config from '../config/config';
 import { WorkersManager } from '../managers/WorkersManager';
-import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil, getPlayerIGNs as getPlayerIGNsUtil } from './utils';
+import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil } from './utils';
+
+interface QueueLike {
+  id?: unknown;
+  channelId: string;
+  maxPlayers: number;
+  minElo: number;
+  maxElo: number;
+  isRanked?: boolean;
+  ispicking?: boolean;
+  queueType?: string;
+  bypassRoles: string[];
+}
 
 export class RandomQueueManager {
   private client: Client;
@@ -28,7 +39,7 @@ export class RandomQueueManager {
 
   public async processQueue(
     players: string[],
-    queueData: any,
+    queueData: QueueLike,
     maxGames: number = 10
   ): Promise<QueueProcessingResult> {
     try {
@@ -155,7 +166,7 @@ export class RandomQueueManager {
     }
   }
 
-  private async selectBalancedTeams(players: string[], queueData: any): Promise<TeamBalanceResult> {
+  private async selectBalancedTeams(players: string[], queueData: QueueLike): Promise<TeamBalanceResult> {
     try {
       if (players.length < queueData.maxPlayers) {
         throw new Error('Not enough players for team selection');
@@ -262,7 +273,7 @@ export class RandomQueueManager {
     return calculateTeamAverageElo(playerIds);
   }
 
-  private async selectRandomMap(queueData: any): Promise<string> {
+  private async selectRandomMap(queueData: QueueLike): Promise<string> {
     return selectRandomMapUtil(this.mapService, queueData);
   }
 
@@ -275,9 +286,9 @@ export class RandomQueueManager {
     team2: string[],
     team1Avg: number,
     team2Avg: number,
-    status: string = 'Ongoing',
+    _status: string = 'Ongoing',
     gameId: number,
-  ): Promise<any> {
+  ): Promise<import('discord.js').EmbedBuilder> {
     const team1Value = [
       ` **Average Elo:** ${team1Avg}`,
       ` **Players:**`,

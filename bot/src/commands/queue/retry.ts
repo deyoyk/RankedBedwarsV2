@@ -8,15 +8,14 @@ import { safeReply } from '../../utils/safeReply';
 const retryCounts: Record<number, number> = {};
 
 export async function retry(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  let gameId: number;
   const Game = (await import('../../models/Game')).default;
-  const channelId = (interaction as any).channelId;
+  const channelId = interaction.channelId;
   const game = await Game.findOne({ 'channels.text': channelId });
   if (!game) {
     await safeReply(interaction, errorEmbed('No game associated with this channel.', 'Error'));
     return;
   }
-  gameId = game.gameId;
+  const gameId = game.gameId;
   if (game.state !== 'pending') {
     await safeReply(interaction, errorEmbed(`Game \`${gameId}\` is ${game.state} and can no longer be retried.`, 'Error'));
     return;
@@ -42,7 +41,7 @@ export async function retry(interaction: Message | ChatInputCommandInteraction, 
       team2: { players: team2 }
     });
     await safeReply(interaction, successEmbed(`Retrying game \`${gameId}\``, 'Retry Initiated'));
-  } catch (error) {
+  } catch {
     await safeReply(interaction, errorEmbed('An error occurred while retrying the game.', 'Error'));
   }
 }

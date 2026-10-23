@@ -7,13 +7,76 @@ const activeScreenshareThreads: {
   }
 } = {};
 
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
+import { PlayerData, GameResult } from '../types/GameTypes';
 import * as http from 'http';
 import express from 'express';
-import config from '../config/config';
 import { escapeRegex } from '../utils/regexEscape';
+import { Client, Collection, GuildMember } from 'discord.js';
+
+type MapEntry = MapsJsonPayload['reserved'][number];
+
+type StoredMap = Partial<MapInfo> & { name: string; maxplayers?: number; max_players?: number };
+
+interface WarpTeam {
+  players: string[];
+}
+
+interface RawPlayerStats {
+  kills?: number;
+  deaths?: number;
+  finalkills?: number;
+  finaldeaths?: number;
+  diamonds?: number;
+  irons?: number;
+  gold?: number;
+  emeralds?: number;
+  blocksplaced?: number;
+  damagedealt?: number;
+  damagetaken?: number;
+  assists?: number;
+  maxstreak?: number;
+  firstblood?: boolean;
+  fights?: unknown;
+}
+
+interface BuiltPlayerData extends PlayerData {
+  finalDeaths?: number;
+}
+
+interface QueueStatusEntry {
+  minElo: number;
+  maxElo: number;
+  currentPlayers: number;
+  maxPlayers: number;
+  isRanked: boolean;
+  isPicking: boolean;
+  players: string[];
+}
+
+interface FightRowRaw {
+  kills?: unknown;
+  damageDealt?: unknown;
+  damage?: unknown;
+}
+
+interface TimelineEvent {
+  type: string;
+  timestamp: number;
+  [key: string]: unknown;
+}
+
+interface AuthIncomingPayload {
+  type: 'auth';
+  auth_key: string;
+}
+
+interface GameManagerLike {
+  scoreGame(gameResult: GameResult): Promise<unknown>;
+  voidGame(gameId: number, reason: string): Promise<unknown>;
+}
  
 
 
@@ -22,8 +85,8 @@ interface WarpPlayersPayload {
   game_id: string;
   map: string;
   is_ranked: boolean;
-  team1: any;
-  team2: any;
+  team1: WarpTeam;
+  team2: WarpTeam;
 }
 
 interface VerificationPayload {
@@ -44,7 +107,8 @@ interface ScoringPayload {
   winningteamignlist?: string[];
   mvps: string[];
   bedsbroken: string[];
-  players: Record<string, any>;
+  players: Record<string, RawPlayerStats>;
+  timeline?: unknown;
 }
 
 interface PingPayload {
@@ -77,7 +141,7 @@ interface QueueFromInGamePayload {
 
 interface QueueStatusPayload {
   type: 'queuestatus';
-  queues: Record<string, any>;
+  queues: Record<string, QueueStatusEntry>;
   timestamp: number;
 }
 
@@ -192,9 +256,9 @@ interface GameStartPayload {
 
 interface MapsInfoPayload {
   type: 'maps_info';
-  reserved: any[];
-  locked: any[];
-  disabled: any[];
+  reserved: MapEntry[];
+  locked: MapEntry[];
+  disabled: MapEntry[];
 }
 
 interface PlayerStatusPayload {
@@ -247,11 +311,11 @@ type IncomingPayload =
   | PlayerStatusPayload
   | PermissionPayload
   | VoidingPayload
-  | any;
+  | AuthIncomingPayload;
 
 export class WebSocketManager {
   
-  private async handleAutoSS(msg: any) {
+  private async handleAutoSS(msg: AutoSSPayload) {
     const { targetign, requestign, uuid } = msg;
     if (!targetign || !requestign || !uuid) {
       this.send({ type: 'autoss_fail', uuid });
@@ -267,7 +331,7 @@ export class WebSocketManager {
         return;
       }
 
-      const guild = this.discordClient.guilds.cache.first();
+      const guild = this.discordClient?.guilds.cache.first();
       if (!guild) {
         this.send({ type: 'autoss_fail', uuid });
         return;
@@ -294,17 +358,17 @@ export class WebSocketManager {
   }
   private wss: WebSocketServer;
   private client: WebSocket | null = null;
-  private allMaps: MapInfo[] = [];
-  private reservedMaps: MapInfo[] = [];
-  private lockedMaps: MapInfo[] = [];
-  private disabledMaps: MapInfo[] = [];
+  private allMaps: StoredMap[] = [];
+  private reservedMaps: StoredMap[] = [];
+  private lockedMaps: StoredMap[] = [];
+  private disabledMaps: StoredMap[] = [];
   
   
   
   private checkPlayerCallbacks: Map<string, Set<(online: boolean, original_ign_case?: string) => void>> = new Map();
-  private listeners: { [type: string]: Set<(msg: any) => void> } = {};
-  private globalHandlers: { [type: string]: ((msg: any) => void) | undefined } = {};
-  private gameManager: any = null;
+  private listeners: { [type: string]: Set<(msg: IncomingPayload) => void> } = {};
+  private globalHandlers: { [type: string]: ((msg: IncomingPayload) => void) | undefined } = {};
+  private gameManager: GameManagerLike | null = null;
   private queueStatusInterval: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
@@ -338,12 +402,12 @@ export class WebSocketManager {
   public server: http.Server;
   public app: express.Application;
 
-  public setGlobalHandler(type: string, handler: (msg: any) => void) {
+  public setGlobalHandler(type: string, handler: (msg: IncomingPayload) => void) {
     this.globalHandlers[type] = handler;
   }
-  private discordClient: any; 
+  private discordClient: Client | undefined;
 
-  constructor(port: number, discordClient?: any, path?: string) {
+  constructor(port: number, discordClient?: Client, path?: string) {
     this.app = express();
     this.server = http.createServer(this.app);
     
@@ -356,7 +420,7 @@ export class WebSocketManager {
     
     global._wsManager = this;
     
-    this.wss.on('connection', (ws, req) => {
+    this.wss.on('connection', (ws, _req) => {
       console.log('[WebSocketManager] New WebSocket connection established');
       
       let isAuthenticated = false;
@@ -365,16 +429,16 @@ export class WebSocketManager {
         console.error('[WebSocketManager] WebSocket connection error:', error.message || error);
         try {
           ws.close();
-        } catch (closeError) {
+        } catch {
         }
       });
-      
+
       ws.on('message', (data) => {
         if (!isAuthenticated) {
           let msg;
           try {
             msg = JSON.parse(data.toString());
-          } catch (e) {
+          } catch {
             console.error('[WebSocketManager] Invalid JSON in auth message:', data.toString());
             ws.send(JSON.stringify({ type: 'auth_failure', message: 'Invalid JSON format' }));
             ws.close();
@@ -388,8 +452,8 @@ export class WebSocketManager {
               try {
                 this.client.removeAllListeners('close');
                 this.client.close();
-              } catch (oldClientError: any) {
-                console.warn('[WebSocketManager] Failed to close previous client:', oldClientError.message || oldClientError);
+              } catch (oldClientError) {
+                console.warn('[WebSocketManager] Failed to close previous client:', oldClientError instanceof Error ? oldClientError.message : oldClientError);
               }
             }
             this.client = ws; 
@@ -438,7 +502,7 @@ export class WebSocketManager {
         try {
           client.removeAllListeners('close');
           client.close();
-        } catch (closeError) {
+        } catch {
         }
         this.stopQueueStatusBroadcast();
       }
@@ -446,8 +510,8 @@ export class WebSocketManager {
   }
   
   private startServer(port: number, path?: string): void {
-    this.server.on('error', (e: any) => {
-      if (e.code === 'EADDRINUSE') {
+    this.server.on('error', (e: Error) => {
+      if ('code' in e && (e as NodeJS.ErrnoException).code === 'EADDRINUSE') {
         console.error(`[WebSocketManager] Port ${port} is already in use. Cannot start WebSocket server.`);
       } else {
         console.error('[WebSocketManager] Server error:', e);
@@ -463,13 +527,13 @@ export class WebSocketManager {
     let msg: IncomingPayload;
     try {
       msg = JSON.parse(data);
-    } catch (e) {
+    } catch {
       console.error('[WebSocketManager] Invalid JSON:', data);
       return;
     }
     
     if (msg.type === 'auth') {
-      const authMsg = msg as { type: 'auth'; auth_key: string };
+      const authMsg = msg;
       if (process.env.AUTH_KEY && authMsg.auth_key === process.env.AUTH_KEY) {
         this.send({ type: 'auth_success', message: 'Authentication successful' });
         console.log('[WebSocketManager] Authentication successful');
@@ -510,16 +574,16 @@ export class WebSocketManager {
         this.send({ type: 'pong', ping_id: msg.ping_id, timestamp: Date.now() });
         break;
       case 'callcmd':
-        this.handleCallCommand(msg as CallCommandPayload);
+        this.handleCallCommand(msg);
         break;
       case 'queuefromingame':
-        this.handleQueueFromInGame(msg as QueueFromInGamePayload);
+        this.handleQueueFromInGame(msg);
         break;
       case 'game_start':
         this.handleGameStart(msg);
         break;
       case 'maps_info':
-        this.handleMapsInfo(msg as MapsJsonPayload);
+        this.handleMapsInfo(msg);
         break;
       case 'player_status':
         this.handlePlayerStatus(msg);
@@ -543,7 +607,7 @@ export class WebSocketManager {
     }
   }
 
-  private async handlePlayerStatusUpdate(msg: any) {
+  private async handlePlayerStatusUpdate(msg: PlayerStatusUpdatePayload) {
     if (typeof msg.online === 'boolean') {
       PresenceService.ingest(msg.ign, msg.online);
     }
@@ -551,7 +615,7 @@ export class WebSocketManager {
     const threadInfo = ignKey ? activeScreenshareThreads[ignKey] : undefined;
     if (threadInfo && Date.now() < threadInfo.expiresAt) {
       try {
-        const guild = this.discordClient.guilds.cache.first();
+        const guild = this.discordClient?.guilds.cache.first();
         if (guild) {
           const thread = await guild.channels.fetch(threadInfo.threadId);
           if (thread && thread.isTextBased()) {
@@ -567,39 +631,39 @@ export class WebSocketManager {
     }
   }
 
-  private handleDontLogCallback(msg: any, success: boolean) {
+  private handleDontLogCallback(msg: ScreenShareDontLogSuccessPayload | ScreenShareDontLogFailurePayload, success: boolean) {
     if (msg.uuid && this.dontLogCallbacks.has(msg.uuid)) {
       this.dontLogCallbacks.get(msg.uuid)!({ online: success, dontlog: success });
       this.dontLogCallbacks.delete(msg.uuid);
     }
   }
 
-  private handleGameStart(msg: any) {
+  private handleGameStart(msg: GameStartPayload) {
     (async () => {
       try {
         const gameIdRaw = msg.game_id || msg.gameid;
         const gameId = gameIdRaw;
 
         const Game = (await import('../models/Game')).default;
-        const game = await Game.findOne({ gameId: parseInt(gameId) });
+        const game = await Game.findOne({ gameId: parseInt(String(gameId)) });
         if (!game) return;
-        const guild = this.discordClient.guilds.cache.first();
+        const guild = this.discordClient?.guilds.cache.first();
         if (!guild) return;
 
         let channel;
         try {
           channel = await guild.channels.fetch(game.channels.text);
-        } catch (err: any) {
-          if (err.code === 10003) {
+        } catch (err) {
+          if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === 10003) {
             console.warn(`[WebSocketManager] Channel ${game.channels.text} not found (may have been deleted).`);
             return;
           } else {
             throw err;
           }
         }
-        if (!channel) return;
+        if (!channel || !channel.isTextBased()) return;
 
-        const { successEmbed } = require('../utils/betterembed');
+        const { successEmbed } = await import('../utils/betterembed');
         const embed = successEmbed(
           `Game started in arena: \`${msg.arena || 'Unknown'}\`\nStart time: <t:${Math.floor((msg.timestamp || Date.now())/1000)}:F>`,
           'Game Started!'
@@ -616,33 +680,33 @@ export class WebSocketManager {
     const reservedMapsArr = Array.isArray(payload.reserved) ? payload.reserved : [];
     const lockedMapsArr = Array.isArray(payload.locked) ? payload.locked : [];
     const disabledMapsArr = Array.isArray(payload.disabled) ? payload.disabled : [];
-    const allMapsMap = new Map<string, any>();
+    const allMapsMap = new Map<string, StoredMap>();
     for (const m of [...reservedMapsArr, ...lockedMapsArr, ...disabledMapsArr]) {
       allMapsMap.set(m.name, {
         ...m,
-        maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-        max_players: (m as any).max_players ?? (m as any).maxplayers
+        maxplayers: m.maxplayers ?? m.max_players,
+        max_players: m.max_players ?? m.maxplayers
       });
     }
     this.allMaps = Array.from(allMapsMap.values());
-    this.reservedMaps = reservedMapsArr.map((m: any) => ({
+    this.reservedMaps = reservedMapsArr.map((m: MapEntry) => ({
       ...m,
-      maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-      max_players: (m as any).max_players ?? (m as any).maxplayers
+      maxplayers: m.maxplayers ?? m.max_players,
+      max_players: m.max_players ?? m.maxplayers
     }));
-    this.lockedMaps = lockedMapsArr.map((m: any) => ({
+    this.lockedMaps = lockedMapsArr.map((m: MapEntry) => ({
       ...m,
-      maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-      max_players: (m as any).max_players ?? (m as any).maxplayers
+      maxplayers: m.maxplayers ?? m.max_players,
+      max_players: m.max_players ?? m.maxplayers
     }));
-    this.disabledMaps = disabledMapsArr.map((m: any) => ({
+    this.disabledMaps = disabledMapsArr.map((m: MapEntry) => ({
       ...m,
-      maxplayers: (m as any).maxplayers ?? (m as any).max_players,
-      max_players: (m as any).max_players ?? (m as any).maxplayers
+      maxplayers: m.maxplayers ?? m.max_players,
+      max_players: m.max_players ?? m.maxplayers
     }));
   }
 
-  private handlePlayerStatus(msg: any) {
+  private handlePlayerStatus(msg: PlayerStatusPayload) {
     const ign = typeof msg.ign === 'string' ? msg.ign.toLowerCase() : '';
     const callbacks = this.checkPlayerCallbacks.get(ign);
     if (callbacks && callbacks.size > 0) {
@@ -653,9 +717,9 @@ export class WebSocketManager {
     }
   }
 
-  private handlePermission(msg: any) {
+  private handlePermission(msg: PermissionPayload) {
     console.log('[WebSocketManager] Received permission settings');
-    const permissionsUpdate = { ...msg };
+    const permissionsUpdate: Record<string, string[] | string> = { ...msg };
     delete permissionsUpdate.type;
     for (const [cmd, roles] of Object.entries(permissionsUpdate)) {
       if (Array.isArray(roles)) {
@@ -664,7 +728,7 @@ export class WebSocketManager {
     }
   }
 
-  private determineWinningTeam(msg: any): number | undefined {
+  private determineWinningTeam(msg: ScoringPayload): number | undefined {
     if (msg.winningTeamNumber != null && msg.winningTeamNumber !== 0) return msg.winningTeamNumber;
     if (msg.winningteamignlist && Array.isArray(msg.winningteamignlist)) {
       console.log(`[WebSocketManager] Winning team determined from IGNs: ${msg.winningteamignlist.join(', ')}`);
@@ -674,12 +738,11 @@ export class WebSocketManager {
     return undefined;
   }
 
-  private calculateMvpsFromStats(players: any, msgMvps?: string[]): string[] {
+  private calculateMvpsFromStats(players: Record<string, RawPlayerStats> | undefined, msgMvps?: string[]): string[] {
     if (msgMvps && msgMvps.length > 0) return msgMvps;
     let maxKills = -1;
     let mvps: string[] = [];
-    for (const [ign, statsRaw] of Object.entries(players || {})) {
-      const stats = statsRaw as any;
+    for (const [ign, stats] of Object.entries(players || {})) {
       const kills = stats.kills ?? 0;
       if (kills > maxKills) {
         maxKills = kills;
@@ -691,10 +754,9 @@ export class WebSocketManager {
     return mvps;
   }
 
-  private buildPlayerData(players: any, bedbreaks: string[]): Record<string, any> {
-    const playerData: Record<string, any> = {};
-    for (const [ign, statsRaw] of Object.entries(players || {})) {
-      const stats = statsRaw as any;
+  private buildPlayerData(players: Record<string, RawPlayerStats> | undefined, bedbreaks: string[]): Record<string, BuiltPlayerData> {
+    const playerData: Record<string, BuiltPlayerData> = {};
+    for (const [ign, stats] of Object.entries(players || {})) {
       playerData[ign] = {
         kills: stats.kills ?? 0,
         deaths: stats.deaths ?? 0,
@@ -717,17 +779,17 @@ export class WebSocketManager {
     return playerData;
   }
 
-  private buildFights(fightsRaw: any): Record<string, { kills: number; damageDealt: number }> {
+  private buildFights(fightsRaw: unknown): Record<string, { kills: number; damageDealt: number }> {
     const fights: Record<string, { kills: number; damageDealt: number }> = {};
     if (!fightsRaw || typeof fightsRaw !== 'object') return fights;
     let count = 0;
     for (const [opponent, rowRaw] of Object.entries(fightsRaw)) {
       if (typeof opponent !== 'string' || !opponent || opponent.length > 32) continue;
       if (opponent === '__proto__' || opponent === 'constructor' || opponent === 'prototype') continue;
-      const row = rowRaw as any;
-      const kills = typeof row?.kills === 'number' && row.kills >= 0 ? Math.floor(row.kills) : 0;
-      const damageDealt = typeof row?.damageDealt === 'number' && row.damageDealt >= 0 ? row.damageDealt
-        : typeof row?.damage === 'number' && row.damage >= 0 ? row.damage : 0;
+      const row: FightRowRaw = typeof rowRaw === 'object' && rowRaw !== null ? rowRaw as FightRowRaw : {};
+      const kills = typeof row.kills === 'number' && row.kills >= 0 ? Math.floor(row.kills) : 0;
+      const damageDealt = typeof row.damageDealt === 'number' && row.damageDealt >= 0 ? row.damageDealt
+        : typeof row.damage === 'number' && row.damage >= 0 ? row.damage : 0;
       if (kills === 0 && damageDealt === 0) continue;
       fights[opponent] = { kills, damageDealt };
       if (++count >= 16) break;
@@ -735,7 +797,7 @@ export class WebSocketManager {
     return fights;
   }
 
-  private handleScoring(msg: any) {
+  private handleScoring(msg: ScoringPayload) {
     console.log(`[WebSocketManager] Received scoring message for game ${msg.gameid}`);
     
     if (!this.gameManager) {
@@ -754,9 +816,9 @@ export class WebSocketManager {
     const mvps = this.calculateMvpsFromStats(players, msgMvps);
     const bedbreaks: string[] = Array.isArray(msgBedsbroken) ? msgBedsbroken : [];
     const playerData = this.buildPlayerData(players, bedbreaks);
-    const rawTimeline: any[] = Array.isArray(msg.timeline) ? msg.timeline : [];
-    const timeline = rawTimeline
-      .filter((e: any) => e && typeof e === 'object' && typeof e.type === 'string' && typeof e.timestamp === 'number')
+    const rawTimeline: unknown = msg.timeline;
+    const timeline: TimelineEvent[] = (Array.isArray(rawTimeline) ? rawTimeline : [])
+      .filter((e: unknown): e is TimelineEvent => typeof e === 'object' && e !== null && typeof (e as { type?: unknown }).type === 'string' && typeof (e as { timestamp?: unknown }).timestamp === 'number')
       .slice(0, 5000);
 
     (async () => {
@@ -778,7 +840,7 @@ export class WebSocketManager {
     })();
   }
 
-  private handleVoiding(msg: any) {
+  private handleVoiding(msg: VoidingPayload) {
     if (!this.gameManager) {
       console.error('[WebSocketManager] GameManager not available for voiding');
       return;
@@ -786,7 +848,7 @@ export class WebSocketManager {
     const { gameid, reason } = msg;
     (async () => {
       try {
-        await this.gameManager!.voidGame(parseInt(gameid), reason || 'Voided via WebSocket');
+        await this.gameManager!.voidGame(parseInt(String(gameid)), reason || 'Voided via WebSocket');
         console.log(`[WebSocketManager] Successfully voided game ${gameid} via GameManager`);
       } catch (error) {
         console.error(`[WebSocketManager] Error voiding game ${gameid} via GameManager:`, error);
@@ -795,19 +857,19 @@ export class WebSocketManager {
   }
 
   public getAllMaps(): MapInfo[] {
-    return this.allMaps;
+    return this.allMaps as MapInfo[];
   }
 
   public getReservedMaps(): MapInfo[] {
-    return this.reservedMaps;
+    return this.reservedMaps as MapInfo[];
   }
 
   public getLockedMaps(): MapInfo[] {
-    return this.lockedMaps;
+    return this.lockedMaps as MapInfo[];
   }
 
   public getDisabledMaps(): MapInfo[] {
-    return this.disabledMaps;
+    return this.disabledMaps as MapInfo[];
   }
 
   
@@ -817,8 +879,8 @@ export class WebSocketManager {
     if (this.client && this.client.readyState === this.client.OPEN) {
       try {
         this.client.send(JSON.stringify(payload));
-      } catch (error: any) {
-        console.error('[WebSocketManager] Failed to send message:', error.message || error);
+      } catch (error) {
+        console.error('[WebSocketManager] Failed to send message:', error instanceof Error ? error.message : error);
       }
     }
   }
@@ -862,17 +924,17 @@ export class WebSocketManager {
     if (!client || client.readyState !== client.OPEN) return null;
     return new Promise((resolve) => {
       const localTimestamp = Date.now();
-      const parseData = (data: any): any => {
+      const parseData = (data: RawData): IncomingPayload | null => {
         try {
-          if (typeof data === 'string') return JSON.parse(data);
-          if (Buffer.isBuffer(data)) return JSON.parse(data.toString('utf8'));
-          if (data instanceof ArrayBuffer) return JSON.parse(Buffer.from(data).toString('utf8'));
-          return data;
+          if (typeof data === 'string') return JSON.parse(data) as IncomingPayload;
+          if (Buffer.isBuffer(data)) return JSON.parse(data.toString('utf8')) as IncomingPayload;
+          if (data instanceof ArrayBuffer) return JSON.parse(Buffer.from(data).toString('utf8')) as IncomingPayload;
+          return null;
         } catch {
           return null;
         }
       };
-      const pongHandler = (data: any) => {
+      const pongHandler = (data: RawData) => {
         const msg = parseData(data);
         if (msg && msg.type === 'pong') {
           client.off('message', pongHandler);
@@ -931,7 +993,7 @@ export class WebSocketManager {
       }
 
       
-      const guild = this.discordClient.guilds.cache.first();
+      const guild = this.discordClient?.guilds.cache.first();
       if (!guild) {
         console.error('[WebSocketManager] Guild not found');
         this.send({
@@ -1009,10 +1071,10 @@ export class WebSocketManager {
         
         
         try {
-          const { successEmbed } = require('../utils/betterembed');
+          const { successEmbed } = await import('../utils/betterembed');
           const gameChannel = await guild.channels.fetch(game.channels.text);
           
-          if (gameChannel) {
+          if (gameChannel && gameChannel.isTextBased()) {
             const embedObj = successEmbed(
               `${target} has been granted access to join and speak in ${voiceChannel.name}.`,
               'Call Access Granted'
@@ -1080,7 +1142,7 @@ export class WebSocketManager {
       }
 
       
-      const guild = this.discordClient.guilds.cache.first();
+      const guild = this.discordClient?.guilds.cache.first();
       if (!guild) {
         console.error('[WebSocketManager] Guild not found');
         this.send({
@@ -1249,15 +1311,14 @@ export class WebSocketManager {
       
       const Queue = (await import('../models/Queue')).default;
       const User = (await import('../models/User')).default;
-      const { queuePlayers } = await import('../types/queuePlayersMemory');
 
       
       const queues = await Queue.find().sort({ channelId: 1 });
       
-      const queueStatus: Record<string, any> = {};
+      const queueStatus: Record<string, QueueStatusEntry> = {};
 
       const allMemberIds = new Set<string>();
-      const channelMemberMap = new Map<string, { channelId: string; members: Map<string, any> }>();
+      const channelMemberMap = new Map<string, { channelId: string; members: Collection<string, GuildMember> }>();
 
       
       if (this.discordClient) {
@@ -1272,7 +1333,7 @@ export class WebSocketManager {
                   allMemberIds.add(memberId);
                 }
               }
-            } catch (err: any) {
+            } catch {
             }
           }
         }
@@ -1339,7 +1400,7 @@ export class WebSocketManager {
     }
   }
 
-  public setGameManager(gameManager: any): void {
+  public setGameManager(gameManager: GameManagerLike): void {
     this.gameManager = gameManager;
   }
 }

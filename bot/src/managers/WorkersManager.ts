@@ -1,15 +1,17 @@
-import { Client, Guild, GuildMember, TextChannel, VoiceChannel, ChannelType, PermissionFlagsBits } from 'discord.js';
+import { Client, TextChannel, type GuildChannelCreateOptions, type MessageCreateOptions } from 'discord.js';
 import config from '../config/config';
+
+type WorkerTaskData = Record<string, unknown>;
 
 interface WorkerTask {
   id: string;
   type: 'channel_create' | 'channel_delete' | 'member_move' | 'member_nickname' | 'member_roles' | 'message_send';
   priority: number;
-  data: any;
+  data: WorkerTaskData;
   retries: number;
   timestamp: number;
-  resolve?: (value: any) => void;
-  reject?: (error: any) => void;
+  resolve?: (value: unknown) => void;
+  reject?: (reason?: unknown) => void;
   timeout?: NodeJS.Timeout;
 }
 
@@ -218,7 +220,7 @@ export class WorkersManager {
     }
 
     try {
-      let result: any;
+      let result: unknown;
 
       switch (task.type) {
         case 'channel_create':
@@ -250,7 +252,7 @@ export class WorkersManager {
         task.resolve(result);
       }
 
-    } catch (error: any) {
+    } catch (error) {
       
       if (this.isPermissionError(error)) {
         try {
@@ -259,7 +261,7 @@ export class WorkersManager {
           this.recordTaskCompletion(worker, startTime, true);
           if (task.resolve) task.resolve(fallbackResult);
           return;
-        } catch (mainErr: any) {
+        } catch (mainErr) {
           if (this.isPermissionError(mainErr)) {
             worker.stats.tasksProcessed++;
             worker.stats.tasksSucceeded++;
@@ -275,7 +277,7 @@ export class WorkersManager {
       }
 
       
-      if (error.code === 429 || error.status === 429) {
+      if (this.isRateLimitError(error)) {
         worker.rateLimitedUntil = Date.now() + this.RATE_LIMIT_COOLDOWN;
         worker.stats.rateLimitHits++;
       }
@@ -304,18 +306,31 @@ export class WorkersManager {
     }
   }
 
-  private async executeChannelCreate(client: Client, data: any): Promise<any> {
+  private async executeChannelCreate(client: Client, data: WorkerTaskData): Promise<unknown> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
 
-    return await guild.channels.create(data.options);
+    return await guild.channels.create(data.options as GuildChannelCreateOptions);
   }
 
-  private isPermissionError(error: any): boolean {
-    const code = (error && (error.code as any)) ?? (error && (error.rawError?.code as any));
-    const status = error && error.status;
-    const msg = (error && error.message) ? String(error.message).toLowerCase() : '';
+  private isPermissionError(error: unknown): boolean {
+    const err = this.asErrorRecord(error);
+    if (!err) return false;
+    const code = err.code ?? err.rawError?.code;
+    const status = err.status;
+    const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
     return code === 50013 || status === 403 || msg.includes('missing permissions');
+  }
+
+  private isRateLimitError(error: unknown): boolean {
+    const err = this.asErrorRecord(error);
+    if (!err) return false;
+    return err.code === 429 || err.status === 429;
+  }
+
+  private asErrorRecord(error: unknown): { code?: unknown; status?: unknown; message?: unknown; rawError?: { code?: unknown } } | null {
+    if (typeof error !== 'object' || error === null) return null;
+    return error as { code?: unknown; status?: unknown; message?: unknown; rawError?: { code?: unknown } };
   }
 
   private recordTaskCompletion(worker: WorkerClient, startTime: number, success: boolean) {
@@ -327,131 +342,110 @@ export class WorkersManager {
       (worker.stats.averageProcessingTime * (worker.stats.tasksProcessed - 1) + processingTime) / worker.stats.tasksProcessed;
   }
 
-  private async executeChannelDelete(client: Client, data: any): Promise<void> {
+  private async executeChannelDelete(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
 
-    const channel = guild.channels.cache.get(data.channelId);
+    const channel = guild.channels.cache.get(data.channelId as string);
     if (channel) {
       await channel.delete();
     }
   }
 
-  private async executeMemberMove(client: Client, data: any): Promise<void> {
+  private async executeMemberMove(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
 
-    const member = guild.members.cache.get(data.memberId);
+    const member = guild.members.cache.get(data.memberId as string);
     if (member?.voice?.channel) {
-      await member.voice.setChannel(data.channelId);
+      await member.voice.setChannel(data.channelId as string);
     }
   }
 
-  private async executeMemberNickname(client: Client, data: any): Promise<void> {
+  private async executeMemberNickname(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
 
-    const member = guild.members.cache.get(data.memberId);
+    const member = guild.members.cache.get(data.memberId as string);
     if (member) {
-      await member.setNickname(data.nickname);
+      await member.setNickname(data.nickname as string | null);
     }
   }
 
-  private async executeMemberRoles(client: Client, data: any): Promise<void> {
+  private async executeMemberRoles(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
 
-    const member = guild.members.cache.get(data.memberId);
+    const member = guild.members.cache.get(data.memberId as string);
     if (!member) return;
 
-    if (data.add && data.add.length > 0) {
-      await member.roles.add(data.add);
+    const add = Array.isArray(data.add)
+      ? data.add.filter((role): role is string => typeof role === 'string')
+      : [];
+    const remove = Array.isArray(data.remove)
+      ? data.remove.filter((role): role is string => typeof role === 'string')
+      : [];
+
+    if (add.length > 0) {
+      await member.roles.add(add);
     }
 
-    if (data.remove && data.remove.length > 0) {
-      await member.roles.remove(data.remove);
+    if (remove.length > 0) {
+      await member.roles.remove(remove);
     }
   }
 
-  private async executeMessageSend(client: Client, data: any): Promise<any> {
+  private async executeMessageSend(client: Client, data: WorkerTaskData): Promise<unknown> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
 
-    const channel = guild.channels.cache.get(data.channelId) as TextChannel;
+    const channel = guild.channels.cache.get(data.channelId as string) as TextChannel;
     if (!channel || !channel.isTextBased()) {
       throw new Error('Channel not found or not text-based');
     }
 
-    return await channel.send(data.message);
+    return await channel.send(data.message as string | MessageCreateOptions);
   }
 
   private performHealthCheck(): void {
     if (!this.isEnabled) return;
-
-    const now = Date.now();
-    let healthyWorkers = 0;
-
-    for (const worker of this.workers) {
-      
-      const isHealthy = worker.isReady && (
-        worker.stats.lastActiveAt === 0 || 
-        now - worker.stats.lastActiveAt < 300000 
-      );
-
-      if (isHealthy) {
-        healthyWorkers++;
-      }
-    }
-
-
-    
-    const totalStats = this.workers.reduce((acc, worker) => ({
-      tasksProcessed: acc.tasksProcessed + worker.stats.tasksProcessed,
-      tasksSucceeded: acc.tasksSucceeded + worker.stats.tasksSucceeded,
-      tasksFailed: acc.tasksFailed + worker.stats.tasksFailed,
-      rateLimitHits: acc.rateLimitHits + worker.stats.rateLimitHits
-    }), { tasksProcessed: 0, tasksSucceeded: 0, tasksFailed: 0, rateLimitHits: 0 });
-
-    if (totalStats.tasksProcessed > 0) {
-      const successRate = (totalStats.tasksSucceeded / totalStats.tasksProcessed) * 100;
-    }
   }
 
   
-  public async createChannel(options: any, priority: number = 5): Promise<any> {
-    return this.addTask('channel_create', { options }, priority);
+  public async createChannel<T extends { id: string } = { id: string }>(options: GuildChannelCreateOptions, priority: number = 5): Promise<T> {
+    return this.addTask<T>('channel_create', { options }, priority);
   }
 
   public async deleteChannel(channelId: string, priority: number = 3): Promise<void> {
-    return this.addTask('channel_delete', { channelId }, priority);
+    await this.addTask<void>('channel_delete', { channelId }, priority);
   }
 
   public async moveMembers(memberIds: string[], channelId: string, priority: number = 7): Promise<PromiseSettledResult<void>[]> {
     const promises = memberIds.map(memberId =>
-      this.addTask('member_move', { memberId, channelId }, priority)
+      this.addTask<void>('member_move', { memberId, channelId }, priority)
     );
     return Promise.allSettled(promises);
   }
 
   public async setMemberNickname(memberId: string, nickname: string, priority: number = 4): Promise<void> {
-    return this.addTask('member_nickname', { memberId, nickname }, priority);
+    await this.addTask<void>('member_nickname', { memberId, nickname }, priority);
   }
 
   public async updateMemberRoles(memberId: string, add: string[] = [], remove: string[] = [], priority: number = 6): Promise<void> {
-    return this.addTask('member_roles', { memberId, add, remove }, priority);
+    await this.addTask<void>('member_roles', { memberId, add, remove }, priority);
   }
 
-  public async sendMessage(channelId: string, message: any, _priority: number = 8): Promise<any> {
+  public async sendMessage(channelId: string, message: string | MessageCreateOptions, _priority: number = 8): Promise<unknown> {
     return this.executeTaskOnMainClient('message_send', { channelId, message });
   }
 
-  private async addTask(type: WorkerTask['type'], data: any, priority: number): Promise<any> {
+  private async addTask<T = unknown>(type: WorkerTask['type'], data: WorkerTaskData, priority: number): Promise<T> {
     
     if (!this.isEnabled) {
-      return this.executeTaskOnMainClient(type, data);
+      return this.executeTaskOnMainClient(type, data) as Promise<T>;
     }
 
-    return new Promise((resolve, reject) => {
+    return new Promise<T>((resolve, reject) => {
       const task: WorkerTask = {
         id: `task_${++this.taskIdCounter}`,
         type,
@@ -459,7 +453,7 @@ export class WorkersManager {
         data,
         retries: 0,
         timestamp: Date.now(),
-        resolve,
+        resolve: resolve as (value: unknown) => void,
         reject
       };
 
@@ -482,7 +476,7 @@ export class WorkersManager {
     });
   }
 
-  private async executeTaskOnMainClient(type: WorkerTask['type'], data: any): Promise<any> {
+  private async executeTaskOnMainClient(type: WorkerTask['type'], data: WorkerTaskData): Promise<unknown> {
     const guild = this.mainClient.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
     try {
@@ -500,7 +494,7 @@ export class WorkersManager {
         case 'message_send':
           return await this.executeMessageSend(this.mainClient, data);
       }
-    } catch (e: any) {
+    } catch (e) {
       if (this.isPermissionError(e)) {
         return;
       }

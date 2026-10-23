@@ -1,7 +1,7 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, User as DiscordUser, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
+import { Message, ChatInputCommandInteraction, EmbedBuilder, User as DiscordUser, Guild, ComponentType } from 'discord.js';
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
-import { PartyService } from '../../services/PartyService';
+import { PartyService, type PartyDocument } from '../../services/PartyService';
 import UserModel from '../../models/User';
 
 export async function party(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
@@ -87,7 +87,7 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
       case 'list':
         await handleListParties(interaction);
         break;
-      case 'join':
+      case 'join': {
         const partyIdToJoin = interaction instanceof ChatInputCommandInteraction
           ? interaction.options.getString('party_id')
           : extraArgs?.[1];
@@ -97,6 +97,7 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
         }
         await handleJoinParty(interaction, userId, partyIdToJoin, guild);
         break;
+      }
       default:
         await safeReply(interaction, errorEmbed('Invalid action! Use: create, invite, leave, info, disband, kick, promote, settings, list, or join', 'Party Error'));
     }
@@ -125,7 +126,7 @@ async function handleCreateParty(interaction: Message | ChatInputCommandInteract
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleInviteToParty(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string, guild: any) {
+async function handleInviteToParty(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
   const result = await PartyService.inviteToParty(userId, targetId, guild);
   
   if (!result.success) {
@@ -145,7 +146,7 @@ async function handleInviteToParty(interaction: Message | ChatInputCommandIntera
   });
 
   collector.on('collect', async (buttonInteraction) => {
-    const [action, partyAction, partyId, targetUserId] = buttonInteraction.customId.split('_');
+    const [, partyAction, partyId, targetUserId] = buttonInteraction.customId.split('_');
     
     if (buttonInteraction.user.id !== targetUserId) {
       await buttonInteraction.reply({ 
@@ -198,7 +199,7 @@ async function handleInviteToParty(interaction: Message | ChatInputCommandIntera
   });
 }
 
-function buildPartyEmbed(party: any, description: string, color: string, title: string, extraFields?: Array<{ name: string; value: string; inline: boolean }>) {
+function buildPartyEmbed(party: PartyDocument, description: string, color: string, title: string, extraFields?: Array<{ name: string; value: string; inline: boolean }>) {
   const embedObj = betterEmbed(description, color, title);
   const fields = [
     { name: 'Party ID', value: party.partyId, inline: true },
@@ -211,7 +212,7 @@ function buildPartyEmbed(party: any, description: string, color: string, title: 
 
 async function handlePartyAction(
   interaction: Message | ChatInputCommandInteraction,
-  serviceCall: Promise<{ success: boolean; message?: string; party?: any }>,
+  serviceCall: Promise<{ success: boolean; message?: string; party?: PartyDocument }>,
   embedConfig: { description: string; color: string; title: string; extraFields?: Array<{ name: string; value: string; inline: boolean }> }
 ) {
   const result = await serviceCall;
@@ -223,11 +224,7 @@ async function handlePartyAction(
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-function membersList(party: any) {
-  return party.members.map((id: string) => `<@${id}>`).join(', ');
-}
-
-async function handleLeaveParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: any) {
+async function handleLeaveParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: Guild) {
   await handlePartyAction(
     interaction,
     PartyService.leaveParty(userId, guild),
@@ -252,7 +249,7 @@ async function handlePartyInfo(interaction: Message | ChatInputCommandInteractio
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleDisbandParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: any) {
+async function handleDisbandParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: Guild) {
   await handlePartyAction(
     interaction,
     PartyService.disbandParty(userId, guild),
@@ -263,7 +260,7 @@ async function handleDisbandParty(interaction: Message | ChatInputCommandInterac
   );
 }
 
-async function handleKickFromParty(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string, guild: any) {
+async function handleKickFromParty(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
   await handlePartyAction(
     interaction,
     PartyService.kickFromParty(userId, targetId, guild),
@@ -351,7 +348,7 @@ async function handleListParties(interaction: Message | ChatInputCommandInteract
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleJoinParty(interaction: Message | ChatInputCommandInteraction, userId: string, partyId: string, guild: any) {
+async function handleJoinParty(interaction: Message | ChatInputCommandInteraction, userId: string, partyId: string, guild: Guild) {
   const result = await PartyService.joinParty(userId, partyId, guild);
   if (!result.success) {
     await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));

@@ -123,7 +123,7 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     try {
       await channel.send({ content: userMention, embeds: [embed], files });
       break;
-    } catch (error: any) {
+    } catch (error) {
       attempts++;
       if (attempts >= maxAttempts) {
         console.error(`[PunishmentEmbed] Failed to send ${type} embed after ${maxAttempts} attempts:`, error);

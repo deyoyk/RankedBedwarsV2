@@ -1,5 +1,5 @@
 import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
-import Game from '../../models/Game';
+import Game, { type IGame } from '../../models/Game';
 import configuration from '../../config/config';
 import { GameManager } from '../../Matchmaking/GameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
@@ -56,7 +56,7 @@ async function parseVoidRequest(interaction: Message | ChatInputCommandInteracti
   }
 }
 
-async function validateVoidRequest(data: VoidRequestData): Promise<{ isValid: boolean; error?: string; game?: any }> {
+async function validateVoidRequest(data: VoidRequestData): Promise<{ isValid: true; game: IGame } | { isValid: false; error: string; game?: undefined }> {
   const game = await Game.findOne({ gameId: data.gameId });
   if (!game) {
     return { isValid: false, error: 'Game not found.' };
@@ -78,7 +78,7 @@ async function validateVoidRequest(data: VoidRequestData): Promise<{ isValid: bo
   return { isValid: true, game };
 }
 
-async function createVoidRequest(interaction: Message | ChatInputCommandInteraction, data: VoidRequestData, game: any) {
+async function createVoidRequest(interaction: Message | ChatInputCommandInteraction, data: VoidRequestData, game: IGame) {
   const channel = interaction.guild?.channels.cache.get(configuration.channels.voidrequestsChannel);
   if (!channel?.isTextBased()) {
     await safeReply(interaction, { content: 'Void request channel not found.' });
@@ -107,13 +107,13 @@ async function createVoidRequest(interaction: Message | ChatInputCommandInteract
   });
 
   collector.on('end', async () => {
-    await processVoteResults(message, data, votes, allPlayers, game);
+    await processVoteResults(message, data, votes, allPlayers);
   });
 
   await safeReply(interaction, { content: 'Void request created successfully.' });
 }
 
-function createVoidRequestEmbed(data: VoidRequestData, game: any): EmbedBuilder {
+function createVoidRequestEmbed(data: VoidRequestData, game: IGame): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle('Void Request')
     .setDescription(`A void has been requested for Game ID: ${data.gameId}`)
@@ -131,7 +131,7 @@ function createVoidRequestEmbed(data: VoidRequestData, game: any): EmbedBuilder 
     .setFooter({ text: `Game ID: ${data.gameId}` });
 }
 
-async function processVoteResults(message: any, data: VoidRequestData, votes: VoteData, allPlayers: string[], game: any) {
+async function processVoteResults(message: Message, data: VoidRequestData, votes: VoteData, allPlayers: string[]) {
   const teamMentions = allPlayers.map((id: string) => `<@${id}>`).join(' ');
   const requiredVotes = Math.max(2, Math.ceil(allPlayers.length * 0.6));
   const approved = votes.upvote.size >= requiredVotes;

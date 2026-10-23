@@ -7,9 +7,15 @@ import { safeReply } from '../utils/safeReply';
  
 
 
+export type CommandFn = (
+  interaction: Message | ChatInputCommandInteraction,
+  args?: string[],
+  wsManager?: WebSocketManager
+) => Promise<void> | void;
+
 export class CommandHandler {
   private client: Client;
-  private commands: Map<string, Function>;
+  private commands: Map<string, CommandFn>;
   private wsManager: WebSocketManager;
 
   constructor(client: Client, wsManager: WebSocketManager) {
@@ -18,7 +24,7 @@ export class CommandHandler {
     this.commands = new Map();
   }
 
-  public registerCommand(name: string, handler: Function) {
+  public registerCommand(name: string, handler: CommandFn) {
     this.commands.set(name, handler);
   }
 

@@ -1,4 +1,3 @@
-import config from '../config/config';
 import { Guild } from 'discord.js';
 import User from '../models/User';
 import { sendPunishmentEmbed } from '../utils/punishmentEmbed';
@@ -13,6 +12,25 @@ export interface PunishmentOperation {
   timestamp: number;
   status: 'pending' | 'completed' | 'failed';
   actionTaken?: string;
+}
+
+export type PunishmentNotificationType = 'strike' | 'ban' | 'mute' | 'unban' | 'unmute' | 'unstrike';
+
+export interface PunishmentRecord {
+  id: string;
+  reason: string;
+  date: Date;
+  duration?: number;
+  moderator: string;
+}
+
+export interface ExpiredPunishmentEntry {
+  user: { discordId: string; ign?: string };
+  lastRecord: PunishmentRecord;
+}
+
+export interface WebSocketNotifier {
+  send: (payload: object) => void;
 }
 
 export interface PunishmentManagerStats {
@@ -41,7 +59,7 @@ export function createPendingOperation(
 }
 
 export function addPunishmentRole(
-  promises: Promise<any>[],
+  promises: Promise<unknown>[],
   guild: Guild,
   targetId: string,
   roleId: string | undefined,
@@ -59,13 +77,13 @@ export function addPunishmentRole(
 }
 
 export function sendPunishmentNotification(
-  promises: Promise<any>[],
+  promises: Promise<unknown>[],
   params: {
     guild: Guild;
     targetId: string;
     moderatorId: string;
     reason: string;
-    type: 'strike' | 'ban' | 'mute' | 'unban' | 'unmute' | 'unstrike';
+    type: PunishmentNotificationType;
     expires?: Date;
   }
 ): void {
@@ -77,9 +95,9 @@ export function sendPunishmentNotification(
 }
 
 export function sendWebSocketNotification(
-  promises: Promise<any>[],
-  wsManager: any,
-  user: any,
+  promises: Promise<unknown>[],
+  wsManager: WebSocketNotifier | null | undefined,
+  user: { ign?: string },
   params: {
     type: string;
     reason: string;
@@ -105,7 +123,7 @@ export function sendWebSocketNotification(
 }
 
 export function handleOperationError(
-  error: any,
+  error: unknown,
   operation: PunishmentOperation,
   stats: PunishmentManagerStats,
   typeName: string,
@@ -114,7 +132,7 @@ export function handleOperationError(
   operation.status = 'failed';
   stats.errors++;
   console.error(`[${typeName}Manager] Failed to ${typeName} ${targetId}:`, error);
-  throw new Error(`${typeName} operation failed: ${error.message}`);
+  throw new Error(`${typeName} operation failed: ${error instanceof Error ? error.message : String(error)}`);
 }
 
 export async function batchProcessExpired<T>(
@@ -151,7 +169,7 @@ export async function autoExpirePunishments(
   config: AutoExpireConfig
 ): Promise<number> {
   const now = new Date();
-  const expiredUsers: Array<{ user: any; lastRecord: any }> = [];
+  const expiredUsers: ExpiredPunishmentEntry[] = [];
   const BATCH_SIZE = 100;
 
   let skip = 0;
@@ -166,7 +184,7 @@ export async function autoExpirePunishments(
 
     for (const user of users) {
       try {
-        const records = user[config.recordsField] as any[];
+        const records = user[config.recordsField];
         const lastRecord = records[records.length - 1];
         if (lastRecord && lastRecord.duration > 0) {
           const expiry = new Date(lastRecord.date.getTime() + lastRecord.duration * 60000);

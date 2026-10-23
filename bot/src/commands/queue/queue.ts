@@ -5,7 +5,7 @@ import User from '../../models/User';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
 
-export async function queue(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function queue(interaction: Message | ChatInputCommandInteraction, _args?: string[]) {
   try {
     const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
     

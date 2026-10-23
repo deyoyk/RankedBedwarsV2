@@ -10,13 +10,15 @@ export enum QueueType {
   PICKING = 'picking'
 }
 
+import type { IGame } from '../models/Game';
+
 export interface GameResources {
   gameId: number;
-  gameChannel: any;
-  team1Voice: any;
-  team2Voice: any;
-  pickingChannel?: any;
-  game: any;
+  gameChannel: { id: string };
+  team1Voice: { id: string };
+  team2Voice: { id: string };
+  pickingChannel?: { id: string };
+  game: IGame | null;
 }
 
 export interface WarpRequestData {
@@ -51,7 +53,7 @@ export interface PlayerData {
 
 export interface GameResult {
   gameId: number;
-  winningTeam: number;
+  winningTeam?: number;
   winningTeamIGNs?: string[]; 
   mvps: string[];
   bedbreaks?: string[];

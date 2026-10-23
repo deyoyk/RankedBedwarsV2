@@ -1,11 +1,13 @@
-import { Client, VoiceState, TextChannel } from 'discord.js';
+import { Client, VoiceState } from 'discord.js';
+import type { VoiceBasedChannel } from 'discord.js';
 import Queue from '../models/Queue';
-import User from '../models/User';
+import User, { type IUser } from '../models/User';
 import Party from '../models/Party';
 import Game from '../models/Game';
 import config from '../config/config';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { CentralizedMatchmaker } from '../Matchmaking/CentralizedMatchmaker';
+import { GameManager } from '../Matchmaking/GameManager';
 import { WorkersManager } from '../managers/WorkersManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { PresenceService } from '../services/PresenceService';
@@ -29,6 +31,20 @@ interface QueueState {
   lastOfflineVersion?: number;
 }
 
+interface QueueLike {
+  id?: unknown;
+  channelId: string;
+  maxPlayers: number;
+  minElo: number;
+  maxElo: number;
+  isRanked?: boolean;
+  ispicking?: boolean;
+  queueType?: string;
+  bypassRoles: string[];
+}
+
+type QueueUserBadge = Pick<IUser, 'discordId' | 'ign' | 'partyId'>;
+
 export class QueueListener {
   private client: Client;
   private matchmaker: CentralizedMatchmaker;
@@ -44,7 +60,7 @@ export class QueueListener {
   private readonly CHANNEL_CACHE_TTL = 30000;
   private readonly PRESENCE_SWEEP_INTERVAL = 30000;
 
-  constructor(client: Client, wsManager: WebSocketManager, gameManager: any) {
+  constructor(client: Client, wsManager: WebSocketManager, gameManager: GameManager) {
     this.client = client;
     this.wsManager = wsManager;
     this.workersManager = WorkersManager.getInstance();
@@ -94,7 +110,7 @@ export class QueueListener {
     const now = Date.now();
     for (const [queueId, state] of this.queueStates) {
       if (state.players.length === 0) continue;
-      let users: any[] = [];
+      let users: QueueUserBadge[];
       try {
         users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
       } catch (error) {
@@ -196,21 +212,21 @@ export class QueueListener {
     }
   }
 
-  private async evictOfflinePlayers(queueId: string, state: QueueState, queue: any): Promise<void> {
+  private async evictOfflinePlayers(queueId: string, state: QueueState, queue: QueueLike): Promise<void> {
     try {
       if (!PresenceService.isConnected() || state.players.length === 0) return;
       const offlineVersion = PresenceService.getOfflineVersion();
       if (state.lastOfflineVersion === offlineVersion) return;
       state.lastOfflineVersion = offlineVersion;
 
-      let users: any[] = [];
+      let users: QueueUserBadge[];
       try {
         users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
       } catch (error) {
         console.error(`[QueueListener] Offline eviction lookup failed for ${queueId}:`, error);
         return;
       }
-      const ignById = new Map(users.map((u: any) => [u.discordId, u.ign]));
+      const ignById = new Map(users.map((u) => [u.discordId, u.ign]));
       const offline = state.players.filter((id) => {
         const ign = ignById.get(id);
         return !!ign && PresenceService.evaluate(ign) === 'offline';
@@ -257,8 +273,8 @@ export class QueueListener {
   private async rescanParties(
     queueId: string,
     queueState: QueueState,
-    queue: any,
-    voiceChannel: any,
+    queue: QueueLike,
+    voiceChannel: VoiceBasedChannel,
     playersInVC: Set<string>
   ): Promise<void> {
     try {
@@ -299,7 +315,7 @@ export class QueueListener {
         })) continue;
         const member = voiceChannel.members.get(present[0]);
         if (!member) continue;
-        await this.handlePartyJoin({ member } as VoiceState, { partyId } as any, queueState, queue);
+        await this.handlePartyJoin({ member } as VoiceState, { partyId }, queueState, queue);
       }
     } catch (error) {
       console.error(`[QueueListener] Error rescanning parties for queue ${queueId}:`, error);
@@ -437,22 +453,28 @@ export class QueueListener {
 
   private async handlePartyJoin(
     state: VoiceState,
-    user: any,
+    user: { partyId?: string | null },
     queueState: QueueState,
-    queue: any
+    queue: QueueLike
   ): Promise<{ success: boolean }> {
     try {
-      let partyMembers = this.partyCache.get(user.partyId)?.members;
+      const partyId = user.partyId;
+      if (!partyId) {
+        await this.moveToWaiting(state, 'Invalid party');
+        return { success: false };
+      }
+
+      let partyMembers = this.partyCache.get(partyId)?.members;
 
       if (!partyMembers) {
-        const party = await Party.findOne({ partyId: user.partyId });
+        const party = await Party.findOne({ partyId });
         if (!party || !party.members) {
           await this.moveToWaiting(state, 'Invalid party');
           return { success: false };
         }
 
         partyMembers = party.members;
-        this.partyCache.set(user.partyId, {
+        this.partyCache.set(partyId, {
           members: partyMembers,
           timestamp: Date.now()
         });
@@ -507,11 +529,11 @@ export class QueueListener {
       const membersInVC = partyMembers.filter(memberId => playersInVC.has(memberId));
 
       if (membersInVC.length !== partyMembers.length) {
-        console.log(`[QueueListener] Party ${user.partyId}: waiting for ${partyMembers.length - membersInVC.length} member(s) to join queue ${queue.channelId}`);
+        console.log(`[QueueListener] Party ${partyId}: waiting for ${partyMembers.length - membersInVC.length} member(s) to join queue ${queue.channelId}`);
         return { success: false };
       }
 
-      queueState.parties.set(user.partyId, partyMembers);
+      queueState.parties.set(partyId, partyMembers);
 
       for (const memberId of partyMembers) {
         if (!queueState.players.includes(memberId)) {
@@ -519,7 +541,7 @@ export class QueueListener {
         }
       }
 
-      console.log(`[QueueListener] Party ${user.partyId} (${partyMembers.length} members) joined queue ${queue.channelId}`);
+      console.log(`[QueueListener] Party ${partyId} (${partyMembers.length} members) joined queue ${queue.channelId}`);
 
       return { success: true };
 

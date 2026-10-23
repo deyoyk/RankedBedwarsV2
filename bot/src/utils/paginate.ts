@@ -1,18 +1,17 @@
 import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedBuilder } from 'discord.js';
 import { safeReply } from './safeReply';
 import { errorEmbed } from './betterembed';
-import { betterEmbed } from './betterembed';
 
-export interface PaginationConfig {
+export interface PaginationConfig<T> {
   commandName: string;
   title: string;
   emptyMessage: string;
   emptyTitle: string;
   perPage: number;
-  fetchPage: (skip: number, limit: number) => Promise<{ items: any[]; total: number; buildEmbed: (items: any[], page: number, totalPages: number, total: number, skip: number) => EmbedBuilder }>;
+  fetchPage: (skip: number, limit: number) => Promise<{ items: T[]; total: number; buildEmbed: (items: T[], page: number, totalPages: number, total: number, skip: number) => EmbedBuilder }>;
 }
 
-export async function paginate(interaction: Message | ChatInputCommandInteraction, config: PaginationConfig): Promise<void> {
+export async function paginate<T>(interaction: Message | ChatInputCommandInteraction, config: PaginationConfig<T>): Promise<void> {
   let page = 1;
 
   if (interaction instanceof ChatInputCommandInteraction) {
@@ -27,7 +26,9 @@ export async function paginate(interaction: Message | ChatInputCommandInteractio
 
   try {
     const skip = Math.max(0, (page - 1) * config.perPage);
-    let { items, total, buildEmbed } = await config.fetchPage(skip, config.perPage);
+    const firstPage = await config.fetchPage(skip, config.perPage);
+    let { items, buildEmbed } = firstPage;
+    const total = firstPage.total;
 
     const totalPages = Math.max(1, Math.ceil(total / config.perPage));
     if (page < 1) page = 1;

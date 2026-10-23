@@ -1,10 +1,9 @@
-import User from '../models/User';
 import config from '../config/config';
 import { Guild } from 'discord.js';
 import { BanManager } from './BanManager';
 import { parseDuration } from '../utils/parseDuration';
 import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
-import { PunishmentOperation, createPendingOperation, sendPunishmentNotification, handleOperationError } from './punishmentHelpers';
+import { PunishmentOperation, PunishmentRecord, createPendingOperation, sendPunishmentNotification } from './punishmentHelpers';
 
 interface StrikeManagerStats {
   totalStrikes: number;
@@ -83,7 +82,7 @@ export class StrikeManager {
 
       try {
         if (banDuration === null) {
-          const promises: Promise<any>[] = [];
+          const promises: Promise<unknown>[] = [];
           sendPunishmentNotification(promises, {
             guild, targetId, moderatorId, reason, type: 'strike'
           });
@@ -96,7 +95,7 @@ export class StrikeManager {
             instance.stats.escalatedStrikes++;
           } catch (banError) {
             console.error(`[StrikeManager] Failed to escalate strike to ban for ${targetId}:`, banError);
-            const promises: Promise<any>[] = [];
+            const promises: Promise<unknown>[] = [];
             sendPunishmentNotification(promises, {
               guild, targetId, moderatorId, reason, type: 'strike'
             });
@@ -117,19 +116,23 @@ export class StrikeManager {
 
       return { strikeCount, actionTaken };
 
-    } catch (error: any) {
+    } catch (error) {
       operation.status = 'failed';
       instance.stats.errors++;
 
       console.error(`[StrikeManager] Failed to issue strike to ${targetId}:`, error);
-      throw new Error(`Strike operation failed: ${error.message}`);
+      const wrappedError = new Error(
+        `Strike operation failed: ${error instanceof Error ? error.message : String(error)}`
+      ) as Error & { cause?: unknown };
+      wrappedError.cause = error;
+      throw wrappedError;
 
     } finally {
       cleanupOperation(instance.pendingOperations, operation.id);
     }
   }
 
-  public static async unstrike(guild: Guild, targetId: string, moderatorId: string, reason = 'Strike removed'): Promise<{ strikeCount: number; removedStrike: any }> {
+  public static async unstrike(guild: Guild, targetId: string, moderatorId: string, reason = 'Strike removed'): Promise<{ strikeCount: number; removedStrike: PunishmentRecord }> {
     const instance = StrikeManager.getInstance();
     const operation = createPendingOperation(targetId, moderatorId, reason);
 
@@ -154,13 +157,16 @@ export class StrikeManager {
 
       
       const removedStrike = user.strikes.pop();
+      if (!removedStrike) {
+        throw new Error('User has no strikes to remove');
+      }
       await user.save();
 
       const strikeCount = user.strikes.length;
 
       
       try {
-        const promises: Promise<any>[] = [];
+        const promises: Promise<unknown>[] = [];
         sendPunishmentNotification(promises, {
           guild, targetId, moderatorId, reason, type: 'unstrike'
         });
@@ -178,12 +184,16 @@ export class StrikeManager {
 
       return { strikeCount, removedStrike };
 
-    } catch (error: any) {
+    } catch (error) {
       operation.status = 'failed';
       instance.stats.errors++;
 
       console.error(`[StrikeManager] Failed to remove strike from ${targetId}:`, error);
-      throw new Error(`Unstrike operation failed: ${error.message}`);
+      const wrappedError = new Error(
+        `Unstrike operation failed: ${error instanceof Error ? error.message : String(error)}`
+      ) as Error & { cause?: unknown };
+      wrappedError.cause = error;
+      throw wrappedError;
 
     } finally {
       cleanupOperation(instance.pendingOperations, operation.id);

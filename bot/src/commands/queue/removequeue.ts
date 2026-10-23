@@ -1,5 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
-import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
+import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import Queue from '../../models/Queue';
 import { safeReply } from '../../utils/safeReply';
 

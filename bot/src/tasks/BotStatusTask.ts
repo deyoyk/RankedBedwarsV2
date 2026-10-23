@@ -1,14 +1,15 @@
-import { Client, EmbedBuilder, TextChannel } from 'discord.js';
+import { Client, EmbedBuilder, Message, TextChannel } from 'discord.js';
 import mongoose from 'mongoose';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import config from '../config/config';
 import os from 'os';
 import path from 'path';
+import botPackage from '../../package.json';
 
 export class BotStatusTask {
   private client: Client;
   private wsManager: WebSocketManager;
-  private statusMessage: any = null;
+  private statusMessage: Message | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
   private startTime: Date;
   private statusImagePath: string;
@@ -81,7 +82,7 @@ export class BotStatusTask {
     }
   }
 
-  private async findOwnStatusMessage(channel: TextChannel): Promise<any> {
+  private async findOwnStatusMessage(channel: TextChannel): Promise<Message | null> {
     try {
       const ownId = this.client.user?.id;
       if (!ownId) return null;
@@ -240,14 +241,10 @@ export class BotStatusTask {
   }
 
   private async getWebSocketStatus() {
-    let ping = 'offline';
-    if (this.wsManager && (this.wsManager as any).client !== null) {
-      const wsPing = await this.wsManager.getPing();
-      ping = wsPing !== null ? `${wsPing}ms` : '-1';
-    }
-    const isConnected = this.wsManager && (this.wsManager as any).client !== null;
+    const wsPing = await this.wsManager.getPing().catch(() => null);
+    const isConnected = wsPing !== null;
     return {
-      ping,
+      ping: isConnected ? `${wsPing}ms` : 'offline',
       plugin: isConnected ? 'true' : 'false',
       socket: isConnected ? 'true' : 'false',
       handshake: isConnected ? 'true' : 'false'
@@ -331,20 +328,15 @@ export class BotStatusTask {
   }
 
   private getEnvironmentStatus() {
-    const packageJson = require('../../package.json');
+    const tsVersion = botPackage.devDependencies?.['typescript']?.replace('^', '') || 'unknown';
     
     
-    const tsVersion = packageJson.devDependencies?.['typescript']?.replace('^', '') || 
-                     packageJson.dependencies?.['typescript']?.replace('^', '') || 
-                     'unknown';
-    
-    
-    const botVersion = `${packageJson.version}`;
+    const botVersion = `${botPackage.version}`;
     
     return {
       nodeVersion: `v${process.version.slice(1)}`,
       typescript: tsVersion,
-      discordJs: packageJson.dependencies['discord.js'].replace('^', ''),
+      discordJs: botPackage.dependencies['discord.js'].replace('^', ''),
       botVersion: botVersion
       };
   }
@@ -363,7 +355,7 @@ export class BotStatusTask {
           const stats = await db.stats();
           dataSize = (stats.dataSize / (1024 * 1024)).toFixed(2) + 'MB';
           indexSize = (stats.indexSize / (1024 * 1024)).toFixed(2) + 'MB';
-        } catch (e) {
+        } catch {
           
         }
       }
@@ -374,7 +366,7 @@ export class BotStatusTask {
         dataSize,
         indexSize
       };
-    } catch (error) {
+    } catch {
       return {
         status: 'error',
         connection: 'failed',

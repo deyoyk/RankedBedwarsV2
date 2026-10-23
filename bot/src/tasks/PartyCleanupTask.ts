@@ -1,4 +1,4 @@
-import { Client } from 'discord.js';
+import { Client, Guild } from 'discord.js';
 import Party from '../models/Party';
 import UserModel from '../models/User';
 import { PartyService } from '../services/PartyService';
@@ -68,7 +68,7 @@ export class PartyCleanupTask {
     }
   }
 
-  private async disbandInactiveParty(party: any, guild: any) {
+  private async disbandInactiveParty(party: { partyId: string; members: string[]; lastActiveTime?: Date }, guild: Guild) {
     try {
       await UserModel.updateMany(
         { partyId: party.partyId },

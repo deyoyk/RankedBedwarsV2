@@ -66,11 +66,11 @@ export async function win(interaction: Message | ChatInputCommandInteraction, ar
 
     try {
       await safeReply(interaction, successEmbed(`Gave win to <@${targetUserId}> (+${eloRank.winElo} Elo).`, 'Win Given'));
-    } catch (e) {
+    } catch {
       const fallbackEmbed = betterEmbed(`Gave win to <@${targetUserId}> (+${eloRank.winElo} Elo).`, 0x00ff00, 'Win Given');
       await safeReply(interaction, { embeds: [fallbackEmbed.builder] });
     }
-  } catch (err) {
+  } catch {
     try {
       await safeReply(interaction, errorEmbed('Failed to give win.', 'Win Usage Error'));
     } catch {

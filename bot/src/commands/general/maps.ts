@@ -58,22 +58,22 @@ export async function maps(
     ];
   };
 
-  const sent = await safeReply(interaction, {
+  await safeReply(interaction, {
     embeds: [buildEmbed(page)],
     components: buildButtons(page),
     fetchReply: true
   });
 
   function getUserId(i: Message | ChatInputCommandInteraction): string {
-    return (i instanceof ChatInputCommandInteraction) ? i.user.id : (i as any).author.id;
+    return (i instanceof ChatInputCommandInteraction) ? i.user.id : i.author.id;
   }
 
-  const collector = (interaction.channel as any)?.createMessageComponentCollector({
-    filter: (i: any) => ['back', 'forward'].includes(i.customId) && i.user.id === getUserId(interaction),
+  const collector = interaction.channel?.createMessageComponentCollector({
+    filter: (i) => ['back', 'forward'].includes(i.customId) && i.user.id === getUserId(interaction),
     time: 60000
   });
 
-  collector?.on('collect', async (buttonInt: any) => {
+  collector?.on('collect', async (buttonInt) => {
     if (buttonInt.customId === 'back' && page > 0) page--;
     if (buttonInt.customId === 'forward' && page < totalPages - 1) page++;
     await buttonInt.update({

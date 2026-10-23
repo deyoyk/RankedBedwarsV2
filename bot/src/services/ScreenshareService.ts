@@ -378,7 +378,7 @@ export class ScreenshareService {
     }
   }
 
-  static createFreezeEmbed(targetId: string): EmbedBuilder {
+  static createFreezeEmbed(_targetId: string): EmbedBuilder {
     return new EmbedBuilder()
       .setColor(0xff0000)
       .setTitle('YOU ARE FROZEN YOU HAVE 5 MINUTES TO DOWNLOAD ANYDESK')
@@ -515,7 +515,7 @@ export class ScreenshareService {
           if (category && category.type === 4) { 
             categoryChannel = category as CategoryChannel;
           }
-        } catch (error) {
+        } catch {
           console.warn('[ScreenshareService] Category not found, creating channel without category');
         }
       }
@@ -577,11 +577,12 @@ export class ScreenshareService {
       }
 
       
-      if (session.targetIgn && global._wsManager && typeof global._wsManager.unregisterScreenshareThread === 'function') {
+      const wsManager = global._wsManager;
+      if (session.targetIgn && wsManager && typeof wsManager.unregisterScreenshareThread === 'function') {
         cleanupTasks.push(
           (async () => {
             try {
-              global._wsManager.unregisterScreenshareThread(session.targetIgn);
+              wsManager.unregisterScreenshareThread(session.targetIgn);
               console.log(`[ScreenshareService] Unregistered websocket thread for ${session.targetIgn}`);
             } catch (error) {
               console.warn(`[ScreenshareService] Failed to unregister websocket thread for ${session.targetIgn}:`, error);

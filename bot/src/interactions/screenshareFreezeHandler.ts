@@ -1,4 +1,4 @@
-import { ButtonInteraction, TextChannel, EmbedBuilder } from 'discord.js';
+import { ButtonInteraction, EmbedBuilder } from 'discord.js';
 import { ScreenshareService } from '../services/ScreenshareService';
 import { errorEmbed, successEmbed } from '../utils/betterembed';
 import config from '../config/config';

@@ -1,17 +1,25 @@
 import satori from 'satori';
 import { Resvg } from '@resvg/resvg-js';
-import { loadImageFonts } from './assets';
-
-const renderSvg = (satori as any).default || (satori as any);
+import { loadImageFonts, type ImageFont } from './assets';
 
 export type VNode = {
   type: string;
-  props: Record<string, any>;
+  props: Record<string, unknown>;
 };
 
-export function h(type: string, props: Record<string, any> = {}, ...children: any[]): VNode {
-  const flat = children.flat(Infinity).filter((c) => c !== null && c !== undefined && c !== false);
-  return { type, props: { ...props, children: flat.length === 1 ? flat[0] : flat } };
+type SatoriRenderFn = (
+  element: VNode,
+  options: { width: number; height: number; fonts: ImageFont[] },
+) => Promise<string>;
+
+const importedModule = satori as unknown as SatoriRenderFn | { default: SatoriRenderFn };
+const renderSvg: SatoriRenderFn =
+  typeof importedModule === 'function' ? importedModule : importedModule.default;
+
+export function h(type: string, props: Record<string, unknown> = {}, ...children: unknown[]): VNode {
+  const flat = children.flat(Infinity) as unknown[];
+  const kept = flat.filter((c) => c !== null && c !== undefined && c !== false);
+  return { type, props: { ...props, children: kept.length === 1 ? kept[0] : kept } };
 }
 
 export async function renderPng(root: VNode, width: number, height: number): Promise<Buffer> {

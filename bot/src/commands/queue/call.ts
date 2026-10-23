@@ -1,5 +1,5 @@
-import { Message, ChatInputCommandInteraction, VoiceChannel, PermissionFlagsBits } from 'discord.js';
-import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
+import { Message, ChatInputCommandInteraction, VoiceChannel } from 'discord.js';
+import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import Game from '../../models/Game';
 import User from '../../models/User';
@@ -70,10 +70,9 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
     }
 
     
-    let targetMember;
     try {
-      targetMember = await guild.members.fetch(targetUser);
-    } catch (error) {
+      await guild.members.fetch(targetUser);
+    } catch {
       await safeReply(interaction, errorEmbed('The target user is not a member of this server.', '❌ User Not Found'));
       return;
     }

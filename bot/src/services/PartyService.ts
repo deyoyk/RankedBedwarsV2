@@ -1,14 +1,16 @@
-import { GuildMember, Guild, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
+import { Guild, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import Party from '../models/Party';
 import UserModel from '../models/User';
 import config from '../config/config';
-import { errorEmbed, successEmbed, betterEmbed } from '../utils/betterembed';
+
+export type PartyDocument = ReturnType<typeof Party.hydrate>;
+export type PartyUserDocument = ReturnType<typeof UserModel.hydrate>;
 
 export interface PartyValidationResult {
   isValid: boolean;
   error?: string;
-  party?: any;
-  user?: any;
+  party?: PartyDocument;
+  user?: PartyUserDocument;
 }
 
 export interface PartyInviteResult {
@@ -47,7 +49,7 @@ export class PartyService {
     }
   }
 
-  static async createParty(userId: string): Promise<{ success: boolean; party?: any; error?: string }> {
+  static async createParty(userId: string): Promise<{ success: boolean; party?: PartyDocument; error?: string }> {
     try {
       const user = await UserModel.findOne({ discordId: userId });
       if (!user) {
@@ -80,7 +82,7 @@ export class PartyService {
     }
   }
 
-  static async inviteToParty(leaderId: string, targetId: string, guild: Guild): Promise<PartyInviteResult> {
+  static async inviteToParty(leaderId: string, targetId: string, _guild: Guild): Promise<PartyInviteResult> {
     try {
       const leaderValidation = await this.validatePartyAccess(leaderId, true);
       if (!leaderValidation.isValid) {
@@ -157,7 +159,7 @@ export class PartyService {
     }
   }
 
-  private static async removeMemberFromParty(party: any, userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
+  private static async removeMemberFromParty(party: PartyDocument, userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     const updated = await Party.findOneAndUpdate(
       { partyId: party.partyId, members: userId },
       { $pull: { members: userId } },
@@ -179,7 +181,7 @@ export class PartyService {
     return { success: true, party: updated };
   }
 
-  private static async addMemberToParty(party: any, userId: string, guild: Guild): Promise<{ success: boolean; message?: string }> {
+  private static async addMemberToParty(party: PartyDocument, userId: string, guild: Guild): Promise<{ success: boolean; message?: string }> {
     const user = await UserModel.findOne({ discordId: userId });
     if (!user) {
       return { success: false, message: 'User not registered' };
@@ -225,7 +227,7 @@ export class PartyService {
     return { success: true };
   }
 
-  static async leaveParty(userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
+  static async leaveParty(userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(userId);
       if (!validation.isValid) {
@@ -243,7 +245,7 @@ export class PartyService {
     }
   }
 
-  static async disbandParty(userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
+  static async disbandParty(userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(userId, true);
       if (!validation.isValid) {
@@ -271,7 +273,7 @@ export class PartyService {
     }
   }
 
-  static async kickFromParty(leaderId: string, targetId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
+  static async kickFromParty(leaderId: string, targetId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(leaderId, true);
       if (!validation.isValid) {
@@ -294,7 +296,7 @@ export class PartyService {
     }
   }
 
-  static async promoteToLeader(leaderId: string, targetId: string): Promise<{ success: boolean; message?: string; party?: any }> {
+  static async promoteToLeader(leaderId: string, targetId: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(leaderId, true);
       if (!validation.isValid) {
@@ -321,7 +323,7 @@ export class PartyService {
     }
   }
 
-  static async updatePartySettings(leaderId: string, setting: string, value: string): Promise<{ success: boolean; message?: string; party?: any }> {
+  static async updatePartySettings(leaderId: string, setting: string, value: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(leaderId, true);
       if (!validation.isValid) {
@@ -331,13 +333,14 @@ export class PartyService {
       const party = validation.party!;
 
       switch (setting.toLowerCase()) {
-        case 'maxmembers':
+        case 'maxmembers': {
           const maxMembers = parseInt(value);
           if (isNaN(maxMembers) || maxMembers < this.MIN_MEMBERS || maxMembers > this.MAX_MEMBERS) {
             return { success: false, message: `Max members must be between ${this.MIN_MEMBERS} and ${this.MAX_MEMBERS}` };
           }
           party.maxMembers = maxMembers;
           break;
+        }
         case 'private':
           party.isPrivate = value.toLowerCase() === 'true';
           break;
@@ -361,7 +364,7 @@ export class PartyService {
     }
   }
 
-  static async joinParty(userId: string, partyId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: any }> {
+  static async joinParty(userId: string, partyId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const party = await Party.findOne({ partyId });
       if (!party) {
@@ -380,7 +383,7 @@ export class PartyService {
     }
   }
 
-  static async getPartyInfo(userId: string): Promise<{ success: boolean; party?: any; message?: string }> {
+  static async getPartyInfo(userId: string): Promise<{ success: boolean; party?: PartyDocument; message?: string }> {
     try {
       const validation = await this.validatePartyAccess(userId);
       if (!validation.isValid) {
@@ -395,7 +398,7 @@ export class PartyService {
     }
   }
 
-  static async listPublicParties(): Promise<{ success: boolean; parties?: any[]; message?: string }> {
+  static async listPublicParties(): Promise<{ success: boolean; parties?: PartyDocument[]; message?: string }> {
     try {
       const parties = await Party.find({ isPrivate: false }).sort({ lastActiveTime: -1 });
       return { success: true, parties };

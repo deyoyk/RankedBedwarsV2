@@ -1,5 +1,6 @@
 import { Guild } from 'discord.js';
 import { TimedPunishmentManager, TimedPunishmentKind } from './timedPunishmentManager';
+import type { WebSocketNotifier } from './punishmentHelpers';
 
 const kind: TimedPunishmentKind = {
   type: 'mute',
@@ -35,11 +36,11 @@ export class MuteManager extends TimedPunishmentManager {
     return MuteManager.instance;
   }
 
-  public static async mute(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | undefined> {
+  public static async mute(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<Date | undefined> {
     return MuteManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager);
   }
 
-  public static async unmute(guild: Guild, targetId: string, moderatorId: string, reason = 'Unmuted', wsManager?: any): Promise<void> {
+  public static async unmute(guild: Guild, targetId: string, moderatorId: string, reason = 'Unmuted', wsManager?: WebSocketNotifier | null): Promise<void> {
     return MuteManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager);
   }
 

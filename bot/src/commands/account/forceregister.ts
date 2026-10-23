@@ -1,8 +1,8 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { safeReply } from '../../utils/safeReply';
-import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
+import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
-import { fix, safeFix } from '../../utils/fix';
+import { safeFix } from '../../utils/fix';
 import { escapeRegex } from '../../utils/regexEscape';
 import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
 

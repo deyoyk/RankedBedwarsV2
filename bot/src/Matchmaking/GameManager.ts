@@ -1,7 +1,7 @@
-﻿import { Client, TextChannel, VoiceChannel, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+﻿import { Client, TextChannel, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+import type { MessageCreateOptions } from 'discord.js';
 import Game, { IGame } from '../models/Game';
 import User, { IUser } from '../models/User';
-import Queue from '../models/Queue';
 import EloRank, { IEloRank } from '../models/EloRank';
 import { getNextSequence, Counter } from '../models/Counter';
 import config from '../config/config';
@@ -11,14 +11,13 @@ import { fix } from '../utils/fix';
 import { normalizeTeams } from './utils';
 import { generateScoreImageBuffer } from '../utils/scoreImage';
 import {
-  getLevelInfo,
   checkLevelUp,
   EXPERIENCE_REWARDS
 } from '../utils/levelSystem';
 import { WorkersManager } from '../managers/WorkersManager';
 import { updateDailyElo } from '../utils/userStats';
-
-import axios from 'axios';
+import type { IRecentGame } from '../models/gameBase';
+import type { ICombatEntry } from '../models/gameTypes';
 
 interface PlayerScoreData {
   player: IUser;
@@ -59,7 +58,56 @@ interface PlayerVoidData {
   experienceToRevert: number;
   oldLevel: number;
   newLevel: number;
-  gameStats: any;  
+  gameStats: VoidableGameStats | null;
+}
+
+interface VoidableGameStats {
+  gameId: number;
+  state: string;
+  eloGain: number;
+  oldElo?: number;
+  newElo?: number;
+  won?: boolean;
+  ismvp?: boolean;
+  kills: number;
+  deaths: number;
+  bedBroken: number;
+  finalKills: number;
+  finalDeaths?: number;
+  map: string;
+  diamonds?: number;
+  irons?: number;
+  gold?: number;
+  emeralds?: number;
+  blocksPlaced?: number;
+  damageDealt?: number;
+  damageTaken?: number;
+  assists?: number;
+  maxStreak?: number;
+  firstBlood?: boolean;
+}
+
+interface QueueLike {
+  id?: unknown;
+  channelId: string;
+  maxPlayers: number;
+  minElo: number;
+  maxElo: number;
+  isRanked?: boolean;
+  ispicking?: boolean;
+  queueType?: string;
+  bypassRoles: string[];
+}
+
+interface WarpEventMessage {
+  type?: string;
+  gameId?: string | number;
+}
+
+interface FightStatRow {
+  kills?: number;
+  damageDealt?: number;
+  damage?: number;
 }
 
 interface GameVoidContext {
@@ -105,7 +153,7 @@ export class GameManager {
 
   public async createGame(
     gameId: number,
-    queueData: any,
+    queueData: Partial<QueueLike> | null,
     team1: string[],
     team2: string[],
     selectedMap: string
@@ -130,7 +178,7 @@ export class GameManager {
       const guild = await this.getGuild();
       if (!guild) throw new Error('Guild not found');
       const resources = await this.createGameResources(guild, gameId, selectedMap, [...team1, ...team2], queueData);
-      await this.createGameInDatabaseAndUpdateUsers(resources, queueData, selectedMap, team1, team2);
+      await this.createGameInDatabaseAndUpdateUsers(resources, queueData as QueueLike, selectedMap, team1, team2);
       await this.movePlayersToVoiceChannels(guild, team1, team2, resources);
       this.activeGames.set(gameId, resources);
       console.log(`[GameManager] Successfully created game ${gameId}`);
@@ -185,7 +233,7 @@ export class GameManager {
       await this.sendScoreNotifications(context, playerScoreData);
 
       try {
-        await this.updatePlayerRoles(playerScoreData.map(p => ({ player: p.player } as any)));
+        await this.updatePlayerRoles(playerScoreData);
       } catch (e) {
         console.warn('[GameManager] Skipping role updates due to error (non-blocking):', e);
       }
@@ -328,7 +376,7 @@ export class GameManager {
     gameId: number,
     selectedMap: string,
     allPlayers: string[],
-    queue: any
+    _queue: Partial<QueueLike> | null
   ): Promise<GameResources> {
     try {
       console.log(`[GameManager] Creating game resources for game ${gameId} using WorkersManager`);
@@ -420,7 +468,7 @@ export class GameManager {
   
   private async createGameInDatabaseAndUpdateUsers(
     resources: GameResources,
-    queue: any,
+    queue: QueueLike,
     selectedMap: string,
     team1: string[],
     team2: string[]
@@ -458,7 +506,7 @@ export class GameManager {
         user.recentGames = user.recentGames || [];
         user.recentGames.unshift({
           gameId: resources.gameId,
-          queueid: typeof queue.id === 'number' ? queue.id : parseInt(queue.id, 10),
+          queueid: String(typeof queue.id === 'number' ? queue.id : parseInt(String(queue.id), 10)),
           map: selectedMap,
           eloGain: 0,
           kills: 0,
@@ -535,7 +583,7 @@ export class GameManager {
   private async initiatePlayerWarp(
     resources: GameResources,
     selectedMap: string,
-    queue: any,
+    queue: QueueLike,
     team1: string[],
     team2: string[]
   ): Promise<void> {
@@ -623,7 +671,7 @@ export class GameManager {
   }
 
 
-  private async handleWarpSuccess(msg: any): Promise<void> {
+  private async handleWarpSuccess(msg: WarpEventMessage): Promise<void> {
     try {
       const { gameId } = msg;
       if (!gameId || isNaN(Number(gameId))) {
@@ -632,10 +680,10 @@ export class GameManager {
       }
       console.log(`[GameManager] Warp successful for game ${gameId}`);
 
-      const warpData = this.warpRequests.get(gameId);
+      const warpData = this.warpRequests.get(gameId as string);
       if (warpData) {
         clearTimeout(warpData.timeout);
-        this.warpRequests.delete(gameId);
+        this.warpRequests.delete(gameId as string);
       }
 
       const game = await Game.findOne({ gameId: Number(gameId) });
@@ -649,31 +697,31 @@ export class GameManager {
     }
   }
 
-  private async handleWarpFailedArena(msg: any): Promise<void> {
+  private async handleWarpFailedArena(msg: WarpEventMessage): Promise<void> {
     try {
       const { gameId } = msg;
       console.log(`[GameManager] Warp failed (arena not found) for game ${gameId}`);
-      await this.handleWarpFailure(gameId, 'Arena not found');
+      await this.handleWarpFailure(gameId as string, 'Arena not found');
     } catch (error) {
       console.error('[GameManager] Error handling arena not found:', error);
     }
   }
 
-  private async handleWarpFailedOffline(msg: any): Promise<void> {
+  private async handleWarpFailedOffline(msg: WarpEventMessage): Promise<void> {
     try {
       const { gameId } = msg;
       console.log(`[GameManager] Warp failed (offline players) for game ${gameId}`);
-      await this.handleWarpFailure(gameId, 'Some players are offline');
+      await this.handleWarpFailure(gameId as string, 'Some players are offline');
     } catch (error) {
       console.error('[GameManager] Error handling offline players:', error);
     }
   }
 
-  private async handleWarpFailureUnknown(msg: any): Promise<void> {
+  private async handleWarpFailureUnknown(msg: WarpEventMessage): Promise<void> {
     try {
       const { gameId } = msg;
       console.log(`[GameManager] Warp failed (unknown reason) for game ${gameId}`);
-      await this.handleWarpFailure(gameId, 'Unknown warp failure');
+      await this.handleWarpFailure(gameId as string, 'Unknown warp failure');
     } catch (error) {
       console.error('[GameManager] Error handling unknown warp failure:', error);
     }
@@ -736,12 +784,12 @@ export class GameManager {
     }
   }
 
-  private async handleRetryGame(msg: any): Promise<void> {
+  private async handleRetryGame(msg: WarpEventMessage): Promise<void> {
     try {
       const { gameId } = msg;
       console.log(`[GameManager] Retry game request for game ${gameId}`);
 
-      const warpData = this.warpRequests.get(gameId);
+      const warpData = this.warpRequests.get(gameId as string);
       if (warpData) {
         this.wsManager.send({
           type: 'warp_players',
@@ -818,7 +866,7 @@ export class GameManager {
     gameId: number,
     team1: string[],
     team2: string[],
-    queueData: any,
+    queueData: QueueLike,
     selectedMap: string,
     startTime: Date
   ): Promise<void> {
@@ -838,7 +886,7 @@ export class GameManager {
 
           const recentGame = {
             gameId,
-            queueid: typeof queueData.id === 'number' ? queueData.id : parseInt(queueData.id, 10),
+            queueid: String(typeof queueData.id === 'number' ? queueData.id : parseInt(String(queueData.id), 10)),
             map: selectedMap,
             eloGain: 0,
             kills: 0,
@@ -1009,13 +1057,13 @@ export class GameManager {
     return claimed;
   }
 
-  private buildCombatEntries(context: GameScoreContext): any[] {
+  private buildCombatEntries(context: GameScoreContext): ICombatEntry[] {
     try {
       const statsByIgn: Record<string, PlayerData> = {};
       for (const [key, value] of Object.entries(context.playerData || {})) {
         statsByIgn[String(key).toLowerCase()] = value as PlayerData;
       }
-      const fightsOf = (ign: string): Record<string, { kills?: number; damageDealt?: number }> => {
+      const fightsOf = (ign: string): Record<string, FightStatRow> => {
         const stats = statsByIgn[ign.toLowerCase()];
         return (stats && stats.fights && typeof stats.fights === 'object') ? stats.fights : {};
       };
@@ -1024,29 +1072,29 @@ export class GameManager {
         const stats = statsByIgn[ign.toLowerCase()] || {};
         const ownFights = fightsOf(ign);
         const fights = Object.entries(ownFights).slice(0, 16).map(([opponent, row]) => {
-          const mirrorRows = fightsOf(opponent) as Record<string, any>;
+          const mirrorRows = fightsOf(opponent);
           const mirrorKey = Object.keys(mirrorRows).find((k) => k.toLowerCase() === ign.toLowerCase());
-          const mirrorRow = mirrorKey ? mirrorRows[mirrorKey] : null;
-          const rowDamage = (row as any).damageDealt ?? (row as any).damage ?? 0;
+          const mirrorRow = mirrorKey ? mirrorRows[mirrorKey] : undefined;
+          const rowDamage = row.damageDealt ?? row.damage ?? 0;
+          const mirrorDamage = mirrorRow?.damageDealt ?? mirrorRow?.damage;
           return {
             opponent,
             kills: row.kills || 0,
             deaths: mirrorRow && typeof mirrorRow.kills === 'number' ? mirrorRow.kills : 0,
             damageDealt: typeof rowDamage === 'number' && rowDamage >= 0 ? rowDamage : 0,
-            damageTaken: mirrorRow && typeof (mirrorRow.damageDealt ?? mirrorRow.damage) === 'number'
-              ? (mirrorRow.damageDealt ?? mirrorRow.damage) : 0,
+            damageTaken: typeof mirrorDamage === 'number' ? mirrorDamage : 0,
           };
         });
-        const num = (v: any): number => (typeof v === 'number' && v >= 0 ? v : 0);
+        const num = (v: unknown): number => (typeof v === 'number' && v >= 0 ? v : 0);
         return {
           player: player.discordId,
-          kills: num((stats as any).kills),
-          deaths: num((stats as any).deaths),
-          damageDealt: num((stats as any).damageDealt),
-          damageTaken: num((stats as any).damageTaken),
-          assists: num((stats as any).assists),
-          maxStreak: num((stats as any).maxStreak),
-          firstBlood: (stats as any).firstBlood === true,
+          kills: num(stats.kills),
+          deaths: num(stats.deaths),
+          damageDealt: num(stats.damageDealt),
+          damageTaken: num(stats.damageTaken),
+          assists: num(stats.assists),
+          maxStreak: num(stats.maxStreak),
+          firstBlood: stats.firstBlood === true,
           fights,
         };
       });
@@ -1101,7 +1149,7 @@ export class GameManager {
 
   private buildPlayerScoreData(
     player: IUser, isWinner: boolean, isMvp: boolean, isBedBreaker: boolean,
-    eloChange: number, stats: Record<string, any>
+    eloChange: number, stats: PlayerData & { finalDeaths?: unknown; finaldeaths?: unknown }
   ) {
     const experienceGained = this.calculateExperienceGained(isWinner, isMvp, isBedBreaker, stats);
     const oldExperience = player.experience || 0;
@@ -1290,9 +1338,9 @@ export class GameManager {
   private async updatePlayerRecentGames(player: IUser, scoreData: PlayerScoreData, game: IGame): Promise<void> {
     try {
       const now = new Date();
-      const entry = {
+      const entry: IRecentGame = {
         gameId: game.gameId,
-        queueid: typeof game.queueId === 'number' ? game.queueId : parseInt(game.queueId as any, 10),
+        queueid: String(parseInt(game.queueId, 10)),
         map: game.map,
         eloGain: scoreData.eloChange,
         oldElo: scoreData.oldElo,
@@ -1319,11 +1367,11 @@ export class GameManager {
         maxStreak: scoreData.stats.maxStreak || 0,
         firstBlood: scoreData.stats.firstBlood === true,
         fights: scoreData.stats.fights ? Object.keys(scoreData.stats.fights).length : 0
-      } as any;
+      };
 
       if (!player.recentGames) player.recentGames = [];
 
-      const idx = player.recentGames.findIndex((g: any) => g.gameId === game.gameId);
+      const idx = player.recentGames.findIndex((g) => g.gameId === game.gameId);
       if (idx !== -1) {
         player.recentGames[idx] = entry;
       } else {
@@ -1446,7 +1494,7 @@ export class GameManager {
   ): Promise<void> {
     try {
       if (config.channels.scoringChannel) {
-        const message: any = { content: mentions };
+        const message: MessageCreateOptions = { content: mentions };
         if (imageBuffer) {
           message.files = [{ attachment: imageBuffer, name: `game_${Date.now()}_results.png` }];
         }
@@ -1466,7 +1514,7 @@ export class GameManager {
   ): Promise<void> {
     try {
       if (game.channels?.text) {
-        const message: any = { content: mentions };
+        const message: MessageCreateOptions = { content: mentions };
         if (embed) {
           message.embeds = [embed];
         }
@@ -1529,7 +1577,7 @@ export class GameManager {
       const oldElo = player.elo;
       let eloChange = 0;
       let restoredElo: number | null = null;
-      let gameStats: any = null;
+      let gameStats: VoidableGameStats | null = null;
       let experienceToRevert = 0;
 
       
@@ -1611,11 +1659,13 @@ export class GameManager {
     }
   }
 
-  private revertStatFields(player: any, gameStats: any): void {
-    const statFields = ['kills', 'deaths', 'finalKills', 'finalDeaths', 'bedBroken', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'damageDealt', 'damageTaken', 'assists'];
+  private revertStatFields(player: IUser, gameStats: VoidableGameStats): void {
+    const statFields = ['kills', 'deaths', 'finalKills', 'finalDeaths', 'bedBroken', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'damageDealt', 'damageTaken', 'assists'] as const;
     for (const field of statFields) {
-      if (typeof gameStats[field] === 'number') {
-        player[field] = Math.max(0, (player[field] || 0) - gameStats[field]);
+      const value = gameStats[field];
+      if (typeof value === 'number') {
+        const current = player[field];
+        player[field] = Math.max(0, (typeof current === 'number' ? current : 0) - value);
       }
     }
     if (gameStats.won === true) {
@@ -1687,7 +1737,7 @@ export class GameManager {
         
         player.recentGames.unshift({
           gameId: targetGameId,
-          queueid: 0,
+          queueid: '0',
           map: 'Unknown',
           eloGain: 0,
           kills: 0,
@@ -1705,7 +1755,7 @@ export class GameManager {
           gold: 0,
           emeralds: 0,
           blocksPlaced: 0
-        } as any);
+        });
       }
     } catch (error) {
       console.error(`[GameManager] Error updating recent games for void ${player.discordId}:`, error);
@@ -1837,7 +1887,7 @@ export class GameManager {
             console.log(`[GameManager] Deleted text channel for game ${gameId}`);
           }
 
-          const pickingId = (game.channels as any).picking as string | undefined;
+          const pickingId = game.channels.picking;
           if (pickingId) {
             await this.workersManager.deleteChannel(pickingId, 2);
             console.log(`[GameManager] Deleted picking channel for game ${gameId}`);

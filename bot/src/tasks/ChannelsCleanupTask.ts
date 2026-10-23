@@ -1,4 +1,4 @@
-import { Client, ChannelType, CategoryChannel, TextChannel, VoiceChannel } from 'discord.js';
+import { Client, ChannelType, CategoryChannel, Guild, TextChannel, VoiceChannel } from 'discord.js';
 import Game from '../models/Game';
 import config from '../config/config';
 
@@ -64,7 +64,7 @@ export class ChannelsCleanupTask {
     }
   }
 
-  private async cleanupCategory(guild: any, categoryId: string, validChannelIds: Set<string>, categoryType: string) {
+  private async cleanupCategory(guild: Guild, categoryId: string, validChannelIds: Set<string>, categoryType: string) {
     try {
       const category = await guild.channels.fetch(categoryId) as CategoryChannel;
       if (!category || category.type !== ChannelType.GuildCategory) {
@@ -99,8 +99,9 @@ export class ChannelsCleanupTask {
           
           
           await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (deleteError: any) {
-          console.error(`[ChannelsCleanupTask] Failed to delete channel ${channel.name} (${channel.id}):`, deleteError?.message || deleteError);
+        } catch (deleteError) {
+          const detail = deleteError instanceof Error ? deleteError.message : deleteError;
+          console.error(`[ChannelsCleanupTask] Failed to delete channel ${channel.name} (${channel.id}):`, detail);
         }
       }
 

@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, MessageReaction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import User from '../../models/User';
 
 

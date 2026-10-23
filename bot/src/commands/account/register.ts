@@ -1,8 +1,7 @@
-import { Message, ChatInputCommandInteraction, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { Message, ChatInputCommandInteraction, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonInteraction, ModalSubmitInteraction, ComponentType } from 'discord.js';
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
-import config from '../../config/config';
 import { fix } from '../../utils/fix';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 
@@ -56,10 +55,10 @@ export async function register(interaction: Message | ChatInputCommandInteractio
       .setLabel('Complete Registration')
       .setStyle(ButtonStyle.Primary);
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
-    const sentMessage: any = await safeReply(interaction, { embeds: [embedObj.builder], components: [row], fetchReply: true }); 
-    const filter = (i: any) => i.customId === 'register_button' && i.user.id === discordId;
-    const collector = interaction.channel?.createMessageComponentCollector({ filter, time: 60000, max: 1 });
-    collector?.on('collect', async (btnInt: any) => {
+    const sentMessage = await safeReply(interaction, { embeds: [embedObj.builder], components: [row], fetchReply: true });
+    const filter = (i: ButtonInteraction) => i.customId === 'register_button' && i.user.id === discordId;
+    const collector = interaction.channel?.createMessageComponentCollector({ componentType: ComponentType.Button, filter, time: 60000, max: 1 });
+    collector?.on('collect', async (btnInt: ButtonInteraction) => {
       const modal = new ModalBuilder()
         .setCustomId('register_modal')
         .setTitle('Enter Registration Code')
@@ -73,7 +72,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           )
         );
       await btnInt.showModal(modal);
-      const filter = (i: any) => i.customId === 'register_modal';
+      const filter = (i: ModalSubmitInteraction) => i.customId === 'register_modal';
       const modalInt = await btnInt.awaitModalSubmit({ filter, time: 60000 }).catch(() => null);
       if (!modalInt) return;
       const inputCode = modalInt.fields.getTextInputValue('reg_code');
@@ -82,7 +81,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
         const existingUser = await User.findOne({ discordId });
         if (existingUser) {
           try {
-            await sentMessage.edit({
+            await (sentMessage as Message).edit({
               embeds: [errorEmbed('You are already registered.', 'Register Error').builder],
               components: []
             });
@@ -95,7 +94,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
         const ignTakenAgain = await User.findOne({ ign: { $regex: `^${ign}$`, $options: 'i' } });
         if (ignTakenAgain) {
           try {
-            await sentMessage.edit({
+            await (sentMessage as Message).edit({
               embeds: [errorEmbed('This IGN is already registered to another user.', 'Register Error').builder],
               components: []
             });
@@ -105,7 +104,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           await modalInt.reply({ content: 'IGN already registered to another user.', ephemeral: true });
           return;
         }
-        const user = await User.create({ discordId, ign });
+        await User.create({ discordId, ign });
         
 
         
@@ -115,7 +114,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           }
           
           try {
-            await sentMessage.edit({
+            await (sentMessage as Message).edit({
               embeds: [successEmbed('Registration successful! Your nickname and roles have been set up.', 'Registration Complete').builder],
               components: []
             });
@@ -126,7 +125,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
         } catch (fixError) {
           console.error('Error updating nickname/roles:', fixError);
           try {
-            await sentMessage.edit({
+            await (sentMessage as Message).edit({
               embeds: [
                 errorEmbed(
                   'Registration successful, but there was an issue updating your nickname/roles. An administrator can help fix this.',
@@ -142,7 +141,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
         }
       } else {
         try {
-          await sentMessage.edit({
+          await (sentMessage as Message).edit({
             embeds: [errorEmbed('Invalid code. Please try again.', 'Register Error').builder],
             components: []
           });

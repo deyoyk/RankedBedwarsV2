@@ -2,6 +2,8 @@ import { Message, ChatInputCommandInteraction, Guild } from 'discord.js';
 import { safeReply } from './safeReply';
 import { successEmbed, errorEmbed } from './betterembed';
 
+type ModerationEmbed = ReturnType<typeof successEmbed>;
+
 interface ParsedInteraction {
   targetId: string;
   duration?: string;
@@ -64,7 +66,7 @@ function parseInteractionInput(
 export interface ModerationActionConfig {
   commandName: string;
   actionVerb: string;
-  managerCall: (guild: Guild, targetId: string, issuerId: string, duration: string, reason: string) => Promise<any>;
+  managerCall: (guild: Guild, targetId: string, issuerId: string, duration: string, reason: string) => Promise<unknown>;
   hasDuration: boolean;
 }
 
@@ -97,7 +99,7 @@ export async function executeModerationAction(
       false
     );
     await safeReply(interaction, embed);
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Failed to ${config.commandName} user:`, error);
     await safeReply(interaction, errorEmbed(`Failed to ${config.commandName} user.`, `${config.commandName} Error`));
   }
@@ -106,7 +108,7 @@ export async function executeModerationAction(
 export interface UnmoderationActionConfig {
   commandName: string;
   actionVerb: string;
-  managerCall: (guild: Guild, targetId: string, issuerId: string) => Promise<any>;
+  managerCall: (guild: Guild, targetId: string, issuerId: string) => Promise<unknown>;
 }
 
 export async function executeUnmoderationAction(
@@ -126,7 +128,7 @@ export async function executeUnmoderationAction(
 export interface StrikeActionConfig {
   commandName: string;
   successMessage: (targetId: string, reason: string) => string;
-  managerCall: (guild: Guild, targetId: string, issuerId: string, reason: string) => Promise<any>;
+  managerCall: (guild: Guild, targetId: string, issuerId: string, reason: string) => Promise<unknown>;
 }
 
 async function executeModerationCommand(
@@ -136,7 +138,7 @@ async function executeModerationCommand(
     commandName: string;
     hasDuration?: boolean;
     hasReason?: boolean;
-    onSuccess: (parsed: ParsedInteraction) => Promise<{ embed: any; errorTitle?: string } | { error: string; errorTitle?: string }>;
+    onSuccess: (parsed: ParsedInteraction) => Promise<{ embed: ModerationEmbed; errorTitle?: string } | { error: string; errorTitle?: string }>;
   }
 ): Promise<void> {
   const parsed = parseInteractionInput(interaction, args, {
@@ -162,7 +164,7 @@ async function executeModerationCommand(
     } else {
       await safeReply(interaction, result.embed);
     }
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Failed to ${options.commandName} user:`, error);
     await safeReply(interaction, errorEmbed(`Failed to ${options.commandName} user.`, `${options.commandName} Error`));
   }

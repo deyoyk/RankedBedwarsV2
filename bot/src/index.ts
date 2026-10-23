@@ -1,8 +1,7 @@
 import { registerVcLeaveCleanupListener } from './handlers/VcLeaveCleanupListener';
-import { Client, GatewayIntentBits, ChatInputCommandInteraction, Interaction, RepliableInteraction, Message } from 'discord.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 import mongoose from 'mongoose';
 import config, { validateConfig } from './config/config';
-import { QueueListener } from './handlers/QueueListener';
 import { CommandManager } from './managers/CommandManager';
 import { WebSocketManager } from './websocket/WebSocketManager';
 import { ApiManager } from './api/ApiManager';
@@ -16,9 +15,11 @@ import { WorkersManager } from './managers/WorkersManager';
 import { GuildJoinListener } from './handlers/GuildJoinListener';
 
 
+import type { GameManager } from './Matchmaking/GameManager';
+
 declare global {
   
-  var _gameManager: import('./Matchmaking/GameManager').GameManager | undefined;
+  var _gameManager: GameManager | undefined;
 }
 
 
@@ -59,7 +60,6 @@ const wsManager = new WebSocketManager(wsPort, client, wsPath);
 const apiManager = new ApiManager(client, wsManager);
 
 
-let queueListener: any;
 const commandManager = new CommandManager(client, wsManager);
 
 
@@ -68,7 +68,7 @@ let partyCleanupTask: PartyCleanupTask;
 let channelsCleanupTask: ChannelsCleanupTask;
 let statusRotationTask: StatusRotationTask;
 let screenshareCleanupTask: ScreenshareCleanupTask;
-let gameManager: any;
+let gameManager: GameManager | undefined;
 let workersManager: WorkersManager;
 
 client.once('ready', async () => {
@@ -83,7 +83,7 @@ client.once('ready', async () => {
       if (maskedUri.password) maskedUri.password = '***';
       if (maskedUri.username) maskedUri.username = '***';
       console.log('[MongoDB] URI:', maskedUri.toString());
-    } catch (uriError) {
+    } catch {
       console.log('[MongoDB] URI:', mongouri.split('@').pop());
     }
 
@@ -122,7 +122,7 @@ client.once('ready', async () => {
     
     wsManager.setGameManager(gameManager);
 
-    queueListener = new (await import('./handlers/QueueListener')).QueueListener(client, wsManager, gameManager);
+    new (await import('./handlers/QueueListener')).QueueListener(client, wsManager, gameManager);
 
     new GuildJoinListener(client);
 

@@ -1,5 +1,5 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, ButtonStyle } from 'discord.js';
-import User from '../../models/User';
+import { Message, ChatInputCommandInteraction, ButtonStyle } from 'discord.js';
+import User, { IUser } from '../../models/User';
 import { fix } from '../../utils/fix';
 import { executeWithConfirmation } from '../../utils/confirmAction';
 import { successEmbed } from '../../utils/betterembed';
@@ -35,7 +35,7 @@ export async function wipeeveryone(interaction: Message | ChatInputCommandIntera
   });
 }
 
-async function executeWipeEveryone(interaction: Message | ChatInputCommandInteraction, users: any[]) {
+async function executeWipeEveryone(interaction: Message | ChatInputCommandInteraction, users: IUser[]) {
   const total = users.length;
   let processed = 0;
   const startTime = Date.now();

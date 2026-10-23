@@ -1,4 +1,4 @@
-import { Client } from 'discord.js';
+import { Client, Guild } from 'discord.js';
 import { ScreenshareService } from '../services/ScreenshareService';
 
 export class ScreenshareCleanupTask {
@@ -74,7 +74,7 @@ export class ScreenshareCleanupTask {
     }
   }
 
-  private async cleanupGuildSessions(guild: any): Promise<number> {
+  private async cleanupGuildSessions(guild: Guild): Promise<number> {
     try {
       const beforeCount = await ScreenshareService.getActiveSessions();
       await ScreenshareService.expireSessions(guild);

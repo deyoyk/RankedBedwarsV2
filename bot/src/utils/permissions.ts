@@ -1,9 +1,10 @@
 import { Message, ChatInputCommandInteraction, GuildMember } from 'discord.js';
 import { safeReply } from './safeReply';
+import type { WebSocketManager } from '../websocket/WebSocketManager';
 
 
 declare global {
-  var _wsManager: any;
+  var _wsManager: WebSocketManager | undefined;
 }
 
 export async function checkPermission(interaction: Message | ChatInputCommandInteraction, command: string): Promise<boolean> {

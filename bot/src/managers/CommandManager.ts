@@ -2,7 +2,7 @@ import { wipeeveryone } from '../commands/account/wipeeveryone';
 import { wipe } from '../commands/account/wipe';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
-import { Client, ChatInputCommandInteraction, Message, Collection } from 'discord.js';
+import { Client, ChatInputCommandInteraction, Message, Collection, ButtonInteraction, SlashCommandBuilder, type ApplicationCommandDataResolvable, type ApplicationCommandOptionData } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
 import { addelo } from '../commands/account/addelo';
@@ -53,6 +53,7 @@ import { executeEndSeason } from '../commands/season/endseason';
 import { executeListSeasons } from '../commands/season/listseasons';
 import { execute as level } from '../commands/stats/level';
 import { seasoninfo } from '../commands/season/seasoninfo';
+import { executeQueueControl, queueControlData } from '../commands/queue/queuecontrol';
 
 
 
@@ -61,7 +62,8 @@ import { seasoninfo } from '../commands/season/seasoninfo';
 interface Command {
   name: string;
   description: string;
-  options?: any[];
+  options?: ApplicationCommandOptionData[];
+  apiData?: ReturnType<SlashCommandBuilder['toJSON']>;
   execute: (interaction: Message | ChatInputCommandInteraction, args?: string[]) => Promise<void>;
 }
 
@@ -143,11 +145,11 @@ export class CommandManager {
     });
   }
 
-  private reg(name: string, description: string, execute: Command['execute'], options: any[] = []) {
-    this.commands.set(name, { name, description, options, execute });
+  private reg(name: string, description: string, execute: Command['execute'], options: ApplicationCommandOptionData[] = [], apiData?: Command['apiData']) {
+    this.commands.set(name, { name, description, options, apiData, execute });
   }
 
-  private async handleScreenshareCancel(interaction: any): Promise<void> {
+  private async handleScreenshareCancel(interaction: ButtonInteraction): Promise<void> {
     try {
       if (!interaction.guild) {
         await interaction.reply({ content: 'This can only be used in a server.', ephemeral: true });
@@ -190,7 +192,7 @@ export class CommandManager {
 
       try {
         const originalMessage = interaction.message;
-        if (originalMessage) {
+        if (originalMessage && 'edit' in originalMessage) {
           await originalMessage.edit({ components: [] });
         }
       } catch (editError) {
@@ -206,10 +208,10 @@ export class CommandManager {
     }
   }
 
-  private regChat(name: string, description: string, execute: (interaction: ChatInputCommandInteraction) => Promise<any>, options: any[] = []) {
+  private regChat(name: string, description: string, execute: (interaction: ChatInputCommandInteraction) => Promise<unknown>, options: ApplicationCommandOptionData[] = [], apiData?: Command['apiData']) {
     this.reg(name, description, async (interaction) => {
       if (interaction instanceof ChatInputCommandInteraction) await execute(interaction);
-    }, options);
+    }, options, apiData);
   }
 
   private registerCommands() {
@@ -240,8 +242,7 @@ export class CommandManager {
   }
 
   private registerQueueCommands() {
-    const { executeQueueControl, queueControlData } = require('../commands/queue/queuecontrol');
-    this.reg('queuecontrol', 'Enable or disable queues by type or specific queue', executeQueueControl, queueControlData.toJSON().options || []);
+    this.regChat('queuecontrol', 'Enable or disable queues by type or specific queue', executeQueueControl, [], queueControlData.toJSON());
     this.reg('queue', 'Show information about players in the current queue', queue);
     this.reg('party', 'Party management', party, [
       { name: 'action', description: 'Party action to perform', type: 3, required: true, choices: [
@@ -441,12 +442,12 @@ export class CommandManager {
 
   public async registerSlashCommands() {
     try {
-      const commands = Array.from(this.commands.values()).map((cmd, cmdIndex) => {
+      const commands: ApplicationCommandDataResolvable[] = Array.from(this.commands.values()).map((cmd, cmdIndex) => {
         console.log(`[Command Manager] Processing command ${cmdIndex}: ${cmd.name}`);
 
-        
-        if (cmd.options) {
-          cmd.options.forEach((option, index) => {
+        const printableOptions = cmd.options ?? cmd.apiData?.options ?? [];
+        if (printableOptions.length > 0) {
+          printableOptions.forEach((option, index) => {
             if (!option.type) {
               console.error(`[Command Manager] Command "${cmd.name}" (index ${cmdIndex}) option at index ${index} is missing type field:`, JSON.stringify(option, null, 2));
             } else {
@@ -455,6 +456,10 @@ export class CommandManager {
           });
         } else {
           console.log(`[Command Manager] Command "${cmd.name}" has no options`);
+        }
+
+        if (cmd.apiData) {
+          return cmd.apiData;
         }
 
         return {
@@ -469,12 +474,15 @@ export class CommandManager {
 
       await this.client.application?.commands.set(commands);
       console.log('[Command Manager] Slash commands registered successfully');
-    } catch (error: any) {
+    } catch (error) {
       console.error('[Command Manager] Error registering slash commands:', error);
 
       
-      if (error.rawError && error.rawError.errors) {
-        console.error('[Command Manager] Detailed error info:', JSON.stringify(error.rawError.errors, null, 2));
+      const rawErrors = error instanceof Error
+        ? (error as Error & { rawError?: { errors?: unknown } }).rawError
+        : undefined;
+      if (rawErrors?.errors) {
+        console.error('[Command Manager] Detailed error info:', JSON.stringify(rawErrors.errors, null, 2));
       }
     }
   }

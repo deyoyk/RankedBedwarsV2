@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, TextChannel } from 'discord.js';
+import { ChatInputCommandInteraction, GuildMember, TextChannel } from 'discord.js';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -15,15 +15,15 @@ export async function ssclose(interaction: ChatInputCommandInteraction) {
   }
 
   const screensharerRoleId = config.roles.screensharer;
-  const member = interaction.member;
-  
+  const member = interaction.member as GuildMember | null;
+
   let hasRole = false;
-  if (member && 'roles' in member) {
+  if (member) {
     const roles = member.roles;
-    if (typeof roles === 'object' && typeof (roles as any).cache === 'object' && typeof (roles as any).has === 'function') {
-      hasRole = (roles as any).has(screensharerRoleId);
-    } else if (Array.isArray(roles)) {
+    if (Array.isArray(roles)) {
       hasRole = roles.includes(screensharerRoleId);
+    } else if (roles && typeof roles === 'object' && 'cache' in roles) {
+      hasRole = roles.cache.has(screensharerRoleId);
     }
   }
 

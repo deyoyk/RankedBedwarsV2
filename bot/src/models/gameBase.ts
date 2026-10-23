@@ -11,6 +11,7 @@ export interface IRecentGame {
   deaths: number;
   bedBroken: number;
   finalKills: number;
+  finalDeaths?: number;
   won?: boolean;
   ismvp?: boolean;
   date: Date;
@@ -46,6 +47,7 @@ export const recentGameSubdoc = {
   deaths: { type: Number, required: true },
   bedBroken: { type: Number, required: true },
   finalKills: { type: Number, required: true },
+  finalDeaths: { type: Number, default: 0 },
   won: { type: Boolean, required: true },
   ismvp: { type: Boolean, default: false },
   date: { type: Date, required: true },
@@ -129,7 +131,7 @@ export const gameBaseFields = {
   combat: { type: [combatEntrySubdoc], default: [] },
 };
 
-function getTeamOfPlayer(this: any, playerId: string): string[] | null {
+function getTeamOfPlayer(this: { team1: string[]; team2: string[] }, playerId: string): string[] | null {
   if (this.team1.includes(playerId)) return this.team1;
   if (this.team2.includes(playerId)) return this.team2;
   return null;

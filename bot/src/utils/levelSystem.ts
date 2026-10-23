@@ -16,16 +16,6 @@ function getExperienceForLevel(level: number): number {
 }
 
 
-function getExperienceForLevelUp(fromLevel: number): number {
-  if (fromLevel < 1) return 100;
-
-  const baseIncrement = 100;
-  const incrementIncrease = 25;
-
-  return baseIncrement + (incrementIncrease * (fromLevel - 1));
-}
-
-
 function getLevelFromExperience(experience: number): number {
   if (experience < 100) return 1;
   const n = Math.floor((-175 + Math.sqrt(30625 + 200 * experience)) / 50);

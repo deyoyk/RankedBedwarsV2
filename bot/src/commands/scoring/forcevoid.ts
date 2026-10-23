@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, TextChannel } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import Game from '../../models/Game';
 import { GameManager } from '../../Matchmaking/GameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';

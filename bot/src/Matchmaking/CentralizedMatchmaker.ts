@@ -33,6 +33,18 @@ interface QueueMetrics {
   lastProcessedAt: number;
 }
 
+interface QueueLike {
+  id?: unknown;
+  channelId: string;
+  maxPlayers: number;
+  minElo: number;
+  maxElo: number;
+  isRanked?: boolean;
+  ispicking?: boolean;
+  queueType?: string;
+  bypassRoles: string[];
+}
+
 export class CentralizedMatchmaker {
   private client: Client;
   private wsManager: WebSocketManager;
@@ -47,7 +59,7 @@ export class CentralizedMatchmaker {
   private retryQueue: Set<string> = new Set();
   private queueMetrics: Map<string, QueueMetrics> = new Map();
   private priorityQueue: Array<{ queueId: string; priority: number; timestamp: number }> = [];
-  private queueCache: Map<string, { queue: any; timestamp: number }> = new Map();
+  private queueCache: Map<string, { queue: QueueLike; timestamp: number }> = new Map();
   private validationCache: Map<string, { valid: boolean; timestamp: number }> = new Map();
   private queueMonitorInterval: NodeJS.Timeout | null = null;
   private cacheCleanupInterval: NodeJS.Timeout | null = null;
@@ -281,7 +293,7 @@ export class CentralizedMatchmaker {
       let validPlayers: string[];
       try {
         validPlayers = await withTimeout(this.validatePlayers(players, queue), 5000, 'Validation');
-      } catch (validationError: any) {
+      } catch (validationError) {
         console.warn(`[CentralizedMatchmaker] Player validation failed for ${queueId}:`, validationError);
         return { success: false, gamesCreated: 0, errors: ['Player validation timed out'] };
       }
@@ -330,12 +342,13 @@ export class CentralizedMatchmaker {
         processingResult = isPickingQueue
           ? await processingPromise
           : await withTimeout(processingPromise, 30000, 'Processing');
-      } catch (processingError: any) {
+      } catch (processingError) {
+        const processingMessage = processingError instanceof Error ? processingError.message : String(processingError);
         console.error(`[CentralizedMatchmaker] Processing error for ${queueId}:`, processingError);
-        errors.push(`Processing failed: ${processingError.message}`);
+        errors.push(`Processing failed: ${processingMessage}`);
 
         state.retryCount++;
-        state.errors.push(processingError.message);
+        state.errors.push(processingMessage);
 
         if (state.retryCount < this.MAX_RETRIES) {
           console.log(`[CentralizedMatchmaker] Scheduling retry ${state.retryCount}/${this.MAX_RETRIES} for queue ${queueId}`);
@@ -380,12 +393,13 @@ export class CentralizedMatchmaker {
         errors: errors.length > 0 ? errors : undefined
       };
 
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[CentralizedMatchmaker] Unexpected error processing queue ${queueId}:`, error);
-      errors.push(error.message || 'Unexpected error occurred');
+      const errorMessage = error instanceof Error && error.message ? error.message : 'Unexpected error occurred';
+      errors.push(errorMessage);
 
       state.retryCount++;
-      state.errors.push(error.message);
+      state.errors.push(error instanceof Error ? error.message : 'Unexpected error occurred');
       metrics.errorCount++;
 
       if (state.retryCount < this.MAX_RETRIES) {
@@ -472,7 +486,7 @@ export class CentralizedMatchmaker {
     }
   }
 
-  private async validatePlayers(playerIds: string[], queue: any): Promise<string[]> {
+  private async validatePlayers(playerIds: string[], queue: QueueLike): Promise<string[]> {
     try {
       const validPlayers: string[] = [];
       const checkedParties = new Set<string>();
@@ -513,7 +527,7 @@ export class CentralizedMatchmaker {
 
   private async validateSinglePlayer(
     playerId: string, 
-    queue: any, 
+    queue: QueueLike, 
     allPlayersInQueue: string[],
     checkedParties: Set<string>,
     invalidParties: Set<string>
@@ -571,8 +585,8 @@ export class CentralizedMatchmaker {
             console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
             return false;
           }
-        } catch (error: any) {
-          console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error.message}), keeping player in queue`);
+        } catch (error) {
+          console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error instanceof Error ? error.message : String(error)}), keeping player in queue`);
         }
       }
 
@@ -585,7 +599,7 @@ export class CentralizedMatchmaker {
 
   private async validateParty(
     partyId: string, 
-    queue: any, 
+    queue: QueueLike, 
     playersInQueue: string[]
   ): Promise<{ valid: boolean; reason?: string }> {
     try {
@@ -651,7 +665,7 @@ export class CentralizedMatchmaker {
     }
   }
 
-  private determineQueueType(queue: any): QueueType {
+  private determineQueueType(queue: QueueLike): QueueType {
     
     if (queue.maxPlayers <= 2) {
       return QueueType.RANDOM;
@@ -663,7 +677,7 @@ export class CentralizedMatchmaker {
     return QueueType.RANDOM;
   }
 
-  private async getQueueSafely(queueId: string): Promise<any | null> {
+  private async getQueueSafely(queueId: string): Promise<QueueLike | null> {
     try {
       const cached = this.queueCache.get(queueId);
       if (cached && Date.now() - cached.timestamp < this.CACHE_TTL) {

@@ -1,7 +1,7 @@
 import { 
   Client, 
   TextChannel, 
-  VoiceChannel, 
+  VoiceChannel,
   Guild, 
   EmbedBuilder, 
   ActionRowBuilder, 
@@ -20,6 +20,18 @@ import { MapService } from '../managers/MapManager';
 import { WorkersManager } from '../managers/WorkersManager';
 
 import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil, getPlayerIGNs as getPlayerIGNsUtil } from './utils';
+
+interface QueueLike {
+  id?: unknown;
+  channelId: string;
+  maxPlayers: number;
+  minElo: number;
+  maxElo: number;
+  isRanked?: boolean;
+  ispicking?: boolean;
+  queueType?: string;
+  bypassRoles: string[];
+}
 
 export class PickingQueueManager {
   private client: Client;
@@ -87,30 +99,27 @@ export class PickingQueueManager {
       const soloPlayers = players.filter(p => !partyPlayers.has(p));
 
       let captains: string[] = [];
-      let remainingPlayers = [...players];
 
       if (partyEntries.length === 0) {
         const highestElo = users[0].discordId;
         const lowestElo = users[users.length - 1].discordId;
         captains = [highestElo, lowestElo];
       } else if (partyEntries.length === 1) {
-        const [partyId, members] = partyEntries[0];
+        const [, members] = partyEntries[0];
         const partyLeader = members[0];
         const soloCaptain = soloPlayers.length > 0 ? soloPlayers[0] : members[1];
         captains = [partyLeader, soloCaptain];
       } else if (partyEntries.length === 2) {
-        const [party1Id, members1] = partyEntries[0];
-        const [party2Id, members2] = partyEntries[1];
+        const [, members1] = partyEntries[0];
+        const [, members2] = partyEntries[1];
         captains = [members1[0], members2[0]];
       } else if (partyEntries.length >= 3) {
         const shuffledParties = partyEntries.sort(() => Math.random() - 0.5);
-        const [party1Id, members1] = shuffledParties[0];
-        const [party2Id, members2] = shuffledParties[1];
+        const [, members1] = shuffledParties[0];
+        const [, members2] = shuffledParties[1];
         captains = [members1[0], members2[0]];
       }
 
-      remainingPlayers = remainingPlayers.filter(p => !captains.includes(p));
-      
       return { captains, partyInfo: partyMap };
     } catch (error) {
       console.error('[PickingQueue] Error selecting captains with parties:', error);
@@ -133,7 +142,7 @@ export class PickingQueueManager {
     if (partyEntries.length === 0) {
       pickOrder = captains;
     } else if (partyEntries.length === 1) {
-      const [partyId, members] = partyEntries[0];
+      const [, members] = partyEntries[0];
       const partyCaptain = captains.find(c => members.includes(c))!;
       const soloCaptain = captains.find(c => !members.includes(c))!;
       
@@ -184,7 +193,7 @@ export class PickingQueueManager {
     team: string[],
     captainId: string,
     avgElo: number,
-    ignMap: Map<string, string>
+    _ignMap: Map<string, string>
   ): string {
     const players = team.filter(id => id !== captainId);
     return [
@@ -235,7 +244,7 @@ export class PickingQueueManager {
 
   public async processQueue(
     players: string[], 
-    queueData: any, 
+    queueData: QueueLike, 
     maxGames: number = 5
   ): Promise<QueueProcessingResult> {
     try {
@@ -295,11 +304,11 @@ export class PickingQueueManager {
 
   private async runCaptainPicking(
     players: string[],
-    queueData: any,
+    queueData: QueueLike,
     gameId: number,
     selectedMap: string
   ): Promise<{ success: boolean }> {
-    let resources: Partial<GameResources> = {};
+    let resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel } | null = null;
     let session: PickingSession | null = null;
 
     try {
@@ -313,7 +322,7 @@ export class PickingQueueManager {
 
       
       const { captains, partyInfo } = await this.selectCaptainsWithParties(players);
-      const { pickOrder, partyPlayers, soloPlayers } = this.getPartyPickingOrder(partyInfo, captains);
+      const { pickOrder, partyPlayers } = this.getPartyPickingOrder(partyInfo, captains);
       
       console.log(`[PickingQueue] Game ${gameId} - Captains: ${captains.join(', ')}`);
       console.log(`[PickingQueue] Game ${gameId} - Party info: ${partyInfo.size} parties`);
@@ -353,13 +362,13 @@ export class PickingQueueManager {
       this.activeSessions.set(gameId, session);
 
       
-      await this.moveAllToPickingVC(guild, players, resources.pickingChannel!.id);
+      await this.moveAllToPickingVC(guild, players, resources!.pickingChannel.id);
 
-      
-      await this.sendPickingEmbed(resources.gameChannel!, session, selectedMap, queueData);
 
-      
-      const finalTeams = await this.executePicking(resources.gameChannel!, session);
+      await this.sendPickingEmbed(resources!.gameChannel, session, selectedMap, queueData);
+
+
+      const finalTeams = await this.executePicking(resources!.gameChannel, session);
 
       if (!finalTeams) {
         throw new Error('Picking process failed or was cancelled');
@@ -425,7 +434,9 @@ export class PickingQueueManager {
       if (session) {
         this.cleanupPickingSession(gameId);
       }
-      await this.cleanupPickingChannels(resources);
+      if (resources) {
+        await this.cleanupPickingChannels(resources);
+      }
 
       return { success: false };
     }
@@ -435,14 +446,14 @@ export class PickingQueueManager {
     guild: Guild,
     gameId: number,
     players: string[],
-    queueData: any
-  ): Promise<Partial<GameResources>> {
+    _queueData: QueueLike
+  ): Promise<{ gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel }> {
     try {
       console.log(`[PickingQueue] Creating picking resources for game ${gameId} using WorkersManager`);
       
       
       const [pickingChannel, gameChannel] = await Promise.all([
-        this.workersManager.createChannel({
+        this.workersManager.createChannel<VoiceChannel>({
           name: `picking-${gameId}`,
           type: ChannelType.GuildVoice,
           parent: config.categories.voiceCategory,
@@ -465,7 +476,7 @@ export class PickingQueueManager {
           ]
         }, 9), 
 
-        this.workersManager.createChannel({
+        this.workersManager.createChannel<TextChannel>({
           name: `game-${gameId}-picking`,
           type: ChannelType.GuildText,
           parent: config.categories.gameCategory,
@@ -539,7 +550,7 @@ export class PickingQueueManager {
     channel: TextChannel,
     session: PickingSession,
     map: string,
-    queueData: any
+    queueData: Pick<QueueLike, 'isRanked'>
   ): Promise<void> {
     try {
       const embed = await this.buildPickingEmbed(session, map, queueData);
@@ -559,7 +570,7 @@ export class PickingQueueManager {
   private async buildPickingEmbed(
     session: PickingSession,
     map: string,
-    queueData: any
+    _queueData: Pick<QueueLike, 'isRanked'>
   ): Promise<EmbedBuilder> {
     try {
       const ignMap = await this.getPlayerIGNs([...session.team1, ...session.team2, ...session.remainingPlayers]);
@@ -811,7 +822,7 @@ export class PickingQueueManager {
       if (partyEntries.length === 0) {
         return this.getNextPicker(session);
       } else if (partyEntries.length === 1) {
-        const [partyId, members] = partyEntries[0];
+        const [, members] = partyEntries[0];
         const partyCaptain = session.captains.find(c => members.includes(c));
         const soloCaptain = session.captains.find(c => !members.includes(c));
         
@@ -880,7 +891,7 @@ export class PickingQueueManager {
     return calculateTeamAverageElo(playerIds);
   }
 
-  private async selectRandomMap(queueData: any): Promise<string> {
+  private async selectRandomMap(queueData: QueueLike): Promise<string> {
     return selectRandomMapUtil(this.mapService, queueData);
   }
 

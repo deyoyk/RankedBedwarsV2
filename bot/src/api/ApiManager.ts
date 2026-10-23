@@ -1,5 +1,4 @@
 import express, { Request, Response } from 'express';
-import { Server } from 'http';
 import path from 'path';
 import fs from 'fs';
 import { rateLimit } from 'express-rate-limit';
@@ -18,16 +17,45 @@ import { getLevelInfo } from '../utils/levelSystem';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { escapeRegex } from '../utils/regexEscape';
 import botPackage from '../../package.json';
+import type { IUser } from '../models/User';
+import type { IGame } from '../models/Game';
+import type { IGameBase, ICombatEntry } from '../models/gameTypes';
+import type { FlattenMaps, Model } from 'mongoose';
+
+type LeanUser = FlattenMaps<IUser>;
+type LeanGame = FlattenMaps<IGame>;
 
 interface CacheEntry {
-  value: any;
+  value: unknown;
   expiresAt: number;
+}
+
+interface CollectedPunishment {
+  id: string;
+  type: string;
+  reason: string;
+  date: Date;
+  duration: number | null;
+  moderator: string;
+  targetId: string;
+}
+
+interface StoredPunishment {
+  id: string;
+  reason: string;
+  date: Date;
+  duration?: number;
+  moderator: string;
+}
+
+interface ApiStatusError extends Error {
+  statusCode?: number;
 }
 
 export class ApiManager {
   private client: Client;
   private wsManager: WebSocketManager;
-  private gameModel: any = null;
+  private gameModel: Model<IGame> | null = null;
   private cache: Map<string, CacheEntry> = new Map();
 
   private globalLimiter = rateLimit({
@@ -124,7 +152,7 @@ export class ApiManager {
         if (fs.existsSync(path.join(base, 'index.html'))) {
           return base;
         }
-      } catch (error) {
+      } catch {
       }
     }
     return null;
@@ -335,7 +363,7 @@ export class ApiManager {
         res.status(404).json({ error: 'Ban not found' });
         return;
       }
-      const ban = user.bans.find((b: any) => b.id === banId);
+      const ban = user.bans.find((b) => b.id === banId);
       if (!ban) {
         res.status(404).json({ error: 'Ban not found' });
         return;
@@ -402,7 +430,7 @@ export class ApiManager {
     }
   }
 
-  private buildUserWithLevel(user: any) {
+  private buildUserWithLevel(user: LeanUser) {
     const levelInfo = getLevelInfo(user.experience || 0);
     const span = levelInfo.totalExperienceForLevel > 0 ? levelInfo.totalExperienceForLevel : 1;
     return {
@@ -419,14 +447,14 @@ export class ApiManager {
     };
   }
 
-  private async getGameModel(): Promise<any> {
+  private async getGameModel(): Promise<Model<IGame>> {
     if (!this.gameModel) {
       this.gameModel = (await import('../models/Game')).default;
     }
     return this.gameModel;
   }
 
-  private async resolveGameIgns(games: any[]): Promise<Record<string, string>> {
+  private async resolveGameIgns(games: IGameBase[]): Promise<Record<string, string>> {
     const allIds = new Set<string>();
     for (const game of games) {
       for (const id of [...(game.team1 || []), ...(game.team2 || []), ...(game.bedbreaks || []), ...(game.mvps || []), ...(game.winners || []), ...(game.losers || [])]) {
@@ -443,7 +471,7 @@ export class ApiManager {
     return idToIgn;
   }
 
-  private mapGameIgns(game: any, idToIgn: Record<string, string>) {
+  private mapGameIgns(game: IGameBase, idToIgn: Record<string, string>) {
     const map = (arr: string[]) => (arr || []).map((id: string) => idToIgn[id] || id);
     return {
       team1ign: map(game.team1),
@@ -452,7 +480,7 @@ export class ApiManager {
       mvpsign: map(game.mvps),
       winnersign: map(game.winners),
       losersign: map(game.losers),
-      combatsign: (game.combat || []).map((entry: any) => ({
+      combatsign: (game.combat || []).map((entry: ICombatEntry) => ({
         ...entry,
         playerign: idToIgn[entry.player] || entry.player
       }))
@@ -646,17 +674,18 @@ export class ApiManager {
         sortObj[mode] = -1;
 
         const users = await User.find()
-          .sort(sortObj as any)
+          .sort(sortObj)
           .skip(skip)
           .limit(pageSize)
           .select(`ign ${mode}`)
           .lean();
 
         const formatted: Record<number, { ign: string, value: number | string }> = {};
-        users.forEach((user: any, index: number) => {
+        users.forEach((user, index) => {
+          const rawValue: unknown = user[mode as keyof typeof user];
           formatted[index + 1 + skip] = {
             ign: user.ign,
-            value: user[mode as keyof typeof user] || 0
+            value: typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0
           };
         });
 
@@ -698,15 +727,21 @@ export class ApiManager {
 
       const staffIds: Set<string> = new Set();
       const targetIds: Set<string> = new Set();
-      const punishments: any[] = [];
+      const punishments: CollectedPunishment[] = [];
+
+      const getUserPunishments = (user: LeanUser): StoredPunishment[] => {
+        if (type === 'bans') return user.bans ?? [];
+        if (type === 'mutes') return user.mutes ?? [];
+        return user.strikes ?? [];
+      };
 
       for (const user of users) {
-        const arr = Array.isArray((user as any)[type]) ? (user as any)[type] : [];
+        const arr = getUserPunishments(user);
         for (const p of arr) {
           let expired = false;
           if (type === 'bans' || type === 'mutes') {
-            if (p.duration > 0) {
-              const end = this.punishmentTime(p.date) + p.duration * 60000;
+            if ((p.duration ?? 0) > 0) {
+              const end = this.punishmentTime(p.date) + (p.duration ?? 0) * 60000;
               if (end < Date.now()) expired = true;
             }
           }
@@ -851,10 +886,10 @@ export class ApiManager {
       const result = await this.getCached(`seasonLeaderboard:${seasonNumber}:${chapterNumber}:${mode}:${page}`, 30000, async () => {
         try {
           return await SeasonManager.getSeasonLeaderboard(seasonNumber, chapterNumber, mode, page, pageSize);
-        } catch (error: any) {
-          if (error && typeof error.message === 'string' && error.message.startsWith('Invalid mode parameter')) {
-            const err = new Error('Invalid mode parameter');
-            (err as any).statusCode = 400;
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Invalid mode parameter')) {
+            const err: ApiStatusError = new Error('Invalid mode parameter');
+            err.statusCode = 400;
             throw err;
           }
           throw error;
@@ -870,9 +905,10 @@ export class ApiManager {
       });
 
       res.json(formattedResult);
-    } catch (error: any) {
-      if (error && error.statusCode === 400) {
-        res.status(400).json({ error: error.message });
+    } catch (error) {
+      const statusCode = error instanceof Error ? (error as ApiStatusError).statusCode : undefined;
+      if (statusCode === 400) {
+        res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid mode parameter' });
         return;
       }
       console.error('Error fetching season leaderboard:', error);
@@ -1015,24 +1051,27 @@ export class ApiManager {
         sortObj[stat] = -1;
 
         const users = await User.find()
-          .sort(sortObj as any)
+          .sort(sortObj)
           .limit(limit)
           .select(`ign discordId ${stat} elo wins losses kills deaths finalDeaths playtimeSeconds peakElo`)
           .lean();
 
-        return users.map((user: any, index: number) => ({
-          rank: index + 1,
-          ign: user.ign,
-          discordId: user.discordId,
-          value: user[stat as keyof typeof user] || 0,
-          elo: user.elo,
-          wins: user.wins,
-          losses: user.losses,
-          kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A',
-          finalDeaths: user.finalDeaths || 0,
-          playtimeSeconds: user.playtimeSeconds || 0,
-          peakElo: user.peakElo || 0
-        }));
+        return users.map((user, index) => {
+          const rawValue: unknown = user[stat as keyof typeof user];
+          return {
+            rank: index + 1,
+            ign: user.ign,
+            discordId: user.discordId,
+            value: typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0,
+            elo: user.elo,
+            wins: user.wins,
+            losses: user.losses,
+            kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A',
+            finalDeaths: user.finalDeaths || 0,
+            playtimeSeconds: user.playtimeSeconds || 0,
+            peakElo: user.peakElo || 0
+          };
+        });
       });
 
       res.json({ stat, results: result });
@@ -1073,7 +1112,7 @@ export class ApiManager {
 
       const idToIgn = await this.resolveGameIgns(games);
 
-      const gamesWithIgns = games.map((game: any) => ({
+      const gamesWithIgns = games.map((game: LeanGame) => ({
         ...game,
         ...this.mapGameIgns(game, idToIgn),
         playerResult: {
@@ -1117,8 +1156,8 @@ export class ApiManager {
         .select('gameId map winners losers mvps bedbreaks team1 team2 startTime combat')
         .lean();
 
-      const result = games.map((game: any) => {
-        const entry = (game.combat || []).find((c: any) => c.player === discordid) || {};
+      const result = games.map((game: LeanGame) => {
+        const entry = (game.combat || []).find((c) => c.player === discordid);
         return {
           gameId: game.gameId,
           map: game.map,
@@ -1126,10 +1165,10 @@ export class ApiManager {
           won: game.winners.includes(discordid),
           wasMVP: game.mvps.includes(discordid),
           brokeABed: game.bedbreaks.includes(discordid),
-          damageDealt: entry.damageDealt || 0,
-          damageTaken: entry.damageTaken || 0,
-          assists: entry.assists || 0,
-          fights: Array.isArray(entry.fights) ? entry.fights.length : 0
+          damageDealt: entry?.damageDealt || 0,
+          damageTaken: entry?.damageTaken || 0,
+          assists: entry?.assists || 0,
+          fights: entry && Array.isArray(entry.fights) ? entry.fights.length : 0
         };
       });
 
@@ -1182,7 +1221,7 @@ export class ApiManager {
         const allPlayerIds = new Set<string>();
 
 
-        for (const [channelId, playerIds] of queuePlayers.entries()) {
+        for (const [, playerIds] of queuePlayers.entries()) {
           playerIds.forEach(id => allPlayerIds.add(id));
         }
 
@@ -1219,7 +1258,7 @@ export class ApiManager {
         const queues = await Queue.find().lean();
 
         let totalPlayersInQueue = 0;
-        for (const [channelId, playerIds] of queuePlayers.entries()) {
+        for (const [, playerIds] of queuePlayers.entries()) {
           totalPlayersInQueue += playerIds.length;
         }
 
@@ -1274,7 +1313,7 @@ export class ApiManager {
       const staffIgnMap: Record<string, string> = {};
       staffUsers.forEach(u => { staffIgnMap[u.discordId] = u.ign; });
 
-      const formatPunishments = (punishments: any[], type: string) => {
+      const formatPunishments = (punishments: StoredPunishment[], type: string) => {
         return punishments.map(p => ({
           ...p,
           type,
@@ -1358,13 +1397,14 @@ export class ApiManager {
       sortObj[mode] = -1;
 
       const users = await User.find()
-        .sort(sortObj as any)
+        .sort(sortObj)
         .limit(limit)
         .select('ign discordId elo wins losses kills deaths games mvps bedBroken experience level finalDeaths playtimeSeconds peakElo damageDealt damageTaken assists bestStreak firstBloods')
         .lean();
 
-      const topPlayers = users.map((user: any, index: number) => {
+      const topPlayers = users.map((user, index) => {
         const levelInfo = getLevelInfo(user.experience || 0);
+        const rawValue: unknown = user[mode as keyof typeof user];
         return {
           rank: index + 1,
           ign: user.ign,
@@ -1385,7 +1425,7 @@ export class ApiManager {
           kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A',
           wlr: user.losses > 0 ? (user.wins / user.losses).toFixed(2) : 'N/A',
           winRate: user.games > 0 ? ((user.wins / user.games) * 100).toFixed(1) + '%' : 'N/A',
-          [mode]: user[mode as keyof typeof user] || 0
+          [mode]: typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0
         };
       });
 
@@ -1413,7 +1453,7 @@ export class ApiManager {
 
       const idToIgn = await this.resolveGameIgns(games);
 
-      const gamesWithIgns = games.map((game: any) => ({
+      const gamesWithIgns = games.map((game: LeanGame) => ({
         gameId: game.gameId,
         map: game.map,
         date: game.startTime,
@@ -1619,7 +1659,7 @@ export class ApiManager {
       }
 
       const recentGames = (user.recentGames || []).slice(0, 20);
-      const eloHistory = recentGames.map((game: any, index: number) => ({
+      const eloHistory = recentGames.map((game) => ({
         gameId: game.gameId,
         date: game.date,
         won: game.won,

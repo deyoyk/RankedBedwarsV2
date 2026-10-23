@@ -1,10 +1,11 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
-import Queue from '../../models/Queue';
+import Queue, { IQueue } from '../../models/Queue';
 import { betterEmbed } from '../../utils/betterembed';
 import { paginate } from '../../utils/paginate';
+import { queuePlayers } from '../../types/queuePlayersMemory';
 
-export async function queues(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
-  await paginate(interaction, {
+export async function queues(interaction: Message | ChatInputCommandInteraction, _args?: string[]) {
+  await paginate<IQueue>(interaction, {
     commandName: 'queues',
     title: 'Queues',
     emptyMessage: 'There are no queues in the database.',
@@ -28,7 +29,7 @@ export async function queues(interaction: Message | ChatInputCommandInteraction,
             queuesList += `\n <#${queue.channelId}>\n`;
             queuesList += `\`MinELO: ${queue.minElo}\` | `;
             queuesList += `\`MaxELO: ${queue.maxElo}\` | `;
-            queuesList += `\`Players: ${queue.players?.length || 0}/${queue.maxPlayers}\` | `;
+            queuesList += `\`Players: ${queuePlayers.get(queue.channelId)?.length || 0}/${queue.maxPlayers}\` | `;
             queuesList += `\`Ranked: ${queue.isRanked ? 'Yes' : 'No'}\` | `;
             queuesList += `\`Picking: ${queue.ispicking ? 'Yes' : 'No'}\``;
             queuesList += '\n';

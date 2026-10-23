@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, User as DiscordUser } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';

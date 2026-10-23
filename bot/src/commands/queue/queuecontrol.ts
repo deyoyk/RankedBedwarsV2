@@ -30,7 +30,7 @@ export async function executeQueueControl(interaction: ChatInputCommandInteracti
   const sub = interaction.options.getSubcommand();
   const type = interaction.options.getString('type', true);
   const queueId = interaction.options.getString('queueid');
-  let filter: any = {};
+  let filter: Record<string, unknown> = {};
   if (type === 'ranked') filter = { isRanked: true };
   else if (type === 'unranked') filter = { isRanked: false };
   else if (type === 'specific') {
@@ -47,7 +47,7 @@ export async function executeQueueControl(interaction: ChatInputCommandInteracti
       .setTitle(sub === 'enable' ? 'Queues Enabled' : 'Queues Disabled')
       .setDescription(`Affected queues: ${result.modifiedCount}`);
     await interaction.reply({ embeds: [embed], ephemeral: false });
-  } catch (error) {
+  } catch {
     await interaction.reply({ content: 'Error updating queues.', ephemeral: true });
   }
 }

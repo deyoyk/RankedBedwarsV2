@@ -80,7 +80,7 @@ export async function executeWithConfirmation(
 
       await config.onConfirm();
 
-    } catch (timeoutError) {
+    } catch {
       const timeoutEmbed = new EmbedBuilder()
         .setTitle('⏰ Confirmation Expired')
         .setColor('#00AAAA')
@@ -94,8 +94,9 @@ export async function executeWithConfirmation(
       });
     }
 
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${config.commandName}] Error in ${config.commandName} command:`, error);
-    await safeReply(interaction, errorEmbed(`There was an error running ${config.commandName}: ${error.message || 'Unknown error'}`, `${config.commandName} Error`));
+    const detail = error instanceof Error ? error.message : 'Unknown error';
+    await safeReply(interaction, errorEmbed(`There was an error running ${config.commandName}: ${detail}`, `${config.commandName} Error`));
   }
 }

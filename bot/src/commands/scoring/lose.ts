@@ -70,7 +70,7 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
     }
 
     await safeReply(interaction, successEmbed(`Gave loss to <@${targetId}> (-${eloRank.loseElo} Elo).`, 'Loss Given'));
-  } catch (err) {
+  } catch {
     await safeReply(interaction, errorEmbed('Failed to give loss.'));
   }
 }

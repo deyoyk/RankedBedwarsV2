@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ThreadAutoArchiveDuration } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Message, MessageComponentInteraction, ThreadAutoArchiveDuration } from 'discord.js';
 
 export interface VoteData {
   upvote: Set<string>;
@@ -20,7 +20,7 @@ export function createVoteButtons(upLabel: string, downLabel: string, prefix: st
   );
 }
 
-export async function createDiscussionThread(message: any, threadName: string): Promise<void> {
+export async function createDiscussionThread(message: Message, threadName: string): Promise<void> {
   try {
     await message.startThread({
       name: threadName,
@@ -32,17 +32,17 @@ export async function createDiscussionThread(message: any, threadName: string): 
 }
 
 export function setupVoteCollector(
-  message: any,
+  message: Message,
   eligiblePlayers: string[],
   onVote: (userId: string, customId: string) => void,
   timeMs = 15 * 60 * 1000
 ) {
   const collector = message.createMessageComponentCollector({
     time: timeMs,
-    filter: (i: any) => eligiblePlayers.includes(i.user.id)
+    filter: (i: MessageComponentInteraction) => eligiblePlayers.includes(i.user.id)
   });
 
-  collector.on('collect', async (buttonInteraction: any) => {
+  collector.on('collect', async (buttonInteraction: MessageComponentInteraction) => {
     try {
       onVote(buttonInteraction.user.id, buttonInteraction.customId);
       await buttonInteraction.deferUpdate();

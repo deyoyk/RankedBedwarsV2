@@ -45,7 +45,7 @@ async function fetchImageDataUrl(url: string, timeoutMs: number): Promise<string
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: controller.signal } as any);
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     const contentType = res.headers.get('content-type') || 'image/png';

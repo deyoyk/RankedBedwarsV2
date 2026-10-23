@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   ActionRowBuilder,
   StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
   ButtonBuilder,
   ButtonStyle,
   ComponentType
@@ -70,9 +71,8 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
   });
 
   const changedSettings: Record<SettingKey, boolean> = { ...user.settings };
-  let currentEmbed = embedObj.builder;
 
-  const updateEmbed = async (componentInteraction?: any) => {
+  const updateEmbed = async (componentInteraction?: StringSelectMenuInteraction) => {
     const updatedEmbedObj = betterEmbed('Toggle your personal settings below:', '#00AAAA', 'User Settings');
     for (const setting of SETTINGS) {
       updatedEmbedObj.builder.addFields({
@@ -81,7 +81,6 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
         inline: false
       });
     }
-    currentEmbed = updatedEmbedObj.builder;
     if (componentInteraction) {
       await componentInteraction.update({ embeds: [updatedEmbedObj.builder], components: [row1, row2] });
     } else {

@@ -93,10 +93,14 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
     }
 
     
-    const oldValue = (user as any)[statToEdit];
+    const stat = statToEdit as EditableStat;
+    const oldValue: number = user[stat] ?? 0;
 
-    
-    (user as any)[statToEdit] = convertedValue;
+    if (typeof convertedValue !== 'number') {
+      await safeReply(interaction, errorEmbed(`"${newValue}" is not a valid non-negative number for stat "${statToEdit}".`, 'Edit Command Error'));
+      return;
+    }
+    user[stat] = convertedValue;
 
     
     if (statToEdit === 'kills' || statToEdit === 'deaths') {

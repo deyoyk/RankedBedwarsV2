@@ -41,10 +41,20 @@ export async function calculateTeamAverageElo(playerIds: string[]): Promise<numb
   }
 }
 
-export async function selectRandomMap(mapService: MapService, queueData: any): Promise<string> {
+type MapSize = {
+  name: string;
+  maxplayers?: number;
+  max_players?: number;
+};
+
+function mapSize(m: MapSize): number | undefined {
+  return m.maxplayers ?? m.max_players;
+}
+
+export async function selectRandomMap(mapService: MapService, queueData: { maxPlayers: number }): Promise<string> {
   try {
     const reservedMaps = await mapService.getReservedMaps();
-    const candidates = reservedMaps.filter(m => (m.maxplayers ?? (m as any).max_players) === queueData.maxPlayers);
+    const candidates = reservedMaps.filter(m => mapSize(m) === queueData.maxPlayers);
 
     if (candidates.length > 0) {
       const pick = candidates[Math.floor(Math.random() * candidates.length)];
@@ -52,7 +62,7 @@ export async function selectRandomMap(mapService: MapService, queueData: any): P
     }
 
     const unlockedMaps = await mapService.getUnlockedMaps();
-    const unlockedCandidates = unlockedMaps.filter(m => (m.maxplayers ?? (m as any).max_players) === queueData.maxPlayers);
+    const unlockedCandidates = unlockedMaps.filter(m => mapSize(m) === queueData.maxPlayers);
 
     if (unlockedCandidates.length > 0) {
       const pick = unlockedCandidates[Math.floor(Math.random() * unlockedCandidates.length)];

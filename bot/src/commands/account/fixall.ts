@@ -1,6 +1,6 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, ButtonStyle } from 'discord.js';
 import { fix } from '../../utils/fix';
-import User from '../../models/User';
+import User, { IUser } from '../../models/User';
 import { executeWithConfirmation } from '../../utils/confirmAction';
 
 interface FixAllProgress {
@@ -42,7 +42,7 @@ export async function fixall(interaction: Message | ChatInputCommandInteraction)
   });
 }
 
-async function executeFixAll(interaction: Message | ChatInputCommandInteraction, users: any[]) {
+async function executeFixAll(interaction: Message | ChatInputCommandInteraction, users: IUser[]) {
   const total = users.length;
   const progress: FixAllProgress = {
     total,
@@ -83,9 +83,10 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
         await fix(interaction.guild!, user.discordId);
         progress.successful++;
         console.log(`[FixAll] Successfully fixed user ${user.discordId} (${user.ign || 'Unknown'})`);
-      } catch (error: any) {
+      } catch (error) {
         progress.failed++;
-        const errorMsg = `Failed to fix ${user.ign || user.discordId}: ${error.message || 'Unknown error'}`;
+        const detail = error instanceof Error ? error.message : 'Unknown error';
+        const errorMsg = `Failed to fix ${user.ign || user.discordId}: ${detail}`;
         progress.errors.push(errorMsg);
         console.error(`[FixAll] ${errorMsg}`);
       } finally {

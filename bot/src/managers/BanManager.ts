@@ -1,5 +1,6 @@
 import { Guild } from 'discord.js';
 import { TimedPunishmentManager, TimedPunishmentKind } from './timedPunishmentManager';
+import type { WebSocketNotifier } from './punishmentHelpers';
 
 const kind: TimedPunishmentKind = {
   type: 'ban',
@@ -24,7 +25,7 @@ export class BanManager extends TimedPunishmentManager {
     return kind;
   }
 
-  protected discordApply(promises: Promise<any>[], guild: Guild, targetId: string, reason: string, moderatorId: string, duration: number | null): void {
+  protected discordApply(promises: Promise<unknown>[], guild: Guild, targetId: string, reason: string, moderatorId: string, duration: number | null): void {
     if (!duration) {
       promises.push(
         guild.members.ban(targetId, { reason: `${reason} - By: ${moderatorId}` }).catch(error => {
@@ -34,7 +35,7 @@ export class BanManager extends TimedPunishmentManager {
     }
   }
 
-  protected discordUndo(promises: Promise<any>[], guild: Guild, targetId: string, reason: string, moderatorId: string): void {
+  protected discordUndo(promises: Promise<unknown>[], guild: Guild, targetId: string, reason: string, moderatorId: string): void {
     promises.push(
       guild.members.unban(targetId, `${reason} - By: ${moderatorId}`).catch(error => {
         console.warn(`[BanManager] Failed to Discord unban ${targetId}:`, error.message);
@@ -53,11 +54,11 @@ export class BanManager extends TimedPunishmentManager {
     return BanManager.instance;
   }
 
-  public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: any): Promise<Date | undefined> {
+  public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<Date | undefined> {
     return BanManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager);
   }
 
-  public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: any): Promise<void> {
+  public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: WebSocketNotifier | null): Promise<void> {
     return BanManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager);
   }
 

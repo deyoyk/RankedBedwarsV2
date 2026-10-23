@@ -1,11 +1,11 @@
-export function validatePositiveInt(value: any, name: string): number {
+export function validatePositiveInt(value: unknown, name: string): number {
   if (typeof value !== 'number' || value <= 0 || !Number.isInteger(value)) {
     throw new Error(`${name} must be a positive integer`);
   }
   return value;
 }
 
-export function validatePageLimit(page: any, limit: any): { page: number; limit: number } {
+export function validatePageLimit(page: unknown, limit: unknown): { page: number; limit: number } {
   return {
     page: validatePositiveInt(page, 'Page'),
     limit: validatePositiveInt(limit, 'Limit')

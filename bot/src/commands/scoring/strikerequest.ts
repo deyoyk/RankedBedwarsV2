@@ -1,5 +1,5 @@
 import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
-import Game from '../../models/Game';
+import Game, { IGame } from '../../models/Game';
 import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
 import { safeReply } from '../../utils/safeReply';
@@ -57,7 +57,7 @@ async function parseStrikeRequest(interaction: Message | ChatInputCommandInterac
   }
 }
 
-async function validateStrikeRequest(data: StrikeRequestData): Promise<{ isValid: boolean; error?: string; game?: any; team?: string[] }> {
+async function validateStrikeRequest(data: StrikeRequestData): Promise<{ isValid: boolean; error?: string; game?: IGame; team?: string[] }> {
   const game = await Game.findOne({ gameId: data.gameId });
   if (!game) {
     return { isValid: false, error: 'Game not found.' };
@@ -119,7 +119,7 @@ async function createStrikeRequest(interaction: Message | ChatInputCommandIntera
   await safeReply(interaction, { content: 'Strike request created successfully.' });
 }
 
-function createStrikeRequestEmbed(data: StrikeRequestData, game: any): EmbedBuilder {
+function createStrikeRequestEmbed(data: StrikeRequestData, game: IGame | null): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle('Strike Request')
     .setDescription(`A strike has been requested against <@${data.targetId}>`)
@@ -134,7 +134,7 @@ function createStrikeRequestEmbed(data: StrikeRequestData, game: any): EmbedBuil
     .setFooter({ text: `Game ID: ${data.gameId} | Target: ${data.targetId}` });
 }
 
-async function processVoteResults(message: any, data: StrikeRequestData, votes: VoteData, team: string[]) {
+async function processVoteResults(message: Message, data: StrikeRequestData, votes: VoteData, team: string[]) {
   const teamMentions = team.map((id: string) => `<@${id}>`).join(' ');
   const requiredVotes = Math.max(2, Math.ceil(team.length * 0.6));
   const approved = votes.upvote.size >= requiredVotes;

@@ -1,8 +1,5 @@
 
-import { ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, EmbedBuilder, Message } from 'discord.js';
-import config from '../config/config';
-import { StringSelectMenuInteraction } from 'discord.js';
-import { ButtonInteraction } from 'discord.js';
+import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, EmbedBuilder, ButtonBuilder, ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import pkg from '../../package.json';
@@ -89,7 +86,7 @@ export async function help(interaction: ChatInputCommandInteraction | Message) {
     
     const embed = new EmbedBuilder()
       .setTitle(`Ranked Bedwars System v${pkg.version}`)
-      .setDescription('Made by <@919498122940547072> \`Deyo\` and Managed by [Zerocode](https://discord.com/invite/23hPVuuam3) \n\n:star2: Select a category to view commands and their required roles.')
+      .setDescription('Made by <@919498122940547072> `Deyo` and Managed by [Zerocode](https://discord.com/invite/23hPVuuam3) \n\n:star2: Select a category to view commands and their required roles.')
       .setColor('#00AAAA')
 
     const selectMenu = buildCategorySelectMenu(commandCategories);
@@ -100,8 +97,9 @@ export async function help(interaction: ChatInputCommandInteraction | Message) {
         await interaction.reply(replyContent);
       } else {
         const msg = interaction as Message;
-        if (msg.channel && typeof (msg.channel as any).send === 'function') {
-          await (msg.channel as any).send(replyContent);
+        const channel = msg.channel;
+        if (channel && 'send' in channel && typeof channel.send === 'function') {
+          await channel.send(replyContent);
         }
       }
       return;
@@ -113,21 +111,22 @@ export async function help(interaction: ChatInputCommandInteraction | Message) {
       await interaction.reply({ embeds: [embed], components: [row.toJSON()] });
     } else {
       const msg = interaction as Message;
-      if (msg.channel && typeof (msg.channel as any).send === 'function') {
-        await (msg.channel as any).send({ embeds: [embed], components: [row.toJSON()] });
+      const channel = msg.channel;
+      if (channel && 'send' in channel && typeof channel.send === 'function') {
+        await channel.send({ embeds: [embed], components: [row.toJSON()] });
       }
     }
   } catch (error) {
     console.error('Error in help command:', error);
     
     try {
-      if ('isRepliable' in interaction && (interaction as any).isRepliable?.()) {
-        if ((interaction as any).replied) {
-          await (interaction as any).followUp({ content: 'There was an error loading the help menu. Please try again.', flags: 64 });
-        } else if ((interaction as any).deferred) {
-          await (interaction as any).editReply({ content: 'There was an error loading the help menu. Please try again.' });
+      if ('isRepliable' in interaction && interaction.isRepliable()) {
+        if (interaction.replied) {
+          await interaction.followUp({ content: 'There was an error loading the help menu. Please try again.', flags: 64 });
+        } else if (interaction.deferred) {
+          await interaction.editReply({ content: 'There was an error loading the help menu. Please try again.' });
         } else {
-          await (interaction as any).reply({ content: 'There was an error loading the help menu. Please try again.', flags: 64 });
+          await interaction.reply({ content: 'There was an error loading the help menu. Please try again.', flags: 64 });
         }
       }
     } catch (followUpError) {
@@ -136,7 +135,7 @@ export async function help(interaction: ChatInputCommandInteraction | Message) {
   }
 }
 
-export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
+export async function handleHelpMenu(interaction: StringSelectMenuInteraction | ButtonInteraction) {
   try {
     if (!interaction.deferred && typeof interaction.deferUpdate === 'function') {
       await interaction.deferUpdate().catch(() => {});
@@ -145,7 +144,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
     const commandCategories = await getCommandCategories();
     let category: string | undefined;
     let page = 0;
-    if (interaction.values && interaction.values.length > 0) {
+    if ('values' in interaction && interaction.values && interaction.values.length > 0) {
       category = interaction.values[0];
     } else if (interaction.customId && interaction.customId.startsWith('help_category:')) {
       const parts = interaction.customId.split(':');
@@ -177,10 +176,10 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
     
     const selectMenu = buildCategorySelectMenu(commandCategories);
     const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
-    const components: any[] = [selectRow.toJSON()];
+    const components: Array<ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>> = [selectRow];
     if (totalPages > 1) {
       const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
-      const row = new ActionRowBuilder().addComponents(
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`help_prev:${category}:${page}`)
           .setLabel('Previous')
@@ -192,7 +191,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction) {
           .setStyle(ButtonStyle.Secondary)
           .setDisabled(page === totalPages - 1)
       );
-      components.push(row.toJSON());
+      components.push(row);
     }
     
     await interaction.editReply({ embeds: [embed], components }).catch(async (error) => {
@@ -227,7 +226,7 @@ export async function handleHelpPagination(interaction: ButtonInteraction) {
     if (action === 'next') newPage = page + 1;
     
     interaction.customId = `help_category:${category}:${newPage}`;
-    await handleHelpMenu(interaction as any);
+    await handleHelpMenu(interaction);
   } catch (error) {
     console.error('Error in handleHelpPagination:', error);
     try {

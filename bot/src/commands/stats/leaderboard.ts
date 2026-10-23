@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, TextChannel, ModalBuilder, TextInputBuilder, TextInputStyle, InteractionCollector, ModalSubmitInteraction } from 'discord.js';
+import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction } from 'discord.js';
 import User, { IUser } from '../../models/User';
 import { betterEmbed, errorEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -52,8 +52,6 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
   }
 
   async function renderPage(page: number) {
-    let users: IUser[] = [];
-    let totalUsers = 0;
     const { title, field: valueField } = getModeConfig(mode);
 
     if (searchIGN) {
@@ -77,11 +75,11 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
       page = Math.floor((searchPosition - 1) / usersPerPage);
     }
 
-    users = await User.find({ [valueField]: { $ne: null } })
+    const users = await User.find({ [valueField]: { $ne: null } })
       .sort({ [valueField]: -1 })
       .skip(page * usersPerPage)
       .limit(usersPerPage);
-    totalUsers = await User.countDocuments({ [valueField]: { $ne: null } });
+    const totalUsers = await User.countDocuments({ [valueField]: { $ne: null } });
 
     if (!users || users.length === 0) {
       
@@ -96,7 +94,8 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
       const user = users[i];
       const rank = page * usersPerPage + i + 1;
       const prefix = rank <= 3 ? medals[rank - 1] : `#${rank}`;
-      const value = (user as any)[valueField] ?? 0;
+      const rawValue: unknown = user[valueField as keyof IUser];
+      const value = typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0;
       leaderboardList += `${prefix} ${user.ign || user.discordId} » ${value}\n`;
     }
 
@@ -143,7 +142,7 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
     }
   }
 
-  async function replyEmbed(embedObj: any, components?: any) {
+  async function replyEmbed(embedObj: ReturnType<typeof betterEmbed>, components?: ActionRowBuilder<ButtonBuilder>[]) {
     if (interaction instanceof ChatInputCommandInteraction || interaction instanceof Message) {
       await safeReply(interaction, { embeds: [embedObj.builder], components: components || [] });
     }
