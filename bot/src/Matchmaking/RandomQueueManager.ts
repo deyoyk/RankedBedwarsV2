@@ -15,7 +15,7 @@ interface QueueLike {
   minElo: number;
   maxElo: number;
   isRanked?: boolean;
-  ispicking?: boolean;
+  isPicking?: boolean;
   queueType?: string;
   bypassRoles: string[];
 }

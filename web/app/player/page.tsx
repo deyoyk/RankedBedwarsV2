@@ -12,8 +12,8 @@ const STAT_ORDER: Array<[string, string]> = [
   ['elo', 'Elo'], ['peakElo', 'Peak elo'], ['wins', 'Wins'], ['losses', 'Losses'],
   ['games', 'Games'], ['winRate', 'Win rate'], ['kills', 'Kills'], ['deaths', 'Deaths'],
   ['kdr', 'KDR'], ['finalKills', 'Final kills'], ['finalDeaths', 'Final deaths'],
-  ['bedBroken', 'Beds broken'], ['mvps', 'MVPs'], ['winstreak', 'Winstreak'],
-  ['losestreak', 'Losestreak'], ['level', 'Level'], ['experience', 'Experience'],
+  ['bedBroken', 'Beds broken'], ['mvps', 'MVPs'], ['winStreak', 'Winstreak'],
+  ['loseStreak', 'Losestreak'], ['level', 'Level'], ['experience', 'Experience'],
   ['playtimeSeconds', 'Playtime'], ['diamonds', 'Diamonds'], ['irons', 'Iron'],
   ['gold', 'Gold'], ['emeralds', 'Emeralds'], ['blocksPlaced', 'Blocks placed'],
   ['damageDealt', 'Damage dealt'], ['damageTaken', 'Damage taken'], ['assists', 'Assists'],
@@ -77,8 +77,8 @@ function PlayerInner() {
           const value = p[key];
           let tone = '';
           if (key === 'elo') tone = 'accent';
-          if (key === 'winstreak' && Number(value) > 0) tone = 'ok';
-          if (key === 'losestreak' && Number(value) > 0) tone = 'bad';
+          if (key === 'winStreak' && Number(value) > 0) tone = 'ok';
+          if (key === 'loseStreak' && Number(value) > 0) tone = 'bad';
           if (key === 'winRate' && typeof value === 'string' && value !== 'N/A') {
             const num = parseFloat(value);
             tone = num >= 60 ? 'ok' : num < 40 ? 'bad' : '';

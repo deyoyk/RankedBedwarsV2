@@ -2,18 +2,18 @@ import { Schema } from 'mongoose';
 
 export interface IRecentGame {
   gameId: number;
-  queueid?: string;
+  queueId?: string;
   map: string;
   eloGain: number;
-  oldElo?: number;
-  newElo?: number;
+  elo_before?: number;
+  elo_after?: number;
   kills: number;
   deaths: number;
   bedBroken: number;
   finalKills: number;
   finalDeaths?: number;
   won?: boolean;
-  ismvp?: boolean;
+  isMvp?: boolean;
   date: Date;
   state: string;
   startTime: Date;
@@ -38,18 +38,18 @@ export interface IDailyElo {
 
 export const recentGameSubdoc = {
   gameId: { type: Number, required: true },
-  queueid: { type: String, required: false },
+  queueId: { type: String, required: false },
   map: { type: String, required: true },
   eloGain: { type: Number, required: true },
-  oldElo: { type: Number },
-  newElo: { type: Number },
+  elo_before: { type: Number },
+  elo_after: { type: Number },
   kills: { type: Number, required: true },
   deaths: { type: Number, required: true },
   bedBroken: { type: Number, required: true },
   finalKills: { type: Number, required: true },
   finalDeaths: { type: Number, default: 0 },
   won: { type: Boolean, required: true },
-  ismvp: { type: Boolean, default: false },
+  isMvp: { type: Boolean, default: false },
   date: { type: Date, required: true },
   state: { type: String, default: 'pending' },
   startTime: { type: Date, required: true },

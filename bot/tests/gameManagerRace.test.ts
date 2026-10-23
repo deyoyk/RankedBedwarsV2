@@ -33,7 +33,7 @@ function makeUser(id: string, elo = 1000) {
     wins: 0, losses: 0, games: 0, mvps: 0,
     kills: 0, deaths: 0, finalKills: 0, bedBroken: 0,
     diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0,
-    winstreak: 0, losestreak: 0, experience: 0, level: 1,
+    winStreak: 0, loseStreak: 0, experience: 0, level: 1,
     kdr: 0, wlr: 0,
     recentGames: [],
     dailyElo: [],
@@ -168,9 +168,9 @@ describe('GameManager race conditions', () => {
 
   it('concurrent voidGame calls revert exactly once', async () => {
     const recentGame = {
-      gameId: 1, map: 'MapA', eloGain: -20, oldElo: 1200, newElo: 1180,
+      gameId: 1, map: 'MapA', eloGain: -20, elo_before: 1200, elo_after: 1180,
       kills: 0, deaths: 0, bedBroken: 0, finalKills: 0,
-      won: false, ismvp: false, date: new Date(), state: 'scored',
+      won: false, isMvp: false, date: new Date(), state: 'scored',
       startTime: new Date(), diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0
     };
     const players = [
@@ -230,9 +230,9 @@ describe('GameManager race conditions', () => {
 
   it('voiding a never-scored game still decrements games exactly once', async () => {
     const recentGame = {
-      gameId: 1, map: 'MapA', eloGain: 0, oldElo: 1000, newElo: 1000,
+      gameId: 1, map: 'MapA', eloGain: 0, elo_before: 1000, elo_after: 1000,
       kills: 0, deaths: 0, bedBroken: 0, finalKills: 0,
-      won: false, ismvp: false, date: new Date(), state: 'pending',
+      won: false, isMvp: false, date: new Date(), state: 'pending',
       startTime: new Date(), diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0
     };
     const players = [

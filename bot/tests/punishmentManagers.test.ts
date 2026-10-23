@@ -9,8 +9,8 @@ const mockUser = (): any => ({
   discordId: '123',
   ign: 'Steve',
   elo: 1000,
-  isbanned: false,
-  ismuted: false,
+  isBanned: false,
+  isMuted: false,
   bans: [] as any[],
   mutes: [] as any[],
   strikes: [] as any[],
@@ -73,7 +73,7 @@ describe('BanManager.ban', () => {
     expect(expires).toBeInstanceOf(Date);
     expect(user.bans).toHaveLength(1);
     expect(mongoose.isValidObjectId(user.bans[0].id)).toBe(true);
-    expect(user.isbanned).toBe(true);
+    expect(user.isBanned).toBe(true);
     expect(mockSave).toHaveBeenCalled();
   });
 
@@ -102,12 +102,12 @@ describe('BanManager.ban', () => {
     await expect(BanManager.ban(guildMock() as any, '123', 'mod', 'not-a-duration', 'test'))
       .rejects.toThrow();
     expect(user.bans).toHaveLength(0);
-    expect(user.isbanned).toBe(false);
+    expect(user.isBanned).toBe(false);
   });
 
   it('does not duplicate records when re-banning, updates existing instead', async () => {
     const user = mockUser();
-    user.isbanned = true;
+    user.isBanned = true;
     user.bans.push({
       id: new mongoose.Types.ObjectId().toString(),
       reason: 'old reason',
@@ -135,12 +135,12 @@ describe('BanManager.ban', () => {
 describe('BanManager.unban', () => {
   it('clears the ban status and saves', async () => {
     const user = mockUser();
-    user.isbanned = true;
+    user.isBanned = true;
     UserModel.findOne.mockResolvedValue(user);
 
     await BanManager.unban(guildMock() as any, '123', 'mod', 'Expired');
 
-    expect(user.isbanned).toBe(false);
+    expect(user.isBanned).toBe(false);
     expect(mockSave).toHaveBeenCalled();
   });
 
@@ -163,7 +163,7 @@ describe('MuteManager.mute', () => {
     expect(expires).toBeInstanceOf(Date);
     expect(user.mutes).toHaveLength(1);
     expect(mongoose.isValidObjectId(user.mutes[0].id)).toBe(true);
-    expect(user.ismuted).toBe(true);
+    expect(user.isMuted).toBe(true);
   });
 
   it('rejects durations over 30 days', async () => {
@@ -195,7 +195,7 @@ describe('MuteManager.mute', () => {
 
   it('does not duplicate records when re-muting', async () => {
     const user = mockUser();
-    user.ismuted = true;
+    user.isMuted = true;
     user.mutes.push({
       id: new mongoose.Types.ObjectId().toString(),
       reason: 'old',
@@ -215,12 +215,12 @@ describe('MuteManager.mute', () => {
 describe('MuteManager.unmute', () => {
   it('clears the mute status and saves', async () => {
     const user = mockUser();
-    user.ismuted = true;
+    user.isMuted = true;
     UserModel.findOne.mockResolvedValue(user);
 
     await MuteManager.unmute(guildMock() as any, '123', 'mod', 'Expired');
 
-    expect(user.ismuted).toBe(false);
+    expect(user.isMuted).toBe(false);
     expect(mockSave).toHaveBeenCalled();
   });
 
@@ -296,7 +296,7 @@ describe('StrikeManager.strike', () => {
 
     expect(result.strikeCount).toBe(2);
     expect(result.actionTaken).toBe('Banned for 10h (Strike 2)');
-    expect(user.isbanned).toBe(true);
+    expect(user.isBanned).toBe(true);
     expect(user.bans).toHaveLength(1);
   });
 

@@ -27,9 +27,9 @@ const queueDoc = {
 };
 
 const userDocs: Record<string, any> = {
-  a: { discordId: 'a', partyId: 'P', elo: 1000, isbanned: false, isfrozen: false },
-  b: { discordId: 'b', partyId: 'P', elo: 1100, isbanned: false, isfrozen: false },
-  s: { discordId: 's', partyId: null, elo: 1200, isbanned: false, isfrozen: false }
+  a: { discordId: 'a', partyId: 'P', elo: 1000, isBanned: false, isFrozen: false },
+  b: { discordId: 'b', partyId: 'P', elo: 1100, isBanned: false, isFrozen: false },
+  s: { discordId: 's', partyId: null, elo: 1200, isBanned: false, isFrozen: false }
 };
 
 function member(id: string) {

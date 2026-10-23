@@ -27,17 +27,24 @@ interface WarpTeam {
 interface RawPlayerStats {
   kills?: number;
   deaths?: number;
+  final_kills?: number;
   finalkills?: number;
+  final_deaths?: number;
   finaldeaths?: number;
   diamonds?: number;
   irons?: number;
   gold?: number;
   emeralds?: number;
+  blocks_placed?: number;
   blocksplaced?: number;
+  damage_dealt?: number;
   damagedealt?: number;
+  damage_taken?: number;
   damagetaken?: number;
   assists?: number;
+  max_streak?: number;
   maxstreak?: number;
+  first_blood?: boolean;
   firstblood?: boolean;
   fights?: unknown;
 }
@@ -47,17 +54,18 @@ interface BuiltPlayerData extends PlayerData {
 }
 
 interface QueueStatusEntry {
-  minElo: number;
-  maxElo: number;
-  currentPlayers: number;
-  maxPlayers: number;
-  isRanked: boolean;
-  isPicking: boolean;
+  min_elo: number;
+  max_elo: number;
+  current_players: number;
+  max_players: number;
+  is_ranked: boolean;
+  is_picking: boolean;
   players: string[];
 }
 
 interface FightRowRaw {
   kills?: unknown;
+  damage_dealt?: unknown;
   damageDealt?: unknown;
   damage?: unknown;
 }
@@ -102,11 +110,15 @@ interface CheckPlayerPayload {
 
 interface ScoringPayload {
   type: 'scoring';
-  gameid: string;
+  game_id: string;
+  gameid?: string;
+  winning_team_number?: number;
   winningTeamNumber?: number;
+  winning_team_ign_list?: string[];
   winningteamignlist?: string[];
   mvps: string[];
-  bedsbroken: string[];
+  beds_broken: string[];
+  bedsbroken?: string[];
   players: Record<string, RawPlayerStats>;
   timeline?: unknown;
 }
@@ -128,7 +140,8 @@ interface PongPayload {
 
 interface CallCommandPayload {
   type: 'callcmd';
-  callId: string;
+  call_id: string;
+  callId?: string;
   requester: string;
   target: string;
 }
@@ -177,12 +190,14 @@ interface ScreenShareDontLogFailurePayload {
 
 interface CallSuccessPayload {
   type: 'callsuccess';
-  callId: string;
+  call_id: string;
+  callId?: string;
 }
 
 interface CallFailurePayload {
   type: 'callfailure';
-  callId: string;
+  call_id: string;
+  callId?: string;
   reason: string;
 }
 
@@ -235,13 +250,15 @@ interface BotUnmutePayload {
 
 interface ScoringSuccessPayload {
   type: 'scoringsuccess';
-  gameid: number;
+  game_id: number;
+  gameid?: number;
   players: string[];
 }
 
 interface GameVoidedPayload {
   type: 'gamevoided';
-  gameid: number;
+  game_id: number;
+  gameid?: number;
   reason: string;
   players: string[];
 }
@@ -275,7 +292,8 @@ interface PermissionPayload {
 
 interface VoidingPayload {
   type: 'voiding';
-  gameid: string;
+  game_id: string;
+  gameid?: string;
   reason: string;
 }
 
@@ -729,9 +747,11 @@ export class WebSocketManager {
   }
 
   private determineWinningTeam(msg: ScoringPayload): number | undefined {
-    if (msg.winningTeamNumber != null && msg.winningTeamNumber !== 0) return msg.winningTeamNumber;
-    if (msg.winningteamignlist && Array.isArray(msg.winningteamignlist)) {
-      console.log(`[WebSocketManager] Winning team determined from IGNs: ${msg.winningteamignlist.join(', ')}`);
+    const winningNumber = msg.winning_team_number ?? msg.winningTeamNumber;
+    if (winningNumber != null && winningNumber !== 0) return winningNumber;
+    const ignList = msg.winning_team_ign_list ?? msg.winningteamignlist;
+    if (ignList && Array.isArray(ignList)) {
+      console.log(`[WebSocketManager] Winning team determined from IGNs: ${ignList.join(', ')}`);
       return undefined;
     }
     console.error('[WebSocketManager] No winning team information provided');
@@ -761,18 +781,18 @@ export class WebSocketManager {
         kills: stats.kills ?? 0,
         deaths: stats.deaths ?? 0,
         bedBroken: bedbreaks.includes(ign) ? 1 : 0,
-        finalKills: stats.finalkills ?? 0,
-        finalDeaths: stats.finaldeaths ?? 0,
+        finalKills: stats.final_kills ?? stats.finalkills ?? 0,
+        finalDeaths: stats.final_deaths ?? stats.finaldeaths ?? 0,
         diamonds: stats.diamonds ?? 0,
         irons: stats.irons ?? 0,
         gold: stats.gold ?? 0,
         emeralds: stats.emeralds ?? 0,
-        blocksPlaced: stats.blocksplaced ?? 0,
-        damageDealt: stats.damagedealt ?? 0,
-        damageTaken: stats.damagetaken ?? 0,
+        blocksPlaced: stats.blocks_placed ?? stats.blocksplaced ?? 0,
+        damageDealt: stats.damage_dealt ?? stats.damagedealt ?? 0,
+        damageTaken: stats.damage_taken ?? stats.damagetaken ?? 0,
         assists: stats.assists ?? 0,
-        maxStreak: stats.maxstreak ?? 0,
-        firstBlood: stats.firstblood === true,
+        maxStreak: stats.max_streak ?? stats.maxstreak ?? 0,
+        firstBlood: (stats.first_blood ?? stats.firstblood) === true,
         fights: this.buildFights(stats.fights)
       };
     }
@@ -788,7 +808,8 @@ export class WebSocketManager {
       if (opponent === '__proto__' || opponent === 'constructor' || opponent === 'prototype') continue;
       const row: FightRowRaw = typeof rowRaw === 'object' && rowRaw !== null ? rowRaw as FightRowRaw : {};
       const kills = typeof row.kills === 'number' && row.kills >= 0 ? Math.floor(row.kills) : 0;
-      const damageDealt = typeof row.damageDealt === 'number' && row.damageDealt >= 0 ? row.damageDealt
+      const damageDealt = typeof row.damage_dealt === 'number' && row.damage_dealt >= 0 ? row.damage_dealt
+        : typeof row.damageDealt === 'number' && row.damageDealt >= 0 ? row.damageDealt
         : typeof row.damage === 'number' && row.damage >= 0 ? row.damage : 0;
       if (kills === 0 && damageDealt === 0) continue;
       fights[opponent] = { kills, damageDealt };
@@ -798,14 +819,18 @@ export class WebSocketManager {
   }
 
   private handleScoring(msg: ScoringPayload) {
-    console.log(`[WebSocketManager] Received scoring message for game ${msg.gameid}`);
+    const gameIdRaw = msg.game_id ?? msg.gameid;
+    console.log(`[WebSocketManager] Received scoring message for game ${gameIdRaw}`);
     
     if (!this.gameManager) {
       console.error('[WebSocketManager] GameManager not available for scoring');
       return;
     }
     
-    const { gameid, winningteamignlist, players, mvps: msgMvps, bedsbroken: msgBedsbroken } = msg;
+    const { players, mvps: msgMvps } = msg;
+    const winningteamignlist = msg.winning_team_ign_list ?? msg.winningteamignlist;
+    const msgBedsbroken = msg.beds_broken ?? msg.bedsbroken;
+    const gameid = String(gameIdRaw ?? '');
     const gameIdNum = parseInt(gameid, 10);
     if (isNaN(gameIdNum) || gameIdNum <= 0) {
       console.error('[WebSocketManager] Invalid game ID in scoring message:', gameid);
@@ -845,7 +870,8 @@ export class WebSocketManager {
       console.error('[WebSocketManager] GameManager not available for voiding');
       return;
     }
-    const { gameid, reason } = msg;
+    const gameid = msg.game_id ?? msg.gameid;
+    const { reason } = msg;
     (async () => {
       try {
         await this.gameManager!.voidGame(parseInt(String(gameid)), reason || 'Voided via WebSocket');
@@ -953,13 +979,14 @@ export class WebSocketManager {
   private async handleCallCommand(msg: CallCommandPayload): Promise<void> {
     try {
       console.log(`[WebSocketManager] Handling call command: ${JSON.stringify(msg)}`);
-      const { callId, requester, target } = msg;
+      const callId = msg.call_id ?? msg.callId;
+      const { requester, target } = msg;
       
       if (!callId || !requester || !target) {
         console.error('[WebSocketManager] Invalid call command payload:', msg);
         this.send({
           type: 'callfailure',
-          callId: callId || '',
+          call_id: callId || '',
           reason: 'Missing required fields in payload'
         } as CallFailurePayload);
         return;
@@ -974,7 +1001,7 @@ export class WebSocketManager {
         console.error(`[WebSocketManager] Requester ${requester} not found in database`);
         this.send({
           type: 'callfailure',
-          callId,
+          call_id: callId,
           reason: 'Requester not found in database'
         } as CallFailurePayload);
         return;
@@ -986,7 +1013,7 @@ export class WebSocketManager {
         console.error(`[WebSocketManager] Target ${target} not found in database`);
         this.send({
           type: 'callfailure',
-          callId,
+          call_id: callId,
           reason: 'Target player not found in database'
         } as CallFailurePayload);
         return;
@@ -998,7 +1025,7 @@ export class WebSocketManager {
         console.error('[WebSocketManager] Guild not found');
         this.send({
           type: 'callfailure',
-          callId,
+          call_id: callId,
           reason: 'Discord guild not available'
         } as CallFailurePayload);
         return;
@@ -1012,7 +1039,7 @@ export class WebSocketManager {
         console.error(`[WebSocketManager] Could not fetch requester member: ${error}`);
         this.send({
           type: 'callfailure',
-          callId,
+          call_id: callId,
           reason: 'Requester is not in the Discord server'
         } as CallFailurePayload);
         return;
@@ -1023,7 +1050,7 @@ export class WebSocketManager {
         console.error(`[WebSocketManager] Requester ${requester} is not in a voice channel`);
         this.send({
           type: 'callfailure',
-          callId,
+          call_id: callId,
           reason: 'Requester is not in a voice channel'
         } as CallFailurePayload);
         return;
@@ -1045,7 +1072,7 @@ export class WebSocketManager {
         console.error(`[WebSocketManager] Voice channel ${voiceChannel.id} is not associated with a game`);
         this.send({
           type: 'callfailure',
-          callId,
+          call_id: callId,
           reason: 'Must be in a game voice channel to use call command'
         } as CallFailurePayload);
         return;
@@ -1066,7 +1093,7 @@ export class WebSocketManager {
         
         this.send({
           type: 'callsuccess',
-          callId
+          call_id: callId
         } as CallSuccessPayload);
         
         
@@ -1098,7 +1125,7 @@ export class WebSocketManager {
         console.error(`[WebSocketManager] Error granting voice permissions: ${permError}`);
         this.send({
           type: 'callfailure',
-          callId,
+          call_id: callId,
           reason: 'Failed to grant voice channel permissions'
         } as CallFailurePayload);
       }
@@ -1107,7 +1134,7 @@ export class WebSocketManager {
       console.error('[WebSocketManager] Error handling call command:', error);
       this.send({
         type: 'callfailure',
-        callId: msg.callId || '',
+        call_id: msg.call_id ?? msg.callId ?? '',
         reason: 'Internal server error'
       } as CallFailurePayload);
     }
@@ -1366,12 +1393,12 @@ export class WebSocketManager {
         }
 
         queueStatus[queue.channelId] = {
-          minElo: queue.minElo,
-          maxElo: queue.maxElo,
-          currentPlayers: currentPlayerCount,
-          maxPlayers: queue.maxPlayers,
-          isRanked: queue.isRanked,
-          isPicking: queue.ispicking,
+          min_elo: queue.minElo,
+          max_elo: queue.maxElo,
+          current_players: currentPlayerCount,
+          max_players: queue.maxPlayers,
+          is_ranked: queue.isRanked,
+          is_picking: queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking,
           players: playersInQueue
         };
       }

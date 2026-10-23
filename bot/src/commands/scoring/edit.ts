@@ -19,8 +19,8 @@ const EDITABLE_STATS = {
   'gold': 'number',
   'emeralds': 'number',
   'blocksPlaced': 'number',
-  'winstreak': 'number',
-  'losestreak': 'number',
+  'winStreak': 'number',
+  'loseStreak': 'number',
   'kdr': 'number',
   'wlr': 'number',
 } as const;

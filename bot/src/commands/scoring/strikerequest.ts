@@ -34,7 +34,7 @@ async function parseStrikeRequest(interaction: Message | ChatInputCommandInterac
   const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    const gameId = interaction.options.getString('gameid', true);
+    const gameId = interaction.options.getString('game_id', true);
     const target = interaction.options.getUser('target', true);
     const reason = interaction.options.getString('reason', true);
 

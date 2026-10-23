@@ -336,7 +336,7 @@ public class MBedwarsListener implements Listener {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject json = new JsonObject();
             json.addProperty("type", "voiding");
-            json.addProperty("gameid", gameId);
+            json.addProperty("game_id", gameId);
             json.addProperty("reason", "[system] voided because player: " + playerName + " left before arena starts");
             plugin.getWebSocketManager().sendMessage(json.toString());
             plugin.debug("Sent void notification for game #" + gameId + " due to player " + playerName + " leaving");
@@ -363,7 +363,7 @@ public class MBedwarsListener implements Listener {
                     
                     JsonObject json = new JsonObject();
                     json.addProperty("type", "retrygame");
-                    json.addProperty("gameid", gameId);
+                    json.addProperty("game_id", gameId);
                     plugin.getWebSocketManager().sendMessage(json.toString());
                     plugin.debug("Sent retry notification for game #" + gameId + " (Attempt " + (retryCount + 1) + "/" + maxRetries + ")");
                 });

@@ -70,9 +70,9 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
         deaths: 0,
         bedBroken: 0,
         finalKills: 0,
-        isbanned: false,
-        ismuted: false,
-        isfrozen: false,
+        isBanned: false,
+        isMuted: false,
+        isFrozen: false,
         settings: {
           toggleprefix: false,
           togglescoreping: false,

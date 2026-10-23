@@ -11,14 +11,14 @@ public class GameIdParsingTest {
     @Test
     public void numericGameIdIsParsed() {
         JsonObject json = new JsonObject();
-        json.addProperty("gameid", 1234);
+        json.addProperty("game_id", 1234);
         assertEquals(1234, WebSocketManager.parseGameId(json));
     }
 
     @Test
     public void stringGameIdIsParsed() {
         JsonObject json = new JsonObject();
-        json.addProperty("gameid", "1234");
+        json.addProperty("game_id", "1234");
         assertEquals(1234, WebSocketManager.parseGameId(json));
     }
 
@@ -32,14 +32,14 @@ public class GameIdParsingTest {
     @Test
     public void nullGameIdReturnsMinusOne() {
         JsonObject json = new JsonObject();
-        json.add("gameid", com.google.gson.JsonNull.INSTANCE);
+        json.add("game_id", com.google.gson.JsonNull.INSTANCE);
         assertEquals(-1, WebSocketManager.parseGameId(json));
     }
 
     @Test
     public void nonNumericGameIdReturnsMinusOneWithoutThrowing() {
         JsonObject json = new JsonObject();
-        json.addProperty("gameid", "abc-123-uuid");
+        json.addProperty("game_id", "abc-123-uuid");
         assertEquals(-1, WebSocketManager.parseGameId(json));
     }
 }

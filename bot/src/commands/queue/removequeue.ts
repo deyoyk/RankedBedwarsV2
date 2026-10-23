@@ -8,7 +8,7 @@ export async function removequeue(interaction: Message | ChatInputCommandInterac
   let channelId: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    channelId = interaction.options.getString('channelid', true);
+    channelId = interaction.options.getString('channel_id', true);
   } else {
     if (!args || args.length !== 1) {
       await safeReply(interaction, errorEmbed('Usage: =removequeue <channelId>', 'Queue Removal Error'));
@@ -31,7 +31,7 @@ export async function removequeue(interaction: Message | ChatInputCommandInterac
       { name: 'Max Players', value: queue.maxPlayers.toString(), inline: true },
       { name: 'ELO Range', value: `${queue.minElo}-${queue.maxElo}`, inline: true },
       { name: 'Queue Type', value: queue.isRanked ? 'Ranked' : 'Casual', inline: true },
-      { name: 'Picking Enabled', value: queue.ispicking ? 'Yes' : 'No', inline: true }
+      { name: 'Picking Enabled', value: queue.isPicking ? 'Yes' : 'No', inline: true }
     );
     await safeReply(interaction, embed);
   } catch (error) {

@@ -9,7 +9,7 @@ export interface IQueue extends Document {
   minElo: number;
   maxElo: number;
   isRanked: boolean;
-  ispicking: boolean;
+  isPicking: boolean;
   bypassRoles: string[];
   isActive?: boolean;
 }
@@ -20,7 +20,7 @@ const QueueSchema: Schema = new Schema({
   minElo: { type: Number, required: true, index: true },
   maxElo: { type: Number, required: true, index: true },
   isRanked: { type: Boolean, required: true },
-  ispicking: { type: Boolean, default: false },
+  isPicking: { type: Boolean, default: false },
   bypassRoles: [{ type: String, default: [] }],
   isActive: { type: Boolean, default: true, index: true }
 });

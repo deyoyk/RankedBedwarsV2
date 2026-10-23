@@ -48,7 +48,7 @@ export interface PlayerData {
   assists?: number;
   maxStreak?: number;
   firstBlood?: boolean;
-  fights?: Record<string, { kills?: number; damageDealt?: number }>;
+  fights?: Record<string, { kills?: number; damage_dealt?: number; damageDealt?: number }>;
 }
 
 export interface GameResult {

@@ -9,7 +9,7 @@ const kind: TimedPunishmentKind = {
   undoPastTense: 'unbanned',
   activeWord: 'banned',
   logName: 'BanManager',
-  statusField: 'isbanned',
+  statusField: 'isBanned',
   recordsField: 'bans',
   roleKey: 'banned',
   maxDurationMs: 365 * 24 * 60 * 60 * 1000,

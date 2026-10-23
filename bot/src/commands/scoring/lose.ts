@@ -47,13 +47,13 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
 
     ensureUserStats(existing);
 
-    const newElo = Math.max(0, existing.elo - eloRank.loseElo);
-    const newLosestreak = (existing.losestreak ?? 0) + 1;
+    const updatedElo = Math.max(0, existing.elo - eloRank.loseElo);
+    const newLoseStreak = (existing.loseStreak ?? 0) + 1;
     const newWlr = computeWlr(existing.wins, existing.losses + 1);
     const user = await User.findOneAndUpdate(
       { discordId: targetId },
       {
-        $set: { elo: newElo, losestreak: newLosestreak, winstreak: 0, wlr: newWlr },
+        $set: { elo: updatedElo, loseStreak: newLoseStreak, winStreak: 0, wlr: newWlr },
         $inc: { losses: 1, games: 1 },
       },
       { new: true }

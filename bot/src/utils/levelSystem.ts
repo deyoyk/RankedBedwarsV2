@@ -45,6 +45,8 @@ export function checkLevelUp(oldExperience: number, newExperience: number): {
   leveledUp: boolean;
   oldLevel: number;
   newLevel: number;
+  level_before: number;
+  level_after: number;
   levelsGained: number;
 } {
   const oldLevel = getLevelFromExperience(oldExperience);
@@ -54,6 +56,8 @@ export function checkLevelUp(oldExperience: number, newExperience: number): {
     leveledUp: newLevel > oldLevel,
     oldLevel,
     newLevel,
+    level_before: oldLevel,
+    level_after: newLevel,
     levelsGained: newLevel - oldLevel
   };
 }

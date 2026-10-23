@@ -8,7 +8,7 @@ export async function removeelo(interaction: Message | ChatInputCommandInteracti
   let roleId: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    roleId = interaction.options.getString('roleid', true);
+    roleId = interaction.options.getString('role_id', true);
   } else {
     if (!args || args.length !== 1) {
       await safeReply(interaction, errorEmbed('Usage: =removeelo <roleId>', 'ELO Rank Removal Error'));

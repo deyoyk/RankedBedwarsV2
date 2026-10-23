@@ -31,7 +31,7 @@ export async function queues(interaction: Message | ChatInputCommandInteraction,
             queuesList += `\`MaxELO: ${queue.maxElo}\` | `;
             queuesList += `\`Players: ${queuePlayers.get(queue.channelId)?.length || 0}/${queue.maxPlayers}\` | `;
             queuesList += `\`Ranked: ${queue.isRanked ? 'Yes' : 'No'}\` | `;
-            queuesList += `\`Picking: ${queue.ispicking ? 'Yes' : 'No'}\``;
+            queuesList += `\`Picking: ${queue.isPicking ? 'Yes' : 'No'}\``;
             queuesList += '\n';
           }
 

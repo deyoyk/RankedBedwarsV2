@@ -2,8 +2,10 @@ import { h, VNode } from '../renderer';
 
 export type ScoreTemplatePlayer = {
   username: string;
-  oldElo: number;
-  newElo: number;
+  elo_before: number;
+  elo_after: number;
+  oldElo?: number;
+  newElo?: number;
   mvp: boolean;
   avatar: string;
 };
@@ -23,7 +25,9 @@ const ROW_H = 93;
 const CARD_X = 185;
 
 function eloChangeText(p: ScoreTemplatePlayer): string {
-  const delta = p.newElo - p.oldElo;
+  const before = p.elo_before ?? p.oldElo ?? 0;
+  const after = p.elo_after ?? p.newElo ?? 0;
+  const delta = after - before;
   return `${delta >= 0 ? '+' : ''}${delta}`;
 }
 
@@ -60,8 +64,8 @@ function row(p: ScoreTemplatePlayer, top: number, band: string): VNode[] {
       }, 'MVP') : null,
     ),
     eloColumn(y, CARD_X + 1010, eloChangeText(p), '#FFFFFF'),
-    eloColumn(y, CARD_X + 1171, String(p.oldElo), '#757474'),
-    eloColumn(y, CARD_X + 1379, String(p.newElo), '#FFFFFF'),
+    eloColumn(y, CARD_X + 1171, String(p.elo_before ?? p.oldElo ?? 0), '#757474'),
+    eloColumn(y, CARD_X + 1379, String(p.elo_after ?? p.newElo ?? 0), '#FFFFFF'),
   ];
 }
 

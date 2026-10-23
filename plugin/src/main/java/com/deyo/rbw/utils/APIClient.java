@@ -134,11 +134,11 @@ public class APIClient {
         userData.setGold(0);
         userData.setEmeralds(0);
         userData.setBlocksPlaced(0);
-        userData.setIsbanned(false);
-        userData.setIsmuted(false);
-        userData.setIsfrozen(false);
-        userData.setWinstreak(0);
-        userData.setLosestreak(0);
+        userData.setBanned(false);
+        userData.setMuted(false);
+        userData.setFrozen(false);
+        userData.setWinStreak(0);
+        userData.setLoseStreak(0);
         userData.setKdr(0.0);
         userData.setWlr(0.0);
         userData.set__v(0);

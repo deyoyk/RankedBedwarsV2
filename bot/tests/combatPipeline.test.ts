@@ -30,7 +30,7 @@ function makeUser(id: string, elo = 1000) {
     wins: 0, losses: 0, games: 0, mvps: 0,
     kills: 0, deaths: 0, finalKills: 0, bedBroken: 0,
     diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0,
-    winstreak: 0, losestreak: 0, experience: 0, level: 1,
+    winStreak: 0, loseStreak: 0, experience: 0, level: 1,
     kdr: 0, wlr: 0,
     damageDealt: 0, damageTaken: 0, assists: 0, bestStreak: 0, firstBloods: 0,
     recentGames: [] as any[],
@@ -166,8 +166,8 @@ describe('combat history pipeline', () => {
 
   it('voiding a scored game reverts combat totals but keeps the best streak', async () => {
     const recent = {
-      gameId: 1, map: 'MapA', eloGain: 30, oldElo: 1000, newElo: 1030,
-      kills: 3, deaths: 1, bedBroken: 0, finalKills: 1, won: true, ismvp: false,
+      gameId: 1, map: 'MapA', eloGain: 30, elo_before: 1000, elo_after: 1030,
+      kills: 3, deaths: 1, bedBroken: 0, finalKills: 1, won: true, isMvp: false,
       date: new Date(), state: 'scored', startTime: new Date(),
       damageDealt: 320.5, damageTaken: 120, assists: 1, firstBlood: true,
     };

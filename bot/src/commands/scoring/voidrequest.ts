@@ -34,7 +34,7 @@ async function parseVoidRequest(interaction: Message | ChatInputCommandInteracti
   const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    const gameId = interaction.options.getString('gameid', true);
+    const gameId = interaction.options.getString('game_id', true);
     const reason = interaction.options.getString('reason', true);
 
     return { gameId, reason, requesterId };

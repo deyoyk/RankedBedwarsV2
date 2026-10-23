@@ -118,14 +118,14 @@ function makeUserDoc(overrides: any = {}) {
     gold: 15,
     emeralds: 20,
     blocksPlaced: 100,
-    winstreak: 2,
-    losestreak: 0,
+    winStreak: 2,
+    loseStreak: 0,
     kdr: 2,
     wlr: 2,
     playtimeSeconds: 3600,
-    ismuted: false,
-    isbanned: false,
-    isfrozen: false,
+    isMuted: false,
+    isBanned: false,
+    isFrozen: false,
     settings: {},
     recentGames: [],
     dailyElo: [],
@@ -141,14 +141,14 @@ function makeRecentGame(gameId: number) {
     gameId,
     map: 'Aquarius',
     eloGain: 30,
-    oldElo: 1000,
-    newElo: 1030,
+    elo_before: 1000,
+    elo_after: 1030,
     kills: 5,
     deaths: 2,
     bedBroken: 1,
     finalKills: 1,
     won: true,
-    ismvp: false,
+    isMvp: false,
     date: new Date(),
     state: 'scored',
     startTime: new Date(),
@@ -224,7 +224,7 @@ describe('ApiManager', () => {
     expect(body.recentGames).toHaveLength(10);
     expect(body.dailyElo).toHaveLength(1);
     expect(body.level.level).toBe(3);
-    expect(body.currentStreak).toEqual({ winstreak: 2, losestreak: 0 });
+    expect(body.currentStreak).toEqual({ winStreak: 2, loseStreak: 0 });
     expect(body.seasonHistory.totalSeasons).toBe(2);
     expect(body.seasonHistory.seasons[0].season).toBe(2);
     expect(body.seasonHistory.seasons[0].peakElo).toBe(1400);
@@ -332,7 +332,7 @@ describe('ApiManager', () => {
 
   it('GET /rbw/api/muteinfo tolerates string dates', async () => {
     UserModel.findOne.mockImplementation(() => mockQuery(makeUserDoc({
-      ismuted: true,
+      isMuted: true,
       mutes: [{ id: 'm1', date: '2020-01-01T00:00:00.000Z', duration: 60, reason: 'old' }]
     })));
     const { app } = makeManager();
@@ -347,7 +347,7 @@ describe('ApiManager', () => {
 
   it('GET /rbw/api/muteinfo flags an active string-dated mute', async () => {
     UserModel.findOne.mockImplementation(() => mockQuery(makeUserDoc({
-      ismuted: true,
+      isMuted: true,
       mutes: [{ id: 'm2', date: new Date(Date.now() + 3600000).toISOString(), duration: 120, reason: 'active' }]
     })));
     const { app } = makeManager();

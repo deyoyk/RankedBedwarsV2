@@ -14,7 +14,7 @@ function addQueueOptions(sub: SlashCommandSubcommandBuilder) {
         )
     )
     .addStringOption(opt =>
-      opt.setName('queueid')
+      opt.setName('queue_id')
         .setDescription('Channel ID of the specific queue (if type is specific)')
         .setRequired(false)
     );
@@ -29,13 +29,13 @@ export const queueControlData = new SlashCommandBuilder()
 export async function executeQueueControl(interaction: ChatInputCommandInteraction) {
   const sub = interaction.options.getSubcommand();
   const type = interaction.options.getString('type', true);
-  const queueId = interaction.options.getString('queueid');
+  const queueId = interaction.options.getString('queue_id');
   let filter: Record<string, unknown> = {};
   if (type === 'ranked') filter = { isRanked: true };
   else if (type === 'unranked') filter = { isRanked: false };
   else if (type === 'specific') {
     if (!queueId) {
-      return interaction.reply({ content: 'You must provide a queueid for specific type.', ephemeral: true });
+      return interaction.reply({ content: 'You must provide a queue_id for specific type.', ephemeral: true });
     }
     filter = { channelId: queueId };
   }

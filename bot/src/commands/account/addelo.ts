@@ -17,13 +17,13 @@ export async function addelo(interaction: Message | ChatInputCommandInteraction,
   let bedElo: number;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    roleId = interaction.options.getString('roleid', true);
-    startElo = interaction.options.getInteger('startelo', true);
-    endElo = interaction.options.getInteger('endelo', true);
-    winElo = interaction.options.getInteger('winelo', true);
-    loseElo = interaction.options.getInteger('loseelo', true);
-    mvpElo = interaction.options.getInteger('mvpelo', true);
-    bedElo = interaction.options.getInteger('bedelo', false) ?? 0;
+    roleId = interaction.options.getString('role_id', true);
+    startElo = interaction.options.getInteger('start_elo', true);
+    endElo = interaction.options.getInteger('end_elo', true);
+    winElo = interaction.options.getInteger('win_elo', true);
+    loseElo = interaction.options.getInteger('lose_elo', true);
+    mvpElo = interaction.options.getInteger('mvp_elo', true);
+    bedElo = interaction.options.getInteger('bed_elo', false) ?? 0;
 
     
     if (!roleId || startElo === null || endElo === null || winElo === null || loseElo === null || mvpElo === null) {

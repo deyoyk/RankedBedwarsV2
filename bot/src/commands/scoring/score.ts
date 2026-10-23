@@ -16,8 +16,8 @@ interface ScoreParams {
 
 function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args?: string[]): ScoreParams | null {
   if (interaction instanceof ChatInputCommandInteraction) {
-    const gameId = interaction.options.getInteger('gameid');
-    const winningTeam = interaction.options.getInteger('winningteam') || interaction.options.getInteger('winning_team') || interaction.options.getInteger('team');
+    const gameId = interaction.options.getInteger('game_id');
+    const winningTeam = interaction.options.getInteger('winning_team') ?? interaction.options.getInteger('winningteam');
     if (!gameId) return null;
     if (!winningTeam || (winningTeam !== 1 && winningTeam !== 2)) return null;
     const mvpsStr = interaction.options.getString('mvps') || '';

@@ -13,7 +13,7 @@ export type PlayerData = {
 };
 
 export type RecentGame = {
-  gameid?: number | string;
+  game_id?: number | string;
   result?: 'win' | 'lose' | 'loss' | 'voided' | 'pending' | 'submitted' | string;
 } | null;
 

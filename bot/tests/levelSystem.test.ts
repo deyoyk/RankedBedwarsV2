@@ -37,8 +37,8 @@ describe('checkLevelUp', () => {
   it('detects a level up', () => {
     const result = checkLevelUp(0, 250);
     expect(result.leveledUp).toBe(true);
-    expect(result.oldLevel).toBe(1);
-    expect(result.newLevel).toBe(3);
+    expect(result.level_before).toBe(1);
+    expect(result.level_after).toBe(3);
     expect(result.levelsGained).toBe(2);
   });
 
@@ -51,7 +51,7 @@ describe('checkLevelUp', () => {
   it('handles exact boundary', () => {
     const result = checkLevelUp(100, 100);
     expect(result.leveledUp).toBe(false);
-    expect(result.oldLevel).toBe(2);
+    expect(result.level_before).toBe(2);
   });
 });
 

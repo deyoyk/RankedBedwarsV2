@@ -23,7 +23,7 @@ export interface TimedPunishmentKind {
   undoPastTense: string;
   activeWord: string;
   logName: string;
-  statusField: 'isbanned' | 'ismuted';
+  statusField: 'isBanned' | 'isMuted';
   recordsField: 'bans' | 'mutes';
   roleKey: 'banned' | 'muted';
   maxDurationMs: number;

@@ -232,7 +232,7 @@ export class CommandManager {
       { name: 'page', description: 'Page number', type: 4, required: false }
     ]);
     this.reg('gameinfo', 'Show detailed info for a game by game ID', gameinfo, [
-      { name: 'gameid', description: 'The ID of the game', type: 4, required: true }
+      { name: 'game_id', description: 'The ID of the game', type: 4, required: true }
     ]);
     this.reg('maps', 'Show available maps and select mode', async (interaction, args) => {
       await maps(interaction, args, this.commandHandler['wsManager']);
@@ -260,23 +260,23 @@ export class CommandManager {
     ]);
     this.reg('retry', 'Retry a game', retry);
     this.reg('addqueue', 'Create a new queue', addqueue, [
-      { name: 'channelid', description: 'Voice channel ID for the queue', type: 3, required: true },
-      { name: 'maxplayers', description: 'Maximum number of players', type: 4, required: true },
-      { name: 'minelo', description: 'Minimum ELO required', type: 4, required: true },
-      { name: 'maxelo', description: 'Maximum ELO allowed', type: 4, required: true },
-      { name: 'isranked', description: 'Whether this is a ranked queue', type: 5, required: true },
-      { name: 'ispicking', description: 'Whether team picking is enabled', type: 5, required: true },
-      { name: 'bypassroles', description: 'Role IDs that can bypass restrictions (comma-separated)', type: 3, required: false }
+      { name: 'channel_id', description: 'Voice channel ID for the queue', type: 3, required: true },
+      { name: 'max_players', description: 'Maximum number of players', type: 4, required: true },
+      { name: 'min_elo', description: 'Minimum ELO required', type: 4, required: true },
+      { name: 'max_elo', description: 'Maximum ELO allowed', type: 4, required: true },
+      { name: 'is_ranked', description: 'Whether this is a ranked queue', type: 5, required: true },
+      { name: 'is_picking', description: 'Whether team picking is enabled', type: 5, required: true },
+      { name: 'bypass_roles', description: 'Role IDs that can bypass restrictions (comma-separated)', type: 3, required: false }
     ]);
     this.reg('removequeue', 'Remove a queue by channel ID', removequeue, [
-      { name: 'channelid', description: 'Channel ID of the queue to remove', type: 3, required: true }
+      { name: 'channel_id', description: 'Channel ID of the queue to remove', type: 3, required: true }
     ]);
   }
 
   private registerScoringCommands() {
     this.reg('score', 'Report game score', score, [
-      { name: 'gameid', description: 'Game ID', type: 4, required: true },
-      { name: 'winningteam', description: 'Winning Team (1 or 2)', type: 4, required: true },
+      { name: 'game_id', description: 'Game ID', type: 4, required: true },
+      { name: 'winning_team', description: 'Winning Team (1 or 2)', type: 4, required: true },
       { name: 'mvps', description: 'MVP players (comma-separated user IGNs)', type: 3, required: false },
       { name: 'bedbreaks', description: 'Players who broke beds (comma-separated user IGNs)', type: 3, required: false },
       { name: 'reason', description: 'Reason for the game result', type: 3, required: false }
@@ -288,7 +288,7 @@ export class CommandManager {
       { name: 'user', description: 'User to give loss to', type: 6, required: true }
     ]);
     this.reg('void', 'Void a game', voidGame, [
-      { name: 'gameid', description: 'Game ID', type: 4, required: true },
+      { name: 'game_id', description: 'Game ID', type: 4, required: true },
       { name: 'reason', description: 'Reason for voiding the game', type: 3, required: true }
     ]);
     this.reg('forcevoid', 'Force void the game associated with this channel', forcevoid);
@@ -300,19 +300,19 @@ export class CommandManager {
         { name: 'Kills', value: 'kills' }, { name: 'Deaths', value: 'deaths' }, { name: 'Bed Broken', value: 'bedBroken' },
         { name: 'Final Kills', value: 'finalKills' }, { name: 'Diamonds', value: 'diamonds' }, { name: 'Irons', value: 'irons' },
         { name: 'Gold', value: 'gold' }, { name: 'Emeralds', value: 'emeralds' }, { name: 'Blocks Placed', value: 'blocksPlaced' },
-        { name: 'Win Streak', value: 'winstreak' }, { name: 'Lose Streak', value: 'losestreak' },
+        { name: 'Win Streak', value: 'winStreak' }, { name: 'Lose Streak', value: 'loseStreak' },
         { name: 'KDR', value: 'kdr' }, { name: 'WLR', value: 'wlr' }
       ]},
       { name: 'value', description: 'New value for the statistic', type: 3, required: true }
     ]);
     this.reg('gamescount', 'Show a chart of games count by day and state', gamescount);
     this.reg('strikerequest', 'Request a strike against a player.', strikerequest, [
-      { name: 'gameid', type: 3, description: 'The ID of the game.', required: true },
+      { name: 'game_id', type: 3, description: 'The ID of the game.', required: true },
       { name: 'target', type: 6, description: 'The target user to strike.', required: true },
       { name: 'reason', type: 3, description: 'The reason for the strike.', required: true }
     ]);
     this.reg('voidrequest', 'Request to void a game.', voidrequest, [
-      { name: 'gameid', type: 3, description: 'The ID of the game.', required: true },
+      { name: 'game_id', type: 3, description: 'The ID of the game.', required: true },
       { name: 'reason', description: 'The reason for voiding the game.', type: 3, required: true }
     ]);
   }
@@ -324,7 +324,7 @@ export class CommandManager {
       { name: 'reason', description: 'Reason for ban', type: 3, required: true }
     ]);
     this.reg('unban', 'Unban a user from the server', unban, [
-      { name: 'userid', description: 'User ID to unban', type: 3, required: true }
+      { name: 'user_id', description: 'User ID to unban', type: 3, required: true }
     ]);
     this.reg('mute', 'Mute a user in the server', mute, [
       { name: 'user', description: 'User to mute (ID or mention)', type: 6, required: true },
@@ -332,7 +332,7 @@ export class CommandManager {
       { name: 'reason', description: 'Reason for mute', type: 3, required: true }
     ]);
     this.reg('unmute', 'Unmute a user in the server', unmute, [
-      { name: 'userid', description: 'User ID to unmute', type: 3, required: true }
+      { name: 'user_id', description: 'User ID to unmute', type: 3, required: true }
     ]);
     this.reg('strike', 'Issue a strike to a user', strike, [
       { name: 'user', description: 'User to strike (ID or mention)', type: 6, required: true },
@@ -343,7 +343,7 @@ export class CommandManager {
       { name: 'reason', description: 'Reason for removing strike', type: 3, required: false }
     ]);
     this.reg('history', 'View a user history of bans, mutes, or strikes', history, [
-      { name: 'userid', description: 'The Discord ID of the user', type: 3, required: true },
+      { name: 'user_id', description: 'The Discord ID of the user', type: 3, required: true },
       { name: 'type', description: 'The type of history to view (ban, mute, strike)', type: 3, required: true, choices: [
         { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }, { name: 'Strike', value: 'strike' }
       ]}
@@ -367,7 +367,7 @@ export class CommandManager {
     ]);
     this.reg('forcerename', 'Force rename a registered user IGN', forcerename, [
       { name: 'user', description: 'User to force rename', type: 6, required: true },
-      { name: 'newign', description: 'New in-game name', type: 3, required: true }
+      { name: 'new_ign', description: 'New in-game name', type: 3, required: true }
     ]);
     this.reg('unregister', 'Unregister a user from the bot', unregister, [
       { name: 'user', description: 'User to unregister', type: 6, required: true }
@@ -382,16 +382,16 @@ export class CommandManager {
     this.reg('settings', 'Edit your user settings', settings);
     this.reg('fixall', 'Fix roles and nicknames for all users in the database', fixall);
     this.reg('addelo', 'Add an ELO rank', addelo, [
-      { name: 'roleid', description: 'Role ID for this rank', type: 3, required: true },
-      { name: 'startelo', description: 'Starting ELO for this rank', type: 4, required: true },
-      { name: 'endelo', description: 'Ending ELO for this rank', type: 4, required: true },
-      { name: 'winelo', description: 'ELO gained for a win', type: 4, required: true },
-      { name: 'loseelo', description: 'ELO lost for a loss', type: 4, required: true },
-      { name: 'mvpelo', description: 'MVP ELO bonus for this rank', type: 4, required: true },
-      { name: 'bedelo', description: 'ELO gained for breaking a bed', type: 4, required: false }
+      { name: 'role_id', description: 'Role ID for this rank', type: 3, required: true },
+      { name: 'start_elo', description: 'Starting ELO for this rank', type: 4, required: true },
+      { name: 'end_elo', description: 'Ending ELO for this rank', type: 4, required: true },
+      { name: 'win_elo', description: 'ELO gained for a win', type: 4, required: true },
+      { name: 'lose_elo', description: 'ELO lost for a loss', type: 4, required: true },
+      { name: 'mvp_elo', description: 'MVP ELO bonus for this rank', type: 4, required: true },
+      { name: 'bed_elo', description: 'ELO gained for breaking a bed', type: 4, required: false }
     ]);
     this.reg('removeelo', 'Remove an ELO rank by role ID', removeelo, [
-      { name: 'roleid', description: 'Role ID of the ELO rank to remove', type: 3, required: true }
+      { name: 'role_id', description: 'Role ID of the ELO rank to remove', type: 3, required: true }
     ]);
     this.reg('wipe', 'Wipe all stats for a user (except bans, mutes, strikes)', wipe, [
       { name: 'user', description: 'User to wipe stats for', type: 6, required: true }
@@ -410,7 +410,7 @@ export class CommandManager {
         { name: 'Deaths', value: 'deaths' }, { name: 'Beds Broken', value: 'bedBroken' }, { name: 'Final Kills', value: 'finalKills' },
         { name: 'Diamonds', value: 'diamonds' }, { name: 'Irons', value: 'irons' }, { name: 'Gold', value: 'gold' },
         { name: 'Emeralds', value: 'emeralds' }, { name: 'Blocks Placed', value: 'blocksPlaced' },
-        { name: 'Winstreak', value: 'winstreak' }, { name: 'Losestreak', value: 'losestreak' },
+        { name: 'Winstreak', value: 'winStreak' }, { name: 'Losestreak', value: 'loseStreak' },
         { name: 'KDR', value: 'kdr' }, { name: 'WLR', value: 'wlr' }, { name: 'Level', value: 'level' },
         { name: 'Experience', value: 'experience' }, { name: 'Damage Dealt', value: 'damageDealt' },
         { name: 'Damage Taken', value: 'damageTaken' }, { name: 'Assists', value: 'assists' },

@@ -9,7 +9,7 @@ const kind: TimedPunishmentKind = {
   undoPastTense: 'unmuted',
   activeWord: 'muted',
   logName: 'MuteManager',
-  statusField: 'ismuted',
+  statusField: 'isMuted',
   recordsField: 'mutes',
   roleKey: 'muted',
   maxDurationMs: 30 * 24 * 60 * 60 * 1000,

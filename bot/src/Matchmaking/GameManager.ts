@@ -25,13 +25,13 @@ interface PlayerScoreData {
   isMvp: boolean;
   isBedBreaker: boolean;
   eloChange: number;
-  oldElo: number;
-  newElo: number;
+  elo_before: number;
+  elo_after: number;
   stats: PlayerData;
   finalDeaths: number;
   experienceGained: number;
-  oldLevel: number;
-  newLevel: number;
+  level_before: number;
+  level_after: number;
   leveledUp: boolean;
 }
 
@@ -53,11 +53,11 @@ interface PlayerVoidData {
   isMvp: boolean;
   isBedBreaker: boolean;
   eloChange: number;
-  oldElo: number;
-  newElo: number;
+  elo_before: number;
+  elo_after: number;
   experienceToRevert: number;
-  oldLevel: number;
-  newLevel: number;
+  level_before: number;
+  level_after: number;
   gameStats: VoidableGameStats | null;
 }
 
@@ -65,9 +65,12 @@ interface VoidableGameStats {
   gameId: number;
   state: string;
   eloGain: number;
+  elo_before?: number;
+  elo_after?: number;
   oldElo?: number;
   newElo?: number;
   won?: boolean;
+  isMvp?: boolean;
   ismvp?: boolean;
   kills: number;
   deaths: number;
@@ -94,6 +97,7 @@ interface QueueLike {
   minElo: number;
   maxElo: number;
   isRanked?: boolean;
+  isPicking?: boolean;
   ispicking?: boolean;
   queueType?: string;
   bypassRoles: string[];
@@ -106,6 +110,7 @@ interface WarpEventMessage {
 
 interface FightStatRow {
   kills?: number;
+  damage_dealt?: number;
   damageDealt?: number;
   damage?: number;
 }
@@ -242,7 +247,7 @@ export class GameManager {
         if (allPlayerIGNs.length > 0) {
           this.wsManager.send({
             type: 'scoringsuccess',
-            gameid: gameResult.gameId,
+            game_id: gameResult.gameId,
             players: allPlayerIGNs
           });
         }
@@ -293,7 +298,7 @@ export class GameManager {
         if (allPlayerIGNs.length > 0) {
           this.wsManager.send({
             type: 'gamevoided',
-            gameid: gameId,
+            game_id: gameId,
             players: allPlayerIGNs,
             reason
           });
@@ -307,7 +312,7 @@ export class GameManager {
       return {
         gameId,
         reason,
-        revertedPlayers: playerVoidData.map(p => ({ discordId: p.player.discordId, elo: p.newElo }))
+        revertedPlayers: playerVoidData.map(p => ({ discordId: p.player.discordId, elo: p.elo_after }))
       };
     } catch (error) {
       console.error(`[GameManager] Error voiding game ${gameId}:`, error);
@@ -506,7 +511,7 @@ export class GameManager {
         user.recentGames = user.recentGames || [];
         user.recentGames.unshift({
           gameId: resources.gameId,
-          queueid: String(typeof queue.id === 'number' ? queue.id : parseInt(String(queue.id), 10)),
+          queueId: String(typeof queue.id === 'number' ? queue.id : parseInt(String(queue.id), 10)),
           map: selectedMap,
           eloGain: 0,
           kills: 0,
@@ -517,7 +522,7 @@ export class GameManager {
           state: 'pending',
           startTime: startTime,
           won: false,
-          ismvp: false
+          isMvp: false
         });
         await user.save();
       });
@@ -886,7 +891,7 @@ export class GameManager {
 
           const recentGame = {
             gameId,
-            queueid: String(typeof queueData.id === 'number' ? queueData.id : parseInt(String(queueData.id), 10)),
+            queueId: String(typeof queueData.id === 'number' ? queueData.id : parseInt(String(queueData.id), 10)),
             map: selectedMap,
             eloGain: 0,
             kills: 0,
@@ -897,7 +902,7 @@ export class GameManager {
             state: 'pending',
             startTime: startTime,
             won: false,
-            ismvp: false
+            isMvp: false
           };
 
           user.recentGames.unshift(recentGame);
@@ -1075,8 +1080,8 @@ export class GameManager {
           const mirrorRows = fightsOf(opponent);
           const mirrorKey = Object.keys(mirrorRows).find((k) => k.toLowerCase() === ign.toLowerCase());
           const mirrorRow = mirrorKey ? mirrorRows[mirrorKey] : undefined;
-          const rowDamage = row.damageDealt ?? row.damage ?? 0;
-          const mirrorDamage = mirrorRow?.damageDealt ?? mirrorRow?.damage;
+          const rowDamage = row.damage_dealt ?? row.damageDealt ?? row.damage ?? 0;
+          const mirrorDamage = mirrorRow?.damage_dealt ?? mirrorRow?.damageDealt ?? mirrorRow?.damage;
           return {
             opponent,
             kills: row.kills || 0,
@@ -1166,13 +1171,13 @@ export class GameManager {
       isMvp,
       isBedBreaker,
       eloChange,
-      oldElo: player.elo,
-      newElo: Math.max(0, player.elo + eloChange),
+      elo_before: player.elo,
+      elo_after: Math.max(0, player.elo + eloChange),
       stats,
       finalDeaths,
       experienceGained,
-      oldLevel: levelUpInfo.oldLevel,
-      newLevel: levelUpInfo.newLevel,
+      level_before: levelUpInfo.level_before ?? levelUpInfo.oldLevel,
+      level_after: levelUpInfo.level_after ?? levelUpInfo.newLevel,
       leveledUp: levelUpInfo.leveledUp
     };
   }
@@ -1258,19 +1263,19 @@ export class GameManager {
       const updatePromises = playerScoreData.map(async (scoreData) => {
         const player = scoreData.player;
 
-        player.elo = scoreData.newElo;
+        player.elo = scoreData.elo_after;
 
         player.experience = (player.experience || 0) + scoreData.experienceGained;
-        player.level = scoreData.newLevel;
+        player.level = scoreData.level_after;
 
         if (scoreData.isWinner) {
           player.wins = (player.wins || 0) + 1;
-          player.winstreak = (player.winstreak || 0) + 1;
-          player.losestreak = 0;
+          player.winStreak = (player.winStreak || 0) + 1;
+          player.loseStreak = 0;
         } else {
           player.losses = (player.losses || 0) + 1;
-          player.losestreak = (player.losestreak || 0) + 1;
-          player.winstreak = 0;
+          player.loseStreak = (player.loseStreak || 0) + 1;
+          player.winStreak = 0;
         }
 
         if (scoreData.isMvp) {
@@ -1281,7 +1286,7 @@ export class GameManager {
 
         player.finalDeaths = (player.finalDeaths || 0) + (scoreData.finalDeaths || 0);
         player.playtimeSeconds = (player.playtimeSeconds || 0) + gameDurationSeconds;
-        player.peakElo = Math.max(player.peakElo || 0, scoreData.newElo);
+        player.peakElo = Math.max(player.peakElo || 0, scoreData.elo_after);
 
         player.kdr = player.deaths && player.deaths > 0 ? player.kills / player.deaths : player.kills;
         player.wlr = player.losses && player.losses > 0 ? player.wins / player.losses : player.wins;
@@ -1293,7 +1298,7 @@ export class GameManager {
         await player.save();
 
         if (scoreData.leveledUp) {
-          console.log(`[GameManager] Player ${player.ign || player.discordId} leveled up from ${scoreData.oldLevel} to ${scoreData.newLevel}!`);
+          console.log(`[GameManager] Player ${player.ign || player.discordId} leveled up from ${scoreData.level_before} to ${scoreData.level_after}!`);
         }
       });
       const results = await Promise.allSettled(updatePromises);
@@ -1340,18 +1345,18 @@ export class GameManager {
       const now = new Date();
       const entry: IRecentGame = {
         gameId: game.gameId,
-        queueid: String(parseInt(game.queueId, 10)),
+        queueId: String(parseInt(game.queueId, 10)),
         map: game.map,
         eloGain: scoreData.eloChange,
-        oldElo: scoreData.oldElo,
-        newElo: scoreData.newElo,
+        elo_before: scoreData.elo_before,
+        elo_after: scoreData.elo_after,
         kills: scoreData.stats.kills || 0,
         deaths: scoreData.stats.deaths || 0,
         bedBroken: scoreData.stats.bedBroken || 0,
         finalKills: scoreData.stats.finalKills || 0,
         finalDeaths: scoreData.finalDeaths || 0,
         won: scoreData.isWinner,
-        ismvp: scoreData.isMvp,
+        isMvp: scoreData.isMvp,
         date: now,
         state: 'scored',
         startTime: game.startTime,
@@ -1445,8 +1450,10 @@ export class GameManager {
           discordId: p.player.discordId,
           username: context.idToIgn[p.player.discordId] || 'Unknown',
           team: 'winning' as const,
-          oldElo: p.oldElo,
-          newElo: p.newElo,
+          elo_before: p.elo_before,
+          elo_after: p.elo_after,
+          oldElo: p.elo_before,
+          newElo: p.elo_after,
           mvp: p.isMvp
         }));
 
@@ -1456,8 +1463,10 @@ export class GameManager {
           discordId: p.player.discordId,
           username: context.idToIgn[p.player.discordId] || 'Unknown',
           team: 'losing' as const,
-          oldElo: p.oldElo,
-          newElo: p.newElo,
+          elo_before: p.elo_before,
+          elo_after: p.elo_after,
+          oldElo: p.elo_before,
+          newElo: p.elo_after,
           mvp: p.isMvp
         }));
 
@@ -1574,7 +1583,7 @@ export class GameManager {
       const isMvp = Array.isArray(context.game.mvps) && context.game.mvps.includes(player.discordId);
       const isBedBreaker = Array.isArray(context.game.bedbreaks) && context.game.bedbreaks.includes(player.discordId);
 
-      const oldElo = player.elo;
+      const elo_before = player.elo;
       let eloChange = 0;
       let restoredElo: number | null = null;
       let gameStats: VoidableGameStats | null = null;
@@ -1583,19 +1592,20 @@ export class GameManager {
       
       const recentGameIdx = player.recentGames.findIndex(g => g.gameId === context.game.gameId);
       if (recentGameIdx !== -1) {
-        const recentGame = player.recentGames[recentGameIdx];
+        const recentGame = player.recentGames[recentGameIdx] as IRecentGame & { oldElo?: number; ismvp?: boolean };
         gameStats = recentGame;
 
         if (recentGame.state === 'scored') {
-          if (typeof recentGame.oldElo === 'number') {
-            restoredElo = recentGame.oldElo;
+          const before = recentGame.elo_before ?? recentGame.oldElo;
+          if (typeof before === 'number') {
+            restoredElo = before;
           } else {
             eloChange = -recentGame.eloGain;
           }
 
           experienceToRevert = this.calculateExperienceGained(
             recentGame.won || false,
-            recentGame.ismvp || false,
+            recentGame.isMvp ?? recentGame.ismvp ?? false,
             isBedBreaker,
             recentGame
           );
@@ -1610,13 +1620,13 @@ export class GameManager {
         experienceToRevert = 0;
       }
 
-      const newElo = restoredElo !== null ? restoredElo : Math.max(0, player.elo + eloChange);
+      const elo_after = restoredElo !== null ? restoredElo : Math.max(0, player.elo + eloChange);
 
       const currentExperience = player.experience || 0;
       const newExperience = Math.max(0, currentExperience - experienceToRevert);
-      const oldLevel = player.level || 1;
+      const level_before = player.level || 1;
       const levelInfo = checkLevelUp(0, newExperience);
-      const newLevel = levelInfo.newLevel;
+      const level_after = levelInfo.level_after ?? levelInfo.newLevel;
 
       return {
         player,
@@ -1624,11 +1634,11 @@ export class GameManager {
         isMvp,
         isBedBreaker,
         eloChange,
-        oldElo,
-        newElo,
+        elo_before,
+        elo_after,
         experienceToRevert,
-        oldLevel,
-        newLevel,
+        level_before,
+        level_after,
         gameStats
       };
     } catch (error) {
@@ -1642,7 +1652,7 @@ export class GameManager {
       const updatePromises = playerVoidData.map(async (voidData) => {
         try {
           const player = voidData.player;
-          player.elo = voidData.newElo;
+          player.elo = voidData.elo_after;
 
           await this.revertPlayerGameStats(player, voidData);
           await this.updatePlayerRecentGamesForVoid(player, voidData, gameId);
@@ -1670,12 +1680,12 @@ export class GameManager {
     }
     if (gameStats.won === true) {
       player.wins = Math.max(0, (player.wins || 0) - 1);
-      player.winstreak = Math.max(0, (player.winstreak || 0) - 1);
+      player.winStreak = Math.max(0, (player.winStreak || 0) - 1);
     } else if (gameStats.won === false) {
       player.losses = Math.max(0, (player.losses || 0) - 1);
-      player.losestreak = Math.max(0, (player.losestreak || 0) - 1);
+      player.loseStreak = Math.max(0, (player.loseStreak || 0) - 1);
     }
-    if (gameStats.ismvp) {
+    if (gameStats.isMvp ?? gameStats.ismvp) {
       player.mvps = Math.max(0, (player.mvps || 0) - 1);
     }
     if (gameStats.firstBlood) {
@@ -1701,11 +1711,11 @@ export class GameManager {
       this.revertStatFields(player, gameStats);
 
       player.experience = Math.max(0, (player.experience || 0) - voidData.experienceToRevert);
-      player.level = voidData.newLevel;
+      player.level = voidData.level_after;
       player.kdr = player.deaths && player.deaths > 0 ? Number((player.kills / player.deaths).toFixed(2)) : (player.kills || 0);
       player.wlr = player.losses && player.losses > 0 ? Number((player.wins / player.losses).toFixed(2)) : (player.wins || 0);
 
-      console.log(`[GameManager] Reverted stats for player ${player.discordId}: -${voidData.experienceToRevert} XP (Lv.${voidData.oldLevel}â†’${voidData.newLevel}), ${voidData.eloChange} ELO`);
+      console.log(`[GameManager] Reverted stats for player ${player.discordId}: -${voidData.experienceToRevert} XP (Lv.${voidData.level_before}â†’${voidData.level_after}), ${voidData.eloChange} ELO`);
     } catch (error) {
       console.error(`[GameManager] Error reverting game stats for player ${player.discordId}:`, error);
     }
@@ -1729,7 +1739,7 @@ export class GameManager {
           existing.state = 'voided';
           existing.eloGain = 0;
           existing.won = false;
-          existing.ismvp = false;
+          existing.isMvp = false;
         } else {
           console.warn(`[GameManager] Game ${targetGameId} for player ${player.discordId} is not in scored/pending state: ${existing.state}`);
         }
@@ -1737,7 +1747,7 @@ export class GameManager {
         
         player.recentGames.unshift({
           gameId: targetGameId,
-          queueid: '0',
+          queueId: '0',
           map: 'Unknown',
           eloGain: 0,
           kills: 0,
@@ -1745,7 +1755,7 @@ export class GameManager {
           bedBroken: 0,
           finalKills: 0,
           won: false,
-          ismvp: false,
+          isMvp: false,
           date: new Date(),
           state: 'voided',
           startTime: new Date(),
@@ -1812,8 +1822,8 @@ export class GameManager {
       const formatPlayer = (voidData: PlayerVoidData): string => {
         const eloChangeStr = voidData.eloChange >= 0 ? `+${voidData.eloChange}` : `${voidData.eloChange}`;
         const expChangeStr = voidData.experienceToRevert > 0 ? ` (-${voidData.experienceToRevert} XP)` : '';
-        const levelChangeStr = voidData.oldLevel !== voidData.newLevel ? ` (Lv.${voidData.oldLevel}â†’${voidData.newLevel})` : '';
-        return `<@${voidData.player.discordId}>: ${voidData.oldElo} â†’ ${voidData.newElo} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
+        const levelChangeStr = voidData.level_before !== voidData.level_after ? ` (Lv.${voidData.level_before}â†’${voidData.level_after})` : '';
+        return `<@${voidData.player.discordId}>: ${voidData.elo_before} â†’ ${voidData.elo_after} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
       };
 
       const voidedSummary = playerVoidData.map(formatPlayer).join('\n');

@@ -42,8 +42,8 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
   const deaths = user.deaths || 0;
   const mvps = user.mvps || 0;
   const elo = user.elo || 0;
-  const winstreak = user.winstreak || 0;
-  const losestreak = user.losestreak || 0;
+  const winStreak = user.winStreak || 0;
+  const loseStreak = user.loseStreak || 0;
   const wlr = losses > 0 ? wins / losses : wins;
   const kdr = deaths > 0 ? kills / deaths : kills;
   const winRate = games > 0 ? wins / games : 0;
@@ -59,7 +59,7 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
 
   const playSecs = user.playtimeSeconds || 0;
   const playtime = playSecs < 3600 ? `${Math.floor(playSecs / 60)}m` : playSecs < 86400 ? `${Math.floor(playSecs / 3600)}h` : `${Math.floor(playSecs / 86400)}d`;
-  const streak = winstreak > 0 ? `+${winstreak}` : losestreak > 0 ? `-${losestreak}` : '0';
+  const streak = winStreak > 0 ? `+${winStreak}` : loseStreak > 0 ? `-${loseStreak}` : '0';
 
   const rankOf = async (field: string, value: number): Promise<string> => {
     const higher = await User.countDocuments({ [field]: { $gt: value } });
@@ -74,7 +74,7 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
     rankOf('kills', kills),
     rankOf('kdr', user.kdr || 0),
     rankOf('mvps', mvps),
-    rankOf('winstreak', winstreak),
+    rankOf('winStreak', winStreak),
     rankOf('playtimeSeconds', playSecs),
     rankOf('finalKills', user.finalKills || 0),
     rankOf('bedBroken', user.bedBroken || 0),
@@ -121,7 +121,7 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
     if (g.state === 'scored') result = g.won ? 'win' : 'lose';
     else if (g.state === 'voided') result = 'voided';
     else result = 'pending';
-    return { gameid: g.gameId, result };
+    return { game_id: g.gameId, result };
   });
 
   

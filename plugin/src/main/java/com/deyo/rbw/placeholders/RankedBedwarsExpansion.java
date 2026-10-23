@@ -32,14 +32,16 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     
     private static final Set<String> VALID_MODES = Set.of(
         "elo", "kills", "deaths", "wins", "losses", "games",
-        "winstreak", "losestreak", "kdr", "wlr", "finalKills", "bedBroken", "mvps",
-        "diamonds", "irons", "gold", "emeralds", "blocksPlaced",
-        "damagedealt", "damagetaken", "assists", "beststreak", "firstbloods"
+        "win_streak", "winstreak", "lose_streak", "losestreak", "kdr", "wlr",
+        "final_kills", "finalkills", "bed_broken", "bedbroken", "mvps",
+        "diamonds", "irons", "gold", "emeralds", "blocks_placed", "blocksplaced",
+        "damage_dealt", "damagedealt", "damage_taken", "damagetaken", "assists",
+        "best_streak", "beststreak", "first_bloods", "firstbloods"
     );
     
     
-    private static final Pattern TOP_PATTERN = Pattern.compile("top_([a-z]+)_([0-9]+)");
-    private static final Pattern TOP_VALUE_PATTERN = Pattern.compile("top_([a-z]+)_([0-9]+)_value");
+    private static final Pattern TOP_PATTERN = Pattern.compile("top_([a-z_]+)_([0-9]+)");
+    private static final Pattern TOP_VALUE_PATTERN = Pattern.compile("top_([a-z_]+)_([0-9]+)_value");
     
     public RankedBedwarsExpansion(RankedBedwars plugin) {
         this.plugin = plugin;
@@ -104,13 +106,17 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             case "wlr":
                 return getCachedUserStat(playerName, "wlr");
             case "winstreak":
-                return getCachedUserStat(playerName, "winstreak");
+            case "win_streak":
+                return getCachedUserStat(playerName, "win_streak");
             case "losestreak":
-                return getCachedUserStat(playerName, "losestreak");
+            case "lose_streak":
+                return getCachedUserStat(playerName, "lose_streak");
             case "finalkills":
-                return getCachedUserStat(playerName, "finalKills");
+            case "final_kills":
+                return getCachedUserStat(playerName, "final_kills");
             case "bedbroken":
-                return getCachedUserStat(playerName, "bedBroken");
+            case "bed_broken":
+                return getCachedUserStat(playerName, "bed_broken");
             case "mvps":
                 return getCachedUserStat(playerName, "mvps");
             case "diamonds":
@@ -122,17 +128,22 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             case "emeralds":
                 return getCachedUserStat(playerName, "emeralds");
             case "blocksplaced":
-                return getCachedUserStat(playerName, "blocksPlaced");
+            case "blocks_placed":
+                return getCachedUserStat(playerName, "blocks_placed");
             case "damagedealt":
-                return getCachedUserStat(playerName, "damageDealt");
+            case "damage_dealt":
+                return getCachedUserStat(playerName, "damage_dealt");
             case "damagetaken":
-                return getCachedUserStat(playerName, "damageTaken");
+            case "damage_taken":
+                return getCachedUserStat(playerName, "damage_taken");
             case "assists":
                 return getCachedUserStat(playerName, "assists");
             case "beststreak":
-                return getCachedUserStat(playerName, "bestStreak");
+            case "best_streak":
+                return getCachedUserStat(playerName, "best_streak");
             case "firstbloods":
-                return getCachedUserStat(playerName, "firstBloods");
+            case "first_bloods":
+                return getCachedUserStat(playerName, "first_bloods");
             default:
                 
                 return handleLeaderboardPlaceholder(params);
@@ -174,12 +185,18 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             case "wlr":
                 return String.format("%.2f", userData.getWlr());
             case "winstreak":
-                return String.valueOf(userData.getWinstreak());
+            case "win_streak":
+                return String.valueOf(userData.getWinStreak());
             case "losestreak":
-                return String.valueOf(userData.getLosestreak());
+            case "lose_streak":
+                return String.valueOf(userData.getLoseStreak());
             case "finalKills":
+            case "finalkills":
+            case "final_kills":
                 return String.valueOf(userData.getFinalKills());
             case "bedBroken":
+            case "bedbroken":
+            case "bed_broken":
                 return String.valueOf(userData.getBedBroken());
             case "mvps":
                 return String.valueOf(userData.getMvps());
@@ -192,16 +209,26 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             case "emeralds":
                 return String.valueOf(userData.getEmeralds());
             case "blocksPlaced":
+            case "blocksplaced":
+            case "blocks_placed":
                 return String.valueOf(userData.getBlocksPlaced());
             case "damageDealt":
+            case "damagedealt":
+            case "damage_dealt":
                 return String.valueOf(Math.round(userData.getDamageDealt()));
             case "damageTaken":
+            case "damagetaken":
+            case "damage_taken":
                 return String.valueOf(Math.round(userData.getDamageTaken()));
             case "assists":
                 return String.valueOf(userData.getAssists());
             case "bestStreak":
+            case "beststreak":
+            case "best_streak":
                 return String.valueOf(userData.getBestStreak());
             case "firstBloods":
+            case "firstbloods":
+            case "first_bloods":
                 return String.valueOf(userData.getFirstBloods());
             default:
                 return "0";

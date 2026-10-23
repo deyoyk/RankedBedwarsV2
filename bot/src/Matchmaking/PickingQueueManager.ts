@@ -28,7 +28,7 @@ interface QueueLike {
   minElo: number;
   maxElo: number;
   isRanked?: boolean;
-  ispicking?: boolean;
+  isPicking?: boolean;
   queueType?: string;
   bypassRoles: string[];
 }
@@ -213,13 +213,13 @@ export class PickingQueueManager {
     team2Avg: number,
     ignMap: Map<string, string>,
     status: string = 'Ongoing',
-    gameid: number
+    gameId: number
   ): Promise<EmbedBuilder> {
     const team1Value = this.buildTeamValue(team1, captains[0], team1Avg, ignMap);
     const team2Value = this.buildTeamValue(team2, captains[1], team2Avg, ignMap);
     const statusField = `**Status:** ${status}`;
     return new EmbedBuilder()
-      .setTitle(`Game #${gameid} Started`)
+      .setTitle(`Game #${gameId} Started`)
       .addFields(
         {
           name: '**TEAM GREEN**',

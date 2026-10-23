@@ -6,16 +6,20 @@ type PlayerLine = {
   discordId: string;
   username: string;
   team: 'winning' | 'losing';
-  oldElo: number;
-  newElo: number;
+  elo_before: number;
+  elo_after: number;
+  oldElo?: number;
+  newElo?: number;
   mvp: boolean;
 };
 
 async function toTemplatePlayer(player: PlayerLine): Promise<ScoreTemplatePlayer> {
   return {
     username: player.username,
-    oldElo: player.oldElo,
-    newElo: player.newElo,
+    elo_before: player.elo_before ?? player.oldElo ?? 0,
+    elo_after: player.elo_after ?? player.newElo ?? 0,
+    oldElo: player.elo_before ?? player.oldElo ?? 0,
+    newElo: player.elo_after ?? player.newElo ?? 0,
     mvp: player.mvp,
     avatar: await loadAvatarDataUrl(player.username),
   };

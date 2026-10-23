@@ -71,7 +71,7 @@ function makeQueue(channelId: string, maxPlayers = 4) {
     minElo: 0,
     maxElo: 99999,
     isRanked: true,
-    ispicking: false,
+    isPicking: false,
     bypassRoles: [],
     isActive: true
   };
@@ -83,8 +83,8 @@ function makeUser(id: string) {
     ign: id,
     elo: 1000 + parseInt(id.slice(1), 10) % 100,
     partyId: null,
-    isbanned: false,
-    isfrozen: false
+    isBanned: false,
+    isFrozen: false
   };
 }
 

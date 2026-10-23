@@ -16,8 +16,8 @@ export interface IUserStats {
   gold: number;
   emeralds: number;
   blocksPlaced: number;
-  winstreak: number;
-  losestreak: number;
+  winStreak: number;
+  loseStreak: number;
   kdr: number;
   wlr: number;
   playtimeSeconds: number;
@@ -49,8 +49,8 @@ export const coreStatFields = {
   gold: { type: Number, default: 0 },
   emeralds: { type: Number, default: 0 },
   blocksPlaced: { type: Number, default: 0 },
-  winstreak: { type: Number, default: 0 },
-  losestreak: { type: Number, default: 0 },
+  winStreak: { type: Number, default: 0 },
+  loseStreak: { type: Number, default: 0 },
   kdr: { type: Number, default: 0 },
   wlr: { type: Number, default: 0 },
   playtimeSeconds: { type: Number, default: 0 },

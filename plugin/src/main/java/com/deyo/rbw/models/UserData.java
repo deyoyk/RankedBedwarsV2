@@ -22,11 +22,11 @@ public class UserData {
     private int gold;
     private int emeralds;
     private int blocksPlaced;
-    private boolean isbanned;
-    private boolean ismuted;
-    private boolean isfrozen;
-    private int winstreak;
-    private int losestreak;
+    private boolean isBanned;
+    private boolean isMuted;
+    private boolean isFrozen;
+    private int winStreak;
+    private int loseStreak;
     private double kdr;
     private double wlr;
     private double damageDealt;

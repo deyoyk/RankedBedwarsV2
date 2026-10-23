@@ -13,9 +13,9 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
   currentTheme?: string;
   seasonNumber?: number;
   chapterNumber?: number;
-  ismuted?: boolean;
-  isfrozen?: boolean;
-  isbanned?: boolean;
+  isMuted?: boolean;
+  isFrozen?: boolean;
+  isBanned?: boolean;
   settings: {
     toggleprefix: boolean;
     togglescoreping: boolean;
@@ -58,9 +58,9 @@ const UserSchema: Schema = new Schema({
   seasonNumber: { type: Number },
   chapterNumber: { type: Number },
   wins: { ...coreStatFields.wins, index: true },
-  isbanned: { type: Boolean, default: false, index: true },
-  ismuted: { type: Boolean, default: false },
-  isfrozen: { type: Boolean, default: false, index: true },
+  isBanned: { type: Boolean, default: false, index: true },
+  isMuted: { type: Boolean, default: false },
+  isFrozen: { type: Boolean, default: false, index: true },
   settings:{
     toggleprefix:{ type: Boolean, default: false },
     togglescoreping: { type: Boolean, default: false },
@@ -96,7 +96,7 @@ const UserSchema: Schema = new Schema({
 UserSchema.index({ ign: 1 }, { collation: { locale: 'en', strength: 2 } });
 UserSchema.index({ elo: -1 });
 UserSchema.index({ wins: -1 });
-UserSchema.index({ isbanned: 1, isfrozen: 1 });
+UserSchema.index({ isBanned: 1, isFrozen: 1 });
 UserSchema.index({ partyId: 1 }, { sparse: true });
 
 export default mongoose.model<IUser>('User', UserSchema);

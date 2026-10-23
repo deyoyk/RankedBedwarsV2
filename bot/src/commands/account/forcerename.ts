@@ -14,7 +14,7 @@ export async function forcerename(interaction: Message | ChatInputCommandInterac
   if (interaction instanceof ChatInputCommandInteraction) {
     const user = interaction.options.getUser('user', true);
     targetUser = user.id;
-    newIgn = interaction.options.getString('newign', true);
+    newIgn = interaction.options.getString('new_ign', true);
   } else {
     if (!args || args.length < 2) {
       await safeReply(interaction, errorEmbed('Usage: =forcerename <user> <newign>', 'Force Rename Error'));

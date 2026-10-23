@@ -40,7 +40,7 @@ interface QueueLike {
   minElo: number;
   maxElo: number;
   isRanked?: boolean;
-  ispicking?: boolean;
+  isPicking?: boolean;
   queueType?: string;
   bypassRoles: string[];
 }
@@ -171,7 +171,7 @@ export class CentralizedMatchmaker {
           }
 
           if (state && state.isProcessing && now - state.lastProcessed > this.LOCK_TIMEOUT) {
-            if (queue.ispicking) {
+            if (queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking) {
               return;
             }
             console.warn(`[CentralizedMatchmaker] Queue ${queue.channelId} stuck for ${now - state.lastProcessed}ms, resetting`);
@@ -329,7 +329,7 @@ export class CentralizedMatchmaker {
       }
 
       const isPickingQueue = queueType === QueueType.PICKING;
-      if ((queue.ispicking || queue.queueType === 'picking') && queue.maxPlayers <= 2) {
+      if (((queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking) || queue.queueType === 'picking') && queue.maxPlayers <= 2) {
         console.log(`[CentralizedMatchmaker] Using random queue for ${queue.maxPlayers}-player game (overriding picking mode)`);
       }
 
@@ -545,7 +545,7 @@ export class CentralizedMatchmaker {
         return false;
       }
 
-      if (user.isbanned || user.isfrozen) {
+      if (user.isBanned || user.isFrozen) {
         console.warn(`[CentralizedMatchmaker] User ${playerId} is banned or frozen`);
         return false;
       }
@@ -626,7 +626,7 @@ export class CentralizedMatchmaker {
 
       const partyUsers = await User.find({ 
         discordId: { $in: partyMembers } 
-      }).select('discordId elo isbanned isfrozen').lean();
+      }).select('discordId elo isBanned isFrozen').lean();
 
       if (partyUsers.length !== partyMembers.length) {
         return { 
@@ -636,7 +636,7 @@ export class CentralizedMatchmaker {
       }
 
       for (const member of partyUsers) {
-        if (member.isbanned || member.isfrozen) {
+        if (member.isBanned || member.isFrozen) {
           return { 
             valid: false, 
             reason: `Party member ${member.discordId} is banned or frozen` 
@@ -671,7 +671,7 @@ export class CentralizedMatchmaker {
       return QueueType.RANDOM;
     }
     
-    if (queue.ispicking || queue.queueType === 'picking') {
+    if ((queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking) || queue.queueType === 'picking') {
       return QueueType.PICKING;
     }
     return QueueType.RANDOM;

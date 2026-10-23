@@ -29,7 +29,7 @@ function makeUser(id: string, elo = 1000, saveImpl?: () => Promise<unknown>) {
     wins: 0, losses: 0, games: 0, mvps: 0,
     kills: 0, deaths: 0, finalKills: 0, bedBroken: 0,
     diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0,
-    winstreak: 0, losestreak: 0, experience: 0, level: 1,
+    winStreak: 0, loseStreak: 0, experience: 0, level: 1,
     kdr: 0, wlr: 0,
     recentGames: [],
     dailyElo: [],

@@ -223,8 +223,8 @@ export class SeasonManager {
             gold: user.gold || 0,
             emeralds: user.emeralds || 0,
             blocksPlaced: user.blocksPlaced || 0,
-            winstreak: user.winstreak || 0,
-            losestreak: user.losestreak || 0,
+            winStreak: user.winStreak || 0,
+            loseStreak: user.loseStreak || 0,
             kdr: user.kdr || 0,
             wlr: user.wlr || 0,
             playtimeSeconds: user.playtimeSeconds || 0,
@@ -266,8 +266,8 @@ export class SeasonManager {
             gold: 0,
             emeralds: 0,
             blocksPlaced: 0,
-            winstreak: 0,
-            losestreak: 0,
+            winStreak: 0,
+            loseStreak: 0,
             kdr: 0,
             wlr: 0,
             playtimeSeconds: 0,
@@ -399,7 +399,7 @@ export class SeasonManager {
       const { page: validPage, limit: validLimit } = validatePageLimit(page, limit);
 
       const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths', 'bedBroken', 'mvps',
+        'winStreak', 'loseStreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths', 'bedBroken', 'mvps',
         'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced', 'level', 'experience',
         'playtimeSeconds', 'peakElo',
         'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods'];

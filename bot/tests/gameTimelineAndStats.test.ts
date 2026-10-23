@@ -34,7 +34,7 @@ function makeUser(id: string, elo = 1000) {
     wins: 0, losses: 0, games: 0, mvps: 0,
     kills: 0, deaths: 0, finalKills: 0, finalDeaths: 0, bedBroken: 0,
     diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0,
-    winstreak: 0, losestreak: 0, experience: 0, level: 1,
+    winStreak: 0, loseStreak: 0, experience: 0, level: 1,
     kdr: 0, wlr: 0,
     playtimeSeconds: 0, peakElo: 0,
     recentGames: [],
@@ -231,9 +231,9 @@ describe('GameManager timeline + new user stats', () => {
 
   it('void reverts finalDeaths but keeps playtimeSeconds and peakElo', async () => {
     const recentGame = {
-      gameId: 1, map: 'MapA', eloGain: 30, oldElo: 1200, newElo: 1230,
+      gameId: 1, map: 'MapA', eloGain: 30, elo_before: 1200, elo_after: 1230,
       kills: 5, deaths: 2, bedBroken: 0, finalKills: 1, finalDeaths: 2,
-      won: true, ismvp: false, date: new Date(), state: 'scored',
+      won: true, isMvp: false, date: new Date(), state: 'scored',
       startTime: new Date(Date.now() - 600000), endTime: new Date(),
       diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0
     };

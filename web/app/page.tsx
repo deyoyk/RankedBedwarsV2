@@ -18,7 +18,7 @@ interface RecentGame {
 }
 
 interface QueueInfo {
-  minElo: number; maxElo: number; isRanked: boolean; ispicking: boolean;
+  minElo: number; maxElo: number; isRanked: boolean; isPicking: boolean;
   playerCount: number; maxPlayers: number; playerIGNs: string[];
 }
 
@@ -110,7 +110,7 @@ export default function HomePage() {
               rows={list.map((q, i) => [
                 <span key={`r${i}`} className="muted num">{formatNumber(q.minElo)}–{formatNumber(q.maxElo)}</span>,
                 <Pill key={`m${i}`} text={q.isRanked ? 'Ranked' : 'Unranked'} tone={q.isRanked ? 'ok' : ''} />,
-                <Pill key={`t${i}`} text={q.ispicking ? 'Picking' : 'Random'} />,
+                <Pill key={`t${i}`} text={q.isPicking ? 'Picking' : 'Random'} />,
                 <span key={`p${i}`} className="num">{q.playerCount}/{q.maxPlayers}</span>,
                 <span key={`q${i}`} className="muted">{q.playerIGNs.length ? q.playerIGNs.join(', ') : 'Empty'}</span>,
               ])}

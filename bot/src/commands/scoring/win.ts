@@ -43,13 +43,13 @@ export async function win(interaction: Message | ChatInputCommandInteraction, ar
       return;
     }
 
-    const newWinstreak = (existing.winstreak ?? 0) + 1;
+    const newWinStreak = (existing.winStreak ?? 0) + 1;
     const newWlr = computeWlr(existing.wins + 1, existing.losses);
     const user = await User.findOneAndUpdate(
       { discordId: targetUserId },
       {
         $inc: { elo: eloRank.winElo, wins: 1, games: 1 },
-        $set: { winstreak: newWinstreak, losestreak: 0, wlr: newWlr },
+        $set: { winStreak: newWinStreak, loseStreak: 0, wlr: newWlr },
       },
       { new: true }
     );

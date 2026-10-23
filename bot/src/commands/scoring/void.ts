@@ -13,7 +13,7 @@ export async function voidGame(interaction: Message | ChatInputCommandInteractio
   let reason: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    gameId = interaction.options.getInteger('gameid', true);
+    gameId = interaction.options.getInteger('game_id', true);
     reason = interaction.options.getString('reason') || `voided by <@${interaction.user.id}>: no reason provided`;
   } else {
     if (!args || args.length < 1) {

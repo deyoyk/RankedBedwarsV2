@@ -82,7 +82,7 @@ public class CallCmd implements CommandExecutor, TabCompleter {
         String callId = UUID.randomUUID().toString();
         JsonObject json = new JsonObject();
         json.addProperty("type", "callcmd");
-        json.addProperty("callId", callId);
+        json.addProperty("call_id", callId);
         json.addProperty("requester", requesterIgn);
         json.addProperty("target", targetIgn);
 

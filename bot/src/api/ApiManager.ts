@@ -309,7 +309,7 @@ export class ApiManager {
   private validateMode(req: Request, res: Response): string | null {
     const mode = (req.query.mode as string) || 'elo';
     const validModes = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-      'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
+      'winStreak', 'loseStreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
       'bedBroken', 'mvps', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced',
       'level', 'experience', 'playtimeSeconds', 'peakElo',
       'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods'];
@@ -394,7 +394,7 @@ export class ApiManager {
       }
       const now = new Date();
       let current = null;
-      if (user.ismuted && user.mutes.length > 0) {
+      if (user.isMuted && user.mutes.length > 0) {
         const lastMute = user.mutes[user.mutes.length - 1];
         if (lastMute.duration === 0 || (this.punishmentTime(lastMute.date) + lastMute.duration * 60000 > now.getTime())) {
           current = lastMute;
@@ -615,7 +615,7 @@ export class ApiManager {
           minElo: q.minElo,
           maxElo: q.maxElo,
           isRanked: q.isRanked,
-          ispicking: q.ispicking,
+          isPicking: q.isPicking ?? (q as unknown as { ispicking?: boolean }).ispicking,
           bypassRoles,
           playerCount: playerIds.length,
           playerIGNs: igns
@@ -1036,7 +1036,7 @@ export class ApiManager {
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 10, 1), 100);
 
       const validStats = ['elo', 'kills', 'deaths', 'wins', 'losses', 'games',
-        'winstreak', 'losestreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
+        'winStreak', 'loseStreak', 'kdr', 'wlr', 'finalKills', 'finalDeaths',
         'bedBroken', 'mvps', 'diamonds', 'irons', 'gold', 'emeralds', 'blocksPlaced',
         'level', 'experience', 'playtimeSeconds', 'peakElo',
         'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods'];
@@ -1638,7 +1638,7 @@ export class ApiManager {
       res.json({
         ign: user.ign,
         discordId: user.discordId,
-        currentWinstreak: user.winstreak || 0,
+        currentWinstreak: (user.winStreak ?? (user as unknown as { winstreak?: number }).winstreak) || 0,
         maxWinstreakInHistory: maxStreak,
         recentWinstreaks: winstreakHistory.slice(-10)
       });
@@ -1659,14 +1659,21 @@ export class ApiManager {
       }
 
       const recentGames = (user.recentGames || []).slice(0, 20);
-      const eloHistory = recentGames.map((game) => ({
-        gameId: game.gameId,
-        date: game.date,
-        won: game.won,
-        eloChange: typeof game.eloGain === 'number' ? game.eloGain : null,
-        oldElo: typeof game.oldElo === 'number' ? game.oldElo : null,
-        newElo: typeof game.newElo === 'number' ? game.newElo : null
-      }));
+      const eloHistory = recentGames.map((game) => {
+        const g = game as typeof game & { oldElo?: number; newElo?: number };
+        const before = typeof g.elo_before === 'number' ? g.elo_before : (typeof g.oldElo === 'number' ? g.oldElo : null);
+        const after = typeof g.elo_after === 'number' ? g.elo_after : (typeof g.newElo === 'number' ? g.newElo : null);
+        return {
+          gameId: game.gameId,
+          date: game.date,
+          won: game.won,
+          eloChange: typeof game.eloGain === 'number' ? game.eloGain : null,
+          elo_before: before,
+          elo_after: after,
+          oldElo: before,
+          newElo: after
+        };
+      });
 
       res.json({
         ign: user.ign,
@@ -1740,8 +1747,8 @@ export class ApiManager {
           levelInfo
         },
         currentStreak: {
-          winstreak: user.winstreak || 0,
-          losestreak: user.losestreak || 0
+          winStreak: user.winStreak ?? (user as unknown as { winstreak?: number }).winstreak ?? 0,
+          loseStreak: user.loseStreak ?? (user as unknown as { losestreak?: number }).losestreak ?? 0
         },
         seasonHistory: {
           totalSeasons: seasonHistory.length,

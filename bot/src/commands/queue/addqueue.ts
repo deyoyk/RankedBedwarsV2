@@ -13,23 +13,23 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
   let minElo: number;
   let maxElo: number;
   let isRanked: boolean;
-  let ispicking: boolean;
+  let isPicking: boolean;
   let bypassRoles: string[] = [];
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    channelId = interaction.options.getString('channelid', true);
-    maxPlayers = interaction.options.getInteger('maxplayers', true);
-    minElo = interaction.options.getInteger('minelo', true);
-    maxElo = interaction.options.getInteger('maxelo', true);
-    isRanked = interaction.options.getBoolean('isranked', true);
-    ispicking = interaction.options.getBoolean('ispicking', true);
-    const bypassRolesStr = interaction.options.getString('bypassroles', false);
+    channelId = interaction.options.getString('channel_id', true);
+    maxPlayers = interaction.options.getInteger('max_players', true);
+    minElo = interaction.options.getInteger('min_elo', true);
+    maxElo = interaction.options.getInteger('max_elo', true);
+    isRanked = interaction.options.getBoolean('is_ranked', true);
+    isPicking = interaction.options.getBoolean('is_picking', true);
+    const bypassRolesStr = interaction.options.getString('bypass_roles', false);
     if (bypassRolesStr) {
       bypassRoles = bypassRolesStr.split(',').map(id => id.trim());
     }
   } else {
     if (!args || args.length < 6) {
-      await safeReply(interaction, errorEmbed('Usage: =addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <ispicking> [bypassRoles]', 'Queue Creation Error'));
+      await safeReply(interaction, errorEmbed('Usage: =addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <isPicking> [bypassRoles]', 'Queue Creation Error'));
       return;
     }
     channelId = args[0];
@@ -37,7 +37,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
     minElo = parseInt(args[2], 10);
     maxElo = parseInt(args[3], 10);
     isRanked = args[4].toLowerCase() === 'true';
-    ispicking = args[5].toLowerCase() === 'true';
+    isPicking = args[5].toLowerCase() === 'true';
     if (args.length > 6) {
       bypassRoles = args[6].split(',').map(id => id.trim());
     }
@@ -80,7 +80,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
       minElo,
       maxElo,
       isRanked,
-      ispicking,
+      isPicking,
       bypassRoles,
       players: [],
       parties: []
@@ -94,7 +94,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
       { name: 'Max Players', value: maxPlayers.toString(), inline: true },
       { name: 'ELO Range', value: `${minElo}-${maxElo}`, inline: true },
       { name: 'Queue Type', value: isRanked ? 'Ranked' : 'Casual', inline: true },
-      { name: 'Picking Enabled', value: ispicking ? 'Yes' : 'No', inline: true },
+      { name: 'Picking Enabled', value: isPicking ? 'Yes' : 'No', inline: true },
       { name: 'Bypass Roles', value: bypassRoles.length > 0 ? bypassRoles.join(', ') : 'None', inline: true }
     );
     await safeReply(interaction, embed);

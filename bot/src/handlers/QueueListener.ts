@@ -38,7 +38,7 @@ interface QueueLike {
   minElo: number;
   maxElo: number;
   isRanked?: boolean;
-  ispicking?: boolean;
+  isPicking?: boolean;
   queueType?: string;
   bypassRoles: string[];
 }
@@ -376,7 +376,7 @@ export class QueueListener {
         return;
       }
 
-      if (user.isbanned || user.isfrozen) {
+      if (user.isBanned || user.isFrozen) {
         await this.moveToWaiting(state, 'you have a restricted role. please contact a staff if you think its a mistake');
         return;
       }
@@ -487,7 +487,7 @@ export class QueueListener {
 
       const partyUsers = await User.find({
         discordId: { $in: partyMembers }
-      }).select('discordId elo isbanned isfrozen').lean();
+      }).select('discordId elo isBanned isFrozen').lean();
 
       if (partyUsers.length !== partyMembers.length) {
         await this.moveToWaiting(state, 'Some party members not found');
@@ -495,7 +495,7 @@ export class QueueListener {
       }
 
       for (const member of partyUsers) {
-        if (member.isbanned || member.isfrozen) {
+        if (member.isBanned || member.isFrozen) {
           await this.moveToWaiting(state, `Party member is banned or frozen`);
           return { success: false };
         }

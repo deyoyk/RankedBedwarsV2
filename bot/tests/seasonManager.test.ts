@@ -65,7 +65,7 @@ function makeUser(i: number) {
     level: 5, experience: 500, wins: 10, losses: 5, games: 15, mvps: 2,
     kills: 50, deaths: 25, bedBroken: 3, finalKills: 4, finalDeaths: 1,
     diamonds: 1, irons: 2, gold: 3, emeralds: 4, blocksPlaced: 100,
-    winstreak: 1, losestreak: 0, kdr: 2, wlr: 2, playtimeSeconds: 600,
+    winStreak: 1, loseStreak: 0, kdr: 2, wlr: 2, playtimeSeconds: 600,
     peakElo: 1100, recentGames: [], dailyElo: []
   };
 }

@@ -41,7 +41,7 @@ describe('Queue schema', () => {
       minElo: 0,
       maxElo: 2000,
       isRanked: true,
-      ispicking: false,
+      isPicking: false,
       bypassRoles: []
     });
     expect(queue.isActive).toBe(true);

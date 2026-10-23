@@ -157,7 +157,7 @@ export async function batchProcessExpired<T>(
 
 export interface AutoExpireConfig {
   typeName: string;
-  statusField: 'isbanned' | 'ismuted';
+  statusField: 'isBanned' | 'isMuted';
   recordsField: 'bans' | 'mutes';
   selectFields: string;
   processExpired: (guild: Guild, userId: string) => Promise<void>;

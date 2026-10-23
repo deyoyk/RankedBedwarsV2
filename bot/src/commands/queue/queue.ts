@@ -59,7 +59,7 @@ export async function queue(interaction: Message | ChatInputCommandInteraction, 
       { name: 'Players', value: `${playersInQueue.length}/${queue.maxPlayers}`, inline: true },
       { name: 'ELO Range', value: `${queue.minElo}-${queue.maxElo}`, inline: true },
       { name: 'Type', value: queue.isRanked ? 'Ranked' : 'Casual', inline: true },
-      { name: 'Picking', value: queue.ispicking ? 'Enabled' : 'Disabled', inline: true }
+      { name: 'Picking', value: queue.isPicking ? 'Enabled' : 'Disabled', inline: true }
     );
 
     embed.builder.setTimestamp();

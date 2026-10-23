@@ -517,36 +517,36 @@ public class WebSocketManager {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject json = new JsonObject();
             json.addProperty("type", "scoring");
-            json.addProperty("gameid", game.getGameId());
+            json.addProperty("game_id", game.getGameId());
             
             if (game.getMvps() != null && !game.getMvps().isEmpty()) {
                 json.add("mvps", toJsonArray(game.getMvps()));
             }
             if (game.getBedBreakers() != null && !game.getBedBreakers().isEmpty()) {
-                json.add("bedsbroken", toJsonArray(game.getBedBreakers()));
+                json.add("beds_broken", toJsonArray(game.getBedBreakers()));
             }
             JsonObject playersJson = new JsonObject();
             for (String playerName : game.getPlayerKills().keySet()) {
                 JsonObject playerJson = new JsonObject();
                 playerJson.addProperty("kills", game.getPlayerKills().getOrDefault(playerName, 0));
                 playerJson.addProperty("deaths", game.getPlayerDeaths().getOrDefault(playerName, 0));
-                playerJson.addProperty("finalkills", game.getPlayerFinalKills().getOrDefault(playerName, 0));
-                playerJson.addProperty("blocksplaced", game.getPlayerBlocksPlaced().getOrDefault(playerName, 0));
+                playerJson.addProperty("final_kills", game.getPlayerFinalKills().getOrDefault(playerName, 0));
+                playerJson.addProperty("blocks_placed", game.getPlayerBlocksPlaced().getOrDefault(playerName, 0));
                 playerJson.addProperty("diamonds", game.getPlayerDiamondsCollected().getOrDefault(playerName, 0));
                 playerJson.addProperty("irons", game.getPlayerIronCollected().getOrDefault(playerName, 0));
                 playerJson.addProperty("gold", game.getPlayerGoldCollected().getOrDefault(playerName, 0));
                 playerJson.addProperty("emeralds", game.getPlayerEmeraldsCollected().getOrDefault(playerName, 0));
-                playerJson.addProperty("damagedealt", game.getPlayerDamageDealt().getOrDefault(playerName, 0.0));
-                playerJson.addProperty("damagetaken", game.getPlayerDamageTaken().getOrDefault(playerName, 0.0));
+                playerJson.addProperty("damage_dealt", game.getPlayerDamageDealt().getOrDefault(playerName, 0.0));
+                playerJson.addProperty("damage_taken", game.getPlayerDamageTaken().getOrDefault(playerName, 0.0));
                 playerJson.addProperty("assists", game.getPlayerAssists().getOrDefault(playerName, 0));
-                playerJson.addProperty("maxstreak", game.getPlayerMaxStreak().getOrDefault(playerName, 0));
-                playerJson.addProperty("firstblood", playerName.equals(game.getFirstBlood()));
+                playerJson.addProperty("max_streak", game.getPlayerMaxStreak().getOrDefault(playerName, 0));
+                playerJson.addProperty("first_blood", playerName.equals(game.getFirstBlood()));
                 JsonObject fightsJson = new JsonObject();
                 Map<String, Game.FightStats> fights = game.getPlayerFights().getOrDefault(playerName, java.util.Collections.emptyMap());
                 for (Map.Entry<String, Game.FightStats> fight : fights.entrySet()) {
                     JsonObject fightJson = new JsonObject();
                     fightJson.addProperty("kills", fight.getValue().getKills());
-                    fightJson.addProperty("damage", fight.getValue().getDamage());
+                    fightJson.addProperty("damage_dealt", fight.getValue().getDamage());
                     fightsJson.add(fight.getKey(), fightJson);
                 }
                 playerJson.add("fights", fightsJson);
@@ -582,7 +582,7 @@ public class WebSocketManager {
                         winningTeamIgnList.add(player);
                     }
                 }
-                json.add("winningteamignlist", winningTeamIgnList);
+                json.add("winning_team_ign_list", winningTeamIgnList);
             } else {
                 plugin.getLogger().warning("Not sending winning team for game " + game.getGameId() + ": winner not tracked");
             }
@@ -784,15 +784,15 @@ public class WebSocketManager {
     }
     
     private void handleCallSuccess(JsonObject json) {
-        if (json.has("callId") && plugin.getCallCommand() != null) {
-            plugin.getCallCommand().handleCallSuccess(json.get("callId").getAsString());
+        if (json.has("call_id") && plugin.getCallCommand() != null) {
+            plugin.getCallCommand().handleCallSuccess(json.get("call_id").getAsString());
         }
     }
 
     private void handleCallFailure(JsonObject json) {
-        if (json.has("callId") && plugin.getCallCommand() != null) {
+        if (json.has("call_id") && plugin.getCallCommand() != null) {
             String reason = json.has("reason") ? json.get("reason").getAsString() : "Unknown error";
-            plugin.getCallCommand().handleCallFailure(json.get("callId").getAsString(), reason);
+            plugin.getCallCommand().handleCallFailure(json.get("call_id").getAsString(), reason);
         }
     }
 
@@ -835,10 +835,10 @@ public class WebSocketManager {
             queuePlayers.add(playersArray.get(i).getAsString());
         }
         String queueMessage = String.format("§6In Queue [§e%d-%d§6] §f%d/%d §7Ranked: %s §7Picking: %s",
-            queue.get("minElo").getAsInt(), queue.get("maxElo").getAsInt(),
-            queue.get("currentPlayers").getAsInt(), queue.get("maxPlayers").getAsInt(),
-            queue.get("isRanked").getAsBoolean() ? "§atrue" : "§cfalse",
-            queue.get("isPicking").getAsBoolean() ? "§atrue" : "§cfalse"
+            queue.get("min_elo").getAsInt(), queue.get("max_elo").getAsInt(),
+            queue.get("current_players").getAsInt(), queue.get("max_players").getAsInt(),
+            queue.get("is_ranked").getAsBoolean() ? "§atrue" : "§cfalse",
+            queue.get("is_picking").getAsBoolean() ? "§atrue" : "§cfalse"
         );
         Bukkit.getScheduler().runTask(plugin, () -> {
             for (String playerName : queuePlayers) {
@@ -952,15 +952,15 @@ public class WebSocketManager {
 	}
 
 	/**
-	 * Parses the gameid from a bot message. The bot may send it as a number or
+	 * Parses the game_id from a bot message. The bot may send it as a number or
 	 * as a string; non-numeric ids are tolerated and reported as -1 instead of
 	 * throwing NumberFormatException.
 	 */
 	static int parseGameId(JsonObject json) {
-		if (!json.has("gameid") || json.get("gameid").isJsonNull()) {
+		if (!json.has("game_id") || json.get("game_id").isJsonNull()) {
 			return -1;
 		}
-		JsonElement gameIdElement = json.get("gameid");
+		JsonElement gameIdElement = json.get("game_id");
 		try {
 			return gameIdElement.isJsonPrimitive() && gameIdElement.getAsJsonPrimitive().isNumber()
 					? gameIdElement.getAsInt()

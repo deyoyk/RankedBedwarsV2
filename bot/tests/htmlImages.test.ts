@@ -34,7 +34,7 @@ function countText(node: any, text: string): number {
 const avatar = staticImageDataUrl('fallbacks', 'steve.png');
 
 function player(username: string, mvp = false) {
-  return { discordId: username, username, team: 'winning' as const, oldElo: 1000, newElo: 1030, mvp };
+  return { discordId: username, username, team: 'winning' as const, elo_before: 1000, elo_after: 1030, mvp };
 }
 
 function enrichedPlayer() {

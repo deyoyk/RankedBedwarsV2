@@ -13,8 +13,8 @@ export interface UserStatsLike {
   gold?: number;
   emeralds?: number;
   blocksPlaced?: number;
-  winstreak?: number;
-  losestreak?: number;
+  winStreak?: number;
+  loseStreak?: number;
   kdr?: number;
   wlr?: number;
   finalDeaths?: number;
@@ -30,8 +30,8 @@ export function ensureUserStats(user: UserStatsLike) {
   user.elo = typeof user.elo === 'number' && !isNaN(user.elo) ? user.elo : 0;
   user.wins = typeof user.wins === 'number' && !isNaN(user.wins) ? user.wins : 0;
   user.games = typeof user.games === 'number' && !isNaN(user.games) ? user.games : 0;
-  user.winstreak = typeof user.winstreak === 'number' && !isNaN(user.winstreak) ? user.winstreak : 0;
-  user.losestreak = typeof user.losestreak === 'number' && !isNaN(user.losestreak) ? user.losestreak : 0;
+  user.winStreak = typeof user.winStreak === 'number' && !isNaN(user.winStreak) ? user.winStreak : 0;
+  user.loseStreak = typeof user.loseStreak === 'number' && !isNaN(user.loseStreak) ? user.loseStreak : 0;
   user.losses = typeof user.losses === 'number' && !isNaN(user.losses) ? user.losses : 0;
   user.finalDeaths = typeof user.finalDeaths === 'number' && !isNaN(user.finalDeaths) ? user.finalDeaths : 0;
   user.playtimeSeconds = typeof user.playtimeSeconds === 'number' && !isNaN(user.playtimeSeconds) ? user.playtimeSeconds : 0;
@@ -55,8 +55,8 @@ export function resetUserStats(user: UserStatsLike) {
   user.gold = 0;
   user.emeralds = 0;
   user.blocksPlaced = 0;
-  user.winstreak = 0;
-  user.losestreak = 0;
+  user.winStreak = 0;
+  user.loseStreak = 0;
   user.kdr = 0;
   user.wlr = 0;
   user.playtimeSeconds = 0;

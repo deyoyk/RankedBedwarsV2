@@ -10,11 +10,11 @@ const STATS: Array<[string, string]> = [
   ['elo', 'Elo'], ['wins', 'Wins'], ['losses', 'Losses'], ['kills', 'Kills'],
   ['deaths', 'Deaths'], ['kdr', 'KDR'], ['wlr', 'WLR'], ['level', 'Level'],
   ['mvps', 'MVPs'], ['bedBroken', 'Beds broken'], ['finalKills', 'Final kills'],
-  ['finalDeaths', 'Final deaths'], ['games', 'Games'], ['winstreak', 'Winstreak'],
-  ['losestreak', 'Losestreak'], ['peakElo', 'Peak elo'], ['playtimeSeconds', 'Playtime'],
+  ['finalDeaths', 'Final deaths'], ['games', 'Games'], ['winStreak', 'Winstreak'],
+  ['loseStreak', 'Losestreak'], ['peakElo', 'Peak elo'], ['playtimeSeconds', 'Playtime'],
 ];
 
-const LOSER_STATS = new Set(['losses', 'deaths', 'finalDeaths', 'losestreak']);
+const LOSER_STATS = new Set(['losses', 'deaths', 'finalDeaths', 'loseStreak']);
 
 function CompareInner() {
   const params = useSearchParams();

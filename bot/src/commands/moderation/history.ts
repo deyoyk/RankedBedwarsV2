@@ -10,7 +10,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
   let historyType: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {
-    discordId = interaction.options.getString('userid', true);
+    discordId = interaction.options.getString('user_id', true);
     historyType = interaction.options.getString('type', true).toLowerCase();
   } else {
     if (args && args.length >= 2) {

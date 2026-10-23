@@ -6,7 +6,7 @@ import Game from '../../models/Game';
 export async function gameinfo(interaction: Message | ChatInputCommandInteraction, args?: string[]): Promise<void> {
   let gameId: number | undefined;
   if (interaction instanceof ChatInputCommandInteraction) {
-    gameId = interaction.options.getInteger('gameid', true);
+    gameId = interaction.options.getInteger('game_id', true);
   } else {
     if (!args || args.length < 1) {
       await safeReply(interaction, 'Usage: =gameinfo <gameId>');
