@@ -4,14 +4,10 @@ import com.deyo.rbw.RankedBedwars;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.scheduler.BukkitScheduler;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mockito.MockedStatic;
 
 import java.io.File;
 import java.io.InputStreamReader;
@@ -27,11 +23,9 @@ import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 public class GameDataManagerTest {
@@ -40,8 +34,10 @@ public class GameDataManagerTest {
     Path tempDir;
 
     private RankedBedwars plugin;
-    private MockedStatic<Bukkit> bukkit;
     private GameDataManager manager;
+
+    private static final java.util.concurrent.ExecutorService TEST_EXECUTOR =
+            java.util.concurrent.Executors.newCachedThreadPool();
 
     @BeforeEach
     public void setUp() {
@@ -54,20 +50,7 @@ public class GameDataManagerTest {
         when(plugin.getLogger()).thenReturn(Logger.getLogger("GameData-Test"));
         when(plugin.getGson()).thenReturn(new Gson());
 
-        BukkitScheduler scheduler = mock(BukkitScheduler.class);
-        when(scheduler.runTaskAsynchronously(any(), any(Runnable.class))).thenAnswer(inv -> {
-            new Thread((Runnable) inv.getArgument(1)).start();
-            return null;
-        });
-        bukkit = mockStatic(Bukkit.class);
-        bukkit.when(Bukkit::getScheduler).thenReturn(scheduler);
-
-        manager = new GameDataManager(plugin);
-    }
-
-    @AfterEach
-    public void tearDown() {
-        bukkit.close();
+        manager = new GameDataManager(plugin, TEST_EXECUTOR::execute);
     }
 
     private File warpFile(String gameId) {

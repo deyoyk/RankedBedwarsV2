@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.concurrent.Executor;
 import java.util.logging.Level;
 
 
@@ -46,9 +47,15 @@ public class GameDataManager {
     private final ThreadLocal<SimpleDateFormat> timeFormat = ThreadLocal.withInitial(() -> new SimpleDateFormat("HH-mm-ss"));
     private final File dataFolder;
     private final boolean enabled;
-    
+    private final Executor asyncRunner;
+
     public GameDataManager(RankedBedwars plugin) {
+        this(plugin, task -> Bukkit.getScheduler().runTaskAsynchronously(plugin, task));
+    }
+
+    GameDataManager(RankedBedwars plugin, Executor asyncRunner) {
         this.plugin = plugin;
+        this.asyncRunner = asyncRunner;
         
         FileConfiguration config = plugin.getConfig();
         this.enabled = config.getBoolean("data-storage.enabled", true);
@@ -56,7 +63,7 @@ public class GameDataManager {
         String folderPath = config.getString("data-storage.folder-path", "games");
         this.dataFolder = new File(plugin.getDataFolder(), folderPath);
         
-        if (enabled && !dataFolder.exists() && !dataFolder.mkdirs()) {
+        if (enabled && !dataFolder.exists() && !dataFolder.mkdirs() && !dataFolder.exists()) {
             plugin.getLogger().warning("Failed to create data directory: " + dataFolder.getAbsolutePath());
         }
     }
@@ -65,7 +72,7 @@ public class GameDataManager {
             return;
         }
         
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        asyncRunner.execute(() -> {
             try {
                 JsonObject warpData = new JsonObject();
                 warpData.addProperty("type", "warp_data");
@@ -98,7 +105,7 @@ public class GameDataManager {
             return;
         }
 
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+        asyncRunner.execute(() -> {
             try {
                 JsonObject resultJson = JsonParser.parseString(snapshot).getAsJsonObject();
 
@@ -115,7 +122,7 @@ public class GameDataManager {
     private void saveToFile(JsonObject data, String gameId, String type) throws IOException {
         String date = dateFormat.get().format(new Date());
         File dateFolder = new File(dataFolder, date);
-        if (!dateFolder.exists() && !dateFolder.mkdirs()) {
+        if (!dateFolder.exists() && !dateFolder.mkdirs() && !dateFolder.exists()) {
             plugin.getLogger().warning("Failed to create date directory: " + dateFolder.getAbsolutePath());
             return;
         }
@@ -132,7 +139,7 @@ public class GameDataManager {
     private void appendToWarpFile(JsonObject warpData, String gameId) throws IOException {
         String date = dateFormat.get().format(new Date());
         File dateFolder = new File(dataFolder, date);
-        if (!dateFolder.exists() && !dateFolder.mkdirs()) {
+        if (!dateFolder.exists() && !dateFolder.mkdirs() && !dateFolder.exists()) {
             plugin.getLogger().warning("Failed to create date directory: " + dateFolder.getAbsolutePath());
             return;
         }
@@ -144,16 +151,25 @@ public class GameDataManager {
             JsonArray warpsArray;
 
             if (file.exists()) {
+                boolean corrupt = false;
+                JsonArray parsed = null;
                 try (InputStreamReader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
                     try {
-                        warpsArray = JsonParser.parseReader(reader).getAsJsonArray();
+                        parsed = JsonParser.parseReader(reader).getAsJsonArray();
                     } catch (Exception e) {
-                        File backup = new File(dateFolder, filename + ".corrupt-" + System.currentTimeMillis() + ".json");
-                        if (file.renameTo(backup)) {
-                            plugin.getLogger().warning("Backed up corrupt warp file to " + backup.getName());
-                        }
-                        warpsArray = new JsonArray();
+                        corrupt = true;
                     }
+                } catch (Exception e) {
+                    corrupt = true;
+                }
+                if (corrupt) {
+                    File backup = new File(dateFolder, filename + ".corrupt-" + System.currentTimeMillis() + ".json");
+                    if (file.renameTo(backup)) {
+                        plugin.getLogger().warning("Backed up corrupt warp file to " + backup.getName());
+                    }
+                    warpsArray = new JsonArray();
+                } else {
+                    warpsArray = parsed != null ? parsed : new JsonArray();
                 }
             } else {
                 warpsArray = new JsonArray();

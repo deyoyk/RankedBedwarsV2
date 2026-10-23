@@ -35,6 +35,16 @@
             <id>placeholderapi</id>
             <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
         </repository>
+        <repository>
+            <id>project-vendored</id>
+            <url>file://${project.basedir}/libs-repo</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>false</enabled>
+            </snapshots>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -47,6 +57,10 @@
                 <exclusion>
                     <groupId>junit</groupId>
                     <artifactId>junit</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>net.md-5</groupId>
+                    <artifactId>bungeecord-chat</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
@@ -66,9 +80,8 @@
         <dependency>
             <groupId>net.md-5</groupId>
             <artifactId>bungeecord-chat</artifactId>
-            <version>1.8-SNAPSHOT</version>
-            <systemPath>${project.basedir}/src/main/java/com/deyo/rbw/libs/bungeecord-chat-1.8.jar</systemPath>
-            <scope>system</scope>
+            <version>1.8</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
@@ -86,8 +99,7 @@
             <groupId>com.andrei1058.bedwars</groupId>
             <artifactId>bedwars-api</artifactId>
             <version>25.6</version>
-            <systemPath>${project.basedir}/src/main/java/com/deyo/rbw/libs/bedwars-api-25.6.jar</systemPath>
-            <scope>system</scope>
+            <scope>provided</scope>
         </dependency>
         
         <dependency>
@@ -125,6 +137,10 @@
                 <configuration>
                     <source>${java.version}</source>
                     <target>${java.version}</target>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                    </compilerArgs>
                     <annotationProcessorPaths>
                         <path>
                             <groupId>org.projectlombok</groupId>
@@ -146,6 +162,18 @@
                         </goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>META-INF/versions/9/module-info.class</exclude>
+                                        <exclude>META-INF/MANIFEST.MF</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
                             <relocations>
                                 <relocation>
                                     <pattern>com.google.gson</pattern>
