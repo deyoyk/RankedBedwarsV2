@@ -66,16 +66,3 @@ npm run lint
 ```
 
 Tests run on Jest with ts-jest. Use `npm test`; other runners (e.g. `bun test`) are not supported because the suite relies on Jest module mocking.
-
-## Field-name migration
-
-Stored field names follow camelCase (`winStreak`, `isBanned`, `queueId`, `elo_before`). If you are
-upgrading from a version that stored the old names (`winstreak`, `isbanned`, `queueid`, `oldElo`
-and friends), run the migration once against your database:
-
-```bash
-MONGO_URI=mongodb://127.0.0.1:27017/deyorbw DBNAME=deyorbw npm run migrate
-```
-
-It renames the fields on users, season stats, recent games and queues, and prints a per-collection
-summary. Back up your database first.
