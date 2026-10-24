@@ -84,6 +84,16 @@ export class CommandManager {
       this.commandHandler.registerCommand(name, command.execute);
     }
 
+      // Register aliases here.
+      // Format: alias -> original command.
+      this.commandHandler.registerAlias('tempban', 'ban');
+      this.commandHandler.registerAlias('tb', 'ban');
+
+      this.commandHandler.registerAlias('tempmute', 'mute');
+      this.commandHandler.registerAlias('tm', 'mute');
+      this.commandHandler.registerCommand(name, command.execute);
+    }
+
 
     client.on('messageCreate', (message) => this.commandHandler.handleMessage(message));
     client.on('interactionCreate', async (interaction) => {
