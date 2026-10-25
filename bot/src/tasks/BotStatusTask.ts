@@ -243,7 +243,8 @@ export class BotStatusTask {
   }
 
   private async getWebSocketStatus() {
-    const wsPing = await this.wsManager.getPing().catch(() => null);
+    const cachedPing = this.wsManager.getLastPing?.() ?? null;
+    const wsPing = cachedPing ?? await this.wsManager.getPing().catch(() => null);
     const isConnected = wsPing !== null;
     return {
       ping: isConnected ? `${wsPing}ms` : 'offline',

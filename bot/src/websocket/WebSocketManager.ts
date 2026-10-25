@@ -390,6 +390,14 @@ export class WebSocketManager {
   private queueStatusInterval: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private lastQueueStatusHash: string | null = null;
+  private lastPingMs: number | null = null;
+  private lastPingAt = 0;
+
+  public getLastPing(maxAgeMs = 45000): number | null {
+    if (this.lastPingMs === null) return null;
+    if (Date.now() - this.lastPingAt > maxAgeMs) return null;
+    return this.lastPingMs;
+  }
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
 
   public async requestDontLog(ign: string, uuid: string): Promise<{ online: boolean; dontlog: boolean }> {
@@ -975,7 +983,10 @@ export class WebSocketManager {
         const msg = parseData(data);
         if (msg && msg.type === 'pong') {
           client.off('message', pongHandler);
-          resolve(Date.now() - localTimestamp);
+          const ms = Date.now() - localTimestamp;
+          this.lastPingMs = ms;
+          this.lastPingAt = Date.now();
+          resolve(ms);
         }
       };
       client.on('message', pongHandler);
