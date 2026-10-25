@@ -1,10 +1,12 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { betterEmbed } from '../../utils/betterembed';
-import Game, { IGame } from '../../models/Game';
+import Game from '../../models/Game';
 import { paginate } from '../../utils/paginate';
 
+type GameListItem = { gameId: number; state: string };
+
 export async function games(interaction: Message | ChatInputCommandInteraction, _args?: string[]) {
-  await paginate<IGame>(interaction, {
+  await paginate<GameListItem>(interaction, {
     commandName: 'games',
     title: 'Game History',
     emptyMessage: 'There are no games in the database.',
@@ -12,7 +14,7 @@ export async function games(interaction: Message | ChatInputCommandInteraction, 
     perPage: 15,
     fetchPage: async (skip, limit) => {
       const total = await Game.countDocuments();
-      const items = await Game.find().sort({ gameId: -1 }).skip(skip).limit(limit);
+      const items = await Game.find().sort({ gameId: -1 }).skip(skip).limit(limit).select('gameId state').lean();
       return {
         items,
         total,

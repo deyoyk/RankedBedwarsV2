@@ -18,7 +18,7 @@ export async function gameinfo(interaction: Message | ChatInputCommandInteractio
     await safeReply(interaction, 'Invalid game ID.');
     return;
   }
-  const game = await Game.findOne({ gameId });
+  const game = await Game.findOne({ gameId }).select('-timeline').lean();
   if (!game) {
     await safeReply(interaction, 'Game not found!');
     return;
