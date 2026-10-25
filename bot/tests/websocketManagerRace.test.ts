@@ -18,15 +18,13 @@ describe('WebSocketManager race conditions', () => {
     (manager as any).server.close();
   });
 
-  it('concurrent checks for the same IGN each resolve with their own result', async () => {
+  it('concurrent checks for the same IGN share one probe and each resolve', async () => {
     const promises = Array.from({ length: 5 }, () => manager.checkPlayerOnline('Steve'));
 
     const checks = sent.filter(m => m.type === 'check_player');
-    expect(checks).toHaveLength(5);
+    expect(checks).toHaveLength(1);
 
-    for (let i = 0; i < 5; i++) {
-      (manager as any).handlePlayerStatus({ ign: 'steve', online: true, original_ign_case: 'Steve' });
-    }
+    (manager as any).handlePlayerStatus({ ign: 'steve', online: true, original_ign_case: 'Steve' });
 
     const results = await Promise.all(promises);
     for (const result of results) {

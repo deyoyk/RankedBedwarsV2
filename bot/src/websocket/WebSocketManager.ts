@@ -13,7 +13,6 @@ import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
 import { PlayerData, GameResult } from '../types/GameTypes';
 import * as http from 'http';
 import express from 'express';
-import { escapeRegex } from '../utils/regexEscape';
 import { Client, Collection, GuildMember } from 'discord.js';
 
 type MapEntry = MapsJsonPayload['reserved'][number];
@@ -341,8 +340,10 @@ export class WebSocketManager {
     }
     try {
       const User = (await import('../models/User')).default;
-      const targetUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(targetign)}$`, 'i') } });
-      const requesterUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(requestign)}$`, 'i') } });
+      const [targetUser, requesterUser] = await Promise.all([
+        User.findOne({ ign: targetign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean(),
+        User.findOne({ ign: requestign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean()
+      ]);
       
       if (!targetUser || !requesterUser) {
         this.send({ type: 'autoss_fail', uuid });
@@ -933,7 +934,12 @@ export class WebSocketManager {
     return new Promise((resolve) => {
       const normalizedIgn = ign.toLowerCase();
       let callbacks = this.checkPlayerCallbacks.get(normalizedIgn);
+      const isNew = !callbacks;
       if (!callbacks) {
+        if (this.checkPlayerCallbacks.size >= 2000) {
+          resolve({ online: false });
+          return;
+        }
         callbacks = new Set();
         this.checkPlayerCallbacks.set(normalizedIgn, callbacks);
       }
@@ -956,7 +962,9 @@ export class WebSocketManager {
       }, 10000);
 
       callbacks.add(cb);
-      this.send({ type: 'check_player', ign });
+      if (isNew) {
+        this.send({ type: 'check_player', ign });
+      }
     });
   }
 
@@ -1016,9 +1024,11 @@ export class WebSocketManager {
 
       
       const User = (await import('../models/User')).default;
-      
-      
-      const requesterUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(requester)}$`, 'i') } });
+
+      const [requesterUser, targetUser] = await Promise.all([
+        User.findOne({ ign: requester }).collation({ locale: 'en', strength: 2 }).select('discordId').lean(),
+        User.findOne({ ign: target }).collation({ locale: 'en', strength: 2 }).select('discordId').lean()
+      ]);
       if (!requesterUser) {
         console.error(`[WebSocketManager] Requester ${requester} not found in database`);
         this.send({
@@ -1030,7 +1040,6 @@ export class WebSocketManager {
       }
 
       
-      const targetUser = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(target)}$`, 'i') } });
       if (!targetUser) {
         console.error(`[WebSocketManager] Target ${target} not found in database`);
         this.send({
@@ -1179,7 +1188,7 @@ export class WebSocketManager {
 
       
       const User = (await import('../models/User')).default;
-      const user = await User.findOne({ ign: { $regex: new RegExp(`^${escapeRegex(ign)}$`, 'i') } });
+      const user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('discordId elo ign').lean();
       if (!user) {
         console.error(`[WebSocketManager] User ${ign} not found in database`);
         this.send({
