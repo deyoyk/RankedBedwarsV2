@@ -2170,7 +2170,8 @@ export class GameManager {
 
       const updatePromises = playerVoidData.map(async (voidData) => {
         try {
-          const member = await guild.members.fetch(voidData.player.discordId);
+          const member = guild.members.cache.get(voidData.player.discordId)
+            ?? await guild.members.fetch(voidData.player.discordId).catch(() => null);
           if (member) {
 
             await fix(guild, voidData.player.discordId);
