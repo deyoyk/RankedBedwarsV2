@@ -243,21 +243,9 @@ export class ScreenshareService {
       }
 
       
-      let member: GuildMember | null = guild.members.cache?.get(session.targetId) ?? null;
-      for (let i = 0; i < 3 && !member; i++) {
-        try {
-          member = await guild.members.fetch(session.targetId);
-          break;
-        } catch (error) {
-          if (i === 2) {
-            console.error('[ScreenshareService] Failed to fetch member after 3 attempts:', error);
-            return { success: false, error: 'Target user not found in server' };
-          }
-          await new Promise(resolve => setTimeout(resolve, 1000)); 
-        }
-      }
-
+      const member: GuildMember | null = guild.members.cache?.get(session.targetId) ?? await guild.members.fetch(session.targetId).catch(() => null);
       if (!member) {
+        console.error('[ScreenshareService] Target user not found in server');
         return { success: false, error: 'Target user not found in server' };
       }
 
@@ -550,7 +538,7 @@ export class ScreenshareService {
       let categoryChannel: CategoryChannel | null = null;
       if (channelConfig.categoryId) {
         try {
-          const category = await guild.channels.fetch(channelConfig.categoryId);
+          const category = guild.channels.cache.get(channelConfig.categoryId) ?? await guild.channels.fetch(channelConfig.categoryId);
           if (category && category.type === 4) { 
             categoryChannel = category as CategoryChannel;
           }
