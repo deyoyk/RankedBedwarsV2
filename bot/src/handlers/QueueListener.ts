@@ -391,8 +391,10 @@ export class QueueListener {
       const userId = newState.member?.id;
       if (!userId) return;
 
-      const wasQueueChannel = await this.isQueueChannel(oldState.channelId);
-      const isQueueChannel = await this.isQueueChannel(newState.channelId);
+      const [wasQueueChannel, isQueueChannel] = await Promise.all([
+        this.isQueueChannel(oldState.channelId),
+        this.isQueueChannel(newState.channelId)
+      ]);
 
       if (!wasQueueChannel && isQueueChannel) {
         await this.handleQueueJoin(newState);
