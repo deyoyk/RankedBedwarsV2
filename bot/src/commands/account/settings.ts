@@ -5,8 +5,7 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
   ButtonBuilder,
-  ButtonStyle,
-  ComponentType
+  ButtonStyle
 } from 'discord.js';
 
 import { errorEmbed, betterEmbed, successEmbed } from '../../utils/betterembed';
@@ -66,9 +65,11 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
   });
 
   const collector = reply.createMessageComponentCollector({
-    componentType: ComponentType.StringSelect,
-    time: 5 * 60 * 1000
+    time: 5 * 60 * 1000,
+    filter: (i) => i.user.id === userId,
+    dispose: true
   });
+  let finished = false;
 
   const stored = (user.settings ?? {}) as Partial<Record<SettingKey, boolean>>;
   const changedSettings: Record<SettingKey, boolean> = {
@@ -96,39 +97,33 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
   };
 
   collector.on('collect', async (i) => {
-    if (i.user.id !== userId) {
-      await i.reply(errorEmbed('This menu is not for you!', 'Settings Error'));
+    if (i.isStringSelectMenu()) {
+      const key = i.values[0] as SettingKey;
+      changedSettings[key] = !changedSettings[key];
+      touched.add(key);
+      await updateEmbed(i);
       return;
     }
-    const key = i.values[0] as SettingKey;
-    changedSettings[key] = !changedSettings[key];
-    touched.add(key);
-    await updateEmbed(i);
-  });
 
-  reply.createMessageComponentCollector({
-    componentType: ComponentType.Button,
-    time: 5 * 60 * 1000
-  }).on('collect', async (i) => {
-    if (i.user.id !== userId) {
-      await i.reply({ content: 'This button is not for you!', flags: 64 }); 
-      return;
+    if (i.isButton()) {
+      const set: Record<string, boolean> = {};
+      for (const key of touched) {
+        set[`settings.${key}`] = changedSettings[key];
+      }
+      if (Object.keys(set).length > 0) {
+        await UserModel.updateOne({ discordId: userId }, { $set: set });
+      }
+      if (interaction.guild) {
+        await fix(interaction.guild, userId);
+      }
+      finished = true;
+      await i.update(successEmbed('Settings saved and applied!', 'Settings Saved'));
+      collector.stop();
     }
-    const set: Record<string, boolean> = {};
-    for (const key of touched) {
-      set[`settings.${key}`] = changedSettings[key];
-    }
-    if (Object.keys(set).length > 0) {
-      await UserModel.updateOne({ discordId: userId }, { $set: set });
-    }
-    if (interaction.guild) {
-      await fix(interaction.guild, userId);
-    }
-    await i.update(successEmbed('Settings saved and applied!', 'Settings Saved'));
-    collector.stop();
   });
 
   collector.on('end', async () => {
-    await reply.edit({ components: [] });
+    if (finished) return;
+    await reply.edit({ components: [] }).catch(() => undefined);
   });
 }
