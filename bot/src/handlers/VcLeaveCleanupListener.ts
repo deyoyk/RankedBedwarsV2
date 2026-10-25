@@ -12,7 +12,7 @@ export function registerVcLeaveCleanupListener(client: Client) {
           { 'channels.team1Voice': oldState.channelId },
           { 'channels.team2Voice': oldState.channelId }
         ]
-      });
+      }).select('state').lean();
 
       if (!game) return;
       if (game.state !== 'scored' && game.state !== 'voided') return;
