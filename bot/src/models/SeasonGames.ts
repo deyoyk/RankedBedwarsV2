@@ -16,6 +16,8 @@ const SeasonGamesSchema: Schema = new Schema({
 
 SeasonGamesSchema.index({ gameId: 1, seasonNumber: 1, chapterNumber: 1 }, { unique: true });
 SeasonGamesSchema.index({ seasonNumber: 1, chapterNumber: 1, gameId: -1 });
+SeasonGamesSchema.index({ state: 1 });
+SeasonGamesSchema.index({ 'channels.text': 1 });
 
 applyGetTeamOfPlayer(SeasonGamesSchema);
 

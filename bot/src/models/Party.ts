@@ -25,4 +25,9 @@ const PartySchema: Schema = new Schema({
   description: { type: String, default: '' }
 });
 
+PartySchema.index({ lastActiveTime: 1 });
+PartySchema.index({ isPrivate: 1, lastActiveTime: -1 });
+PartySchema.index({ members: 1 });
+PartySchema.index({ leader: 1 });
+
 export default mongoose.model<IParty>('Party', PartySchema);

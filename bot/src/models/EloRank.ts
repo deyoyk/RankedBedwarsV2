@@ -23,4 +23,6 @@ const EloRankSchema: Schema = new Schema({
   bedElo: { type: Number, required: true  } 
 });
 
+EloRankSchema.index({ startElo: 1, endElo: 1 });
+
 export default mongoose.model<IEloRank>('EloRank', EloRankSchema);
