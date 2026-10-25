@@ -134,7 +134,7 @@ export class CentralizedMatchmaker {
     try {
       const guild = this.client.guilds.cache.first();
       if (!guild) return null;
-      const channel = await guild.channels.fetch(queueId).catch(() => null);
+      const channel = guild.channels.cache?.get(queueId) ?? await guild.channels.fetch(queueId).catch(() => null);
       if (!channel || !channel.isVoiceBased()) return null;
       return new Set(channel.members.keys());
     } catch {
