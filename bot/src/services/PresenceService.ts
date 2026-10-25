@@ -6,6 +6,7 @@ interface PresenceRecord {
 }
 
 export const PRESENCE_FRESH_TTL_MS = 30_000;
+const MAX_PRESENCE_RECORDS = 5000;
 
 class PresenceStore {
   private records = new Map<string, PresenceRecord>();
@@ -15,6 +16,10 @@ class PresenceStore {
   ingest(ign: string | undefined | null, online: boolean): void {
     const key = (ign || '').trim().toLowerCase();
     if (!key) return;
+    if (!this.records.has(key) && this.records.size >= MAX_PRESENCE_RECORDS) {
+      const oldest = this.records.keys().next();
+      if (!oldest.done) this.records.delete(oldest.value);
+    }
     const prev = this.records.get(key);
     this.records.set(key, { online, lastSeen: Date.now() });
     if (!prev || prev.online !== online) {

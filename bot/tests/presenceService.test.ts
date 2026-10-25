@@ -50,4 +50,12 @@ describe('PresenceService', () => {
     PresenceService.setConnected(true);
     expect(PresenceService.evaluate('Cara')).toBe('online');
   });
+
+  it('bounds memory by evicting the oldest records', () => {
+    for (let i = 0; i < 5005; i++) {
+      PresenceService.ingest(`player${i}`, true);
+    }
+    expect(PresenceService.evaluate('player0')).toBe('unknown');
+    expect(PresenceService.evaluate('player5004')).toBe('online');
+  });
 });
