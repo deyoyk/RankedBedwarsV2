@@ -407,6 +407,7 @@ public class BedWars1058Listener implements Listener {
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
+        if (playerTrackerIndex.get(player.getName()) == null) return;
         com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         
@@ -434,6 +435,7 @@ public class BedWars1058Listener implements Listener {
         Player victim = event.getVictim();
         
         if (killer == null) return;
+        if (playerTrackerIndex.get(killer.getName()) == null) return;
         
         com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
@@ -651,6 +653,7 @@ public class BedWars1058Listener implements Listener {
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
+        if (playerTrackerIndex.get(player.getName()) == null) return;
         com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         
@@ -666,7 +669,13 @@ public class BedWars1058Listener implements Listener {
     
     @EventHandler
     public void onPlayerPickupItem(PlayerPickupItemEvent event) {
+        ItemStack pickupItem = event.getItem().getItemStack();
+        if (pickupItem == null) return;
+        Material pickupMaterial = pickupItem.getType();
+        if (pickupMaterial != Material.IRON_INGOT && pickupMaterial != Material.GOLD_INGOT
+                && pickupMaterial != Material.DIAMOND && pickupMaterial != Material.EMERALD) return;
         Player player = event.getPlayer();
+        if (playerTrackerIndex.get(player.getName()) == null) return;
         com.andrei1058.bedwars.api.BedWars bedwarsAPI = getBedwarsAPI();
         if (bedwarsAPI == null) return;
         

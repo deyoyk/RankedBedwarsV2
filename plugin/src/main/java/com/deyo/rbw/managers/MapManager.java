@@ -118,7 +118,7 @@ public class MapManager {
         private final String displayName;       
         private final int maxPlayers;
         private final List<String> teamNames;
-        private final Map<ArenaVariant, String> variants = new HashMap<>();  
+        private final Map<ArenaVariant, String> variants = new ConcurrentHashMap<>();  
         private ArenaVariant currentlyUsed = null;     
         
         public ArenaGroup(String groupId, String displayName, int maxPlayers, List<String> teamNames) {
@@ -306,13 +306,7 @@ public class MapManager {
             for (ArenaGroup arenaGroup : arenaGroups.values()) {
                 JsonObject entry = new JsonObject();
                 entry.addProperty("name", arenaGroup.getDisplayName());
-                String physicalName = null;
-                for (Map.Entry<String, String> mapEntry : physicalArenaToGroupMap.entrySet()) {
-                    if (arenaGroup.getGroupId().equals(mapEntry.getValue())) {
-                        physicalName = mapEntry.getKey();
-                        break;
-                    }
-                }
+                String physicalName = arenaGroup.getAllPhysicalArenaNames().stream().findFirst().orElse(null);
                 if (physicalName != null) {
                     entry.addProperty("physical_name", physicalName);
                 }

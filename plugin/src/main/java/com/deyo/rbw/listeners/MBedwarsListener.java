@@ -219,6 +219,7 @@ public class MBedwarsListener implements Listener {
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         Player player = event.getPlayer();
+        if (playerInstanceIndex.get(player.getName()) == null) return;
         Object arenaObj = com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByPlayer(player);
         if (arenaObj == null || !(arenaObj instanceof Arena)) return;
         
@@ -233,7 +234,13 @@ public class MBedwarsListener implements Listener {
     @EventHandler
     public void onItemPickup(PlayerPickupItemEvent event) {
         if (event.isCancelled()) return;
+        ItemStack pickupItem = event.getItem().getItemStack();
+        if (pickupItem == null) return;
+        Material pickupMaterial = pickupItem.getType();
+        if (pickupMaterial != Material.IRON_INGOT && pickupMaterial != Material.GOLD_INGOT
+                && pickupMaterial != Material.DIAMOND && pickupMaterial != Material.EMERALD) return;
         Player player = event.getPlayer();
+        if (playerInstanceIndex.get(player.getName()) == null) return;
         Object arenaObj = com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByPlayer(player);
         if (arenaObj == null || !(arenaObj instanceof Arena)) return;
         
