@@ -73,12 +73,6 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
   const updateInterval = 3000;
   const maxStoredErrors = 50;
 
-  try {
-    await interaction.guild!.members.fetch();
-  } catch (error) {
-    console.error('[FixAll] Member pre-warm fetch failed, falling back to per-user lookup:', error);
-  }
-
   let lastId: unknown = null;
   for (;;) {
     const filter: Record<string, unknown> = lastId === null ? {} : { _id: { $gt: lastId } };
