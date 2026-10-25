@@ -58,17 +58,17 @@ export async function maps(
     ];
   };
 
-  await safeReply(interaction, {
+  const sentMsg = (await safeReply(interaction, {
     embeds: [buildEmbed(page)],
     components: buildButtons(page),
     fetchReply: true
-  });
+  })) as unknown as Message | undefined;
 
   function getUserId(i: Message | ChatInputCommandInteraction): string {
     return (i instanceof ChatInputCommandInteraction) ? i.user.id : i.author.id;
   }
 
-  const collector = interaction.channel?.createMessageComponentCollector({
+  const collector = sentMsg?.createMessageComponentCollector({
     filter: (i) => ['back', 'forward'].includes(i.customId) && i.user.id === getUserId(interaction),
     time: 60000
   });
@@ -80,5 +80,13 @@ export async function maps(
       embeds: [buildEmbed(page)],
       components: buildButtons(page)
     });
+  });
+
+  collector?.on('end', async () => {
+    const disabled = buildButtons(page).map((row) => {
+      row.components.forEach((btn) => btn.setDisabled(true));
+      return row;
+    });
+    await sentMsg?.edit({ components: disabled }).catch(() => undefined);
   });
 }
