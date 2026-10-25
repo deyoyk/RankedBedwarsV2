@@ -57,91 +57,111 @@ async function fetchImageDataUrl(url: string, timeoutMs: number): Promise<string
   }
 }
 
-interface AvatarCacheEntry {
+interface CachedImageEntry {
   at: number;
   dataUrl: string;
   ok: boolean;
 }
 
-const AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
-const AVATAR_NEGATIVE_TTL_MS = 60 * 1000;
-const AVATAR_MAX_ENTRIES = 5000;
-const AVATAR_MAX_CONCURRENT = 4;
+const IMAGE_TTL_MS = 24 * 60 * 60 * 1000;
+const IMAGE_NEGATIVE_TTL_MS = 60 * 1000;
+const IMAGE_MAX_ENTRIES = 5000;
+const IMAGE_MAX_CONCURRENT = 4;
 
-const avatarCache = new Map<string, AvatarCacheEntry>();
-const avatarInflight = new Map<string, Promise<string>>();
-const avatarWaitQueue: Array<() => void> = [];
-let avatarInFlightCount = 0;
+const imageCache = new Map<string, CachedImageEntry>();
+const imageInflight = new Map<string, Promise<string | null>>();
+const imageWaitQueue: Array<() => void> = [];
+let imageInFlightCount = 0;
 
-function avatarCached(key: string, now: number): string | null {
-  const entry = avatarCache.get(key);
+function imageCacheGet(key: string, now: number): string | null {
+  const entry = imageCache.get(key);
   if (!entry) return null;
-  const ttl = entry.ok ? AVATAR_TTL_MS : AVATAR_NEGATIVE_TTL_MS;
+  const ttl = entry.ok ? IMAGE_TTL_MS : IMAGE_NEGATIVE_TTL_MS;
   if (now - entry.at > ttl) {
-    avatarCache.delete(key);
+    imageCache.delete(key);
     return null;
   }
   return entry.dataUrl;
 }
 
-function avatarCacheStore(key: string, dataUrl: string, ok: boolean): void {
-  if (!avatarCache.has(key) && avatarCache.size >= AVATAR_MAX_ENTRIES) {
-    const oldest = avatarCache.keys().next();
-    if (!oldest.done) avatarCache.delete(oldest.value);
+function imageCacheStore(key: string, dataUrl: string, ok: boolean): void {
+  if (!imageCache.has(key) && imageCache.size >= IMAGE_MAX_ENTRIES) {
+    const oldest = imageCache.keys().next();
+    if (!oldest.done) imageCache.delete(oldest.value);
   }
-  avatarCache.set(key, { at: Date.now(), dataUrl, ok });
+  imageCache.set(key, { at: Date.now(), dataUrl, ok });
 }
 
-function acquireAvatarSlot(): Promise<void> {
-  if (avatarInFlightCount < AVATAR_MAX_CONCURRENT) {
-    avatarInFlightCount += 1;
+function acquireImageSlot(): Promise<void> {
+  if (imageInFlightCount < IMAGE_MAX_CONCURRENT) {
+    imageInFlightCount += 1;
     return Promise.resolve();
   }
   return new Promise<void>((resolve) => {
-    avatarWaitQueue.push(() => {
-      avatarInFlightCount += 1;
+    imageWaitQueue.push(() => {
+      imageInFlightCount += 1;
       resolve();
     });
   });
 }
 
-function releaseAvatarSlot(): void {
-  const next = avatarWaitQueue.shift();
+function releaseImageSlot(): void {
+  const next = imageWaitQueue.shift();
   if (next) {
     next();
   } else {
-    avatarInFlightCount = Math.max(0, avatarInFlightCount - 1);
+    imageInFlightCount = Math.max(0, imageInFlightCount - 1);
   }
 }
 
-export async function loadAvatarDataUrl(username: string): Promise<string> {
-  const key = username.toLowerCase();
-  const hit = avatarCached(key, Date.now());
+async function loadCachedImage(
+  key: string,
+  loader: () => Promise<{ dataUrl: string | null; ok: boolean; negativeCache?: string | null }>
+): Promise<string | null> {
+  const hit = imageCacheGet(key, Date.now());
   if (hit) return hit;
-  const ongoing = avatarInflight.get(key);
+  const ongoing = imageInflight.get(key);
   if (ongoing) return ongoing;
-  const task = (async (): Promise<string> => {
-    await acquireAvatarSlot();
+  const task = (async (): Promise<string | null> => {
+    await acquireImageSlot();
     try {
-      const remote = await fetchImageDataUrl(`https://mineskin.eu/avatar/${encodeURIComponent(username)}/40`, 2000);
-      if (remote) {
-        avatarCacheStore(key, remote, true);
-        return remote;
+      const result = await loader();
+      if (result.dataUrl) {
+        imageCacheStore(key, result.dataUrl, result.ok);
+        return result.dataUrl;
       }
-      const fallback = staticImageDataUrl('fallbacks', 'steve.png');
-      avatarCacheStore(key, fallback, false);
-      return fallback;
+      if (result.negativeCache) {
+        imageCacheStore(key, result.negativeCache, false);
+        return result.negativeCache;
+      }
+      return null;
     } finally {
-      avatarInflight.delete(key);
-      releaseAvatarSlot();
+      imageInflight.delete(key);
+      releaseImageSlot();
     }
   })();
-  avatarInflight.set(key, task);
+  imageInflight.set(key, task);
   return task;
 }
 
+export async function loadAvatarDataUrl(username: string): Promise<string> {
+  const key = `avatar:${username.toLowerCase()}`;
+  const img = await loadCachedImage(key, async () => {
+    const remote = await fetchImageDataUrl(`https://mineskin.eu/avatar/${encodeURIComponent(username)}/40`, 2000);
+    if (remote) return { dataUrl: remote, ok: true };
+    return { dataUrl: null, ok: false, negativeCache: staticImageDataUrl('fallbacks', 'steve.png') };
+  });
+  if (img) return img;
+  return staticImageDataUrl('fallbacks', 'steve.png');
+}
+
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {
-  const heads = await fetchImageDataUrl(`https://mc-heads.net/body/${encodeURIComponent(ign)}/144`, 4000);
-  if (heads) return heads;
-  return fetchImageDataUrl(`https://nmsr.nickac.dev/fullbody/${encodeURIComponent(ign)}`, 4000);
+  const key = `skin:${ign.toLowerCase()}`;
+  return loadCachedImage(key, async () => {
+    const heads = await fetchImageDataUrl(`https://mc-heads.net/body/${encodeURIComponent(ign)}/144`, 4000);
+    if (heads) return { dataUrl: heads, ok: true };
+    const fallback = await fetchImageDataUrl(`https://nmsr.nickac.dev/fullbody/${encodeURIComponent(ign)}`, 4000);
+    if (fallback) return { dataUrl: fallback, ok: true };
+    return { dataUrl: null, ok: false };
+  });
 }

@@ -1,4 +1,4 @@
-import { loadAvatarDataUrl } from '../src/images/assets';
+import { loadAvatarDataUrl, loadSkinDataUrl } from '../src/images/assets';
 
 const fetchMock = jest.fn();
 
@@ -47,6 +47,23 @@ describe('avatar download cache', () => {
   it('fetches different usernames independently', async () => {
     await loadAvatarDataUrl('AlphaAmy');
     await loadAvatarDataUrl('BetaBob');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('caches skin renders and dedupes concurrent callers', async () => {
+    const [a, b] = await Promise.all([
+      loadSkinDataUrl('SkinSam'),
+      loadSkinDataUrl('skinsam'),
+    ]);
+    expect(a).toContain('data:image/png;base64,');
+    expect(b).toBe(a);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('tries the fallback skin CDN when the primary fails', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, arrayBuffer: async () => new ArrayBuffer(0), headers: { get: () => 'image/png' } });
+    const img = await loadSkinDataUrl('FallbackFinn');
+    expect(img).toContain('data:image/png;base64,');
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
