@@ -33,12 +33,10 @@ export async function history(interaction: Message | ChatInputCommandInteraction
       discordId = userInput.replace(/[<@!>]/g, '');
       historyType = args[1].toLowerCase();
 
-      const user = await User.findOne({
-        $or: [
-          { discordId },
-          { ign: userInput }
-        ]
-      }).collation({ locale: 'en', strength: 2 }).select('discordId bans mutes strikes').lean();
+      const isIdLike = /^<@!?\d+>$/.test(userInput) || /^\d+$/.test(userInput);
+      const user = isIdLike
+        ? await User.findOne({ discordId }).select('discordId bans mutes strikes').lean()
+        : await User.findOne({ ign: userInput }).collation({ locale: 'en', strength: 2 }).select('discordId bans mutes strikes').lean();
 
       if (!user) {
         const embed = new EmbedBuilder()
