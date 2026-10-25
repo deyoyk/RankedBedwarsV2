@@ -601,40 +601,43 @@ export class ApiManager {
 
   private getQueues = async (req: Request, res: Response): Promise<void> => {
     try {
-      const queues = await Queue.find().lean();
-      const guild = this.client.guilds.cache.first();
-      const rolesMap: Record<string, string> = {};
-      if (guild) {
-        const roles = await guild.roles.fetch();
-        if (roles) {
-          roles.forEach(role => {
-            if (role) rolesMap[role.id] = role.name;
-          });
+      const result = await this.getCached('queues', 5000, async () => {
+        const queues = await Queue.find().lean();
+        const guild = this.client.guilds.cache.first();
+        const rolesMap: Record<string, string> = {};
+        if (guild) {
+          const roles = guild.roles.cache.size > 0 ? guild.roles.cache : await guild.roles.fetch();
+          if (roles) {
+            roles.forEach(role => {
+              if (role) rolesMap[role.id] = role.name;
+            });
+          }
         }
-      }
-      const result = await Promise.all(queues.map(async q => {
-        const bypassRoles = (q.bypassRoles || []).map((roleId: string) => ({
-          id: roleId,
-          name: rolesMap[roleId] || null
-        }));
-        const playerIds = queuePlayers.get(q.channelId) || [];
-        let igns: string[] = [];
-        if (playerIds.length > 0) {
-          const users = await User.find({ discordId: { $in: playerIds } }).select('ign').lean();
-          igns = users.map(u => u.ign);
+        const queuedIds = [...new Set(queues.flatMap(q => queuePlayers.get(q.channelId) || []))];
+        const ignById = new Map<string, string>();
+        if (queuedIds.length > 0) {
+          const users = await User.find({ discordId: { $in: queuedIds } }).select('discordId ign').lean();
+          for (const u of users) ignById.set(u.discordId, u.ign);
         }
-        return {
-          channelId: q.channelId,
-          maxPlayers: q.maxPlayers,
-          minElo: q.minElo,
-          maxElo: q.maxElo,
-          isRanked: q.isRanked,
-          isPicking: q.isPicking ?? (q as unknown as { ispicking?: boolean }).ispicking,
-          bypassRoles,
-          playerCount: playerIds.length,
-          playerIGNs: igns
-        };
-      }));
+        return queues.map(q => {
+          const bypassRoles = (q.bypassRoles || []).map((roleId: string) => ({
+            id: roleId,
+            name: rolesMap[roleId] || null
+          }));
+          const playerIds = queuePlayers.get(q.channelId) || [];
+          return {
+            channelId: q.channelId,
+            maxPlayers: q.maxPlayers,
+            minElo: q.minElo,
+            maxElo: q.maxElo,
+            isRanked: q.isRanked,
+            isPicking: q.isPicking ?? (q as unknown as { ispicking?: boolean }).ispicking,
+            bypassRoles,
+            playerCount: playerIds.length,
+            playerIGNs: playerIds.map(id => ignById.get(id)).filter(Boolean)
+          };
+        });
+      });
       res.json(result);
     } catch (error) {
       console.error('Error fetching queues:', error);
