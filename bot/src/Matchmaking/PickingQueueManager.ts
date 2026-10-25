@@ -51,25 +51,26 @@ export class PickingQueueManager {
     this.workersManager = WorkersManager.getInstance();
   }
 
-  private async getPlayerParties(players: string[]): Promise<Map<string, string[]>> {
+  private async getPlayerParties(players: string[], userDocs?: Array<{ discordId: string; partyId?: string | null }>): Promise<Map<string, string[]>> {
     try {
-      const users = await User.find({
+      const users = userDocs ?? await User.find({
         discordId: { $in: players }
-      }).select('discordId partyId');
+      }).select('discordId partyId').lean();
 
       const partyIds = [...new Set(users.filter(u => u.partyId).map(u => u.partyId!))];
-      
+
       if (partyIds.length === 0) {
         return new Map();
       }
 
       const parties = await Party.find({
         partyId: { $in: partyIds }
-      }).select('partyId members');
+      }).select('partyId members').lean();
 
+      const playerSet = new Set(players);
       const partyMap = new Map<string, string[]>();
       for (const party of parties) {
-        const partyMembers = party.members.filter(member => players.includes(member));
+        const partyMembers = party.members.filter(member => playerSet.has(member));
         if (partyMembers.length >= 2) {
           partyMap.set(party.partyId, partyMembers);
         }
@@ -84,12 +85,14 @@ export class PickingQueueManager {
 
   private async selectCaptainsWithParties(players: string[]): Promise<{ captains: string[], partyInfo: Map<string, string[]> }> {
     try {
-      const partyMap = await this.getPlayerParties(players);
-      const partyEntries = Array.from(partyMap.entries());
-      
       const users = await User.find({
         discordId: { $in: players }
-      }).select('discordId elo partyId').sort({ elo: -1 }).lean();
+      }).select('discordId elo partyId').lean();
+
+      const partyMap = await this.getPlayerParties(players, users);
+      const partyEntries = Array.from(partyMap.entries());
+
+      const ranked = [...users].sort((a, b) => (b.elo || 0) - (a.elo || 0));
 
       if (users.length < 2) {
         throw new Error('Not enough players for captain selection');
@@ -101,8 +104,8 @@ export class PickingQueueManager {
       let captains: string[] = [];
 
       if (partyEntries.length === 0) {
-        const highestElo = users[0].discordId;
-        const lowestElo = users[users.length - 1].discordId;
+        const highestElo = ranked[0].discordId;
+        const lowestElo = ranked[ranked.length - 1].discordId;
         captains = [highestElo, lowestElo];
       } else if (partyEntries.length === 1) {
         const [, members] = partyEntries[0];
