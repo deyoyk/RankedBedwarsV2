@@ -57,10 +57,87 @@ async function fetchImageDataUrl(url: string, timeoutMs: number): Promise<string
   }
 }
 
+interface AvatarCacheEntry {
+  at: number;
+  dataUrl: string;
+  ok: boolean;
+}
+
+const AVATAR_TTL_MS = 24 * 60 * 60 * 1000;
+const AVATAR_NEGATIVE_TTL_MS = 60 * 1000;
+const AVATAR_MAX_ENTRIES = 5000;
+const AVATAR_MAX_CONCURRENT = 4;
+
+const avatarCache = new Map<string, AvatarCacheEntry>();
+const avatarInflight = new Map<string, Promise<string>>();
+const avatarWaitQueue: Array<() => void> = [];
+let avatarInFlightCount = 0;
+
+function avatarCached(key: string, now: number): string | null {
+  const entry = avatarCache.get(key);
+  if (!entry) return null;
+  const ttl = entry.ok ? AVATAR_TTL_MS : AVATAR_NEGATIVE_TTL_MS;
+  if (now - entry.at > ttl) {
+    avatarCache.delete(key);
+    return null;
+  }
+  return entry.dataUrl;
+}
+
+function avatarCacheStore(key: string, dataUrl: string, ok: boolean): void {
+  if (!avatarCache.has(key) && avatarCache.size >= AVATAR_MAX_ENTRIES) {
+    const oldest = avatarCache.keys().next();
+    if (!oldest.done) avatarCache.delete(oldest.value);
+  }
+  avatarCache.set(key, { at: Date.now(), dataUrl, ok });
+}
+
+function acquireAvatarSlot(): Promise<void> {
+  if (avatarInFlightCount < AVATAR_MAX_CONCURRENT) {
+    avatarInFlightCount += 1;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    avatarWaitQueue.push(() => {
+      avatarInFlightCount += 1;
+      resolve();
+    });
+  });
+}
+
+function releaseAvatarSlot(): void {
+  const next = avatarWaitQueue.shift();
+  if (next) {
+    next();
+  } else {
+    avatarInFlightCount = Math.max(0, avatarInFlightCount - 1);
+  }
+}
+
 export async function loadAvatarDataUrl(username: string): Promise<string> {
-  const remote = await fetchImageDataUrl(`https://mineskin.eu/avatar/${encodeURIComponent(username)}/40`, 2000);
-  if (remote) return remote;
-  return staticImageDataUrl('fallbacks', 'steve.png');
+  const key = username.toLowerCase();
+  const hit = avatarCached(key, Date.now());
+  if (hit) return hit;
+  const ongoing = avatarInflight.get(key);
+  if (ongoing) return ongoing;
+  const task = (async (): Promise<string> => {
+    await acquireAvatarSlot();
+    try {
+      const remote = await fetchImageDataUrl(`https://mineskin.eu/avatar/${encodeURIComponent(username)}/40`, 2000);
+      if (remote) {
+        avatarCacheStore(key, remote, true);
+        return remote;
+      }
+      const fallback = staticImageDataUrl('fallbacks', 'steve.png');
+      avatarCacheStore(key, fallback, false);
+      return fallback;
+    } finally {
+      avatarInflight.delete(key);
+      releaseAvatarSlot();
+    }
+  })();
+  avatarInflight.set(key, task);
+  return task;
 }
 
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {
