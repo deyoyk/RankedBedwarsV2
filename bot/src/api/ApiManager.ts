@@ -833,7 +833,9 @@ export class ApiManager {
 
   private getAllSeasons = async (req: Request, res: Response): Promise<void> => {
     try {
-      const seasons = await Season.find().sort({ seasonNumber: 1, chapterNumber: 1 }).lean();
+      const seasons = await this.getCached('seasons', 30000, async () => {
+        return Season.find().sort({ seasonNumber: 1, chapterNumber: 1 }).lean();
+      });
       res.json(seasons);
     } catch (error) {
       console.error('Error fetching seasons:', error);
@@ -843,7 +845,9 @@ export class ApiManager {
 
   private getCurrentSeason = async (req: Request, res: Response): Promise<void> => {
     try {
-      const currentSeason = await SeasonManager.getCurrentSeason();
+      const currentSeason = await this.getCached('currentSeason', 30000, async () => {
+        return SeasonManager.getCurrentSeason();
+      });
       if (!currentSeason) {
         res.status(404).json({ error: 'No active season found' });
         return;
@@ -861,21 +865,24 @@ export class ApiManager {
       if (!seasonParams) return;
       const { seasonNumber, chapterNumber } = seasonParams;
 
-      const seasonInfo = await SeasonManager.getSeason(seasonNumber, chapterNumber);
-      if (!seasonInfo) {
+      const response = await this.getCached(`seasonInfo:${seasonNumber}:${chapterNumber}`, 30000, async () => {
+        const seasonInfo = await SeasonManager.getSeason(seasonNumber, chapterNumber);
+        if (!seasonInfo) return null;
+
+        const statsCount = await SeasonStats.countDocuments({ seasonNumber, chapterNumber });
+        const gamesCount = await SeasonGames.countDocuments({ seasonNumber, chapterNumber });
+
+        return {
+          ...seasonInfo.toObject(),
+          statsCount,
+          gamesCount
+        };
+      });
+      if (!response) {
         res.status(404).json({ error: 'Season not found' });
         return;
       }
-
-
-      const statsCount = await SeasonStats.countDocuments({ seasonNumber, chapterNumber });
-      const gamesCount = await SeasonGames.countDocuments({ seasonNumber, chapterNumber });
-
-      res.json({
-        ...seasonInfo.toObject(),
-        statsCount,
-        gamesCount
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching season info:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -1342,50 +1349,53 @@ export class ApiManager {
     try {
       const { discordid } = req.params;
 
-      const user = await User.findOne({ discordId: discordid })
-        .select('ign discordId bans mutes strikes')
-        .lean();
+      const response = await this.getCached(`punishmentHistory:${discordid}`, 10000, async () => {
+        const user = await User.findOne({ discordId: discordid })
+          .select('ign discordId bans mutes strikes')
+          .lean();
 
-      if (!user) {
+        if (!user) return null;
+
+        const allStaffIds = new Set<string>();
+        [...(user.bans || []), ...(user.mutes || []), ...(user.strikes || [])].forEach(p => {
+          if (p.moderator) allStaffIds.add(p.moderator);
+        });
+
+        const staffUsers = await User.find({ discordId: { $in: Array.from(allStaffIds) } })
+          .select('discordId ign')
+          .lean();
+        const staffIgnMap: Record<string, string> = {};
+        staffUsers.forEach(u => { staffIgnMap[u.discordId] = u.ign; });
+
+        const formatPunishments = (punishments: StoredPunishment[], type: string) => {
+          return punishments.map(p => ({
+            ...p,
+            type,
+            staffIgn: staffIgnMap[p.moderator] || p.moderator
+          }));
+        };
+
+        const allPunishments = [
+          ...formatPunishments(user.bans || [], 'ban'),
+          ...formatPunishments(user.mutes || [], 'mute'),
+          ...formatPunishments(user.strikes || [], 'strike')
+        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        return {
+          ign: user.ign,
+          discordId: user.discordId,
+          totalPunishments: allPunishments.length,
+          totalBans: (user.bans || []).length,
+          totalMutes: (user.mutes || []).length,
+          totalStrikes: (user.strikes || []).length,
+          punishments: allPunishments
+        };
+      });
+      if (!response) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-
-      const allStaffIds = new Set<string>();
-      [...(user.bans || []), ...(user.mutes || []), ...(user.strikes || [])].forEach(p => {
-        if (p.moderator) allStaffIds.add(p.moderator);
-      });
-
-      const staffUsers = await User.find({ discordId: { $in: Array.from(allStaffIds) } })
-        .select('discordId ign')
-        .lean();
-      const staffIgnMap: Record<string, string> = {};
-      staffUsers.forEach(u => { staffIgnMap[u.discordId] = u.ign; });
-
-      const formatPunishments = (punishments: StoredPunishment[], type: string) => {
-        return punishments.map(p => ({
-          ...p,
-          type,
-          staffIgn: staffIgnMap[p.moderator] || p.moderator
-        }));
-      };
-
-      const allPunishments = [
-        ...formatPunishments(user.bans || [], 'ban'),
-        ...formatPunishments(user.mutes || [], 'mute'),
-        ...formatPunishments(user.strikes || [], 'strike')
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      res.json({
-        ign: user.ign,
-        discordId: user.discordId,
-        totalPunishments: allPunishments.length,
-        totalBans: (user.bans || []).length,
-        totalMutes: (user.mutes || []).length,
-        totalStrikes: (user.strikes || []).length,
-        punishments: allPunishments
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user punishment history:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -1397,38 +1407,42 @@ export class ApiManager {
     try {
       const { discordid } = req.params;
 
-      const user = await User.findOne({ discordId: discordid }).select('ign discordId').lean();
-      if (!user) {
+      const response = await this.getCached(`seasonHistory:${discordid}`, 10000, async () => {
+        const user = await User.findOne({ discordId: discordid }).select('ign discordId').lean();
+        if (!user) return null;
+
+        const seasonStats = await SeasonStats.find({ discordId: discordid })
+          .sort({ seasonNumber: -1, chapterNumber: -1 })
+          .lean();
+
+        const seasonHistory = seasonStats.map(stats => ({
+          season: stats.seasonNumber,
+          chapter: stats.chapterNumber,
+          elo: stats.elo,
+          wins: stats.wins,
+          losses: stats.losses,
+          kills: stats.kills,
+          deaths: stats.deaths,
+          games: stats.games,
+          mvps: stats.mvps,
+          bedBroken: stats.bedBroken,
+          level: stats.level || getLevelInfo(stats.experience || 0).level,
+          kdr: stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : 'N/A',
+          wlr: stats.losses > 0 ? (stats.wins / stats.losses).toFixed(2) : 'N/A'
+        }));
+
+        return {
+          ign: user.ign,
+          discordId: user.discordId,
+          totalSeasons: seasonHistory.length,
+          seasons: seasonHistory
+        };
+      });
+      if (!response) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      const seasonStats = await SeasonStats.find({ discordId: discordid })
-        .sort({ seasonNumber: -1, chapterNumber: -1 })
-        .lean();
-
-      const seasonHistory = seasonStats.map(stats => ({
-        season: stats.seasonNumber,
-        chapter: stats.chapterNumber,
-        elo: stats.elo,
-        wins: stats.wins,
-        losses: stats.losses,
-        kills: stats.kills,
-        deaths: stats.deaths,
-        games: stats.games,
-        mvps: stats.mvps,
-        bedBroken: stats.bedBroken,
-        level: stats.level || getLevelInfo(stats.experience || 0).level,
-        kdr: stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : 'N/A',
-        wlr: stats.losses > 0 ? (stats.wins / stats.losses).toFixed(2) : 'N/A'
-      }));
-
-      res.json({
-        ign: user.ign,
-        discordId: user.discordId,
-        totalSeasons: seasonHistory.length,
-        seasons: seasonHistory
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user season history:', error);
       res.status(500).json({ error: 'Internal server error' });
