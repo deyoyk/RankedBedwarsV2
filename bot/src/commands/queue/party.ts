@@ -126,39 +126,44 @@ async function handleInviteToParty(interaction: Message | ChatInputCommandIntera
     return;
   }
 
-  const message = await interaction.reply({ 
-    embeds: [result.embed!], 
-    components: result.components!, 
-    fetchReply: true 
-  });
+  const message = (await safeReply(interaction, {
+    embeds: [result.embed!],
+    components: result.components!,
+    fetchReply: true
+  })) as unknown as Message | undefined;
+  if (!message || typeof message.createMessageComponentCollector !== 'function') return;
 
   const collector = message.createMessageComponentCollector({
     componentType: ComponentType.Button,
-    time: 5 * 60 * 1000
+    filter: (i) => i.user.id === targetId,
+    time: 2 * 60 * 1000,
+    max: 1
   });
 
+  let resolved = false;
   collector.on('collect', async (buttonInteraction) => {
     const [, partyAction, partyId, targetUserId] = buttonInteraction.customId.split('_');
-    
+
     if (buttonInteraction.user.id !== targetUserId) {
-      await buttonInteraction.reply({ 
-        embeds: [errorEmbed('This invitation is not for you!', 'Party Error').builder], 
-        ephemeral: true 
+      await buttonInteraction.reply({
+        embeds: [errorEmbed('This invitation is not for you!', 'Party Error').builder],
+        ephemeral: true
       });
       return;
     }
 
     if (partyAction === 'accept') {
       const acceptResult = await PartyService.acceptInvite(partyId, targetUserId, guild);
-      
+
       if (acceptResult.success) {
+        resolved = true;
         const updatedEmbed = EmbedBuilder.from(result.embed!)
           .setDescription(`<@${targetUserId}> has joined the party!`)
           .setColor('#00ff00');
-        
-        await buttonInteraction.update({ 
-          embeds: [updatedEmbed], 
-          components: [] 
+
+        await buttonInteraction.update({
+          embeds: [updatedEmbed],
+          components: []
         });
       } else {
         await buttonInteraction.reply({ 
@@ -167,6 +172,7 @@ async function handleInviteToParty(interaction: Message | ChatInputCommandIntera
         });
       }
     } else if (partyAction === 'decline') {
+      resolved = true;
       const declinedEmbed = EmbedBuilder.from(result.embed!)
         .setDescription(`<@${targetUserId}> declined the invitation.`)
         .setColor('#00AAAA');
@@ -181,13 +187,12 @@ async function handleInviteToParty(interaction: Message | ChatInputCommandIntera
   });
 
   collector.on('end', async () => {
-    if (message.components.length > 0) {
-      const expiredEmbed = errorEmbed('This invitation has expired.', 'Party Invitation Expired');
-      await message.edit({ 
-        embeds: [expiredEmbed.builder], 
-        components: [] 
-      });
-    }
+    if (resolved || message.components.length === 0) return;
+    const expiredEmbed = errorEmbed('This invitation has expired.', 'Party Invitation Expired');
+    await message.edit({
+      embeds: [expiredEmbed.builder],
+      components: []
+    }).catch(() => undefined);
   });
 }
 
