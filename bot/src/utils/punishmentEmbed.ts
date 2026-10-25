@@ -39,6 +39,24 @@ const TYPE_CONFIG: Record<string, { title: string; color: number; asset: string 
   unstrike:{ title: 'Strike Removed',  color: 0x2dd56b, asset: 'unbanunmute.png' },
 };
 
+const assetPathCache = new Map<string, string | null>();
+
+function resolveAssetPath(fileName: string): string | null {
+  const hit = assetPathCache.get(fileName);
+  if (hit !== undefined) return hit;
+  const candidatePaths = [
+    path.resolve(process.cwd(), 'src', 'asserts', 'punishments', fileName),
+    path.resolve(process.cwd(), 'asserts', 'punishments', fileName)
+  ];
+  const found = candidatePaths.find(p => fs.existsSync(p)) ?? null;
+  if (assetPathCache.size >= 100) {
+    const oldest = assetPathCache.keys().next();
+    if (!oldest.done) assetPathCache.delete(oldest.value);
+  }
+  assetPathCache.set(fileName, found);
+  return found;
+}
+
 export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Promise<void> {
   const { guild, targetId, moderatorId, reason, type, expires, extraFields, assetFileName: customAsset, title: customTitle, color: customColor } = options;
 
@@ -106,11 +124,7 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     .setTimestamp();
 
   const fileName = customAsset || config_.asset;
-  const candidatePaths = [
-    path.resolve(process.cwd(), 'src', 'asserts', 'punishments', fileName),
-    path.resolve(process.cwd(), 'asserts', 'punishments', fileName)
-  ];
-  const assetPath = candidatePaths.find(p => fs.existsSync(p));
+  const assetPath = resolveAssetPath(fileName);
   const files: { attachment: string; name: string }[] = [];
   if (assetPath) {
     embed.setThumbnail(`attachment://${fileName}`);
