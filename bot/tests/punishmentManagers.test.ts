@@ -21,7 +21,9 @@ jest.mock('../src/models/User', () => ({
   __esModule: true,
   default: {
     findOne: jest.fn(),
-    find: jest.fn()
+    find: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+    updateOne: jest.fn()
   }
 }));
 
@@ -263,6 +265,10 @@ describe('StrikeManager.strike', () => {
   it('persists a strike with a valid ObjectId', async () => {
     const user = mockUser();
     UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(async (_filter: unknown, update: any) => {
+      user.strikes.push(update.$push.strikes);
+      return user;
+    });
 
     const result = await StrikeManager.strike(guildMock() as any, '123', 'mod', 'Cheating');
 
@@ -277,7 +283,11 @@ describe('StrikeManager.strike', () => {
       { id: new mongoose.Types.ObjectId().toString(), reason: 'a', date: new Date(), moderator: 'm1' },
       { id: new mongoose.Types.ObjectId().toString(), reason: 'b', date: new Date(), moderator: 'm2' }
     ];
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(async () => {
+      const before = { ...user, strikes: [...user.strikes] };
+      user.strikes.pop();
+      return before;
+    });
 
     const result = await StrikeManager.unstrike(guildMock() as any, '123', 'mod');
     expect(user.strikes).toHaveLength(1);
@@ -291,6 +301,10 @@ describe('StrikeManager.strike', () => {
       { id: new mongoose.Types.ObjectId().toString(), reason: 'a', date: new Date(), moderator: 'm1' }
     ];
     UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(async (_filter: unknown, update: any) => {
+      user.strikes.push(update.$push.strikes);
+      return user;
+    });
 
     const result = await StrikeManager.strike(guildMock() as any, '123', 'mod', 'Cheating');
 
@@ -307,10 +321,17 @@ describe('StrikeManager.strike', () => {
     try {
       const user = mockUser();
       UserModel.findOne.mockResolvedValue(user);
+      UserModel.findOneAndUpdate.mockImplementation(async (_filter: unknown, update: any) => {
+        user.strikes.push(update.$push.strikes);
+        return user;
+      });
 
       await expect(StrikeManager.strike(guildMock() as any, '123', 'mod', 'Cheating'))
         .rejects.toThrow('Invalid strike action for strike 1');
-      expect(user.strikes).toHaveLength(0);
+      expect(UserModel.updateOne).toHaveBeenCalledWith(
+        { discordId: '123' },
+        { $pull: { strikes: { id: expect.any(String) } } }
+      );
     } finally {
       configMock.strikes = prev;
     }

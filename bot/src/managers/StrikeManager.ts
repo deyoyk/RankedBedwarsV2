@@ -1,8 +1,9 @@
 import config from '../config/config';
 import { Guild } from 'discord.js';
+import User from '../models/User';
 import { BanManager } from './BanManager';
 import { parseDuration } from '../utils/parseDuration';
-import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
+import { generatePunishmentId, cleanupOperation } from './punishmentBase';
 import { PunishmentOperation, PunishmentRecord, createPendingOperation, sendPunishmentNotification } from './punishmentHelpers';
 
 interface StrikeManagerStats {
@@ -45,14 +46,24 @@ export class StrikeManager {
         throw new Error('Invalid strike parameters');
       }
 
-      
-      const user = await fetchUserWithTimeout(targetId);
-      if (!user) {
+      const strikeId = generatePunishmentId();
+      const strikeRecord = {
+        id: strikeId,
+        reason: reason.trim(),
+        date: new Date(),
+        moderator: moderatorId
+      };
+
+      const updated = await User.findOneAndUpdate(
+        { discordId: targetId },
+        { $push: { strikes: strikeRecord } },
+        { new: true }
+      );
+      if (!updated) {
         throw new Error(`User ${targetId} not found in database`);
       }
-
-      const strikeId = generatePunishmentId();
-      const strikeCount = user.strikes.length + 1;
+      const user = updated;
+      const strikeCount = user.strikes.length;
 
       const strikeConfig = config.strikes || {};
       const action = strikeConfig[strikeCount] || strikeConfig['default'] || 'warn';
@@ -63,19 +74,10 @@ export class StrikeManager {
           parseDuration(action);
           banDuration = action;
         } catch {
+          await User.updateOne({ discordId: targetId }, { $pull: { strikes: { id: strikeId } } });
           throw new Error(`Invalid strike action for strike ${strikeCount}: "${action}" (expected "warn" or a duration)`);
         }
       }
-
-      const strikeRecord = {
-        id: strikeId,
-        reason: reason.trim(),
-        date: new Date(),
-        moderator: moderatorId
-      };
-
-      user.strikes.push(strikeRecord);
-      await user.save();
 
       let actionTaken = 'Warning issued';
       operation.actionTaken = actionTaken;
@@ -144,25 +146,23 @@ export class StrikeManager {
         throw new Error('Invalid unstrike parameters');
       }
 
-      
-      const user = await fetchUserWithTimeout(targetId);
-      if (!user) {
-        throw new Error(`User ${targetId} not found in database`);
-      }
+      const before = await User.findOneAndUpdate(
+        { discordId: targetId, 'strikes.0': { $exists: true } },
+        { $pop: { strikes: 1 } },
+        { new: false }
+      );
 
-      
-      if (!user.strikes || user.strikes.length === 0) {
+      if (!before || !before.strikes || before.strikes.length === 0) {
+        const exists = await User.findOne({ discordId: targetId });
+        if (!exists) {
+          throw new Error(`User ${targetId} not found in database`);
+        }
         throw new Error('User has no strikes to remove');
       }
 
-      
-      const removedStrike = user.strikes.pop();
-      if (!removedStrike) {
-        throw new Error('User has no strikes to remove');
-      }
-      await user.save();
-
-      const strikeCount = user.strikes.length;
+      const removedStrike = before.strikes[before.strikes.length - 1];
+      const strikeCount = before.strikes.length - 1;
+      const user = before;
 
       
       try {
