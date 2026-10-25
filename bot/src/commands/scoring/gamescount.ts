@@ -14,6 +14,9 @@ const DURATIONS = [
 
 const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 1280, height: 720 });
 
+const gamesChartCache = new Map<string, { at: number; buffer: Buffer }>();
+const GAMES_CHART_TTL_MS = 30000;
+
 export async function gamescount(interaction: Message | ChatInputCommandInteraction) {
   let selectedDuration = '30d';
 
@@ -34,21 +37,48 @@ export async function gamescount(interaction: Message | ChatInputCommandInteract
       d.setDate(d.getDate() + i);
       keys.push(`${d.getMonth() + 1}/${d.getDate()}`);
     }
-    const games = await Game.find({ startTime: { $gte: startDate } }).select('startTime state').lean();
     const states = ['pending', 'voided', 'scored'];
     const counts: Record<string, Record<string, number>> = {};
     for (const state of states) {
       counts[state] = {};
       for (const key of keys) counts[state][key] = 0;
     }
-    for (const game of games) {
-      const d = new Date(game.startTime);
-      const key = `${d.getMonth() + 1}/${d.getDate()}`;
-      if (counts[game.state] && counts[game.state][key] !== undefined) {
-        counts[game.state][key]++;
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const buckets = await Game.aggregate([
+      { $match: { startTime: { $gte: startDate } } },
+      {
+        $group: {
+          _id: {
+            day: { $dateToString: { format: '%Y-%m-%d', date: '$startTime', timezone: tz } },
+            state: '$state'
+          },
+          n: { $sum: 1 }
+        }
+      }
+    ]);
+    for (const bucket of buckets) {
+      const parts = String(bucket._id.day).split('-');
+      if (parts.length !== 3) continue;
+      const key = `${Number(parts[1])}/${Number(parts[2])}`;
+      if (counts[bucket._id.state] && counts[bucket._id.state][key] !== undefined) {
+        counts[bucket._id.state][key] += bucket.n;
       }
     }
     return { keys, counts };
+  }
+
+  async function getCachedChart(duration: string): Promise<Buffer> {
+    const now = Date.now();
+    const hit = gamesChartCache.get(duration);
+    if (hit && now - hit.at < GAMES_CHART_TTL_MS) return hit.buffer;
+    const { keys, counts } = await getGameCounts(duration);
+    const buffer = await renderChart(keys, counts);
+    if (gamesChartCache.size >= 8) {
+      const oldest = gamesChartCache.keys().next();
+      if (!oldest.done) gamesChartCache.delete(oldest.value);
+    }
+    gamesChartCache.set(duration, { at: now, buffer });
+    return buffer;
   }
 
 async function renderChart(keys: string[], counts: Record<string, Record<string, number>>) {
@@ -157,8 +187,7 @@ async function renderChart(keys: string[], counts: Record<string, Record<string,
     .addOptions(DURATIONS.map(d => ({ label: d.label, value: d.value, default: d.value === selectedDuration })));
   const components = [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)];
 
-  const { keys, counts } = await getGameCounts(selectedDuration);
-  const chartBuffer = await renderChart(keys, counts);
+  const chartBuffer = await getCachedChart(selectedDuration);
   const chartImage = `attachment://games_count_chart.png`;
   const embed = betterEmbed(
     undefined,
@@ -187,8 +216,7 @@ async function renderChart(keys: string[], counts: Record<string, Record<string,
     }
     if (i.isStringSelectMenu && i.isStringSelectMenu() && i.customId === 'gamescount_duration') {
       selectedDuration = i.values[0];
-      const { keys: newKeys, counts: newCounts } = await getGameCounts(selectedDuration);
-      const newChartBuffer = await renderChart(newKeys, newCounts);
+      const newChartBuffer = await getCachedChart(selectedDuration);
       const newEmbed = betterEmbed(
         undefined,
         '#00AAAA',
