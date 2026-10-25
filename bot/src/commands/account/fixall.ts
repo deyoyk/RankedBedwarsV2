@@ -1,6 +1,6 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, ButtonStyle } from 'discord.js';
 import { fix } from '../../utils/fix';
-import User, { IUser } from '../../models/User';
+import User from '../../models/User';
 import { executeWithConfirmation } from '../../utils/confirmAction';
 
 interface FixAllProgress {
@@ -14,15 +14,13 @@ interface FixAllProgress {
 }
 
 export async function fixall(interaction: Message | ChatInputCommandInteraction) {
-  const users = await User.find().select('discordId ign');
-  if (!users.length) {
+  const total = await User.countDocuments();
+  if (!total) {
     const { safeReply } = await import('../../utils/safeReply');
     const { errorEmbed } = await import('../../utils/betterembed');
     await safeReply(interaction, errorEmbed('No users found in the database.', 'Fix All Error'));
     return;
   }
-
-  const total = users.length;
 
   await executeWithConfirmation(interaction, {
     commandName: 'fixall',
@@ -38,12 +36,11 @@ export async function fixall(interaction: Message | ChatInputCommandInteraction)
     ],
     startMessage: 'Starting fix all operation...',
     cancelMessage: 'Fix all operation cancelled.',
-    onConfirm: () => executeFixAll(interaction, users)
+    onConfirm: () => executeFixAll(interaction, total)
   });
 }
 
-async function executeFixAll(interaction: Message | ChatInputCommandInteraction, users: IUser[]) {
-  const total = users.length;
+async function executeFixAll(interaction: Message | ChatInputCommandInteraction, total: number) {
   const progress: FixAllProgress = {
     total,
     processed: 0,
@@ -74,10 +71,15 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
   const batchSize = 5;
   const rateLimitDelay = 1000;
   const updateInterval = 3000;
+  const maxStoredErrors = 50;
 
-  for (let i = 0; i < users.length; i += batchSize) {
-    const batch = users.slice(i, i + batchSize);
-    
+  let lastId: unknown = null;
+  for (;;) {
+    const filter: Record<string, unknown> = lastId === null ? {} : { _id: { $gt: lastId } };
+    const batch = await User.find(filter).select('_id discordId ign').sort({ _id: 1 }).limit(batchSize).lean();
+    if (batch.length === 0) break;
+    lastId = (batch[batch.length - 1] as { _id: unknown })._id;
+
     const batchPromises = batch.map(async (user) => {
       try {
         await fix(interaction.guild!, user.discordId);
@@ -87,7 +89,9 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
         progress.failed++;
         const detail = error instanceof Error ? error.message : 'Unknown error';
         const errorMsg = `Failed to fix ${user.ign || user.discordId}: ${detail}`;
-        progress.errors.push(errorMsg);
+        if (progress.errors.length < maxStoredErrors) {
+          progress.errors.push(errorMsg);
+        }
         console.error(`[FixAll] ${errorMsg}`);
       } finally {
         progress.processed++;
@@ -111,7 +115,7 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
       }
     }
 
-    if (i + batchSize < users.length) {
+    if (progress.processed < total) {
       await sleep(rateLimitDelay);
     }
   }
@@ -186,8 +190,8 @@ function createFinalEmbed(progress: FixAllProgress): EmbedBuilder {
     .setFooter({ text: 'Deyo.lol' })
     .setTimestamp();
 
-  if (progress.errors.length > 0) {
-    const errorCount = progress.errors.length;
+  if (progress.failed > 0) {
+    const errorCount = progress.failed;
     const displayErrors = progress.errors.slice(-5);
     
     embed.addFields({
