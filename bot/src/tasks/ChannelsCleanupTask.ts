@@ -91,9 +91,6 @@ export class ChannelsCleanupTask {
 
       console.log(`[ChannelsCleanupTask] Found ${channelsToDelete.length} orphaned channels in ${categoryType} category`);
 
-      // Bounded-concurrency deletes: 3 at a time with a short stagger to
-      // stay under Discord rate limits. Previously 200 orphans took 200s+
-      // serially with a 1s sleep between each delete, stalling the task.
       let deletedCount = 0;
       const CONCURRENCY = 3;
       for (let i = 0; i < channelsToDelete.length; i += CONCURRENCY) {

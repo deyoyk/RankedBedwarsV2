@@ -15,7 +15,8 @@ export function normalizeIdList(ids: string[]): string[] {
 
 export function normalizeTeams(team1: string[], team2: string[]): { team1: string[]; team2: string[] } {
   const t1 = normalizeIdList(team1);
-  const t2 = normalizeIdList(team2).filter(id => !t1.includes(id));
+  const seen = new Set(t1);
+  const t2 = normalizeIdList(team2).filter(id => !seen.has(id));
   return { team1: t1, team2: t2 };
 }
 

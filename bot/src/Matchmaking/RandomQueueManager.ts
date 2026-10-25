@@ -49,8 +49,6 @@ export class RandomQueueManager {
 
       console.log(`[RandomQueue] Processing ${availablePlayers.length} players, max ${maxGames} games`);
 
-      // Single batched read for the whole queue snapshot; reused for team
-      // balancing and average-elo computation instead of re-querying per game.
       const userDocsById = new Map<string, any>();
       const eloById = new Map<string, number>();
       try {

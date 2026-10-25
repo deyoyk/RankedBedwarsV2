@@ -121,9 +121,6 @@ interface GameVoidContext {
   reason: string;
 }
 
-// Cache EloRank documents across settlements within a short TTL so concurrent
-// score/void calls for the same burst share one query instead of N queries.
-// In-flight requests are de-duplicated via a shared promise.
 let cachedEloRanks: IEloRank[] | null = null;
 let cachedEloRanksAt = 0;
 let inFlightEloRanks: Promise<IEloRank[]> | null = null;
@@ -889,9 +886,6 @@ export class GameManager {
       const resources = this.activeGames.get(gameId);
       if (!resources) return;
 
-      // Free capacity immediately at settle time; the 30s timer below only
-      // deletes Discord channels. Previously the slot was held for 30s after
-      // every score/void, causing spurious max-concurrent-games backpressure.
       this.activeGames.delete(gameId);
       this.cleaningGames.add(gameId);
 
@@ -1476,8 +1470,6 @@ export class GameManager {
           const ops: Record<string, unknown>[] = [];
           for (const scoreData of playerScoreData) {
             const entry = entries.get(scoreData.player.discordId);
-            // Remove any stale entry for this game first so the $push below
-            // cannot create duplicates, then push the fresh entry capped at 50.
             ops.push({
               updateOne: {
                 filter: { discordId: scoreData.player.discordId },

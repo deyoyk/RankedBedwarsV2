@@ -284,7 +284,6 @@ public class MBedwarsListener implements Listener {
         GameInstance gameInstance = gameInstances.get(arenaName);
         if (gameInstance != null) {
             gameInstance.recordPlayerLeave(player.getName());
-            // Keep playerInstanceIndex entry until round end (see above).
         }
         
         Set<String> players = preGamePlayers.get(arenaName);

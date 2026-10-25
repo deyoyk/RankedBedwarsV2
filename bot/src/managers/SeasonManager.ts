@@ -121,8 +121,6 @@ export class SeasonManager {
       const inserted: unknown = await targetModel.insertMany(docs, { ordered: false });
       return Array.isArray(inserted) ? inserted.length : docs.length;
     } catch (error) {
-      // Unique indexes on (discordId, season, chapter) / (gameId, season, chapter) make
-      // retries safe: already-migrated docs raise 11000 while the rest still persist.
       if (SeasonManager.isDuplicateKeyError(error)) return docs.length;
       throw error;
     }
@@ -149,7 +147,6 @@ export class SeasonManager {
         });
         await SeasonManager.runInBatches(tasks);
       } else {
-        // Fallback for doubles without insertMany (unit tests): per-doc saves, same concurrency bound.
         const tasks = docs.map((doc) => async () => {
           await new targetModel(doc).save();
           migrated += 1;
@@ -160,7 +157,6 @@ export class SeasonManager {
 
     const query: any = sourceModel.find({});
     if (query && typeof query.lean === 'function' && typeof query.cursor === 'function') {
-      // Large-scale path: stream lean docs through a cursor, never materializing the collection.
       if (typeof query.batchSize === 'function') query.batchSize(SeasonManager.READ_BATCH_SIZE);
       const cursor = query.lean().cursor();
       let batch: any[] = [];
@@ -176,7 +172,6 @@ export class SeasonManager {
       return migrated;
     }
 
-    // Fallback path (query doubles in unit tests): array read, still persisted in bounded chunks.
     const all: any = typeof query?.session === 'function' ? await query.session(undefined) : await query;
     const arr: any[] = Array.isArray(all) ? all : [];
     for (const batch of SeasonManager.chunk(arr, SeasonManager.READ_BATCH_SIZE)) {
@@ -311,7 +306,6 @@ export class SeasonManager {
   }
 
   public static async endSeason(): Promise<SeasonEndResult> {
-    // Phase 0: resolve the active season without holding a transaction open.
     const lookupSession = await mongoose.startSession();
     let snapshot: { seasonNumber: number; chapterNumber: number; name: string } | null = null;
     try {
@@ -335,12 +329,6 @@ export class SeasonManager {
     }
     const { seasonNumber, chapterNumber } = snapshot;
 
-    // Phase 1: snapshot live collections into season archives in bounded batches.
-    // Each insertMany chunk is atomic with ordered:false and duplicate-key tolerant,
-    // so a retry after a crash simply skips already-migrated docs (idempotent,
-    // re-runnable). No long-lived transaction here: stays well under the 60s limit.
-    // Note: writes landing between snapshot and reset below belong to the next
-    // season window; pause scoring queues during endSeason for a clean boundary.
     const usersMigrated = await SeasonManager.snapshotCollection(
       User,
       SeasonStats,
@@ -357,7 +345,6 @@ export class SeasonManager {
       chapterNumber
     );
 
-    // Phase 2: one short transaction covering only the reset + close writes.
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {

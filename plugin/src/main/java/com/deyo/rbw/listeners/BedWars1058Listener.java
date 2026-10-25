@@ -634,9 +634,6 @@ public class BedWars1058Listener implements Listener {
         BW1058GameTracker gameTracker = gameTrackers.get(arenaName);
         if (gameTracker != null) {
             gameTracker.recordPlayerLeave(player.getName());
-            // Keep playerTrackerIndex entry until game end: isTracking() stays
-            // true after leave (leave only logs a timeline event), so the
-            // index must mirror tracker lifetime, not presence.
         }
         
         if (arena.getStatus() == GameState.waiting || arena.getStatus() == GameState.starting) {

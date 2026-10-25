@@ -629,12 +629,6 @@ public class MapManager {
                 .collect(java.util.stream.Collectors.toSet());
     }
     
-    /**
-     * Checks whether an arena has no players, using cached reflective
-     * {@code getPlayers} handles so the main-thread auto-refresh timer does
-     * not pay {@code Class.getMethod} lookup costs on every tick.
-     * Direct interface checks run first; reflection is the fallback.
-     */
     private boolean isArenaEmpty(Object arena) {
         if (arena instanceof de.marcely.bedwars.api.arena.Arena) {
             return ((de.marcely.bedwars.api.arena.Arena) arena).getPlayers().isEmpty();

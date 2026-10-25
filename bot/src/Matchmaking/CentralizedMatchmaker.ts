@@ -510,7 +510,6 @@ export class CentralizedMatchmaker {
 
       const pendingIds = pendingIndexes.map(i => playerIds[i]);
 
-      // Single batched user read instead of one findOne per player.
       let userDocs: any[] = [];
       try {
         const query: any = User.find({ discordId: { $in: pendingIds } });
@@ -522,7 +521,6 @@ export class CentralizedMatchmaker {
       }
       const userMap = new Map<string, any>(userDocs.map(u => [u.discordId, u]));
 
-      // Single batched party read for every distinct party referenced.
       const partyIds = [...new Set(userDocs.map(u => u.partyId).filter(Boolean))];
       const partyMap = new Map<string, any>();
       if (partyIds.length > 0) {
@@ -537,7 +535,6 @@ export class CentralizedMatchmaker {
               partyMap.set(party.partyId, party);
             }
           } else {
-            // Fallback for environments where only findOne is available.
             const results = await Promise.all(partyIds.map(async pid => {
               try {
                 const q: any = Party.findOne({ partyId: pid });
@@ -555,8 +552,6 @@ export class CentralizedMatchmaker {
         }
       }
 
-      // Pre-fetch party members that are not in the queue snapshot so the
-      // per-player checks below never hit the database.
       const queuedSet = new Set(playerIds);
       const missingMemberIds = [...new Set(
         [...partyMap.values()].flatMap(party => party.members ?? [])
@@ -606,7 +601,6 @@ export class CentralizedMatchmaker {
         }
       }
 
-      // Run Minecraft online checks concurrently with a cap of 5 in flight.
       await this.runWithConcurrencyLimit(presenceTasks, 5);
 
       for (const index of pendingIndexes) {
