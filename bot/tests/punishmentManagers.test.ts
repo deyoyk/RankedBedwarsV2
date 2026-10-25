@@ -17,6 +17,26 @@ const mockUser = (): any => ({
   save: mockSave
 });
 
+function mirrorUpdate(user: any) {
+  return async (filter: any, update: any) => {
+    if (update.$push) {
+      for (const [arr, rec] of Object.entries<any>(update.$push)) user[arr].push(rec);
+    }
+    if (update.$set) {
+      for (const [path, value] of Object.entries(update.$set)) {
+        const positional = /^(\w+)\.\$\.(\w+)$/.exec(path);
+        if (positional) {
+          const record = user[positional[1]].find((r: any) => r.id === filter[`${positional[1]}.id`]);
+          if (record) record[positional[2]] = value;
+        } else {
+          user[path] = value;
+        }
+      }
+    }
+    return { matchedCount: 1, modifiedCount: 1, ...user };
+  };
+}
+
 jest.mock('../src/models/User', () => ({
   __esModule: true,
   default: {
@@ -68,7 +88,7 @@ beforeEach(() => {
 describe('BanManager.ban', () => {
   it('persists a ban with a valid ObjectId', async () => {
     const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(user));
 
     const expires = await BanManager.ban(guildMock() as any, '123', 'mod', '1h', 'Being toxic');
 
@@ -76,12 +96,12 @@ describe('BanManager.ban', () => {
     expect(user.bans).toHaveLength(1);
     expect(mongoose.isValidObjectId(user.bans[0].id)).toBe(true);
     expect(user.isBanned).toBe(true);
-    expect(mockSave).toHaveBeenCalled();
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
   it('creates a permanent ban when duration is omitted', async () => {
     const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(user));
 
     const expires = await BanManager.ban(guildMock() as any, '123', 'mod', '', 'Cheating');
     expect(expires).toBeUndefined();
@@ -90,19 +110,19 @@ describe('BanManager.ban', () => {
 
   it('rejects durations under 1 minute', async () => {
     const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
 
     await expect(BanManager.ban(guildMock() as any, '123', 'mod', '30s', 'test'))
       .rejects.toThrow('Ban duration must be at least 1 minute');
+    expect(UserModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(user.bans).toHaveLength(0);
   });
 
   it('throws on invalid duration instead of permanent banning', async () => {
     const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
 
     await expect(BanManager.ban(guildMock() as any, '123', 'mod', 'not-a-duration', 'test'))
       .rejects.toThrow();
+    expect(UserModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(user.bans).toHaveLength(0);
     expect(user.isBanned).toBe(false);
   });
@@ -117,7 +137,9 @@ describe('BanManager.ban', () => {
       duration: 60,
       moderator: 'oldmod'
     });
+    UserModel.findOneAndUpdate.mockResolvedValue(null);
     UserModel.findOne.mockResolvedValue(user);
+    UserModel.updateOne.mockImplementation(mirrorUpdate(user));
 
     await BanManager.ban(guildMock() as any, '123', 'mod', '2h', 'new reason');
 
@@ -128,6 +150,7 @@ describe('BanManager.ban', () => {
   });
 
   it('rejects when target user does not exist', async () => {
+    UserModel.findOneAndUpdate.mockResolvedValue(null);
     UserModel.findOne.mockResolvedValue(null);
     await expect(BanManager.ban(guildMock() as any, 'nobody', 'mod', '1h', 'test'))
       .rejects.toThrow('User nobody not found in database');
@@ -135,19 +158,21 @@ describe('BanManager.ban', () => {
 });
 
 describe('BanManager.unban', () => {
-  it('clears the ban status and saves', async () => {
+  it('clears the ban status with a single update', async () => {
     const user = mockUser();
     user.isBanned = true;
+    UserModel.updateOne.mockImplementation(mirrorUpdate(user));
     UserModel.findOne.mockResolvedValue(user);
 
     await BanManager.unban(guildMock() as any, '123', 'mod', 'Expired');
 
     expect(user.isBanned).toBe(false);
-    expect(mockSave).toHaveBeenCalled();
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
   it('does nothing for users who are not banned', async () => {
     const user = mockUser();
+    UserModel.updateOne.mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
     UserModel.findOne.mockResolvedValue(user);
 
     await BanManager.unban(guildMock() as any, '123', 'mod');
@@ -158,7 +183,7 @@ describe('BanManager.unban', () => {
 describe('MuteManager.mute', () => {
   it('persists a mute with a valid ObjectId', async () => {
     const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(user));
 
     const expires = await MuteManager.mute(guildMock() as any, '123', 'mod', '1h', 'Spamming');
 
@@ -169,30 +194,21 @@ describe('MuteManager.mute', () => {
   });
 
   it('rejects durations over 30 days', async () => {
-    const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
-
     await expect(MuteManager.mute(guildMock() as any, '123', 'mod', '31d', 'Spamming'))
       .rejects.toThrow('Mute duration cannot exceed 30 days');
-    expect(user.mutes).toHaveLength(0);
+    expect(UserModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects durations under 1 minute', async () => {
-    const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
-
     await expect(MuteManager.mute(guildMock() as any, '123', 'mod', '30s', 'Spamming'))
       .rejects.toThrow('Mute duration must be at least 1 minute');
-    expect(user.mutes).toHaveLength(0);
+    expect(UserModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects invalid durations', async () => {
-    const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
-
     await expect(MuteManager.mute(guildMock() as any, '123', 'mod', 'banana', 'Spamming'))
       .rejects.toThrow();
-    expect(user.mutes).toHaveLength(0);
+    expect(UserModel.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
   it('does not duplicate records when re-muting', async () => {
@@ -205,7 +221,9 @@ describe('MuteManager.mute', () => {
       duration: 60,
       moderator: 'oldmod'
     });
+    UserModel.findOneAndUpdate.mockResolvedValue(null);
     UserModel.findOne.mockResolvedValue(user);
+    UserModel.updateOne.mockImplementation(mirrorUpdate(user));
 
     await MuteManager.mute(guildMock() as any, '123', 'mod', '3h', 'new reason');
     expect(user.mutes).toHaveLength(1);
@@ -215,19 +233,21 @@ describe('MuteManager.mute', () => {
 });
 
 describe('MuteManager.unmute', () => {
-  it('clears the mute status and saves', async () => {
+  it('clears the mute status with a single update', async () => {
     const user = mockUser();
     user.isMuted = true;
+    UserModel.updateOne.mockImplementation(mirrorUpdate(user));
     UserModel.findOne.mockResolvedValue(user);
 
     await MuteManager.unmute(guildMock() as any, '123', 'mod', 'Expired');
 
     expect(user.isMuted).toBe(false);
-    expect(mockSave).toHaveBeenCalled();
+    expect(mockSave).not.toHaveBeenCalled();
   });
 
   it('does nothing for users who are not muted', async () => {
     const user = mockUser();
+    UserModel.updateOne.mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
     UserModel.findOne.mockResolvedValue(user);
 
     await MuteManager.unmute(guildMock() as any, '123', 'mod');
@@ -238,14 +258,14 @@ describe('MuteManager.unmute', () => {
 describe('BanManager Discord hooks', () => {
   it('Discord-bans on permanent bans only', async () => {
     const permanent = mockUser();
-    UserModel.findOne.mockResolvedValue(permanent);
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(permanent));
     const guild = guildMock();
 
     await BanManager.ban(guild as any, '123', 'mod', '', 'Cheating');
     expect(guild.members.ban).toHaveBeenCalledTimes(1);
 
     const timed = mockUser();
-    UserModel.findOne.mockResolvedValue(timed);
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(timed));
     const guild2 = guildMock();
 
     await BanManager.ban(guild2 as any, '123', 'mod', '1h', 'Toxic');
@@ -301,10 +321,7 @@ describe('StrikeManager.strike', () => {
       { id: new mongoose.Types.ObjectId().toString(), reason: 'a', date: new Date(), moderator: 'm1' }
     ];
     UserModel.findOne.mockResolvedValue(user);
-    UserModel.findOneAndUpdate.mockImplementation(async (_filter: unknown, update: any) => {
-      user.strikes.push(update.$push.strikes);
-      return user;
-    });
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(user));
 
     const result = await StrikeManager.strike(guildMock() as any, '123', 'mod', 'Cheating');
 

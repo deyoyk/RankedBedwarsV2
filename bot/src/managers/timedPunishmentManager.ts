@@ -1,7 +1,8 @@
 import config from '../config/config';
 import { Guild } from 'discord.js';
+import User from '../models/User';
 import { parseDuration } from '../utils/parseDuration';
-import { generatePunishmentId, fetchUserWithTimeout, cleanupOperation } from './punishmentBase';
+import { generatePunishmentId, cleanupOperation } from './punishmentBase';
 import {
   PunishmentOperation,
   PunishmentManagerStats,
@@ -56,11 +57,6 @@ export abstract class TimedPunishmentManager {
         throw new Error(`Invalid ${kind.type} parameters`);
       }
 
-      const user = await fetchUserWithTimeout(targetId);
-      if (!user) {
-        throw new Error(`User ${targetId} not found in database`);
-      }
-
       const duration = durationStr ? parseDuration(durationStr) : null;
       if (duration !== null && duration < 60000) {
         throw new Error(`${kind.type[0].toUpperCase() + kind.type.slice(1)} duration must be at least 1 minute`);
@@ -69,23 +65,7 @@ export abstract class TimedPunishmentManager {
         throw new Error(`${kind.type[0].toUpperCase() + kind.type.slice(1)} duration cannot exceed ${kind.maxDurationLabel}`);
       }
 
-      if (user[kind.statusField]) {
-        console.warn(`[${kind.logName}] User ${targetId} is already ${kind.activeWord}, updating existing record`);
-        const records = user[kind.recordsField] as PunishmentRecord[];
-        const lastRecord = records[records.length - 1];
-        if (lastRecord) {
-          lastRecord.reason = reason.trim();
-          lastRecord.moderator = moderatorId;
-          lastRecord.date = new Date();
-          lastRecord.duration = duration ? Math.ceil(duration / 60000) : 0;
-          await user.save();
-        }
-        return undefined;
-      }
-
-      const expires = duration ? new Date(Date.now() + duration) : undefined;
       const recordId = generatePunishmentId();
-
       const record = {
         id: recordId,
         reason: reason.trim(),
@@ -94,9 +74,44 @@ export abstract class TimedPunishmentManager {
         moderator: moderatorId
       };
 
-      (user[kind.recordsField] as PunishmentRecord[]).push(record);
-      user[kind.statusField] = true;
-      await user.save();
+      const updated = await User.findOneAndUpdate(
+        { discordId: targetId, [kind.statusField]: { $ne: true } },
+        { $push: { [kind.recordsField]: record }, $set: { [kind.statusField]: true } },
+        { new: true }
+      );
+
+      if (!updated) {
+        const existing = await User.findOne({ discordId: targetId });
+        if (!existing) {
+          throw new Error(`User ${targetId} not found in database`);
+        }
+        if (!existing[kind.statusField]) {
+          throw new Error(`Failed to apply ${kind.type} to ${targetId}`);
+        }
+        const records = existing[kind.recordsField] as PunishmentRecord[];
+        const lastRecord = records[records.length - 1];
+        if (!lastRecord) {
+          throw new Error(`User ${targetId} is marked ${kind.activeWord} but has no ${kind.type} record`);
+        }
+        const refreshed = await User.updateOne(
+          { discordId: targetId, [`${kind.recordsField}.id`]: lastRecord.id },
+          {
+            $set: {
+              [`${kind.recordsField}.$.reason`]: reason.trim(),
+              [`${kind.recordsField}.$.moderator`]: moderatorId,
+              [`${kind.recordsField}.$.date`]: new Date(),
+              [`${kind.recordsField}.$.duration`]: duration ? Math.ceil(duration / 60000) : 0
+            }
+          }
+        );
+        if (refreshed.matchedCount === 0) {
+          throw new Error(`Failed to update existing ${kind.type} record for ${targetId}`);
+        }
+        return undefined;
+      }
+
+      const user = updated;
+      const expires = duration ? new Date(Date.now() + duration) : undefined;
 
       const promises: Promise<unknown>[] = [];
 
@@ -137,18 +152,20 @@ export abstract class TimedPunishmentManager {
         throw new Error(`Invalid ${kind.undoType} parameters`);
       }
 
-      const user = await fetchUserWithTimeout(targetId);
-      if (!user) {
-        throw new Error(`User ${targetId} not found in database`);
-      }
-
-      if (!user[kind.statusField]) {
+      const cleared = await User.updateOne(
+        { discordId: targetId, [kind.statusField]: true },
+        { $set: { [kind.statusField]: false } }
+      );
+      if (cleared.matchedCount === 0) {
+        const exists = await User.findOne({ discordId: targetId });
+        if (!exists) {
+          throw new Error(`User ${targetId} not found in database`);
+        }
         console.warn(`[${kind.logName}] User ${targetId} is not currently ${kind.activeWord}`);
         return;
       }
 
-      user[kind.statusField] = false;
-      await user.save();
+      const user = (await User.findOne({ discordId: targetId })) ?? { discordId: targetId, ign: undefined as string | undefined };
 
       const promises: Promise<unknown>[] = [];
 
