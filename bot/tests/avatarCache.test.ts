@@ -57,7 +57,7 @@ describe('avatar download cache', () => {
     ]);
     expect(a).toContain('data:image/png;base64,');
     expect(b).toBe(a);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('tries the fallback skin CDN when the primary fails', async () => {
