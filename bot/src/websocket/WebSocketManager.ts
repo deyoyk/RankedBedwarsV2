@@ -655,7 +655,7 @@ export class WebSocketManager {
       try {
         const guild = this.discordClient?.guilds.cache.first();
         if (guild) {
-          const thread = await guild.channels.fetch(threadInfo.threadId);
+          const thread = guild.channels.cache.get(threadInfo.threadId) ?? await guild.channels.fetch(threadInfo.threadId).catch(() => null);
           if (thread && thread.isTextBased()) {
             const statusMsg = msg.online
               ? `**${msg.original_ign_case || msg.ign}** joined the server.`
@@ -683,14 +683,14 @@ export class WebSocketManager {
         const gameId = gameIdRaw;
 
         const Game = (await import('../models/Game')).default;
-        const game = await Game.findOne({ gameId: parseInt(String(gameId)) });
+        const game = await Game.findOne({ gameId: parseInt(String(gameId)) }).select('gameId channels.text').lean();
         if (!game) return;
         const guild = this.discordClient?.guilds.cache.first();
         if (!guild) return;
 
         let channel;
         try {
-          channel = await guild.channels.fetch(game.channels.text);
+          channel = guild.channels.cache.get(game.channels.text) ?? await guild.channels.fetch(game.channels.text);
         } catch (err) {
           if (typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === 10003) {
             console.warn(`[WebSocketManager] Channel ${game.channels.text} not found (may have been deleted).`);
