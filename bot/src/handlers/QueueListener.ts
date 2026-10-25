@@ -207,7 +207,7 @@ export class QueueListener {
       state.parties = validParties;
       state.lastUpdate = Date.now();
 
-      await this.evictOfflinePlayers(queueId, state, queue);
+      await this.evictOfflinePlayers(queueId, state, queue, voiceChannel);
 
       if (!state.processing) {
         queuePlayers.set(queueId, [...state.players]);
@@ -229,7 +229,7 @@ export class QueueListener {
     }
   }
 
-  private async evictOfflinePlayers(queueId: string, state: QueueState, queue: QueueLike): Promise<void> {
+  private async evictOfflinePlayers(queueId: string, state: QueueState, queue: QueueLike, voiceChannel?: VoiceBasedChannel): Promise<void> {
     try {
       if (!PresenceService.isConnected() || state.players.length === 0) return;
       const offlineVersion = PresenceService.getOfflineVersion();
@@ -269,7 +269,8 @@ export class QueueListener {
       const guild = this.client.guilds.cache.first();
       for (const userId of evicted) {
         try {
-          const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+          const member = voiceChannel?.members.get(userId)
+            ?? (guild ? await guild.members.fetch(userId).catch(() => null) : null);
           if (member) {
             await this.moveToWaiting({ member } as VoiceState, 'you went offline on the Minecraft server, so you were removed from the queue. Rejoin the server and queue again!');
           }
