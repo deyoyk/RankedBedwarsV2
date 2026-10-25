@@ -18,7 +18,43 @@ export async function gameinfo(interaction: Message | ChatInputCommandInteractio
     await safeReply(interaction, 'Invalid game ID.');
     return;
   }
-  const game = await Game.findOne({ gameId }).select('-timeline').lean();
+  const games = await Game.aggregate([
+    { $match: { gameId } },
+    {
+      $project: {
+        gameId: 1,
+        map: 1,
+        state: 1,
+        isRanked: 1,
+        queueId: 1,
+        startTime: 1,
+        endTime: 1,
+        team1: 1,
+        team2: 1,
+        winners: 1,
+        losers: 1,
+        mvps: 1,
+        bedbreaks: 1,
+        partiesInThisGame: 1,
+        reason: 1,
+        combat: {
+          $map: {
+            input: { $ifNull: ['$combat', []] },
+            as: 'c',
+            in: {
+              player: '$$c.player',
+              kills: '$$c.kills',
+              deaths: '$$c.deaths',
+              damageDealt: '$$c.damageDealt',
+              firstBlood: '$$c.firstBlood',
+              fightCount: { $size: { $ifNull: ['$$c.fights', []] } }
+            }
+          }
+        }
+      }
+    }
+  ]);
+  const game = games[0];
   if (!game) {
     await safeReply(interaction, 'Game not found!');
     return;
@@ -47,7 +83,7 @@ export async function gameinfo(interaction: Message | ChatInputCommandInteractio
         const kills = c.kills || 0;
         const deaths = c.deaths || 0;
         const kd = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
-        const fights = Array.isArray(c.fights) ? c.fights.length : 0;
+        const fights = typeof c.fightCount === 'number' ? c.fightCount : 0;
         return `<@${c.player}> dmg \`${Math.round(c.damageDealt || 0)}\` K/D \`${kills}/${deaths} (${kd})\` fights \`${fights}\``;
       });
     const firstBlood = combat.find((c) => c.firstBlood);
