@@ -34,22 +34,17 @@ export async function forcerename(interaction: Message | ChatInputCommandInterac
   }
 
   try {
-    const existing = await User.findOne({ discordId: targetUser }).select('ign').lean();
-    if (!existing) {
-      await safeReply(interaction, errorEmbed(`User <@${targetUser}> is not registered. Use \`forceregister\` instead.`, '❌ Force Rename Error'));
-      return;
-    }
-
-    const oldIgn = existing.ign;
     const updated = await User.findOneAndUpdate(
       { discordId: targetUser },
       { $set: { ign: newIgn } },
-      { new: true }
-    );
+      { new: false }
+    ).select('ign').lean();
     if (!updated) {
       await safeReply(interaction, errorEmbed(`User <@${targetUser}> is not registered. Use \`forceregister\` instead.`, '❌ Force Rename Error'));
       return;
     }
+
+    const oldIgn = updated.ign;
 
     await safeFix(interaction.guild, targetUser);
 
