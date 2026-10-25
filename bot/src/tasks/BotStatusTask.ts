@@ -16,6 +16,8 @@ export class BotStatusTask {
   private statusImageCdnUrl: string | null = null;
   private lastCpuSample: { idle: number; total: number } | null = null;
   private isUpdating = false;
+  private mongoStatusCache: { at: number; value: { status: string; connection: string; collections: string; dataSize: string; indexSize: string } } | null = null;
+  private static readonly MONGO_STATUS_TTL_MS = 5 * 60 * 1000;
 
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
@@ -219,7 +221,7 @@ export class BotStatusTask {
   private async getQueueStatus() {
     try {
       const Queue = (await import('../models/Queue')).default;
-      const queues = await Queue.find();
+      const queues = await Queue.find().select('isRanked').lean();
       
       const total = queues.length;
       let ranked = 0;
@@ -343,6 +345,10 @@ export class BotStatusTask {
 
   private async getMongoDBStatus() {
     try {
+      const now = Date.now();
+      if (this.mongoStatusCache && now - this.mongoStatusCache.at < BotStatusTask.MONGO_STATUS_TTL_MS) {
+        return this.mongoStatusCache.value;
+      }
       const connectionState = mongoose.connection.readyState;
       const states = ['disconnected', 'connected', 'connecting', 'disconnecting'];
       const status = states[connectionState] || 'unknown';
@@ -356,16 +362,18 @@ export class BotStatusTask {
           dataSize = (stats.dataSize / (1024 * 1024)).toFixed(2) + 'MB';
           indexSize = (stats.indexSize / (1024 * 1024)).toFixed(2) + 'MB';
         } catch {
-          
+
         }
       }
-      return {
+      const value = {
         status: status === 'connected' ? 'online' : status,
         connection: connectionState === 1 ? 'established' : 'failed',
         collections: collections.toString(),
         dataSize,
         indexSize
       };
+      this.mongoStatusCache = { at: now, value };
+      return value;
     } catch {
       return {
         status: 'error',
