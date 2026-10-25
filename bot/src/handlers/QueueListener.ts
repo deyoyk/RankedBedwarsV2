@@ -140,19 +140,26 @@ export class QueueListener {
 
   private async checkAllQueues(): Promise<void> {
     try {
-      const queues = await Queue.find({ isActive: true });
+      const found: any = Queue.find({ isActive: true });
+      const queues = typeof found?.lean === 'function' ? await found.lean() : await found;
 
       for (const queue of queues) {
-        await this.validateQueueState(queue.channelId);
+        await this.validateQueueState(queue.channelId, queue);
       }
     } catch (error) {
       console.error('[QueueListener] Error in queue monitor:', error);
     }
   }
 
-  private async validateQueueState(queueId: string): Promise<void> {
+  private async validateQueueState(queueId: string, preloadedQueue?: QueueLike): Promise<void> {
     try {
-      const queue = await Queue.findOne({ channelId: queueId });
+      let queue = preloadedQueue;
+      if (!queue) {
+        const found: any = Queue.findOne({ channelId: queueId });
+        queue = typeof found?.select === 'function'
+          ? await found.select('channelId maxPlayers minElo maxElo isRanked isPicking queueType bypassRoles').lean()
+          : await found;
+      }
       if (!queue) return;
 
       const state = this.queueStates.get(queueId);
@@ -161,7 +168,7 @@ export class QueueListener {
       const guild = this.client.guilds.cache.first();
       if (!guild) return;
 
-      const voiceChannel = await guild.channels.fetch(queueId).catch(() => null);
+      const voiceChannel = guild.channels.cache?.get(queueId) ?? await guild.channels.fetch(queueId).catch(() => null);
       if (!voiceChannel || !voiceChannel.isVoiceBased()) return;
 
       const playersInVC = new Set(voiceChannel.members.keys());
