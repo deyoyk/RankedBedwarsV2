@@ -45,6 +45,32 @@ interface QueueLike {
   bypassRoles: string[];
 }
 
+interface ValidatedUserDoc {
+  discordId: string;
+  partyId?: string | null;
+  ign?: string;
+  isBanned?: boolean;
+  isFrozen?: boolean;
+  elo?: number;
+}
+
+interface ValidatedPartyDoc {
+  partyId: string;
+  members?: string[];
+}
+
+interface ValidationCtx {
+  userMap: Map<string, ValidatedUserDoc>;
+  partyMap: Map<string, ValidatedPartyDoc>;
+  partyMemberMap: Map<string, ValidatedUserDoc>;
+}
+
+async function resolveLean<T>(query: unknown): Promise<T> {
+  const q = query as { lean?: () => Promise<T> };
+  if (typeof q.lean === 'function') return q.lean();
+  return query as Promise<T>;
+}
+
 export class CentralizedMatchmaker {
   private client: Client;
   private wsManager: WebSocketManager;
@@ -510,35 +536,32 @@ export class CentralizedMatchmaker {
 
       const pendingIds = pendingIndexes.map(i => playerIds[i]);
 
-      let userDocs: any[] = [];
+      let userDocs: ValidatedUserDoc[] = [];
       try {
-        const query: any = User.find({ discordId: { $in: pendingIds } });
-        const docs = typeof query?.lean === 'function' ? await query.lean() : await query;
-        userDocs = docs ?? [];
+        userDocs = (await resolveLean<ValidatedUserDoc[]>(User.find({ discordId: { $in: pendingIds } }))) ?? [];
       } catch (error) {
         console.error('[CentralizedMatchmaker] Error batch-fetching users for validation:', error);
         userDocs = [];
       }
-      const userMap = new Map<string, any>(userDocs.map(u => [u.discordId, u]));
+      const userMap = new Map<string, ValidatedUserDoc>(userDocs.map(u => [u.discordId, u]));
 
       const partyIds = [...new Set(userDocs.map(u => u.partyId).filter(Boolean))];
-      const partyMap = new Map<string, any>();
+      const partyMap = new Map<string, ValidatedPartyDoc>();
       if (partyIds.length > 0) {
         try {
-          const Party = (await import('../models/Party')).default as any;
+          const Party = (await import('../models/Party')).default as unknown as {
+            find: (filter: unknown) => unknown;
+            findOne: (filter: unknown) => unknown;
+          };
           if (typeof Party?.find === 'function') {
-            const partyQuery: any = Party.find({ partyId: { $in: partyIds } });
-            const partyDocs = typeof partyQuery?.lean === 'function'
-              ? await partyQuery.lean()
-              : await partyQuery;
+            const partyDocs = (await resolveLean<ValidatedPartyDoc[]>(Party.find({ partyId: { $in: partyIds } }))) ?? [];
             for (const party of partyDocs ?? []) {
               partyMap.set(party.partyId, party);
             }
           } else {
             const results = await Promise.all(partyIds.map(async pid => {
               try {
-                const q: any = Party.findOne({ partyId: pid });
-                return await (typeof q?.lean === 'function' ? q.lean() : q);
+                return await resolveLean<ValidatedPartyDoc | null>(Party.findOne({ partyId: pid }));
               } catch {
                 return null;
               }
@@ -556,13 +579,10 @@ export class CentralizedMatchmaker {
       const missingMemberIds = [...new Set(
         [...partyMap.values()].flatMap(party => party.members ?? [])
       )].filter(id => !userMap.has(id) && !queuedSet.has(id));
-      const partyMemberMap = new Map<string, any>();
+      const partyMemberMap = new Map<string, ValidatedUserDoc>();
       if (missingMemberIds.length > 0) {
         try {
-          const memberQuery: any = User.find({ discordId: { $in: missingMemberIds } });
-          const memberDocs = typeof memberQuery?.lean === 'function'
-            ? await memberQuery.lean()
-            : await memberQuery;
+          const memberDocs = (await resolveLean<ValidatedUserDoc[]>(User.find({ discordId: { $in: missingMemberIds } }))) ?? [];
           for (const member of memberDocs ?? []) {
             partyMemberMap.set(member.discordId, member);
           }
@@ -638,7 +658,7 @@ export class CentralizedMatchmaker {
     playerId: string,
     queue: QueueLike,
     allPlayersInQueue: string[],
-    ctx: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> },
+    ctx: ValidationCtx,
     checkedParties: Set<string>,
     invalidParties: Set<string>
   ): { decision: 'valid' } | { decision: 'invalid' } | { decision: 'presence'; ign: string } {
@@ -659,7 +679,7 @@ export class CentralizedMatchmaker {
       return { decision: 'invalid' };
     }
 
-    if (user.elo < queue.minElo || user.elo > queue.maxElo) {
+    if (user.elo !== undefined && (user.elo < queue.minElo || user.elo > queue.maxElo)) {
       console.warn(`[CentralizedMatchmaker] User ${playerId} ELO ${user.elo} not in queue range ${queue.minElo}-${queue.maxElo}`);
       return { decision: 'invalid' };
     }
@@ -695,7 +715,7 @@ export class CentralizedMatchmaker {
     partyId: string,
     queue: QueueLike,
     playersInQueue: string[],
-    ctx: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> }
+    ctx: ValidationCtx
   ): { valid: boolean; reason?: string } {
     const party = ctx.partyMap.get(partyId);
 
@@ -734,7 +754,7 @@ export class CentralizedMatchmaker {
         };
       }
 
-      if (member.elo < queue.minElo || member.elo > queue.maxElo) {
+      if (member.elo !== undefined && (member.elo < queue.minElo || member.elo > queue.maxElo)) {
         return {
           valid: false,
           reason: `Party member ${member.discordId} ELO ${member.elo} not in queue range ${queue.minElo}-${queue.maxElo}`
@@ -777,12 +797,12 @@ export class CentralizedMatchmaker {
     allPlayersInQueue: string[],
     checkedParties: Set<string>,
     invalidParties: Set<string>,
-    ctx?: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> }
+    ctx?: ValidationCtx
   ): Promise<boolean> {
     try {
       let user = ctx?.userMap.get(playerId);
       if (!user && !ctx) {
-        user = await User.findOne({ discordId: playerId }).lean();
+        user = (await User.findOne({ discordId: playerId }).lean()) ?? undefined;
       }
 
       if (!user) {
@@ -800,7 +820,7 @@ export class CentralizedMatchmaker {
         return false;
       }
 
-      if (user.elo < queue.minElo || user.elo > queue.maxElo) {
+      if (user.elo !== undefined && (user.elo < queue.minElo || user.elo > queue.maxElo)) {
         console.warn(`[CentralizedMatchmaker] User ${playerId} ELO ${user.elo} not in queue range ${queue.minElo}-${queue.maxElo}`);
         return false;
       }
@@ -853,7 +873,7 @@ export class CentralizedMatchmaker {
     partyId: string,
     queue: QueueLike,
     playersInQueue: string[],
-    ctx?: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> }
+    ctx?: ValidationCtx
   ): Promise<{ valid: boolean; reason?: string }> {
     try {
       if (ctx) {
@@ -900,7 +920,7 @@ export class CentralizedMatchmaker {
           };
         }
 
-        if (member.elo < queue.minElo || member.elo > queue.maxElo) {
+        if (member.elo !== undefined && (member.elo < queue.minElo || member.elo > queue.maxElo)) {
           return { 
             valid: false, 
             reason: `Party member ${member.discordId} ELO ${member.elo} not in queue range ${queue.minElo}-${queue.maxElo}` 

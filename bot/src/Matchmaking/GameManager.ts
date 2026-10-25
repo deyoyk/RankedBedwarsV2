@@ -1510,7 +1510,9 @@ export class GameManager {
           await UserModel.bulkWrite(ops);
         } catch (error) {
           console.error('[GameManager] Error bulk-updating player stats:', error);
-          throw new Error(`Failed to persist ${playerScoreData.length}/${playerScoreData.length} player updates`);
+          const wrapped = new Error(`Failed to persist ${playerScoreData.length}/${playerScoreData.length} player updates`);
+          (wrapped as Error & { cause?: unknown }).cause = error;
+          throw wrapped;
         }
         for (const scoreData of playerScoreData) {
           if (scoreData.leveledUp) {

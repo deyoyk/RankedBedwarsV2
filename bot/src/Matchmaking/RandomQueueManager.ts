@@ -49,7 +49,7 @@ export class RandomQueueManager {
 
       console.log(`[RandomQueue] Processing ${availablePlayers.length} players, max ${maxGames} games`);
 
-      const userDocsById = new Map<string, any>();
+      const userDocsById = new Map<string, { discordId: string; partyId?: string | null; elo: number }>();
       const eloById = new Map<string, number>();
       try {
         const fetched = await User.find({
@@ -171,7 +171,7 @@ export class RandomQueueManager {
   private async selectBalancedTeams(
     players: string[],
     queueData: QueueLike,
-    preloaded?: { userDocsById: Map<string, any>; eloById: Map<string, number> }
+    preloaded?: { userDocsById: Map<string, { discordId: string; partyId?: string | null; elo: number }>; eloById: Map<string, number> }
   ): Promise<TeamBalanceResult> {
     try {
       if (players.length < queueData.maxPlayers) {

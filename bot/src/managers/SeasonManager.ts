@@ -65,7 +65,7 @@ export class SeasonManager {
     return chunks;
   }
 
-  private static buildSeasonStatsDoc(user: any, seasonNumber: number, chapterNumber: number): Record<string, unknown> {
+  private static buildSeasonStatsDoc(user: Record<string, unknown>, seasonNumber: number, chapterNumber: number): Record<string, unknown> {
     return {
       discordId: user.discordId,
       seasonNumber,
@@ -99,8 +99,8 @@ export class SeasonManager {
     };
   }
 
-  private static buildSeasonGameDoc(game: any, seasonNumber: number, chapterNumber: number): Record<string, unknown> {
-    const raw: Record<string, unknown> = game && typeof game.toObject === 'function'
+  private static buildSeasonGameDoc(game: Record<string, unknown> & { toObject?: () => Record<string, unknown> }, seasonNumber: number, chapterNumber: number): Record<string, unknown> {
+    const raw: Record<string, unknown> = typeof game.toObject === 'function'
       ? game.toObject()
       : { ...game };
     delete raw._id;
@@ -108,17 +108,33 @@ export class SeasonManager {
     return { ...raw, seasonNumber, chapterNumber };
   }
 
-  private static isDuplicateKeyError(error: any): boolean {
-    if (!error) return false;
-    if (error.code === 11000) return true;
-    const writeErrors: any[] = Array.isArray(error.writeErrors) ? error.writeErrors : [];
-    return writeErrors.length > 0 && writeErrors.every((e) => (e?.code ?? e?.err?.code) === 11000);
+  private static isDuplicateKeyError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+    const record = error as { code?: unknown; writeErrors?: unknown };
+    if (record.code === 11000) return true;
+    const writeErrors: unknown[] = Array.isArray(record.writeErrors) ? record.writeErrors : [];
+    return writeErrors.length > 0 && writeErrors.every((e) => {
+      const entry = (e ?? {}) as { code?: unknown; err?: { code?: unknown } };
+      return (entry.code ?? entry.err?.code) === 11000;
+    });
   }
 
-  private static async insertManyIdempotent(targetModel: any, docs: Array<Record<string, unknown>>): Promise<number> {
+  private static async resolveFirst<T>(query: unknown, session?: unknown): Promise<T | null> {
+    const q = query as { session?: (s: unknown) => Promise<T | null> };
+    const scoped = q.session;
+    if (session !== undefined && typeof scoped === 'function') return scoped(session);
+    return query as Promise<T | null>;
+  }
+
+  private static async insertManyIdempotent(targetModel: {
+    insertMany?: (docs: Array<Record<string, unknown>>, options?: { ordered: boolean }) => Promise<unknown>;
+  }, docs: Array<Record<string, unknown>>): Promise<number> {
     if (docs.length === 0) return 0;
     try {
-      const inserted: unknown = await targetModel.insertMany(docs, { ordered: false });
+      const writer = targetModel.insertMany;
+      const inserted: unknown = typeof writer === 'function'
+        ? await writer.call(targetModel, docs, { ordered: false })
+        : docs.length;
       return Array.isArray(inserted) ? inserted.length : docs.length;
     } catch (error) {
       if (SeasonManager.isDuplicateKeyError(error)) return docs.length;
@@ -127,16 +143,19 @@ export class SeasonManager {
   }
 
   private static async snapshotCollection(
-    sourceModel: any,
-    targetModel: any,
-    toDoc: (doc: any, seasonNumber: number, chapterNumber: number) => Record<string, unknown>,
+    sourceModel: { find: (filter: Record<string, unknown>) => unknown },
+    targetModel: {
+      insertMany?: (docs: Array<Record<string, unknown>>, options?: { ordered: boolean }) => Promise<unknown>;
+      new (doc: Record<string, unknown>): { save: () => Promise<unknown> };
+    },
+    toDoc: (doc: Record<string, unknown>, seasonNumber: number, chapterNumber: number) => Record<string, unknown>,
     seasonNumber: number,
     chapterNumber: number
   ): Promise<number> {
     const canBulk = typeof targetModel?.insertMany === 'function';
     let migrated = 0;
 
-    const persistBatch = async (batch: any[]): Promise<void> => {
+    const persistBatch = async (batch: Array<Record<string, unknown>>): Promise<void> => {
       const docs = batch
         .map((doc) => toDoc(doc, seasonNumber, chapterNumber))
         .filter((doc) => !!doc);
@@ -155,11 +174,17 @@ export class SeasonManager {
       }
     };
 
-    const query: any = sourceModel.find({});
-    if (query && typeof query.lean === 'function' && typeof query.cursor === 'function') {
-      if (typeof query.batchSize === 'function') query.batchSize(SeasonManager.READ_BATCH_SIZE);
-      const cursor = query.lean().cursor();
-      let batch: any[] = [];
+    const query: unknown = sourceModel.find({});
+    const streamQuery = query as {
+      lean?: () => { cursor: () => AsyncIterable<Record<string, unknown>> };
+      batchSize?: (size: number) => unknown;
+      cursor?: unknown;
+      session?: (arg: undefined) => Promise<unknown>;
+    };
+    if (streamQuery && typeof streamQuery.lean === 'function' && typeof streamQuery.cursor === 'function') {
+      if (typeof streamQuery.batchSize === 'function') streamQuery.batchSize(SeasonManager.READ_BATCH_SIZE);
+      const cursor = streamQuery.lean().cursor();
+      let batch: Array<Record<string, unknown>> = [];
       for await (const doc of cursor) {
         batch.push(doc);
         if (batch.length >= SeasonManager.READ_BATCH_SIZE) {
@@ -172,10 +197,12 @@ export class SeasonManager {
       return migrated;
     }
 
-    const all: any = typeof query?.session === 'function' ? await query.session(undefined) : await query;
-    const arr: any[] = Array.isArray(all) ? all : [];
+    const all: unknown = streamQuery && typeof streamQuery.session === 'function'
+      ? await streamQuery.session(undefined)
+      : await (query as Promise<unknown>);
+    const arr: unknown[] = Array.isArray(all) ? all : [];
     for (const batch of SeasonManager.chunk(arr, SeasonManager.READ_BATCH_SIZE)) {
-      await persistBatch(batch);
+      await persistBatch(batch as Array<Record<string, unknown>>);
     }
     return migrated;
   }
@@ -307,23 +334,21 @@ export class SeasonManager {
 
   public static async endSeason(): Promise<SeasonEndResult> {
     const lookupSession = await mongoose.startSession();
-    let snapshot: { seasonNumber: number; chapterNumber: number; name: string } | null = null;
-    try {
-      const query: any = Season.findOne({ isActive: true });
-      const activeSeason: any = query && typeof query.session === 'function'
-        ? await query.session(lookupSession)
-        : await query;
-      if (!activeSeason) {
-        throw new Error('No active season found to end.');
+    const snapshot = await (async (): Promise<{ seasonNumber: number; chapterNumber: number; name: string } | null> => {
+      try {
+        const activeSeason = await SeasonManager.resolveFirst<{
+          seasonNumber: number; chapterNumber: number; name: string;
+        }>(Season.findOne({ isActive: true }), lookupSession);
+        if (!activeSeason) return null;
+        return {
+          seasonNumber: activeSeason.seasonNumber,
+          chapterNumber: activeSeason.chapterNumber,
+          name: activeSeason.name
+        };
+      } finally {
+        await lookupSession.endSession();
       }
-      snapshot = {
-        seasonNumber: activeSeason.seasonNumber,
-        chapterNumber: activeSeason.chapterNumber,
-        name: activeSeason.name
-      };
-    } finally {
-      await lookupSession.endSession();
-    }
+    })();
     if (!snapshot) {
       throw new Error('No active season found to end.');
     }
@@ -382,10 +407,9 @@ export class SeasonManager {
 
         await Game.deleteMany({ state: { $ne: 'pending' } }, { session });
 
-        const seasonQuery: any = Season.findOne({ seasonNumber, chapterNumber });
-        const seasonInTx: any = seasonQuery && typeof seasonQuery.session === 'function'
-          ? await seasonQuery.session(session)
-          : await seasonQuery;
+        const seasonInTx = await SeasonManager.resolveFirst<{
+          endDate?: Date; isActive?: boolean; save: (opts?: unknown) => Promise<unknown>;
+        }>(Season.findOne({ seasonNumber, chapterNumber }), session);
         if (!seasonInTx) {
           throw new Error('No active season found to end.');
         }

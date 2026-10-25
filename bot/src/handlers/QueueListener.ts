@@ -37,6 +37,7 @@ interface QueueLike {
   maxPlayers: number;
   minElo: number;
   maxElo: number;
+  isActive?: boolean;
   isRanked?: boolean;
   isPicking?: boolean;
   queueType?: string;
@@ -44,6 +45,16 @@ interface QueueLike {
 }
 
 type QueueUserBadge = Pick<IUser, 'discordId' | 'ign' | 'partyId'>;
+
+async function resolveQuery<T>(query: unknown, selectFields?: string): Promise<T> {
+  const q = query as {
+    select?: (fields: string) => { lean: () => Promise<T> };
+    lean?: () => Promise<T>;
+  };
+  if (selectFields && typeof q.select === 'function') return q.select(selectFields).lean();
+  if (typeof q.lean === 'function') return q.lean();
+  return q as unknown as Promise<T>;
+}
 
 export class QueueListener {
   private client: Client;
@@ -140,8 +151,7 @@ export class QueueListener {
 
   private async checkAllQueues(): Promise<void> {
     try {
-      const found: any = Queue.find({ isActive: true });
-      const queues = typeof found?.lean === 'function' ? await found.lean() : await found;
+      const queues = await resolveQuery<QueueLike[]>(Queue.find({ isActive: true }));
 
       for (const queue of queues) {
         await this.validateQueueState(queue.channelId, queue);
@@ -153,12 +163,12 @@ export class QueueListener {
 
   private async validateQueueState(queueId: string, preloadedQueue?: QueueLike): Promise<void> {
     try {
-      let queue = preloadedQueue;
+      let queue: QueueLike | null = preloadedQueue ?? null;
       if (!queue) {
-        const found: any = Queue.findOne({ channelId: queueId });
-        queue = typeof found?.select === 'function'
-          ? await found.select('channelId maxPlayers minElo maxElo isRanked isPicking queueType bypassRoles').lean()
-          : await found;
+        queue = await resolveQuery<QueueLike | null>(
+          Queue.findOne({ channelId: queueId }),
+          'channelId maxPlayers minElo maxElo isRanked isPicking queueType bypassRoles'
+        );
       }
       if (!queue) return;
 
@@ -363,10 +373,10 @@ export class QueueListener {
 
   private async handleQueueJoin(state: VoiceState): Promise<void> {
     try {
-      const foundQueue: any = Queue.findOne({ channelId: state.channelId });
-      const queue = typeof foundQueue?.select === 'function'
-        ? await foundQueue.select('channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles').lean()
-        : await foundQueue;
+      const queue = await resolveQuery<QueueLike | null>(
+        Queue.findOne({ channelId: state.channelId }),
+        'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
+      );
       if (!queue || queue.isActive === false) {
         await this.moveToWaiting(state, 'This queue is currently disabled.');
         return;
@@ -375,10 +385,10 @@ export class QueueListener {
       const userId = state.member?.id;
       if (!userId) return;
 
-      const foundUser: any = User.findOne({ discordId: userId });
-      const user = typeof foundUser?.select === 'function'
-        ? await foundUser.select('discordId ign partyId elo isBanned isFrozen').lean()
-        : await foundUser;
+      const user = await resolveQuery<Pick<IUser, 'discordId' | 'ign' | 'partyId' | 'elo' | 'isBanned' | 'isFrozen'> | null>(
+        User.findOne({ discordId: userId }),
+        'discordId ign partyId elo isBanned isFrozen'
+      );
       if (!user) {
         await this.moveToWaiting(state, 'you are not registered. Please register to participate. Maybe `/update`?');
         return;
@@ -577,10 +587,10 @@ export class QueueListener {
 
   private async handleQueueLeave(state: VoiceState): Promise<void> {
     try {
-      const foundQueue: any = Queue.findOne({ channelId: state.channelId });
-      const queue = typeof foundQueue?.select === 'function'
-        ? await foundQueue.select('channelId maxPlayers isActive').lean()
-        : await foundQueue;
+      const queue = await resolveQuery<QueueLike | null>(
+        Queue.findOne({ channelId: state.channelId }),
+        'channelId maxPlayers isActive'
+      );
       if (!queue || queue.isActive === false) {
 
         return;
@@ -589,10 +599,10 @@ export class QueueListener {
       const userId = state.member?.id;
       if (!userId) return;
 
-      const foundUser: any = User.findOne({ discordId: userId });
-      const user = typeof foundUser?.select === 'function'
-        ? await foundUser.select('discordId partyId').lean()
-        : await foundUser;
+      const user = await resolveQuery<Pick<IUser, 'discordId' | 'partyId'> | null>(
+        User.findOne({ discordId: userId }),
+        'discordId partyId'
+      );
       if (!user) return;
 
       const queueState = this.queueStates.get(queue.channelId);
