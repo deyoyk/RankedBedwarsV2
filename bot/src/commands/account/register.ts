@@ -56,8 +56,15 @@ export async function register(interaction: Message | ChatInputCommandInteractio
       .setStyle(ButtonStyle.Primary);
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
     const sentMessage = await safeReply(interaction, { embeds: [embedObj.builder], components: [row], fetchReply: true });
+    const replyMsg = sentMessage as unknown as Message;
     const filter = (i: ButtonInteraction) => i.customId === 'register_button' && i.user.id === discordId;
-    const collector = interaction.channel?.createMessageComponentCollector({ componentType: ComponentType.Button, filter, time: 60000, max: 1 });
+    const collector = replyMsg?.createMessageComponentCollector({ componentType: ComponentType.Button, filter, time: 60000, max: 1 });
+    collector?.on('end', async () => {
+      const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId('register_button').setLabel('Complete Registration').setStyle(ButtonStyle.Primary).setDisabled(true)
+      );
+      await replyMsg?.edit({ components: [disabledRow] }).catch(() => undefined);
+    });
     collector?.on('collect', async (btnInt: ButtonInteraction) => {
       const modal = new ModalBuilder()
         .setCustomId('register_modal')
