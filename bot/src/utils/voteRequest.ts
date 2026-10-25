@@ -64,9 +64,10 @@ export function setupVoteCollector(
   onVote: (userId: string, customId: string) => void,
   timeMs = 15 * 60 * 1000
 ) {
+  const eligible = new Set(eligiblePlayers);
   const collector = message.createMessageComponentCollector({
     time: timeMs,
-    filter: (i: MessageComponentInteraction) => eligiblePlayers.includes(i.user.id)
+    filter: (i: MessageComponentInteraction) => eligible.has(i.user.id)
   });
 
   collector.on('collect', async (buttonInteraction: MessageComponentInteraction) => {
