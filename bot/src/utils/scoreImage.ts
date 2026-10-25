@@ -14,12 +14,18 @@ type PlayerLine = {
 };
 
 async function toTemplatePlayer(player: PlayerLine): Promise<ScoreTemplatePlayer> {
-  const avatar = await Promise.race([
-    loadAvatarDataUrl(player.username),
-    new Promise<string>((resolve) =>
-      setTimeout(() => resolve(staticImageDataUrl('fallbacks', 'steve.png')), 1500)
-    )
-  ]).catch(() => staticImageDataUrl('fallbacks', 'steve.png'));
+  let timer: NodeJS.Timeout | undefined;
+  const fallback = new Promise<string>((resolve) => {
+    timer = setTimeout(() => resolve(staticImageDataUrl('fallbacks', 'steve.png')), 1500);
+  });
+  let avatar: string;
+  try {
+    avatar = await Promise.race([loadAvatarDataUrl(player.username), fallback]);
+  } catch {
+    avatar = staticImageDataUrl('fallbacks', 'steve.png');
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
   return {
     username: player.username,
     elo_before: player.elo_before ?? player.oldElo ?? 0,
