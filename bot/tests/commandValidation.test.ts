@@ -10,7 +10,6 @@ import { lose } from '../src/commands/scoring/lose';
 import { executeModerationAction } from '../src/utils/modCommands';
 import { CommandHandler } from '../src/handlers/CommandHandler';
 import { parseDiscordId, isValidIgn } from '../src/utils/inputValidation';
-import { escapeRegex } from '../src/utils/regexEscape';
 
 jest.mock('../src/models/User', () => ({
   __esModule: true,
@@ -133,18 +132,23 @@ describe('forceregister and forcerename validation', () => {
     expect(UserModel.findOne).not.toHaveBeenCalled();
   });
 
-  it('escapes regex metacharacters in the IGN lookup', async () => {
-    expect(escapeRegex('a.c')).toBe('a\\.c');
-    UserModel.findOne.mockImplementation(async (query: any) => {
-      if (query.ign) {
-        expect(query.ign.$options).toBe('i');
-        return null;
-      }
-      return mockUser();
+  it('uses a collated exact match for the IGN lookup', async () => {
+    const seen: Array<{ query: any; chain: any }> = [];
+    UserModel.findOne.mockImplementation((query: any) => {
+      const chain = {
+        collation: jest.fn().mockReturnThis(),
+        select: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockResolvedValue(query.ign ? null : mockUser())
+      };
+      seen.push({ query, chain });
+      return chain as any;
     });
+    UserModel.findOneAndUpdate.mockResolvedValue(mockUser());
     const interaction = message();
     await forceregister(interaction, ['<@123456789012345678>', 'abc']);
-    expect(UserModel.findOne).toHaveBeenCalled();
+    expect(UserModel.findOne).toHaveBeenCalledWith({ ign: 'abc', discordId: { $ne: '123456789012345678' } });
+    const ignCall = seen.find(s => s.query.ign);
+    expect(ignCall?.chain.collation).toHaveBeenCalledWith({ locale: 'en', strength: 2 });
   });
 
   it('forcerename rejects invalid ids and IGNs', async () => {

@@ -3,7 +3,6 @@ import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
-import { escapeRegex } from '../../utils/regexEscape';
 import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
 
 
@@ -36,7 +35,7 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
 
   try {
     
-    const ignTaken = await User.findOne({ ign: { $regex: `^${escapeRegex(ign)}$`, $options: 'i' }, discordId: { $ne: targetUser } });
+    const ignTaken = await User.findOne({ ign, discordId: { $ne: targetUser } }).collation({ locale: 'en', strength: 2 }).select('_id').lean();
     if (ignTaken) {
       await safeReply(interaction, errorEmbed('This IGN is already registered to another user.', 'Force Register Error'));
       return;
