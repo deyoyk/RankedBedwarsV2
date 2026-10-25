@@ -161,22 +161,31 @@ export class ScreenshareService {
       const sessionId = this.generateSessionId();
       const expireTime = new Date(Date.now() + this.SESSION_TIMEOUT);
 
-      const session = await ScreenshareSession.create({
-        sessionId,
-        targetId,
-        targetIgn: targetUser.ign,
-        requesterId,
-        reason: reason.trim(),
-        imageUrl,
-        status: 'pending',
-        expireTime,
-        actions: [{
-          action: 'freeze',
-          userId: requesterId,
-          timestamp: new Date(),
-          context: 'Session created'
-        }]
-      });
+      let session;
+      try {
+        session = await ScreenshareSession.create({
+          sessionId,
+          targetId,
+          targetIgn: targetUser.ign,
+          requesterId,
+          reason: reason.trim(),
+          imageUrl,
+          status: 'pending',
+          expireTime,
+          actions: [{
+            action: 'freeze',
+            userId: requesterId,
+            timestamp: new Date(),
+            context: 'Session created'
+          }]
+        });
+      } catch (createError) {
+        const code = (createError as { code?: unknown })?.code;
+        if (code === 11000) {
+          return { success: false, error: 'Target user already has an active screenshare session' };
+        }
+        throw createError;
+      }
 
       
       let dontlogResult = { online: false, dontlog: false };
@@ -216,8 +225,13 @@ export class ScreenshareService {
 
       
       if (new Date() > session.expireTime) {
-        session.status = 'expired';
-        await session.save();
+        await ScreenshareSession.updateOne(
+          { sessionId: session.sessionId, status: 'pending' },
+          {
+            $set: { status: 'expired' },
+            $push: { actions: { action: 'expire', userId: 'system', timestamp: new Date() } }
+          }
+        );
         return { success: false, error: 'Session has expired' };
       }
 
@@ -265,18 +279,36 @@ export class ScreenshareService {
       }
 
       
-      session.status = 'frozen';
-      session.freezeTime = new Date();
-      session.channelId = channel.id;
-      session.expireTime = new Date(Date.now() + this.FREEZE_TIMEOUT); 
-      session.actions.push({
-        action: 'freeze',
-        userId: moderatorId,
-        timestamp: new Date(),
-        context: `Frozen by moderator, channel created: ${channel.name}`
-      });
+      const frozen = await ScreenshareSession.findOneAndUpdate(
+        { sessionId: session.sessionId, status: 'pending' },
+        {
+          $set: {
+            status: 'frozen',
+            freezeTime: new Date(),
+            channelId: channel.id,
+            expireTime: new Date(Date.now() + this.FREEZE_TIMEOUT)
+          },
+          $push: {
+            actions: {
+              action: 'freeze',
+              userId: moderatorId,
+              timestamp: new Date(),
+              context: `Frozen by moderator, channel created: ${channel.name}`
+            }
+          }
+        },
+        { new: true }
+      );
 
-      await session.save();
+      if (!frozen) {
+        await this.cleanupSession(guild, {
+          sessionId: session.sessionId,
+          targetId: session.targetId,
+          targetIgn: session.targetIgn,
+          channelId: channel.id
+        } as IScreenshareSession);
+        return { success: false, error: 'Session is no longer pending' };
+      }
 
       console.log(`[ScreenshareService] Frozen session ${session.sessionId}, created channel ${channel.name}`);
       return { success: true, channel };
@@ -293,26 +325,23 @@ export class ScreenshareService {
     context?: string
   ): Promise<ScreenshareCloseResult> {
     try {
-      const session = await ScreenshareSession.findOne({ sessionId });
-      if (!session) {
-        return { success: false, error: 'Session not found' };
-      }
-
-      if (session.status === 'closed' || session.status === 'expired') {
+      const closed = await ScreenshareSession.findOneAndUpdate(
+        { sessionId, status: { $nin: ['closed', 'expired'] } },
+        {
+          $set: { status: 'closed' },
+          $push: { actions: { action: 'close', userId, timestamp: new Date(), context } }
+        },
+        { new: true }
+      );
+      if (!closed) {
+        const existing = await ScreenshareSession.findOne({ sessionId });
+        if (!existing) {
+          return { success: false, error: 'Session not found' };
+        }
         return { success: false, error: 'Session already closed or expired' };
       }
 
-      session.status = 'closed';
-      session.actions.push({
-        action: 'close',
-        userId,
-        timestamp: new Date(),
-        context
-      });
-
-      await session.save();
-
-      await this.cleanupSession(guild, session);
+      await this.cleanupSession(guild, closed);
 
       return { success: true };
     } catch (error) {
@@ -327,23 +356,27 @@ export class ScreenshareService {
       const sessions = await ScreenshareSession.find({
         status: { $in: ['pending', 'frozen'] },
         expireTime: { $lte: now }
-      });
+      }).select('sessionId targetId targetIgn channelId').lean();
+
+      if (sessions.length === 0) return 0;
+
+      const expireAction = {
+        action: 'expire' as const,
+        userId: 'system',
+        timestamp: now
+      };
+      await ScreenshareSession.bulkWrite(sessions.map((session) => ({
+        updateOne: {
+          filter: { sessionId: session.sessionId, status: { $in: ['pending', 'frozen'] } },
+          update: { $set: { status: 'expired' }, $push: { actions: expireAction } }
+        }
+      })));
 
       for (const session of sessions) {
-        session.status = 'expired';
-        session.actions.push({
-          action: 'expire',
-          userId: 'system',
-          timestamp: now
-        });
-
-        await session.save();
-        await this.cleanupSession(guild, session);
+        await this.cleanupSession(guild, session as unknown as IScreenshareSession);
       }
 
-      if (sessions.length > 0) {
-        console.log(`[ScreenshareService] Expired ${sessions.length} screenshare sessions`);
-      }
+      console.log(`[ScreenshareService] Expired ${sessions.length} screenshare sessions`);
       return sessions.length;
     } catch (error) {
       console.error('[ScreenshareService] Error expiring sessions:', error);

@@ -46,5 +46,9 @@ ScreenshareSessionSchema.index({ targetId: 1, status: 1 });
 ScreenshareSessionSchema.index({ requesterId: 1, status: 1 });
 ScreenshareSessionSchema.index({ status: 1, expireTime: 1 });
 ScreenshareSessionSchema.index({ channelId: 1 }, { sparse: true });
+ScreenshareSessionSchema.index(
+  { targetId: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ['pending', 'frozen'] } } }
+);
 
 export default mongoose.model<IScreenshareSession>('ScreenshareSession', ScreenshareSessionSchema);
