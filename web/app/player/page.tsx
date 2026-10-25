@@ -51,21 +51,20 @@ function PlayerInner() {
         return;
       }
       try {
-        const overview = await apiGet<Overview>(`/rbw/api/user/${discordId}/overview`, { ttl: 30000 });
+        const overviewPromise = apiGet<Overview>(`/rbw/api/user/${discordId}/overview`, { ttl: 30000 });
+        const ranksPromise = apiGet<Array<{ startElo: number; endElo: number; roleName?: string; roleColor?: string }>>('/rbw/api/eloranks', { ttl: 60000 }).catch(() => null);
+        const overview = await overviewPromise;
         if (!alive) return;
         const p = overview.profile;
         document.title = `${p.ign} — Ranked Bedwars`;
 
         let rankName: string | null = null;
         let rankColor: string | null = null;
-        try {
-          const ranks = await apiGet<Array<{ startElo: number; endElo: number; roleName?: string; roleColor?: string }>>('/rbw/api/eloranks', { ttl: 60000 });
-          const match = ranks.find((r) => (p.elo as number) >= r.startElo && (p.elo as number) <= r.endElo);
-          if (match) {
-            rankName = match.roleName || null;
-            rankColor = match.roleColor || null;
-          }
-        } catch {
+        const ranks = await ranksPromise;
+        const match = ranks?.find((r) => (p.elo as number) >= r.startElo && (p.elo as number) <= r.endElo);
+        if (match) {
+          rankName = match.roleName || null;
+          rankColor = match.roleColor || null;
         }
 
         const level = (p as Record<string, { level?: number }>).levelInfo?.level ?? (p.level as number | undefined) ?? 1;
