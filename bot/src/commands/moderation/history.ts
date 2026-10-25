@@ -24,32 +24,16 @@ export async function history(interaction: Message | ChatInputCommandInteraction
   let historyType: string;
   let preloadedUser: HistoryUserView | null = null;
 
+  let userInput: string | null = null;
+
   if (interaction instanceof ChatInputCommandInteraction) {
     discordId = interaction.options.getString('user_id', true);
     historyType = interaction.options.getString('type', true).toLowerCase();
   } else {
     if (args && args.length >= 2) {
-      const userInput = args[0];
+      userInput = args[0];
       discordId = userInput.replace(/[<@!>]/g, '');
       historyType = args[1].toLowerCase();
-
-      const isIdLike = /^<@!?\d+>$/.test(userInput) || /^\d+$/.test(userInput);
-      const user = isIdLike
-        ? await User.findOne({ discordId }).select('discordId bans mutes strikes').lean()
-        : await User.findOne({ ign: userInput }).collation({ locale: 'en', strength: 2 }).select('discordId bans mutes strikes').lean();
-
-      if (!user) {
-        const embed = new EmbedBuilder()
-          .setColor('#00AAAA')
-          .setTitle('History Not Found')
-          .setDescription('No user found with the specified ID, mention, or IGN.')
-          .setTimestamp();
-        await safeReply(interaction, { embeds: [embed] });
-        return;
-      }
-
-      discordId = user.discordId;
-      preloadedUser = user;
     } else {
       const embed = new EmbedBuilder()
         .setColor('#00AAAA')
@@ -61,24 +45,40 @@ export async function history(interaction: Message | ChatInputCommandInteraction
     }
   }
 
+  if (!['ban', 'mute', 'strike'].includes(historyType)) {
+    await safeReply(interaction, errorEmbed('Valid types are: `ban`, `mute`, `strike`.', 'Invalid History Type'));
+    return;
+  }
+  const recordsField = historyType === 'ban' ? 'bans' : historyType === 'mute' ? 'mutes' : 'strikes';
+
+  if (userInput !== null) {
+    const isIdLike = /^<@!?\d+>$/.test(userInput) || /^\d+$/.test(userInput);
+    const user = isIdLike
+      ? await User.findOne({ discordId }).select(`discordId ${recordsField}`).lean()
+      : await User.findOne({ ign: userInput }).collation({ locale: 'en', strength: 2 }).select(`discordId ${recordsField}`).lean();
+
+    if (!user) {
+      const embed = new EmbedBuilder()
+        .setColor('#00AAAA')
+        .setTitle('History Not Found')
+        .setDescription('No user found with the specified ID, mention, or IGN.')
+        .setTimestamp();
+      await safeReply(interaction, { embeds: [embed] });
+      return;
+    }
+
+    discordId = user.discordId;
+    preloadedUser = user;
+  }
+
   try {
-    const user = preloadedUser ?? await User.findOne({ discordId }).select('discordId bans mutes strikes').lean();
+    const user = preloadedUser ?? await User.findOne({ discordId }).select(`discordId ${recordsField}`).lean();
     if (!user) {
       await safeReply(interaction, errorEmbed('No user found with the specified ID.', 'History Not Found'));
       return;
     }
 
-    let historyItems;
-    if (historyType === 'ban') {
-      historyItems = user.bans;
-    } else if (historyType === 'mute') {
-      historyItems = user.mutes;
-    } else if (historyType === 'strike') {
-      historyItems = user.strikes;
-    } else {
-      await safeReply(interaction, errorEmbed('Valid types are: `ban`, `mute`, `strike`.', 'Invalid History Type'));
-      return;
-    }
+    const historyItems = user[recordsField];
 
     if (historyItems.length === 0) {
       await safeReply(interaction, successEmbed(`No ${historyType}s found for <@${discordId}>.`, 'No History Found'));
