@@ -1,6 +1,7 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import Queue from '../../models/Queue';
+import { queuePlayers } from '../../types/queuePlayersMemory';
 import { safeReply } from '../../utils/safeReply';
 
 
@@ -24,6 +25,8 @@ export async function removequeue(interaction: Message | ChatInputCommandInterac
       await safeReply(interaction, errorEmbed('No queue found with the specified channel ID.', 'Queue Removal Error'));
       return;
     }
+
+    queuePlayers.delete(channelId);
 
     const embed = successEmbed('The queue has been successfully removed!', 'Queue Removed');
     embed.builder.addFields(

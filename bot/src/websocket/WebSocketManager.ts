@@ -409,6 +409,12 @@ export class WebSocketManager {
   }
 
   public registerScreenshareThread(info: { ign: string; sessionId: string; threadId: string; expiresAt: number }): void {
+    const now = Date.now();
+    for (const key of Object.keys(activeScreenshareThreads)) {
+      if (activeScreenshareThreads[key].expiresAt <= now) {
+        delete activeScreenshareThreads[key];
+      }
+    }
     activeScreenshareThreads[info.ign.toLowerCase()] = info;
   }
 
@@ -632,6 +638,10 @@ export class WebSocketManager {
     }
     const ignKey = msg.ign?.toLowerCase();
     const threadInfo = ignKey ? activeScreenshareThreads[ignKey] : undefined;
+    if (ignKey && threadInfo && Date.now() >= threadInfo.expiresAt) {
+      delete activeScreenshareThreads[ignKey];
+      return;
+    }
     if (threadInfo && Date.now() < threadInfo.expiresAt) {
       try {
         const guild = this.discordClient?.guilds.cache.first();
