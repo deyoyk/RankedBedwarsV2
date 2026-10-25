@@ -893,12 +893,20 @@ export class GameManager {
 
       setTimeout(async () => {
         try {
+          const deletions: Array<Promise<unknown>> = [];
           if (resources.gameChannel) {
-            await this.workersManager.deleteChannel(resources.gameChannel.id, 2);
+            deletions.push(this.workersManager.deleteChannel(resources.gameChannel.id, 2));
           }
           if (resources.pickingChannel) {
-            await this.workersManager.deleteChannel(resources.pickingChannel.id, 2);
+            deletions.push(this.workersManager.deleteChannel(resources.pickingChannel.id, 2));
           }
+          if (resources.team1Voice) {
+            deletions.push(this.workersManager.deleteChannel(resources.team1Voice.id, 2));
+          }
+          if (resources.team2Voice) {
+            deletions.push(this.workersManager.deleteChannel(resources.team2Voice.id, 2));
+          }
+          await Promise.allSettled(deletions);
         } catch (error) {
           console.error(`[GameManager] Error cleaning up channels for game ${gameId}:`, error);
         } finally {
