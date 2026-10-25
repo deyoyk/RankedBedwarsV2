@@ -498,7 +498,10 @@ export class QueueListener {
       let partyMembers = this.partyCache.get(partyId)?.members;
 
       if (!partyMembers) {
-        const party = await Party.findOne({ partyId });
+        const party = await resolveQuery<{ partyId: string; members?: string[] } | null>(
+          Party.findOne({ partyId }),
+          'partyId members'
+        );
         if (!party || !party.members) {
           await this.moveToWaiting(state, 'Invalid party');
           return { success: false };
@@ -520,13 +523,16 @@ export class QueueListener {
         discordId: { $in: partyMembers }
       }).select('discordId elo isBanned isFrozen').lean();
 
-      const activeGamePromise = Game.findOne({
-        $or: [
-          { team1: { $in: partyMembers } },
-          { team2: { $in: partyMembers } }
-        ],
-        state: { $in: ['pending', 'active'] }
-      });
+      const activeGamePromise = resolveQuery<{ gameId: number } | null>(
+        Game.findOne({
+          $or: [
+            { team1: { $in: partyMembers } },
+            { team2: { $in: partyMembers } }
+          ],
+          state: { $in: ['pending', 'active'] }
+        }),
+        'gameId'
+      );
 
       const [partyUsers, activeGame] = await Promise.all([partyUsersPromise, activeGamePromise]);
 
