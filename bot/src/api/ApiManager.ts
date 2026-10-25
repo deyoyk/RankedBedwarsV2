@@ -647,28 +647,30 @@ export class ApiManager {
 
   private getEloRanks = async (req: Request, res: Response): Promise<void> => {
     try {
-      const eloranks = await EloRank.find().lean();
-      const guild = this.client.guilds.cache.first();
-      const rolesMap: Record<string, { name: string, color: string | null }> = {};
-      if (guild) {
-        const roles = await guild.roles.fetch();
-        if (roles) {
-          roles.forEach(role => {
-            if (role) rolesMap[role.id] = { name: role.name, color: role.hexColor };
-          });
+      const result = await this.getCached('eloranks', 60000, async () => {
+        const eloranks = await EloRank.find().lean();
+        const guild = this.client.guilds.cache.first();
+        const rolesMap: Record<string, { name: string, color: string | null }> = {};
+        if (guild) {
+          const roles = guild.roles.cache.size > 0 ? guild.roles.cache : await guild.roles.fetch();
+          if (roles) {
+            roles.forEach(role => {
+              if (role) rolesMap[role.id] = { name: role.name, color: role.hexColor };
+            });
+          }
         }
-      }
-      const result = eloranks.map(r => ({
-        roleId: r.roleId,
-        roleName: rolesMap[r.roleId]?.name || null,
-        roleColor: rolesMap[r.roleId]?.color || null,
-        startElo: r.startElo,
-        endElo: r.endElo,
-        mvpElo: r.mvpElo,
-        winElo: r.winElo,
-        loseElo: r.loseElo,
-        bedElo: r.bedElo
-      }));
+        return eloranks.map(r => ({
+          roleId: r.roleId,
+          roleName: rolesMap[r.roleId]?.name || null,
+          roleColor: rolesMap[r.roleId]?.color || null,
+          startElo: r.startElo,
+          endElo: r.endElo,
+          mvpElo: r.mvpElo,
+          winElo: r.winElo,
+          loseElo: r.loseElo,
+          bedElo: r.bedElo
+        }));
+      });
       res.json(result);
     } catch (error) {
       console.error('Error fetching eloranks:', error);
@@ -1645,41 +1647,45 @@ export class ApiManager {
   private getUserWinstreakHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-      const data = await this.fetchUserWithGameHistory(discordid, 50);
-      if (!data) {
+      const response = await this.getCached(`userWinstreakHistory:${discordid}`, 10000, async () => {
+        const data = await this.fetchUserWithGameHistory(discordid, 50);
+        if (!data) return null;
+        const { user, recentGames } = data;
+
+        const winstreakHistory = [];
+        let currentStreak = 0;
+        let maxStreak = 0;
+
+        for (const game of recentGames.reverse()) {
+          const won = game.winners.includes(discordid);
+          if (won) {
+            currentStreak++;
+            maxStreak = Math.max(maxStreak, currentStreak);
+          } else {
+            if (currentStreak > 0) {
+              winstreakHistory.push({
+                streak: currentStreak,
+                endedAt: game.startTime,
+                gameId: game.gameId
+              });
+            }
+            currentStreak = 0;
+          }
+        }
+
+        return {
+          ign: user.ign,
+          discordId: user.discordId,
+          currentWinstreak: (user.winStreak ?? (user as unknown as { winstreak?: number }).winstreak) || 0,
+          maxWinstreakInHistory: maxStreak,
+          recentWinstreaks: winstreakHistory.slice(-10)
+        };
+      });
+      if (!response) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-      const { user, recentGames } = data;
-
-      const winstreakHistory = [];
-      let currentStreak = 0;
-      let maxStreak = 0;
-
-      for (const game of recentGames.reverse()) {
-        const won = game.winners.includes(discordid);
-        if (won) {
-          currentStreak++;
-          maxStreak = Math.max(maxStreak, currentStreak);
-        } else {
-          if (currentStreak > 0) {
-            winstreakHistory.push({
-              streak: currentStreak,
-              endedAt: game.startTime,
-              gameId: game.gameId
-            });
-          }
-          currentStreak = 0;
-        }
-      }
-
-      res.json({
-        ign: user.ign,
-        discordId: user.discordId,
-        currentWinstreak: (user.winStreak ?? (user as unknown as { winstreak?: number }).winstreak) || 0,
-        maxWinstreakInHistory: maxStreak,
-        recentWinstreaks: winstreakHistory.slice(-10)
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user winstreak history:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -1690,35 +1696,39 @@ export class ApiManager {
   private getUserEloHistory = async (req: Request, res: Response): Promise<void> => {
     try {
       const { discordid } = req.params;
-      const user = await User.findOne({ discordId: discordid }).lean();
-      if (!user) {
+      const response = await this.getCached(`userEloHistory:${discordid}`, 10000, async () => {
+        const user = await User.findOne({ discordId: discordid }).lean();
+        if (!user) return null;
+
+        const recentGames = (user.recentGames || []).slice(0, 20);
+        const eloHistory = recentGames.map((game) => {
+          const g = game as typeof game & { oldElo?: number; newElo?: number };
+          const before = typeof g.elo_before === 'number' ? g.elo_before : (typeof g.oldElo === 'number' ? g.oldElo : null);
+          const after = typeof g.elo_after === 'number' ? g.elo_after : (typeof g.newElo === 'number' ? g.newElo : null);
+          return {
+            gameId: game.gameId,
+            date: game.date,
+            won: game.won,
+            eloChange: typeof game.eloGain === 'number' ? game.eloGain : null,
+            elo_before: before,
+            elo_after: after,
+            oldElo: before,
+            newElo: after
+          };
+        });
+
+        return {
+          ign: user.ign,
+          discordId: user.discordId,
+          currentElo: user.elo,
+          recentGames: eloHistory
+        };
+      });
+      if (!response) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      const recentGames = (user.recentGames || []).slice(0, 20);
-      const eloHistory = recentGames.map((game) => {
-        const g = game as typeof game & { oldElo?: number; newElo?: number };
-        const before = typeof g.elo_before === 'number' ? g.elo_before : (typeof g.oldElo === 'number' ? g.oldElo : null);
-        const after = typeof g.elo_after === 'number' ? g.elo_after : (typeof g.newElo === 'number' ? g.newElo : null);
-        return {
-          gameId: game.gameId,
-          date: game.date,
-          won: game.won,
-          eloChange: typeof game.eloGain === 'number' ? game.eloGain : null,
-          elo_before: before,
-          elo_after: after,
-          oldElo: before,
-          newElo: after
-        };
-      });
-
-      res.json({
-        ign: user.ign,
-        discordId: user.discordId,
-        currentElo: user.elo,
-        recentGames: eloHistory
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user ELO history:', error);
       res.status(500).json({ error: 'Internal server error' });
