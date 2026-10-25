@@ -49,7 +49,7 @@ async function parseRecentGamesRequest(interaction: Message | ChatInputCommandIn
   return { page, gamesPerPage: 15, userFilter, requesterId };
 }
 
-async function findUser(data: RecentGamesData): Promise<IUser | null> {
+async function findUser(data: RecentGamesData): Promise<RecentGamesUser | null> {
   if (data.userFilter) {
     return await User.findOne({
       $or: [
@@ -57,13 +57,15 @@ async function findUser(data: RecentGamesData): Promise<IUser | null> {
         { ign: data.userFilter },
         { discordId: data.userFilter.replace(/[<@!>]/g, '') }
       ]
-    });
+    }).select('discordId ign recentGames').lean();
   } else {
-    return await User.findOne({ discordId: data.requesterId });
+    return await User.findOne({ discordId: data.requesterId }).select('discordId ign recentGames').lean();
   }
 }
 
-async function displayRecentGames(interaction: Message | ChatInputCommandInteraction, user: IUser, data: RecentGamesData) {
+type RecentGamesUser = Pick<IUser, 'discordId' | 'ign' | 'recentGames'>;
+
+async function displayRecentGames(interaction: Message | ChatInputCommandInteraction, user: RecentGamesUser, data: RecentGamesData) {
   if (!user.recentGames || user.recentGames.length === 0) {
     const embed = createNoGamesEmbed(data.userFilter);
     await safeReply(interaction, { embeds: [embed] });
@@ -96,7 +98,7 @@ function createNoGamesEmbed(userFilter?: string): EmbedBuilder {
   return embed;
 }
 
-function createRecentGamesEmbed(user: IUser, games: IRecentGame[], currentPage: number, totalPages: number, startIndex: number, endIndex: number): EmbedBuilder {
+function createRecentGamesEmbed(user: RecentGamesUser, games: IRecentGame[], currentPage: number, totalPages: number, startIndex: number, endIndex: number): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setTitle(`Recent Games - ${user.ign || user.discordId}`)
     .setDescription(`Showing games ${startIndex + 1}-${endIndex} of ${user.recentGames.length}`)
@@ -183,7 +185,7 @@ function createPaginationComponents(currentPage: number, totalPages: number): Ac
   return [row];
 }
 
-async function setupPaginationCollector(interaction: Message | ChatInputCommandInteraction, user: IUser, data: RecentGamesData, totalPages: number) {
+async function setupPaginationCollector(interaction: Message | ChatInputCommandInteraction, user: RecentGamesUser, data: RecentGamesData, totalPages: number) {
   const collector = interaction.channel?.createMessageComponentCollector({ 
     time: 300000,
     filter: (i) => i.user.id === data.requesterId

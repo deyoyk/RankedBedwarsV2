@@ -6,7 +6,7 @@ import { safeReply } from '../../utils/safeReply';
 export async function execute(interaction: ChatInputCommandInteraction) {
     try {
         const targetUser = interaction.options.getUser('user') || interaction.user;
-        const user = await User.findOne({ discordId: targetUser.id });
+        const user = await User.findOne({ discordId: targetUser.id }).select('discordId ign experience').lean();
 
         if (!user) {
             const embed = new EmbedBuilder()
