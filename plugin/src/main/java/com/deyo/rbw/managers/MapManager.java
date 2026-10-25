@@ -96,6 +96,8 @@ public class MapManager {
     private final Map<String, ArenaGroup> arenaGroups = new ConcurrentHashMap<>();
     private final Map<String, String> physicalArenaToGroupMap = new ConcurrentHashMap<>();
     private final Map<String, String> gameIdToPhysicalArenaMap = new ConcurrentHashMap<>();
+    private final Map<String, String> physicalArenaToGameIdMap = new ConcurrentHashMap<>();
+    private final Map<Class<?>, Method> getPlayersMethodCache = new ConcurrentHashMap<>();
     
     
     private final Set<String> lockedArenaGroups = ConcurrentHashMap.newKeySet();
@@ -405,7 +407,8 @@ public class MapManager {
             }
         } else {
             unlockMap(physicalArenaToUse);
-            gameIdToPhysicalArenaMap.remove(gameId);
+            gameIdToPhysicalArenaMap.remove(gameId, physicalArenaToUse);
+            physicalArenaToGameIdMap.remove(physicalArenaToUse, gameId);
             sendWarpFailureUnknown(gameId);
             plugin.getLogger().warning("Cannot warp players: No BedWars implementation is available");
         }
@@ -505,12 +508,7 @@ public class MapManager {
         });
     }
     public String getGameIdForArena(String arenaName) {
-        for (Map.Entry<String, String> entry : gameIdToPhysicalArenaMap.entrySet()) {
-            if (entry.getValue().equals(arenaName)) {
-                return entry.getKey();
-            }
-        }
-        return null;
+        return physicalArenaToGameIdMap.get(arenaName);
     }
 
     /**
@@ -521,17 +519,10 @@ public class MapManager {
         plugin.debug("Cleaning up existing game data for map: " + mapName);
         
         
-        String existingGameId = null;
-        for (Map.Entry<String, String> entry : gameIdToPhysicalArenaMap.entrySet()) {
-            if (entry.getValue().equals(mapName)) {
-                existingGameId = entry.getKey();
-                break;
-            }
-        }
-        
+        String existingGameId = physicalArenaToGameIdMap.remove(mapName);
         if (existingGameId != null) {
+            gameIdToPhysicalArenaMap.remove(existingGameId, mapName);
             plugin.debug("Found existing game ID: " + existingGameId + " for map: " + mapName + " - removing it");
-            gameIdToPhysicalArenaMap.remove(existingGameId);
         }
         
         
@@ -638,6 +629,36 @@ public class MapManager {
                 .collect(java.util.stream.Collectors.toSet());
     }
     
+    private boolean isArenaEmpty(Object arena) {
+        if (arena instanceof de.marcely.bedwars.api.arena.Arena) {
+            return ((de.marcely.bedwars.api.arena.Arena) arena).getPlayers().isEmpty();
+        }
+        try {
+            Method getPlayersMethod = getPlayersMethodCache.computeIfAbsent(arena.getClass(), clazz -> {
+                try {
+                    Method m = clazz.getMethod("getPlayers");
+                    m.setAccessible(true);
+                    return m;
+                } catch (NoSuchMethodException e) {
+                    return null;
+                }
+            });
+            if (getPlayersMethod == null) {
+                plugin.getLogger().fine("Could not check players with getPlayers method: no such method on "
+                        + arena.getClass().getName());
+                return true;
+            }
+            Object players = getPlayersMethod.invoke(arena);
+            if (players instanceof Collection<?>) {
+                return ((Collection<?>) players).isEmpty();
+            }
+            return true;
+        } catch (Exception e) {
+            plugin.getLogger().fine("Could not check players with getPlayers method: " + e.getMessage());
+            return true;
+        }
+    }
+
     public void startMapAutoRefresh() {
         Bukkit.getScheduler().runTaskLater(plugin, this::initializeMaps, 20L);
 
@@ -667,37 +688,12 @@ public class MapManager {
                 
                 for (String physicalArenaName : group.getAllPhysicalArenaNames()) {
                     Object arena = com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByName(physicalArenaName);
-                    
+
                     try {
                         if (arena != null) {
-                            
-                            try {
-                                Object players = arena.getClass().getMethod("getPlayers").invoke(arena);
-                                if (players instanceof Collection<?>) {
-                                    if (!((Collection<?>) players).isEmpty()) {
-                                        isEmpty = false;
-                                        break;
-                                    }
-                                }
-                            } catch (Exception e) {
-                                plugin.getLogger().fine("Could not check players with getPlayers method: " + e.getMessage());
-                                
-                                if (arena instanceof de.marcely.bedwars.api.arena.Arena) {
-                                    if (!((de.marcely.bedwars.api.arena.Arena) arena).getPlayers().isEmpty()) {
-                                        isEmpty = false;
-                                        break;
-                                    }
-                                } else if (arena.getClass().getName().contains("andrei1058")) {
-                                    
-                                    Method getPlayersMethod = arena.getClass().getMethod("getPlayers");
-                                    Object playersObj = getPlayersMethod.invoke(arena);
-                                    if (playersObj instanceof Collection<?>) {
-                                        if (!((Collection<?>) playersObj).isEmpty()) {
-                                            isEmpty = false;
-                                            break;
-                                        }
-                                    }
-                                }
+                            if (!isArenaEmpty(arena)) {
+                                isEmpty = false;
+                                break;
                             }
                         }
                     } catch (Exception e) {

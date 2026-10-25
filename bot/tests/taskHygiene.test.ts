@@ -68,7 +68,7 @@ describe('periodic task hygiene', () => {
   it('party cleanup starts once and never overlaps itself', async () => {
     let release!: () => void;
     const gate = new Promise<void>(resolve => { release = resolve; });
-    PartyModel.find.mockImplementation(() => gate.then(() => []));
+    PartyModel.find.mockImplementation(() => ({ limit: () => ({ lean: () => gate.then(() => []) }) }));
     const task = new PartyCleanupTask({} as any);
     task.start();
     task.start();

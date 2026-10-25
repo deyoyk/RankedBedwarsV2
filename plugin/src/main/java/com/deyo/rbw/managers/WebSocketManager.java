@@ -15,6 +15,9 @@ import org.java_websocket.handshake.ServerHandshake;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 
 
@@ -29,7 +32,8 @@ public class WebSocketManager {
     private String scheme;
     private String authKey;
     private int reconnectDelay;
-    private boolean reconnectScheduled = false;
+    private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
+    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
 
     public WebSocketManager(RankedBedwars plugin) {
         this.plugin = plugin;
@@ -151,9 +155,9 @@ public class WebSocketManager {
             client = new WebSocketClient(serverUri) {
                 @Override
                 public void onOpen(ServerHandshake handshake) {
-                    boolean wasReconnecting = reconnectAttempts > 0;
-                    reconnectAttempts = 0; 
-                    reconnectScheduled = false; 
+                    boolean wasReconnecting = reconnectAttempts.get() > 0;
+                    reconnectAttempts.set(0); 
+                    reconnectScheduled.set(false); 
                     
                     JsonObject authMsg = new JsonObject();
                     authMsg.addProperty("type", "auth");
@@ -186,7 +190,7 @@ public class WebSocketManager {
                         plugin.getLogger().warning("WebSocket connection closed: " + reason + " (code: " + code + ")");
                     }
                     
-                    if (plugin.isEnabled() && !reconnectScheduled) {
+                    if (plugin.isEnabled() && !reconnectScheduled.get()) {
                         scheduleReconnect();
                     }
                 }
@@ -504,7 +508,7 @@ public class WebSocketManager {
         } else {
             plugin.getLogger().warning("Cannot send WebSocket message: connection is closed");
             
-            if (!reconnectScheduled) {
+            if (!reconnectScheduled.get()) {
                 notifyAdmins("§c[RankedBedwars] §4WebSocket connection is closed. Cannot send messages to the bot. Please contact deyo.");
                 
                 if (plugin.isEnabled()) {
@@ -644,52 +648,56 @@ public class WebSocketManager {
             plugin.getLogger().warning("Cannot resend initial data: WebSocket not connected");
         }
     }
-    private int reconnectAttempts = 0;
     private static final int MAX_RECONNECT_ATTEMPTS = 5;
-    
+    private static final int MAX_RECONNECT_DELAY_SECONDS = 60;
+
     private void scheduleReconnect() {
-        if (reconnectScheduled) {
+        if (!reconnectScheduled.compareAndSet(false, true)) {
             return;
         }
         if (!plugin.isEnabled()) {
             plugin.getLogger().warning("Plugin is disabled, not scheduling WebSocket reconnection.");
+            reconnectScheduled.set(false);
             return;
         }
-        
+
         if (client != null && client.isOpen()) {
             plugin.debug("WebSocket is already connected, skipping reconnection schedule");
+            reconnectScheduled.set(false);
             return;
         }
-        
-        reconnectScheduled = true;
-        reconnectAttempts++;
-        
-        int currentDelay = Math.min(reconnectDelay * reconnectAttempts, 60); 
-        
-        plugin.getLogger().info("Scheduling WebSocket reconnection in " + currentDelay + " seconds (Attempt " + reconnectAttempts + ")");
-        
-        if (reconnectAttempts == MAX_RECONNECT_ATTEMPTS) {
-            plugin.getLogger().severe("Failed to connect to WebSocket server after " + reconnectAttempts + " attempts");
+
+        int attempt = reconnectAttempts.incrementAndGet();
+
+        long exponential = (long) reconnectDelay * (1L << Math.min(attempt - 1, 4));
+        long capped = Math.min(exponential, MAX_RECONNECT_DELAY_SECONDS);
+        long jitterSeconds = ThreadLocalRandom.current().nextLong(0, 2);
+        long currentDelay = Math.min(capped + jitterSeconds, MAX_RECONNECT_DELAY_SECONDS);
+
+        plugin.getLogger().info("Scheduling WebSocket reconnection in " + currentDelay + " seconds (Attempt " + attempt + ")");
+
+        if (attempt == MAX_RECONNECT_ATTEMPTS) {
+            plugin.getLogger().severe("Failed to connect to WebSocket server after " + attempt + " attempts");
             plugin.getLogger().severe("The RankedBedwars bot appears to be offline. Please contact deyo.");
             notifyAdmins("§4[RankedBedwars] §cFailed to connect to WebSocket after " +
-                reconnectAttempts + " attempts. The bot is likely offline. Please contact deyo.");
+                attempt + " attempts. The bot is likely offline. Please contact deyo.");
         }
 
         Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
             if (!plugin.isEnabled()) {
                 plugin.getLogger().warning("Plugin is disabled, aborting scheduled WebSocket reconnection.");
-                reconnectScheduled = false;
+                reconnectScheduled.set(false);
                 return;
             }
-            
+
             if (client != null && client.isOpen()) {
                 plugin.debug("WebSocket is already connected, canceling reconnection attempt");
-                reconnectScheduled = false;
+                reconnectScheduled.set(false);
                 return;
             }
-            
-            reconnectScheduled = false;
-            plugin.getLogger().info("Attempting to reconnect to WebSocket server... (Attempt " + reconnectAttempts + ")");
+
+            reconnectScheduled.set(false);
+            plugin.getLogger().info("Attempting to reconnect to WebSocket server... (Attempt " + reconnectAttempts.get() + ")");
             connect();
         }, currentDelay * 20L);
     }
@@ -711,8 +719,8 @@ public class WebSocketManager {
     public void shutdown() {
         plugin.getLogger().info("Shutting down WebSocket connection...");
         
-        reconnectScheduled = false;
-        
+        reconnectScheduled.set(false);
+
         if (client != null && client.isOpen()) {
             client.close(1000, "Plugin disabling");
         }
@@ -765,8 +773,8 @@ public class WebSocketManager {
     
 
     public void resetReconnectionState() {
-        reconnectAttempts = 0;
-        reconnectScheduled = false;
+        reconnectAttempts.set(0);
+        reconnectScheduled.set(false);
         plugin.getLogger().info("WebSocket reconnection state has been reset");
     }
     
@@ -775,8 +783,8 @@ public class WebSocketManager {
         plugin.getLogger().info("Target Bot: " + host + ":" + port);
         plugin.getLogger().info("Full URL: " + buildWebSocketUri());
         plugin.getLogger().info("Current Connection State: " + (isConnected() ? "CONNECTED" : "DISCONNECTED"));
-        plugin.getLogger().info("Reconnect Attempts: " + reconnectAttempts);
-        plugin.getLogger().info("Reconnect Scheduled: " + reconnectScheduled);
+        plugin.getLogger().info("Reconnect Attempts: " + reconnectAttempts.get());
+        plugin.getLogger().info("Reconnect Scheduled: " + reconnectScheduled.get());
         
         testConnectivity();
         

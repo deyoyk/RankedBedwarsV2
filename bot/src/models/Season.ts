@@ -22,5 +22,6 @@ const SeasonSchema: Schema = new Schema({
 
 
 SeasonSchema.index({ seasonNumber: 1, chapterNumber: 1 }, { unique: true });
+SeasonSchema.index({ isActive: 1 });
 
 export default mongoose.model<ISeason>('Season', SeasonSchema);

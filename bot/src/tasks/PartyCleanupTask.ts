@@ -41,7 +41,7 @@ export class PartyCleanupTask {
       
       const inactiveParties = await Party.find({
         lastActiveTime: { $lt: cutoffTime }
-      });
+      }).limit(100).lean();
 
       if (inactiveParties.length === 0) {
         console.log('[PartyCleanupTask] No inactive parties found');

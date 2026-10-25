@@ -41,7 +41,7 @@ export class PickingQueueManager {
   private workersManager: WorkersManager;
   private activeSessions: Map<number, PickingSession> = new Map();
   private readonly PICK_TIMEOUT = 120000;
-  private readonly SESSION_TIMEOUT = 600000;
+  private readonly SESSION_TIMEOUT = 180000;
 
   constructor(client: Client, gameManager: GameManager, wsManager: WebSocketManager) {
     this.client = client;
@@ -546,6 +546,53 @@ export class PickingQueueManager {
     }
   }
 
+  private async loadPickingContext(session: PickingSession): Promise<{
+    ignMap: Map<string, string>;
+    eloMap: Map<string, number>;
+    statsById: Map<string, { ign?: string; elo: number; wins: number; losses: number; kills: number; deaths: number }>;
+    team1Avg: number;
+    team2Avg: number;
+  }> {
+    const empty = {
+      ignMap: new Map<string, string>(),
+      eloMap: new Map<string, number>(),
+      statsById: new Map<string, { ign?: string; elo: number; wins: number; losses: number; kills: number; deaths: number }>(),
+      team1Avg: 0,
+      team2Avg: 0
+    };
+    try {
+      const ids = [...new Set([...session.team1, ...session.team2, ...session.remainingPlayers])];
+      if (ids.length === 0) return empty;
+      const users = await User.find({
+        discordId: { $in: ids }
+      }).select('discordId ign elo wins losses kills deaths').lean() as Array<{
+        discordId: string; ign?: string; elo?: number; wins?: number; losses?: number; kills?: number; deaths?: number;
+      }>;
+      const ignMap = new Map<string, string>();
+      const eloMap = new Map<string, number>();
+      const statsById = new Map<string, { ign?: string; elo: number; wins: number; losses: number; kills: number; deaths: number }>();
+      for (const u of users) {
+        if (!u || !u.discordId) continue;
+        if (typeof u.ign === 'string') ignMap.set(u.discordId, u.ign);
+        if (typeof u.elo === 'number') eloMap.set(u.discordId, u.elo);
+        statsById.set(u.discordId, {
+          ign: u.ign,
+          elo: typeof u.elo === 'number' ? u.elo : 0,
+          wins: typeof u.wins === 'number' ? u.wins : 0,
+          losses: typeof u.losses === 'number' ? u.losses : 0,
+          kills: typeof u.kills === 'number' ? u.kills : 0,
+          deaths: typeof u.deaths === 'number' ? u.deaths : 0
+        });
+      }
+      const team1Avg = await calculateTeamAverageElo(session.team1, eloMap);
+      const team2Avg = await calculateTeamAverageElo(session.team2, eloMap);
+      return { ignMap, eloMap, statsById, team1Avg, team2Avg };
+    } catch (error) {
+      console.error('[PickingQueue] Error loading picking context:', error);
+      return empty;
+    }
+  }
+
   private async sendPickingEmbed(
     channel: TextChannel,
     session: PickingSession,
@@ -553,14 +600,23 @@ export class PickingQueueManager {
     queueData: Pick<QueueLike, 'isRanked'>
   ): Promise<void> {
     try {
-      const embed = await this.buildPickingEmbed(session, map, queueData);
-      const selectMenu = await this.buildSelectMenu(session);
-
-      await channel.send({
-        content: `<@${session.currentPicker}> it's your turn to pick!`,
-        embeds: [embed],
-        components: selectMenu ? [selectMenu] : []
+      const ctx = await this.loadPickingContext(session);
+      const embed = await this.buildPickingEmbed(session, map, queueData, {
+        ignMap: ctx.ignMap,
+        team1Avg: ctx.team1Avg,
+        team2Avg: ctx.team2Avg
       });
+      const selectMenu = await this.buildSelectMenu(session, ctx.statsById);
+
+      await this.workersManager.sendMessage(
+        channel.id,
+        {
+          content: `<@${session.currentPicker}> it's your turn to pick!`,
+          embeds: [embed],
+          components: selectMenu ? [selectMenu] : []
+        },
+        8
+      );
 
     } catch (error) {
       console.error('[PickingQueue] Error sending picking embed:', error);
@@ -570,13 +626,14 @@ export class PickingQueueManager {
   private async buildPickingEmbed(
     session: PickingSession,
     map: string,
-    _queueData: Pick<QueueLike, 'isRanked'>
+    _queueData: Pick<QueueLike, 'isRanked'>,
+    preloaded?: { ignMap?: Map<string, string>; team1Avg?: number; team2Avg?: number }
   ): Promise<EmbedBuilder> {
     try {
-      const ignMap = await this.getPlayerIGNs([...session.team1, ...session.team2, ...session.remainingPlayers]);
+      const ignMap = preloaded?.ignMap ?? await this.getPlayerIGNs([...session.team1, ...session.team2, ...session.remainingPlayers]);
       
-      const team1Avg = await this.calculateTeamAverageElo(session.team1);
-      const team2Avg = await this.calculateTeamAverageElo(session.team2);
+      const team1Avg = preloaded?.team1Avg ?? await this.calculateTeamAverageElo(session.team1);
+      const team2Avg = preloaded?.team2Avg ?? await this.calculateTeamAverageElo(session.team2);
       
       const team1Value = this.buildTeamValue(session.team1, session.captains[0], team1Avg, ignMap);
       const team2Value = this.buildTeamValue(session.team2, session.captains[1], team2Avg, ignMap);
@@ -616,7 +673,10 @@ export class PickingQueueManager {
     }
   }
 
-  private async buildSelectMenu(session: PickingSession): Promise<ActionRowBuilder<StringSelectMenuBuilder> | null> {
+  private async buildSelectMenu(
+    session: PickingSession,
+    preloadedStats?: Map<string, { ign?: string; elo: number; wins: number; losses: number; kills: number; deaths: number }>
+  ): Promise<ActionRowBuilder<StringSelectMenuBuilder> | null> {
     try {
       if (session.remainingPlayers.length === 0) return null;
 
@@ -625,12 +685,18 @@ export class PickingQueueManager {
       if (availablePlayers.length === 0) return null;
 
       
-      const users = await User.find({
-        discordId: { $in: availablePlayers }
-      }).select('discordId ign elo wins losses kills deaths');
+      let findUser: (playerId: string) => { ign?: string; elo: number; wins: number; losses: number; kills: number; deaths: number } | undefined;
+      if (preloadedStats) {
+        findUser = (playerId: string) => preloadedStats.get(playerId);
+      } else {
+        const users = await User.find({
+          discordId: { $in: availablePlayers }
+        }).select('discordId ign elo wins losses kills deaths');
+        findUser = (playerId: string) => users.find(u => u.discordId === playerId) as unknown as { ign?: string; elo: number; wins: number; losses: number; kills: number; deaths: number } | undefined;
+      }
 
       const options = await Promise.all(availablePlayers.map(async (playerId) => {
-        const user = users.find(u => u.discordId === playerId);
+        const user = findUser(playerId);
         
         if (!user) {
           return {
@@ -877,7 +943,7 @@ export class PickingQueueManager {
         .setColor('#00AAAA')
         .setTimestamp();
 
-      await channel.send({ embeds: [embed] });
+      await this.workersManager.sendMessage(channel.id, { embeds: [embed] }, 8);
     } catch (error) {
       console.error('[PickingQueue] Error sending void notice:', error);
     }

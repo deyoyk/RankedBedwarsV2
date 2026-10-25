@@ -389,6 +389,7 @@ export class WebSocketManager {
   private gameManager: GameManagerLike | null = null;
   private queueStatusInterval: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private lastQueueStatusHash: string | null = null;
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
 
   public async requestDontLog(ign: string, uuid: string): Promise<{ online: boolean; dontlog: boolean }> {
@@ -1323,7 +1324,7 @@ export class WebSocketManager {
       } catch (error) {
         console.error('[WebSocketManager] Error broadcasting queue status:', error);
       }
-    }, 3000); 
+    }, 10000); 
 
     console.log('[WebSocketManager] Queue status broadcast started');
   }
@@ -1353,7 +1354,8 @@ export class WebSocketManager {
         if (guild) {
           for (const queue of queues) {
             try {
-              const channel = await guild.channels.fetch(queue.channelId);
+              const cached = guild.channels.cache.get(queue.channelId);
+              const channel = cached ?? await guild.channels.fetch(queue.channelId);
               if (channel && channel.isVoiceBased()) {
                 channelMemberMap.set(queue.channelId, { channelId: queue.channelId, members: channel.members });
                 for (const [memberId] of channel.members) {
@@ -1409,8 +1411,11 @@ export class WebSocketManager {
         timestamp: Date.now()
       };
 
-      
-      
+      const hash = JSON.stringify(queueStatus);
+      if (hash === this.lastQueueStatusHash) {
+        return;
+      }
+      this.lastQueueStatusHash = hash;
       this.send(queueStatusMessage);
 
 

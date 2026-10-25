@@ -171,7 +171,9 @@ export class CentralizedMatchmaker {
           }
 
           if (state && state.isProcessing && now - state.lastProcessed > this.LOCK_TIMEOUT) {
-            if (queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking) {
+            const isPicking = queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking;
+            const pickingGraceMs = this.LOCK_TIMEOUT * 3;
+            if (isPicking && now - state.lastProcessed <= pickingGraceMs) {
               return;
             }
             console.warn(`[CentralizedMatchmaker] Queue ${queue.channelId} stuck for ${now - state.lastProcessed}ms, resetting`);
@@ -340,7 +342,7 @@ export class CentralizedMatchmaker {
       let processingResult: QueueProcessingResult;
       try {
         processingResult = isPickingQueue
-          ? await processingPromise
+          ? await withTimeout(processingPromise, 120000, 'Picking')
           : await withTimeout(processingPromise, 30000, 'Processing');
       } catch (processingError) {
         const processingMessage = processingError instanceof Error ? processingError.message : String(processingError);
@@ -488,53 +490,301 @@ export class CentralizedMatchmaker {
 
   private async validatePlayers(playerIds: string[], queue: QueueLike): Promise<string[]> {
     try {
-      const validPlayers: string[] = [];
-      const checkedParties = new Set<string>();
-      const invalidParties = new Set<string>();
-      
-      for (const playerId of playerIds) {
-        try {
-          const cacheKey = `${queue.channelId}:${playerId}`;
-          const cached = this.validationCache.get(cacheKey);
-          
-          if (cached && Date.now() - cached.timestamp < this.VALIDATION_CACHE_TTL) {
-            if (cached.valid) {
-              validPlayers.push(playerId);
-            }
-            continue;
-          }
+      const validFlags = new Array<boolean>(playerIds.length).fill(false);
+      const pendingIndexes: number[] = [];
 
-          const isValid = await this.validateSinglePlayer(playerId, queue, playerIds, checkedParties, invalidParties);
-          
-          this.validationCache.set(cacheKey, { valid: isValid, timestamp: Date.now() });
-          
-          if (isValid) {
-            validPlayers.push(playerId);
-          } else {
-            console.log(`[CentralizedMatchmaker] Player ${playerId} failed validation`);
-          }
-        } catch (error) {
-          console.error(`[CentralizedMatchmaker] Error validating player ${playerId}:`, error);
+      for (let i = 0; i < playerIds.length; i++) {
+        const cacheKey = `${queue.channelId}:${playerIds[i]}`;
+        const cached = this.validationCache.get(cacheKey);
+
+        if (cached && Date.now() - cached.timestamp < this.VALIDATION_CACHE_TTL) {
+          validFlags[i] = cached.valid;
+        } else {
+          pendingIndexes.push(i);
         }
       }
 
-      return validPlayers;
+      if (pendingIndexes.length === 0) {
+        return playerIds.filter((_, i) => validFlags[i]);
+      }
+
+      const pendingIds = pendingIndexes.map(i => playerIds[i]);
+
+      let userDocs: any[] = [];
+      try {
+        const query: any = User.find({ discordId: { $in: pendingIds } });
+        const docs = typeof query?.lean === 'function' ? await query.lean() : await query;
+        userDocs = docs ?? [];
+      } catch (error) {
+        console.error('[CentralizedMatchmaker] Error batch-fetching users for validation:', error);
+        userDocs = [];
+      }
+      const userMap = new Map<string, any>(userDocs.map(u => [u.discordId, u]));
+
+      const partyIds = [...new Set(userDocs.map(u => u.partyId).filter(Boolean))];
+      const partyMap = new Map<string, any>();
+      if (partyIds.length > 0) {
+        try {
+          const Party = (await import('../models/Party')).default as any;
+          if (typeof Party?.find === 'function') {
+            const partyQuery: any = Party.find({ partyId: { $in: partyIds } });
+            const partyDocs = typeof partyQuery?.lean === 'function'
+              ? await partyQuery.lean()
+              : await partyQuery;
+            for (const party of partyDocs ?? []) {
+              partyMap.set(party.partyId, party);
+            }
+          } else {
+            const results = await Promise.all(partyIds.map(async pid => {
+              try {
+                const q: any = Party.findOne({ partyId: pid });
+                return await (typeof q?.lean === 'function' ? q.lean() : q);
+              } catch {
+                return null;
+              }
+            }));
+            for (const party of results) {
+              if (party) partyMap.set(party.partyId, party);
+            }
+          }
+        } catch (error) {
+          console.error('[CentralizedMatchmaker] Error batch-fetching parties for validation:', error);
+        }
+      }
+
+      const queuedSet = new Set(playerIds);
+      const missingMemberIds = [...new Set(
+        [...partyMap.values()].flatMap(party => party.members ?? [])
+      )].filter(id => !userMap.has(id) && !queuedSet.has(id));
+      const partyMemberMap = new Map<string, any>();
+      if (missingMemberIds.length > 0) {
+        try {
+          const memberQuery: any = User.find({ discordId: { $in: missingMemberIds } });
+          const memberDocs = typeof memberQuery?.lean === 'function'
+            ? await memberQuery.lean()
+            : await memberQuery;
+          for (const member of memberDocs ?? []) {
+            partyMemberMap.set(member.discordId, member);
+          }
+        } catch (error) {
+          console.error('[CentralizedMatchmaker] Error batch-fetching party members:', error);
+        }
+      }
+
+      const ctx = { userMap, partyMap, partyMemberMap };
+      const checkedParties = new Set<string>();
+      const invalidParties = new Set<string>();
+      const presenceTasks: Array<() => Promise<void>> = [];
+      const presenceResults = new Map<string, boolean>();
+
+      for (const index of pendingIndexes) {
+        const playerId = playerIds[index];
+        try {
+          const outcome = this.evaluatePlayerLocal(playerId, queue, playerIds, ctx, checkedParties, invalidParties);
+
+          if (outcome.decision === 'valid') {
+            validFlags[index] = true;
+            this.validationCache.set(`${queue.channelId}:${playerId}`, { valid: true, timestamp: Date.now() });
+          } else if (outcome.decision === 'invalid') {
+            validFlags[index] = false;
+            this.validationCache.set(`${queue.channelId}:${playerId}`, { valid: false, timestamp: Date.now() });
+            console.log(`[CentralizedMatchmaker] Player ${playerId} failed validation`);
+          } else {
+            presenceTasks.push(async () => {
+              const online = await this.checkPlayerOnlinePresence(outcome.ign);
+              presenceResults.set(playerId, online);
+            });
+          }
+        } catch (error) {
+          console.error(`[CentralizedMatchmaker] Error validating player ${playerId}:`, error);
+          validFlags[index] = false;
+        }
+      }
+
+      await this.runWithConcurrencyLimit(presenceTasks, 5);
+
+      for (const index of pendingIndexes) {
+        const playerId = playerIds[index];
+        if (!presenceResults.has(playerId)) continue;
+        const online = presenceResults.get(playerId)!;
+        validFlags[index] = online;
+        this.validationCache.set(`${queue.channelId}:${playerId}`, { valid: online, timestamp: Date.now() });
+        if (!online) {
+          console.log(`[CentralizedMatchmaker] Player ${playerId} failed validation`);
+        }
+      }
+
+      return playerIds.filter((_, i) => validFlags[i]);
     } catch (error) {
       console.error('[CentralizedMatchmaker] Error in validatePlayers:', error);
       return [];
     }
   }
 
-  private async validateSinglePlayer(
-    playerId: string, 
-    queue: QueueLike, 
+  private async runWithConcurrencyLimit(tasks: Array<() => Promise<void>>, limit: number): Promise<void> {
+    if (tasks.length === 0) return;
+    const workerCount = Math.min(Math.max(limit, 1), tasks.length);
+    let next = 0;
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (next < tasks.length) {
+        const current = next++;
+        await tasks[current]();
+      }
+    });
+    await Promise.all(workers);
+  }
+
+  private evaluatePlayerLocal(
+    playerId: string,
+    queue: QueueLike,
     allPlayersInQueue: string[],
+    ctx: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> },
     checkedParties: Set<string>,
     invalidParties: Set<string>
+  ): { decision: 'valid' } | { decision: 'invalid' } | { decision: 'presence'; ign: string } {
+    const user = ctx.userMap.get(playerId);
+
+    if (!user) {
+      console.warn(`[CentralizedMatchmaker] User ${playerId} not found in database`);
+      return { decision: 'invalid' };
+    }
+
+    if (!user.ign) {
+      console.warn(`[CentralizedMatchmaker] User ${playerId} has no IGN`);
+      return { decision: 'invalid' };
+    }
+
+    if (user.isBanned || user.isFrozen) {
+      console.warn(`[CentralizedMatchmaker] User ${playerId} is banned or frozen`);
+      return { decision: 'invalid' };
+    }
+
+    if (user.elo < queue.minElo || user.elo > queue.maxElo) {
+      console.warn(`[CentralizedMatchmaker] User ${playerId} ELO ${user.elo} not in queue range ${queue.minElo}-${queue.maxElo}`);
+      return { decision: 'invalid' };
+    }
+
+    if (user.partyId) {
+      if (invalidParties.has(user.partyId)) return { decision: 'invalid' };
+      if (!checkedParties.has(user.partyId)) {
+        checkedParties.add(user.partyId);
+        const partyValidation = this.validatePartyLocal(user.partyId, queue, allPlayersInQueue, ctx);
+        if (!partyValidation.valid) {
+          console.warn(`[CentralizedMatchmaker] Party ${user.partyId} validation failed: ${partyValidation.reason}`);
+          invalidParties.add(user.partyId);
+          return { decision: 'invalid' };
+        }
+      } else if (invalidParties.has(user.partyId)) {
+        return { decision: 'invalid' };
+      }
+    }
+
+    const presence = PresenceService.evaluate(user.ign);
+    if (presence === 'offline') {
+      console.warn(`[CentralizedMatchmaker] User ${user.ign} is offline in Minecraft, skipping draft`);
+      return { decision: 'invalid' };
+    }
+    if (presence === 'unknown') {
+      return { decision: 'presence', ign: user.ign };
+    }
+
+    return { decision: 'valid' };
+  }
+
+  private validatePartyLocal(
+    partyId: string,
+    queue: QueueLike,
+    playersInQueue: string[],
+    ctx: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> }
+  ): { valid: boolean; reason?: string } {
+    const party = ctx.partyMap.get(partyId);
+
+    if (!party) {
+      return { valid: false, reason: 'Party not found' };
+    }
+
+    if (!party.members || party.members.length === 0) {
+      return { valid: false, reason: 'Party has no members' };
+    }
+
+    const partyMembers = party.members;
+    const partyMembersInQueue = partyMembers.filter((memberId: string) => playersInQueue.includes(memberId));
+
+    if (partyMembersInQueue.length !== partyMembers.length) {
+      return {
+        valid: false,
+        reason: `Not all party members in queue (${partyMembersInQueue.length}/${partyMembers.length})`
+      };
+    }
+
+    const queuedSet = new Set(playersInQueue);
+    for (const memberId of partyMembers) {
+      const member = ctx.userMap.get(memberId) ?? (queuedSet.has(memberId) ? undefined : ctx.partyMemberMap.get(memberId));
+      if (!member) {
+        return {
+          valid: false,
+          reason: 'Some party members not found in database'
+        };
+      }
+
+      if (member.isBanned || member.isFrozen) {
+        return {
+          valid: false,
+          reason: `Party member ${member.discordId} is banned or frozen`
+        };
+      }
+
+      if (member.elo < queue.minElo || member.elo > queue.maxElo) {
+        return {
+          valid: false,
+          reason: `Party member ${member.discordId} ELO ${member.elo} not in queue range ${queue.minElo}-${queue.maxElo}`
+        };
+      }
+    }
+
+    if (partyMembers.length > queue.maxPlayers / 2) {
+      return {
+        valid: false,
+        reason: `Party too large for queue (${partyMembers.length} > ${queue.maxPlayers / 2})`
+      };
+    }
+
+    return { valid: true };
+  }
+
+  private async checkPlayerOnlinePresence(ign: string): Promise<boolean> {
+    try {
+      const onlineCheck = await withTimeout(
+        this.wsManager.checkPlayerOnline(ign),
+        3000,
+        'Online check'
+      );
+      PresenceService.ingest(ign, onlineCheck.online === true);
+      if (!onlineCheck.online) {
+        console.warn(`[CentralizedMatchmaker] User ${ign} is not online`);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.warn(`[CentralizedMatchmaker] Online check for ${ign} failed (${error instanceof Error ? error.message : String(error)}), keeping player in queue`);
+      return true;
+    }
+  }
+
+  private async validateSinglePlayer(
+    playerId: string,
+    queue: QueueLike,
+    allPlayersInQueue: string[],
+    checkedParties: Set<string>,
+    invalidParties: Set<string>,
+    ctx?: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> }
   ): Promise<boolean> {
     try {
-      const user = await User.findOne({ discordId: playerId }).lean();
-      
+      let user = ctx?.userMap.get(playerId);
+      if (!user && !ctx) {
+        user = await User.findOne({ discordId: playerId }).lean();
+      }
+
       if (!user) {
         console.warn(`[CentralizedMatchmaker] User ${playerId} not found in database`);
         return false;
@@ -559,7 +809,9 @@ export class CentralizedMatchmaker {
         if (invalidParties.has(user.partyId)) return false;
         if (!checkedParties.has(user.partyId)) {
           checkedParties.add(user.partyId);
-          const partyValidation = await this.validateParty(user.partyId, queue, allPlayersInQueue);
+          const partyValidation = ctx
+            ? this.validatePartyLocal(user.partyId, queue, allPlayersInQueue, ctx)
+            : await this.validateParty(user.partyId, queue, allPlayersInQueue);
           if (!partyValidation.valid) {
             console.warn(`[CentralizedMatchmaker] Party ${user.partyId} validation failed: ${partyValidation.reason}`);
             invalidParties.add(user.partyId);
@@ -598,11 +850,16 @@ export class CentralizedMatchmaker {
   }
 
   private async validateParty(
-    partyId: string, 
-    queue: QueueLike, 
-    playersInQueue: string[]
+    partyId: string,
+    queue: QueueLike,
+    playersInQueue: string[],
+    ctx?: { userMap: Map<string, any>; partyMap: Map<string, any>; partyMemberMap: Map<string, any> }
   ): Promise<{ valid: boolean; reason?: string }> {
     try {
+      if (ctx) {
+        return this.validatePartyLocal(partyId, queue, playersInQueue, ctx);
+      }
+
       const Party = (await import('../models/Party')).default;
       const party = await Party.findOne({ partyId }).lean();
 

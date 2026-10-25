@@ -40,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class MBedwarsListener implements Listener {
     private final RankedBedwars plugin;
     private final Map<String, GameInstance> gameInstances = new ConcurrentHashMap<>();
+    private final Map<String, GameInstance> playerInstanceIndex = new ConcurrentHashMap<>();
     private final Map<String, Long> recentPvpKills = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> preGamePlayers = new ConcurrentHashMap<>();
 
@@ -55,9 +56,10 @@ public class MBedwarsListener implements Listener {
 
 
     public void cleanupGameInstanceForMap(String mapName) {
-        if (gameInstances.containsKey(mapName)) {
+        GameInstance removed = gameInstances.remove(mapName);
+        if (removed != null) {
             plugin.debug("Cleaning up existing game instance for map: " + mapName);
-            gameInstances.remove(mapName);
+            unindexInstance(removed);
             preGamePlayers.remove(mapName);
             plugin.debug("Cleaned up game instance for map: " + mapName);
         }
@@ -81,6 +83,9 @@ public class MBedwarsListener implements Listener {
         for (Player player : arena.getPlayers()) {
             players.add(player.getName());
         }
+        for (String playerName : players) {
+            playerInstanceIndex.put(playerName, gameInstance);
+        }
         preGamePlayers.put(arenaName, players);
 
         sendGameStartNotification(gameId, arenaName);
@@ -96,13 +101,16 @@ public class MBedwarsListener implements Listener {
         if (dealer == null) return;
         Player victim = (Player) event.getEntity();
         if (dealer.getName().equals(victim.getName())) return;
-        for (GameInstance gameInstance : gameInstances.values()) {
-            if (gameInstance.getPlayerTeams().containsKey(victim.getName())
-                    && gameInstance.getPlayerTeams().containsKey(dealer.getName())) {
-                gameInstance.recordDamage(dealer.getName(), victim.getName(), event.getFinalDamage());
-                return;
-            }
+        GameInstance gameInstance = playerInstanceIndex.get(victim.getName());
+        if (gameInstance != null
+                && gameInstance.getPlayerTeams().containsKey(victim.getName())
+                && gameInstance.getPlayerTeams().containsKey(dealer.getName())) {
+            gameInstance.recordDamage(dealer.getName(), victim.getName(), event.getFinalDamage());
         }
+    }
+
+    private void unindexInstance(GameInstance instance) {
+        playerInstanceIndex.entrySet().removeIf(entry -> entry.getValue() == instance);
     }
 
     private Player resolveDamager(Entity damager) {
@@ -202,6 +210,7 @@ public class MBedwarsListener implements Listener {
         }
         preGamePlayers.remove(arenaName);
         gameInstances.remove(arenaName);
+        unindexInstance(gameInstance);
         for (String playerName : game.getPlayerKills().keySet()) {
             recentPvpKills.remove(playerName);
         }
@@ -330,8 +339,11 @@ public class MBedwarsListener implements Listener {
             }
         }
         if (arenaName != null) {
+            GameInstance removed = gameInstances.remove(arenaName);
+            if (removed != null) {
+                unindexInstance(removed);
+            }
             preGamePlayers.remove(arenaName);
-            gameInstances.remove(arenaName);
         }
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject json = new JsonObject();

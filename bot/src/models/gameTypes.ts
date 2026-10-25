@@ -38,7 +38,7 @@ export interface IGameBase {
   bedbreaks: string[];
   startTime: Date;
   endTime?: Date;
-  state: 'voided' | 'scored' | 'pending' | 'active';
+  state: 'voided' | 'scored' | 'pending' | 'active' | 'scoring';
   channels: {
     text: string;
     team1Voice: string;

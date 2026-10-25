@@ -15,6 +15,18 @@ const GameSchema: Schema = new Schema({
   chapterNumber: { type: Number },
 });
 
+GameSchema.index({ state: 1 });
+GameSchema.index({ queueId: 1, state: 1 });
+GameSchema.index({ team1: 1 });
+GameSchema.index({ team2: 1 });
+GameSchema.index({ winners: 1 });
+GameSchema.index({ losers: 1 });
+GameSchema.index({ 'channels.text': 1 });
+GameSchema.index({ 'channels.team1Voice': 1 });
+GameSchema.index({ 'channels.team2Voice': 1 });
+GameSchema.index({ 'channels.picking': 1 });
+GameSchema.index({ seasonNumber: 1, chapterNumber: 1 });
+
 applyGetTeamOfPlayer(GameSchema);
 
 export default mongoose.model<IGame>('Game', GameSchema);

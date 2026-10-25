@@ -485,9 +485,19 @@ export class QueueListener {
         return { success: false };
       }
 
-      const partyUsers = await User.find({
+      const partyUsersPromise = User.find({
         discordId: { $in: partyMembers }
       }).select('discordId elo isBanned isFrozen').lean();
+
+      const activeGamePromise = Game.findOne({
+        $or: [
+          { team1: { $in: partyMembers } },
+          { team2: { $in: partyMembers } }
+        ],
+        state: { $in: ['pending', 'active'] }
+      });
+
+      const [partyUsers, activeGame] = await Promise.all([partyUsersPromise, activeGamePromise]);
 
       if (partyUsers.length !== partyMembers.length) {
         await this.moveToWaiting(state, 'Some party members not found');
@@ -505,14 +515,6 @@ export class QueueListener {
           return { success: false };
         }
       }
-
-      const activeGame = await Game.findOne({
-        $or: [
-          { team1: { $in: partyMembers } },
-          { team2: { $in: partyMembers } }
-        ],
-        state: { $in: ['pending', 'active'] }
-      });
 
       if (activeGame) {
         await this.moveToWaiting(state, `Party member in game #${activeGame.gameId}`);

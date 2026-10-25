@@ -57,6 +57,7 @@ export class ApiManager {
   private wsManager: WebSocketManager;
   private gameModel: Model<IGame> | null = null;
   private cache: Map<string, CacheEntry> = new Map();
+  private inflight: Map<string, Promise<unknown>> = new Map();
 
   private globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -164,19 +165,32 @@ export class ApiManager {
     if (entry && entry.expiresAt > now) {
       return entry.value as T;
     }
-    const value = await fetcher();
-    this.cache.set(key, { value, expiresAt: now + ttlMs });
-    if (this.cache.size > 100) {
-      for (const [k, e] of this.cache) {
-        if (e.expiresAt <= now) this.cache.delete(k);
-      }
-      while (this.cache.size > 100) {
-        const oldest = this.cache.keys().next();
-        if (oldest.done) break;
-        this.cache.delete(oldest.value);
-      }
+    const ongoing = this.inflight.get(key);
+    if (ongoing) {
+      return ongoing as Promise<T>;
     }
-    return value;
+    const task = (async () => {
+      try {
+        const value = await fetcher();
+        this.cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+        if (this.cache.size > 100) {
+          const sweepNow = Date.now();
+          for (const [k, e] of this.cache) {
+            if (e.expiresAt <= sweepNow) this.cache.delete(k);
+          }
+          while (this.cache.size > 100) {
+            const oldest = this.cache.keys().next();
+            if (oldest.done) break;
+            this.cache.delete(oldest.value);
+          }
+        }
+        return value;
+      } finally {
+        this.inflight.delete(key);
+      }
+    })();
+    this.inflight.set(key, task);
+    return task;
   }
 
   private setupRoutes() {
@@ -669,7 +683,7 @@ export class ApiManager {
       const { page, pageSize } = pagination;
       const skip = (page - 1) * pageSize;
 
-      const result = await this.getCached(`leaderboard:${mode}:${page}`, 10000, async () => {
+      const result = await this.getCached(`leaderboard:${mode}:${page}:${pageSize}`, 10000, async () => {
         const sortObj: Record<string, 1 | -1> = {};
         sortObj[mode] = -1;
 
@@ -883,7 +897,7 @@ export class ApiManager {
       if (!pagination) return;
       const { page, pageSize } = pagination;
 
-      const result = await this.getCached(`seasonLeaderboard:${seasonNumber}:${chapterNumber}:${mode}:${page}`, 30000, async () => {
+      const result = await this.getCached(`seasonLeaderboard:${seasonNumber}:${chapterNumber}:${mode}:${page}:${pageSize}`, 30000, async () => {
         try {
           return await SeasonManager.getSeasonLeaderboard(seasonNumber, chapterNumber, mode, page, pageSize);
         } catch (error) {

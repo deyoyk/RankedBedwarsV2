@@ -1,6 +1,31 @@
 import config from '../config/config';
 import { Guild } from 'discord.js';
 import { WorkersManager } from '../managers/WorkersManager';
+import type { IEloRank } from '../models/EloRank';
+
+let cachedRanks: IEloRank[] | null = null;
+let cachedRanksAt = 0;
+let inFlightRanks: Promise<IEloRank[]> | null = null;
+const RANK_CACHE_TTL_MS = 30000;
+
+async function getEloRanks(): Promise<IEloRank[]> {
+  const EloRank = (await import('../models/EloRank')).default;
+  const now = Date.now();
+  if (cachedRanks && now - cachedRanksAt < RANK_CACHE_TTL_MS) return cachedRanks;
+  if (inFlightRanks) return inFlightRanks;
+  inFlightRanks = (EloRank.find() as unknown as Promise<IEloRank[]>)
+    .then((ranks) => {
+      cachedRanks = ranks;
+      cachedRanksAt = Date.now();
+      inFlightRanks = null;
+      return ranks;
+    })
+    .catch((err) => {
+      inFlightRanks = null;
+      throw err;
+    });
+  return inFlightRanks;
+}
 
 export async function safeFix(guild: Guild | null, discordId: string): Promise<void> {
   if (!guild) return;
@@ -13,7 +38,6 @@ export async function safeFix(guild: Guild | null, discordId: string): Promise<v
 
 export async function fix(guild: Guild, discordId: string) {
   const User = (await import('../models/User')).default;
-  const EloRank = (await import('../models/EloRank')).default;
   const workersManager = WorkersManager.getInstance();
 
   const member = guild.members.cache.get(discordId);
@@ -22,7 +46,7 @@ export async function fix(guild: Guild, discordId: string) {
   const user = await User.findOne({ discordId });
   const registeredRole = config.roles.registered;
   const nonRegisteredRole = config.roles.nonRegistered;
-  const eloRanks = await EloRank.find();
+  const eloRanks = await getEloRanks();
   const eloRoleIds = eloRanks.map(r => r.roleId);
 
   if (!user) {

@@ -40,7 +40,9 @@ export class ChannelsCleanupTask {
       }
 
       
-      const activeGames = await Game.find({ state: { $in: ['pending', 'active'] } });
+      const activeGames = await Game.find({ state: { $in: ['pending', 'active'] } })
+        .select('channels.text channels.picking channels.team1Voice channels.team2Voice')
+        .lean();
 
       
       const validChannelIds = new Set<string>();
@@ -89,20 +91,24 @@ export class ChannelsCleanupTask {
 
       console.log(`[ChannelsCleanupTask] Found ${channelsToDelete.length} orphaned channels in ${categoryType} category`);
 
-      
       let deletedCount = 0;
-      for (const channel of channelsToDelete) {
-        try {
-          await channel.delete(`Orphaned channel cleanup - not associated with any pending/active game`);
-          console.log(`[ChannelsCleanupTask] Deleted orphaned ${channel.type === ChannelType.GuildText ? 'text' : 'voice'} channel: ${channel.name} (${channel.id})`);
-          deletedCount++;
-          
-          
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (deleteError) {
-          const detail = deleteError instanceof Error ? deleteError.message : deleteError;
-          console.error(`[ChannelsCleanupTask] Failed to delete channel ${channel.name} (${channel.id}):`, detail);
+      const CONCURRENCY = 3;
+      for (let i = 0; i < channelsToDelete.length; i += CONCURRENCY) {
+        const batch = channelsToDelete.slice(i, i + CONCURRENCY);
+        const results = await Promise.allSettled(batch.map((channel) =>
+          channel.delete(`Orphaned channel cleanup - not associated with any pending/active game`)
+        ));
+        for (let j = 0; j < results.length; j++) {
+          const result = results[j];
+          if (result.status === 'fulfilled') {
+            console.log(`[ChannelsCleanupTask] Deleted orphaned ${batch[j].type === ChannelType.GuildText ? 'text' : 'voice'} channel: ${batch[j].name} (${batch[j].id})`);
+            deletedCount++;
+          } else {
+            const detail = result.reason instanceof Error ? result.reason.message : result.reason;
+            console.error(`[ChannelsCleanupTask] Failed to delete channel ${batch[j].name} (${batch[j].id}):`, detail);
+          }
         }
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
 
       console.log(`[ChannelsCleanupTask] Successfully deleted ${deletedCount}/${channelsToDelete.length} orphaned channels from ${categoryType} category`);

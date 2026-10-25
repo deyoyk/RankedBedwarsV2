@@ -143,8 +143,15 @@ async function processVoteResults(message: Message, data: StrikeRequestData, vot
 
   try {
     if (approved) {
-      await StrikeManager.strike(message.guild!, data.targetId, data.requesterId, data.reason);
-      resultEmbed.setDescription(`✅ Strike approved and applied to <@${data.targetId}>.`);
+      const freshGame = await Game.findOne({ gameId: data.gameId });
+      if (!freshGame) {
+        resultEmbed.setDescription(`❌ Strike request failed: game not found.`);
+      } else if (freshGame.state === 'scored' || freshGame.state === 'voided' || freshGame.state === 'scoring') {
+        resultEmbed.setDescription(`❌ Strike request not applied: game state changed to ${freshGame.state}.`);
+      } else {
+        await StrikeManager.strike(message.guild!, data.targetId, data.requesterId, data.reason);
+        resultEmbed.setDescription(`✅ Strike approved and applied to <@${data.targetId}>.`);
+      }
     } else {
       resultEmbed.setDescription(`❌ Strike request rejected due to insufficient approval votes.`);
     }

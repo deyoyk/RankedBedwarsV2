@@ -114,7 +114,7 @@ export const gameBaseFields = {
   endTime: { type: Date },
   state: {
     type: String,
-    enum: ['voided', 'scored', 'pending', 'active'],
+    enum: ['voided', 'scored', 'pending', 'active', 'scoring'],
     default: 'pending'
   },
   channels: {

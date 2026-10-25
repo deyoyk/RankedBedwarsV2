@@ -38,6 +38,7 @@ public class BedWars1058Listener implements Listener {
     
     private final RankedBedwars plugin;
     private final Map<String, BW1058GameTracker> gameTrackers = new ConcurrentHashMap<>();
+    private final Map<String, BW1058GameTracker> playerTrackerIndex = new ConcurrentHashMap<>();
     private final Map<String, Long> recentPvpKills = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> preGamePlayers = new ConcurrentHashMap<>();
     
@@ -72,9 +73,10 @@ public class BedWars1058Listener implements Listener {
     
 
     public void cleanupGameTrackerForMap(String mapName) {
-        if (gameTrackers.containsKey(mapName)) {
+        BW1058GameTracker removed = gameTrackers.remove(mapName);
+        if (removed != null) {
             plugin.debug("Cleaning up existing game tracker for map: " + mapName);
-            gameTrackers.remove(mapName);
+            unindexTracker(removed);
             preGamePlayers.remove(mapName);
             plugin.debug("Cleaned up game tracker for map: " + mapName);
         }
@@ -103,6 +105,9 @@ public class BedWars1058Listener implements Listener {
             Set<String> players = new HashSet<>();
             for (Player player : arena.getPlayers()) {
                 players.add(player.getName());
+            }
+            for (String playerName : players) {
+                playerTrackerIndex.put(playerName, gameTracker);
             }
             preGamePlayers.put(arenaName, players);
             
@@ -380,12 +385,14 @@ public class BedWars1058Listener implements Listener {
         if (dealer == null) return;
         Player victim = (Player) event.getEntity();
         if (dealer.getName().equals(victim.getName())) return;
-        for (BW1058GameTracker tracker : gameTrackers.values()) {
-            if (tracker.isTracking(victim.getName()) && tracker.isTracking(dealer.getName())) {
-                tracker.recordDamage(dealer.getName(), victim.getName(), event.getFinalDamage());
-                return;
-            }
+        BW1058GameTracker tracker = playerTrackerIndex.get(victim.getName());
+        if (tracker != null && tracker.isTracking(victim.getName()) && tracker.isTracking(dealer.getName())) {
+            tracker.recordDamage(dealer.getName(), victim.getName(), event.getFinalDamage());
         }
+    }
+
+    private void unindexTracker(BW1058GameTracker tracker) {
+        playerTrackerIndex.entrySet().removeIf(entry -> entry.getValue() == tracker);
     }
 
     private Player resolveDamager(Entity damager) {
@@ -497,6 +504,7 @@ public class BedWars1058Listener implements Listener {
         
         plugin.getMapManager().unlockMap(arenaName);
         gameTrackers.remove(arenaName);
+        unindexTracker(gameTracker);
         preGamePlayers.remove(arenaName);
         
         for (String playerName : gameTracker.playerKills.keySet()) {
@@ -736,8 +744,11 @@ public class BedWars1058Listener implements Listener {
         
         
         if (arenaName != null) {
+            BW1058GameTracker removed = gameTrackers.remove(arenaName);
+            if (removed != null) {
+                unindexTracker(removed);
+            }
             preGamePlayers.remove(arenaName);
-            gameTrackers.remove(arenaName);
         }
         
         

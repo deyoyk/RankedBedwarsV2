@@ -10,7 +10,6 @@
     "dev": "ts-node src/index.ts",
     "setup": "node scripts/setup.cjs && node scripts/validate-config.cjs",
     "validate": "node scripts/validate-config.cjs",
-    "migrate": "node scripts/migrateFieldNames.js",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "test": "jest --runInBand --silent",

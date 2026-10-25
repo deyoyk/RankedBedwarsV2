@@ -42,6 +42,7 @@ export class WorkersManager {
   private isEnabled = false;
   private processingInterval: NodeJS.Timeout | null = null;
   private healthCheckInterval: NodeJS.Timeout | null = null;
+  private isProcessing = false;
 
   
   private readonly MAX_RETRIES = 3;
@@ -183,30 +184,45 @@ export class WorkersManager {
 
   private async processTasks(): Promise<void> {
     if (!this.isEnabled || this.workers.length === 0) return;
-
-    
-    for (let priority = 10; priority >= 0; priority--) {
-      const queue = this.taskQueue.get(priority);
-      if (!queue || queue.length === 0) continue;
-
-      
-      const availableWorkers = this.workers.filter(worker =>
-        worker.isReady &&
-        worker.currentTasks.size < this.MAX_CONCURRENT_TASKS_PER_WORKER &&
-        Date.now() > worker.rateLimitedUntil
-      );
-
-      if (availableWorkers.length === 0) continue;
-
-      
-      const tasksToProcess = queue.splice(0, availableWorkers.length);
-
-      for (let i = 0; i < tasksToProcess.length && i < availableWorkers.length; i++) {
-        const task = tasksToProcess[i];
-        const worker = availableWorkers[i];
-
-        this.executeTask(worker, task);
+    if (this.isProcessing) return;
+    this.isProcessing = true;
+    try {
+      const now = Date.now();
+      const budgets = new Map<WorkerClient, number>();
+      for (const worker of this.workers) {
+        if (!worker.isReady || now <= worker.rateLimitedUntil) continue;
+        const free = this.MAX_CONCURRENT_TASKS_PER_WORKER - worker.currentTasks.size;
+        if (free > 0) budgets.set(worker, free);
       }
+      if (budgets.size === 0) return;
+
+      for (let priority = 10; priority >= 0; priority--) {
+        const queue = this.taskQueue.get(priority);
+        if (!queue || queue.length === 0) continue;
+
+        let progressed = true;
+        while (queue.length > 0 && progressed) {
+          progressed = false;
+          for (const [worker, budget] of budgets) {
+            if (budget <= 0 || queue.length === 0) continue;
+            const task = queue.shift();
+            if (!task) continue;
+            budgets.set(worker, budget - 1);
+            progressed = true;
+            void this.executeTask(worker, task);
+          }
+        }
+        let hasBudget = false;
+        for (const b of budgets.values()) {
+          if (b > 0) {
+            hasBudget = true;
+            break;
+          }
+        }
+        if (!hasBudget) break;
+      }
+    } finally {
+      this.isProcessing = false;
     }
   }
 

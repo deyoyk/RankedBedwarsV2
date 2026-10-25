@@ -218,8 +218,30 @@ export class PartyService {
     }
     party.members = updated.members;
 
-    user.partyId = party.partyId;
-    await user.save();
+    const claim = await UserModel.updateOne(
+      {
+        discordId: userId,
+        $or: [{ partyId: { $exists: false } }, { partyId: null }, { partyId: '' }]
+      },
+      { $set: { partyId: party.partyId } }
+    );
+    const modifiedCount = (claim as { modifiedCount?: number; nModified?: number }).modifiedCount
+      ?? (claim as { nModified?: number }).nModified
+      ?? 0;
+    const matchedCount = (claim as { matchedCount?: number; n?: number }).matchedCount
+      ?? (claim as { n?: number }).n
+      ?? 0;
+    if (modifiedCount < 1 && matchedCount < 1) {
+      await Party.updateOne(
+        { partyId: party.partyId },
+        { $pull: { members: userId } }
+      ).catch(() => undefined);
+      const freshUser = await UserModel.findOne({ discordId: userId });
+      if (freshUser?.partyId) {
+        return { success: false, message: 'Already in a party' };
+      }
+      return { success: false, message: 'Failed to join party' };
+    }
 
     await this.updatePartyRoles(guild, party.members);
     await this.updatePartyActivity(party.partyId);
@@ -400,8 +422,8 @@ export class PartyService {
 
   static async listPublicParties(): Promise<{ success: boolean; parties?: PartyDocument[]; message?: string }> {
     try {
-      const parties = await Party.find({ isPrivate: false }).sort({ lastActiveTime: -1 });
-      return { success: true, parties };
+      const parties = await Party.find({ isPrivate: false }).sort({ lastActiveTime: -1 }).limit(50).lean();
+      return { success: true, parties: parties as unknown as PartyDocument[] };
     } catch (error) {
       console.error('[PartyService] Error listing parties:', error);
       return { success: false, message: 'Failed to list parties' };

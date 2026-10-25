@@ -8,9 +8,12 @@ import org.bukkit.configuration.file.FileConfiguration;
 
 import java.lang.reflect.Type;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
@@ -29,7 +32,8 @@ public class APIClient {
     public APIClient(Gson gson, Logger logger, FileConfiguration config) {
         this.gson = gson;
         this.logger = logger;
-        this.executor = Executors.newFixedThreadPool(2, r -> {
+        int poolSize = Math.max(2, Math.min(16, Runtime.getRuntime().availableProcessors() * 2));
+        this.executor = Executors.newFixedThreadPool(poolSize, r -> {
             Thread t = new Thread(r, "RBW-APIClient");
             t.setDaemon(true);
             return t;
@@ -50,7 +54,7 @@ public class APIClient {
     public CompletableFuture<UserData> getUserData(String ign) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                String url = baseUrl + "/user?ign=" + ign;
+                String url = baseUrl + "/user?ign=" + URLEncoder.encode(ign, StandardCharsets.UTF_8);
                 String response = makeHttpRequest(url);
                 if (response != null) {
                     if (response.equals("NaN")) {
@@ -96,23 +100,49 @@ public class APIClient {
     }
 
     private String makeHttpRequest(String urlString) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(urlString))
-                .timeout(Duration.ofSeconds(5))
-                .GET()
-                .build();
+        Exception lastFailure = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(urlString))
+                        .timeout(Duration.ofSeconds(5))
+                        .GET()
+                        .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-        if (response.statusCode() == 200) {
-            return response.body();
-        } else {
-            logger.warning("HTTP request failed with response code: " + response.statusCode());
-            if (response.statusCode() == 404) {
-                return "NaN";
+                if (response.statusCode() == 200) {
+                    return response.body();
+                }
+                if (response.statusCode() == 404) {
+                    return "NaN";
+                }
+                if (response.statusCode() >= 500 && response.statusCode() < 600) {
+                    logger.warning("HTTP request failed with response code: " + response.statusCode()
+                            + " (attempt " + (attempt + 1) + "/3)");
+                    lastFailure = null;
+                    if (attempt < 2) {
+                        continue;
+                    }
+                    return null;
+                }
+                logger.warning("HTTP request failed with response code: " + response.statusCode());
+                return null;
+            } catch (HttpTimeoutException e) {
+                lastFailure = e;
+                logger.warning("HTTP request timed out (attempt " + (attempt + 1) + "/3): " + e.getMessage());
+                if (attempt >= 2) {
+                    throw e;
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw e;
             }
-            return null;
         }
+        if (lastFailure != null) {
+            throw lastFailure;
+        }
+        return null;
     }
 
     private UserData createDefaultUserData() {

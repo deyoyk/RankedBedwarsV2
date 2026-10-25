@@ -4,7 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
-import { ensureUserStats, updateDailyElo, computeWlr } from '../../utils/userStats';
+import { ensureUserStats, computeWlr } from '../../utils/userStats';
 
 export async function lose(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let targetId: string;
@@ -47,14 +47,14 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
 
     ensureUserStats(existing);
 
-    const updatedElo = Math.max(0, existing.elo - eloRank.loseElo);
-    const newLoseStreak = (existing.loseStreak ?? 0) + 1;
-    const newWlr = computeWlr(existing.wins, existing.losses + 1);
+    const updatedElo = Math.max(0, (existing.elo ?? 0) - eloRank.loseElo);
+    const newWlr = computeWlr(existing.wins ?? 0, (existing.losses ?? 0) + 1);
     const user = await User.findOneAndUpdate(
       { discordId: targetId },
       {
-        $set: { elo: updatedElo, loseStreak: newLoseStreak, winStreak: 0, wlr: newWlr },
-        $inc: { losses: 1, games: 1 },
+        $inc: { losses: 1, games: 1, loseStreak: 1 },
+        $set: { elo: updatedElo, winStreak: 0, wlr: newWlr },
+        $push: { dailyElo: { $each: [{ elo: updatedElo, date: new Date() }], $slice: -30 } },
       },
       { new: true }
     );
@@ -62,8 +62,6 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
       await safeReply(interaction, errorEmbed('User not found.'));
       return;
     }
-    updateDailyElo(user, user.elo);
-    await user.save();
 
     if (interaction.guild) {
       await fix(interaction.guild, user.discordId);
