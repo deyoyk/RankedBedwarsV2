@@ -66,21 +66,20 @@ export function resetUserStats(user: UserStatsLike) {
 }
 
 export function updateDailyElo(user: UserStatsLike, newElo: number) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   if (!Array.isArray(user.dailyElo)) user.dailyElo = [];
-  const existingEntry = user.dailyElo.find((entry) => {
-    const entryDate = new Date(entry.date);
-    entryDate.setHours(0, 0, 0, 0);
-    return entryDate.getTime() === today.getTime();
-  });
-  if (existingEntry) {
-    existingEntry.elo = newElo;
-  } else {
-    user.dailyElo.push({ elo: newElo, date: new Date() });
+  const dayKey = (d: Date | string) => {
+    const t = new Date(d);
+    return t.getFullYear() * 10000 + (t.getMonth() + 1) * 100 + t.getDate();
+  };
+  const todayKey = dayKey(new Date());
+  const last = user.dailyElo[user.dailyElo.length - 1];
+  if (last && dayKey(last.date) === todayKey) {
+    last.elo = newElo;
+    return;
   }
+  user.dailyElo.push({ elo: newElo, date: new Date() });
   if (user.dailyElo.length > 30) {
-    user.dailyElo = user.dailyElo.slice(-30);
+    user.dailyElo.splice(0, user.dailyElo.length - 30);
   }
 }
 
