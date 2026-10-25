@@ -50,6 +50,11 @@ public class BedWars1058Listener implements Listener {
     private void cleanupStaleData() {
         long now = System.currentTimeMillis();
         recentPvpKills.entrySet().removeIf(entry -> (now - entry.getValue()) > 300_000);
+        Set<BW1058GameTracker> live = new HashSet<>(gameTrackers.values());
+        if (!live.isEmpty() || !playerTrackerIndex.isEmpty()) {
+            playerTrackerIndex.entrySet().removeIf(entry -> !live.contains(entry.getValue()));
+        }
+        preGamePlayers.keySet().removeIf(key -> !gameTrackers.containsKey(key));
     }
 
     /**
@@ -76,7 +81,7 @@ public class BedWars1058Listener implements Listener {
         BW1058GameTracker removed = gameTrackers.remove(mapName);
         if (removed != null) {
             plugin.debug("Cleaning up existing game tracker for map: " + mapName);
-            unindexTracker(removed);
+            unindexTracker(mapName, removed);
             preGamePlayers.remove(mapName);
             plugin.debug("Cleaned up game tracker for map: " + mapName);
         }
@@ -391,7 +396,14 @@ public class BedWars1058Listener implements Listener {
         }
     }
 
-    private void unindexTracker(BW1058GameTracker tracker) {
+    private void unindexTracker(String arenaName, BW1058GameTracker tracker) {
+        Set<String> members = preGamePlayers.get(arenaName);
+        if (members != null) {
+            for (String playerName : members) {
+                playerTrackerIndex.remove(playerName, tracker);
+            }
+            return;
+        }
         playerTrackerIndex.entrySet().removeIf(entry -> entry.getValue() == tracker);
     }
 
@@ -505,8 +517,8 @@ public class BedWars1058Listener implements Listener {
         }
         
         plugin.getMapManager().unlockMap(arenaName);
+        unindexTracker(arenaName, gameTracker);
         gameTrackers.remove(arenaName);
-        unindexTracker(gameTracker);
         preGamePlayers.remove(arenaName);
         
         for (String playerName : gameTracker.playerKills.keySet()) {
@@ -755,7 +767,7 @@ public class BedWars1058Listener implements Listener {
         if (arenaName != null) {
             BW1058GameTracker removed = gameTrackers.remove(arenaName);
             if (removed != null) {
-                unindexTracker(removed);
+                unindexTracker(arenaName, removed);
             }
             preGamePlayers.remove(arenaName);
         }

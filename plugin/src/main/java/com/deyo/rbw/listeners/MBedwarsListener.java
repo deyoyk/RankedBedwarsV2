@@ -52,6 +52,11 @@ public class MBedwarsListener implements Listener {
     private void cleanupStaleData() {
         long now = System.currentTimeMillis();
         recentPvpKills.entrySet().removeIf(entry -> (now - entry.getValue()) > 300_000);
+        Set<GameInstance> live = new HashSet<>(gameInstances.values());
+        if (!live.isEmpty() || !playerInstanceIndex.isEmpty()) {
+            playerInstanceIndex.entrySet().removeIf(entry -> !live.contains(entry.getValue()));
+        }
+        preGamePlayers.keySet().removeIf(key -> !gameInstances.containsKey(key));
     }
 
 
@@ -59,7 +64,7 @@ public class MBedwarsListener implements Listener {
         GameInstance removed = gameInstances.remove(mapName);
         if (removed != null) {
             plugin.debug("Cleaning up existing game instance for map: " + mapName);
-            unindexInstance(removed);
+            unindexInstance(mapName, removed);
             preGamePlayers.remove(mapName);
             plugin.debug("Cleaned up game instance for map: " + mapName);
         }
@@ -109,7 +114,14 @@ public class MBedwarsListener implements Listener {
         }
     }
 
-    private void unindexInstance(GameInstance instance) {
+    private void unindexInstance(String arenaName, GameInstance instance) {
+        Set<String> members = preGamePlayers.get(arenaName);
+        if (members != null) {
+            for (String playerName : members) {
+                playerInstanceIndex.remove(playerName, instance);
+            }
+            return;
+        }
         playerInstanceIndex.entrySet().removeIf(entry -> entry.getValue() == instance);
     }
 
@@ -208,9 +220,9 @@ public class MBedwarsListener implements Listener {
         if (plugin.getMapManager() != null) {
             plugin.getMapManager().unlockMap(arenaName);
         }
+        unindexInstance(arenaName, gameInstance);
         preGamePlayers.remove(arenaName);
         gameInstances.remove(arenaName);
-        unindexInstance(gameInstance);
         for (String playerName : game.getPlayerKills().keySet()) {
             recentPvpKills.remove(playerName);
         }
@@ -348,7 +360,7 @@ public class MBedwarsListener implements Listener {
         if (arenaName != null) {
             GameInstance removed = gameInstances.remove(arenaName);
             if (removed != null) {
-                unindexInstance(removed);
+                unindexInstance(arenaName, removed);
             }
             preGamePlayers.remove(arenaName);
         }
