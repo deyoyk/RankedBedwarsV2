@@ -43,6 +43,8 @@ export class WorkersManager {
   private processingInterval: NodeJS.Timeout | null = null;
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private isProcessing = false;
+  private consecutiveFailures = new Map<WorkerClient, number>();
+  private readonly FAILURE_QUARANTINE_THRESHOLD = 3;
 
   
   private readonly MAX_RETRIES = 3;
@@ -263,13 +265,21 @@ export class WorkersManager {
 
       
       this.recordTaskCompletion(worker, startTime, true);
+      this.consecutiveFailures.set(worker, 0);
 
       if (task.resolve) {
         task.resolve(result);
       }
 
     } catch (error) {
-      
+      const failures = (this.consecutiveFailures.get(worker) ?? 0) + 1;
+      this.consecutiveFailures.set(worker, failures);
+      if (failures >= this.FAILURE_QUARANTINE_THRESHOLD) {
+        worker.rateLimitedUntil = Date.now() + this.RATE_LIMIT_COOLDOWN;
+        worker.stats.rateLimitHits++;
+        this.consecutiveFailures.set(worker, 0);
+      }
+
       if (this.isPermissionError(error)) {
         try {
           const fallbackResult = await this.executeTaskOnMainClient(task.type, task.data);
@@ -425,6 +435,15 @@ export class WorkersManager {
 
   private performHealthCheck(): void {
     if (!this.isEnabled) return;
+    const now = Date.now();
+    let quarantined = 0;
+    for (const worker of this.workers) {
+      if (now < worker.rateLimitedUntil) quarantined++;
+      else this.consecutiveFailures.delete(worker);
+    }
+    if (quarantined > 0) {
+      console.log(`[WorkersManager] Health check: ${quarantined}/${this.workers.length} workers quarantined`);
+    }
   }
 
   
