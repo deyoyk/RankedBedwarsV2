@@ -24,7 +24,7 @@ export async function wipeeveryone(interaction: Message | ChatInputCommandIntera
       { name: 'What will be wiped', value: '• ELO\n• Wins/Losses\n• Games played\n• MVPs\n• Kills/Deaths\n• Bed breaks/Final kills\n• Resource stats\n• Win/Lose streaks\n• KDR/WLR\n• Recent games\n• Daily ELO history', inline: false },
       { name: 'What will be preserved', value: '• Bans\n• Mutes\n• Strikes\n• User registration\n• Party information', inline: false },
       { name: 'Users to process', value: `${total}`, inline: true },
-      { name: 'Estimated time', value: `${Math.ceil(total / 10)} seconds`, inline: true },
+      { name: 'Estimated time', value: `${Math.ceil(total / 50)} seconds`, inline: true },
       { name: 'Rate limiting', value: '1 second between batches', inline: true }
     ],
     startMessage: 'Starting wipe everyone operation...',
@@ -73,8 +73,11 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
   resetUserStats(zeroed);
   await User.updateMany({}, { $set: zeroed });
 
-  const batchSize = 10;
+  const batchSize = 50;
+  const rateLimitDelay = 1000;
+  const progressIntervalMs = 5000;
   let lastId: unknown = null;
+  let lastReportAt = 0;
   for (;;) {
     const filter: Record<string, unknown> = lastId === null ? {} : { _id: { $gt: lastId } };
     const batch = await User.find(filter).select('_id discordId').sort({ _id: 1 }).limit(batchSize).lean();
@@ -84,10 +87,12 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
       fix(interaction.guild!, user.discordId).catch(() => undefined)
     ));
     processed += batch.length;
-    if (processed % 10 === 0 || processed >= total) {
+    const now = Date.now();
+    if (now - lastReportAt >= progressIntervalMs || processed >= total) {
+      lastReportAt = now;
       await reportProgress();
     }
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, rateLimitDelay));
   }
 
   const embed = successEmbed(
