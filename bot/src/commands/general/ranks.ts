@@ -8,7 +8,7 @@ import { safeReply } from '../../utils/safeReply';
 export async function ranks(interaction: Message | ChatInputCommandInteraction) {
 
   try {
-    const ranks = await EloRank.find().sort({ startElo: 1 });
+    const ranks = await EloRank.find().sort({ startElo: 1 }).lean();
     if (!ranks.length) {
       await safeReply(interaction, errorEmbed('No ranks found.', 'Ranks'));
       return;

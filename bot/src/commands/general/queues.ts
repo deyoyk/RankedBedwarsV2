@@ -1,11 +1,20 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
-import Queue, { IQueue } from '../../models/Queue';
+import Queue from '../../models/Queue';
 import { betterEmbed } from '../../utils/betterembed';
 import { paginate } from '../../utils/paginate';
 import { queuePlayers } from '../../types/queuePlayersMemory';
 
+type QueueListItem = {
+  channelId: string;
+  minElo: number;
+  maxElo: number;
+  maxPlayers: number;
+  isRanked?: boolean;
+  isPicking?: boolean;
+};
+
 export async function queues(interaction: Message | ChatInputCommandInteraction, _args?: string[]) {
-  await paginate<IQueue>(interaction, {
+  await paginate<QueueListItem>(interaction, {
     commandName: 'queues',
     title: 'Queues',
     emptyMessage: 'There are no queues in the database.',
@@ -13,7 +22,7 @@ export async function queues(interaction: Message | ChatInputCommandInteraction,
     perPage: 10,
     fetchPage: async (skip, limit) => {
       const total = await Queue.countDocuments();
-      const items = await Queue.find().sort({ channelId: 1 }).skip(skip).limit(limit);
+      const items = await Queue.find().sort({ channelId: 1 }).skip(skip).limit(limit).select('channelId minElo maxElo maxPlayers isRanked isPicking').lean();
       return {
         items,
         total,
