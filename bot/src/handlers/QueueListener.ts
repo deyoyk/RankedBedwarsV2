@@ -363,7 +363,10 @@ export class QueueListener {
 
   private async handleQueueJoin(state: VoiceState): Promise<void> {
     try {
-      const queue = await Queue.findOne({ channelId: state.channelId });
+      const foundQueue: any = Queue.findOne({ channelId: state.channelId });
+      const queue = typeof foundQueue?.select === 'function'
+        ? await foundQueue.select('channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles').lean()
+        : await foundQueue;
       if (!queue || queue.isActive === false) {
         await this.moveToWaiting(state, 'This queue is currently disabled.');
         return;
@@ -372,7 +375,10 @@ export class QueueListener {
       const userId = state.member?.id;
       if (!userId) return;
 
-      const user = await User.findOne({ discordId: userId });
+      const foundUser: any = User.findOne({ discordId: userId });
+      const user = typeof foundUser?.select === 'function'
+        ? await foundUser.select('discordId ign partyId elo isBanned isFrozen').lean()
+        : await foundUser;
       if (!user) {
         await this.moveToWaiting(state, 'you are not registered. Please register to participate. Maybe `/update`?');
         return;
@@ -391,7 +397,7 @@ export class QueueListener {
       const member = state.member;
       if (!member) return;
 
-      const hasBypassRole = queue.bypassRoles.some(roleId => member.roles.cache.has(roleId));
+      const hasBypassRole = queue.bypassRoles.some((roleId: string) => member.roles.cache.has(roleId));
 
       if (!hasBypassRole && (user.elo < queue.minElo || user.elo > queue.maxElo)) {
         await this.moveToWaiting(state, `ELO ${user.elo} not in range (${queue.minElo}-${queue.maxElo})`);
