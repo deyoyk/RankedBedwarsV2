@@ -737,6 +737,17 @@ export class ApiManager {
         res.status(400).json({ error: 'Invalid punishment type' });
         return;
       }
+      const result = await this.getCached(`punishments:${type}`, 30000, async () => {
+        return this.collectPunishments(type);
+      });
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching punishments:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+
+  private async collectPunishments(type: string) {
       const users = await User.find({ [`${type}.0`]: { $exists: true } }).select(`discordId ign ${type}`).lean();
 
       const staffIds: Set<string> = new Set();
@@ -799,11 +810,7 @@ export class ApiManager {
           ign: idToIgn[p.targetId] || p.targetId
         }
       }));
-      res.json(result);
-    } catch (error) {
-      console.error('Error fetching punishments:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
+      return result;
   }
 
 
