@@ -9,7 +9,7 @@ export async function queue(interaction: Message | ChatInputCommandInteraction, 
   try {
     const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
     
-    const user = await User.findOne({ discordId: userId });
+    const user = await User.findOne({ discordId: userId }).select('_id').lean();
     if (!user) {
       await safeReply(interaction, betterEmbed('You are not registered. Please register first.', '#00AAAA', 'Not Registered'));
       return;
@@ -21,13 +21,13 @@ export async function queue(interaction: Message | ChatInputCommandInteraction, 
       return;
     }
 
-    const member = await guild.members.fetch(userId);
-    if (!member.voice.channel) {
+    const member = guild.members.cache?.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+    if (!member?.voice.channel) {
       await safeReply(interaction, betterEmbed('You are not in a voice channel.', '#00AAAA', 'Not in Voice Channel'));
       return;
     }
 
-    const queue = await Queue.findOne({ channelId: member.voice.channel.id });
+    const queue = await Queue.findOne({ channelId: member.voice.channel.id }).select('channelId maxPlayers minElo maxElo isRanked isPicking').lean();
     if (!queue) {
       await safeReply(interaction, betterEmbed('You are not in a queue channel.', '#00AAAA', 'Not in Queue'));
       return;
@@ -39,7 +39,7 @@ export async function queue(interaction: Message | ChatInputCommandInteraction, 
       return;
     }
 
-    const users = await User.find({ discordId: { $in: playersInQueue } });
+    const users = await User.find({ discordId: { $in: playersInQueue } }).select('discordId wins losses wlr mvps').lean();
     
     const playerInfo = users.map(user => {
       const wlr = user.wlr !== undefined ? user.wlr : (user.losses > 0 ? (user.wins / user.losses) : user.wins);
