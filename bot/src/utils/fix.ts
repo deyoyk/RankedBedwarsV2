@@ -47,12 +47,12 @@ export interface FixUserInput {
   } | null;
 }
 
-export async function fix(guild: Guild, discordId: string, preloaded?: FixUserInput | null) {
+export async function fix(guild: Guild, discordId: string, preloaded?: FixUserInput | null): Promise<boolean> {
   const User = (await import('../models/User')).default;
   const workersManager = WorkersManager.getInstance();
 
-  const member = guild.members.cache.get(discordId);
-  if (!member) return;
+  const member = guild.members.cache.get(discordId) ?? await guild.members.fetch(discordId).catch(() => null);
+  if (!member) return false;
 
   const user = preloaded !== undefined ? preloaded : await User.findOne({ discordId }).select('discordId elo ign settings').lean();
   const registeredRole = config.roles.registered;
@@ -71,7 +71,7 @@ export async function fix(guild: Guild, discordId: string, preloaded?: FixUserIn
     if (rolesToAdd.length > 0 || rolesToRemove.length > 0) {
       await workersManager.updateMemberRoles(discordId, rolesToAdd, rolesToRemove, 6);
     }
-    return;
+    return true;
   }
 
 
@@ -132,5 +132,7 @@ export async function fix(guild: Guild, discordId: string, preloaded?: FixUserIn
   } catch (error) {
     console.error(`Failed to update nickname for ${user.discordId}:`, error);
   }
+
+  return true;
 
 }

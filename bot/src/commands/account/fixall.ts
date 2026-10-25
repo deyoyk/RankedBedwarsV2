@@ -82,9 +82,18 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
 
     const batchPromises = batch.map(async (user) => {
       try {
-        await fix(interaction.guild!, user.discordId, { discordId: user.discordId, elo: user.elo, ign: user.ign, settings: user.settings });
-        progress.successful++;
-        console.log(`[FixAll] Successfully fixed user ${user.discordId} (${user.ign || 'Unknown'})`);
+        const fixed = await fix(interaction.guild!, user.discordId, { discordId: user.discordId, elo: user.elo, ign: user.ign, settings: user.settings });
+        if (fixed) {
+          progress.successful++;
+          console.log(`[FixAll] Successfully fixed user ${user.discordId} (${user.ign || 'Unknown'})`);
+        } else {
+          progress.failed++;
+          const errorMsg = `Skipped ${user.ign || user.discordId}: not in server`;
+          if (progress.errors.length < maxStoredErrors) {
+            progress.errors.push(errorMsg);
+          }
+          console.log(`[FixAll] ${errorMsg}`);
+        }
       } catch (error) {
         progress.failed++;
         const detail = error instanceof Error ? error.message : 'Unknown error';
