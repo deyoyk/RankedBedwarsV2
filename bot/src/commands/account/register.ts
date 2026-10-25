@@ -104,7 +104,25 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           await modalInt.reply({ content: 'IGN already registered to another user.', ephemeral: true });
           return;
         }
-        await User.create({ discordId, ign });
+        try {
+          await User.create({ discordId, ign });
+        } catch (createError) {
+          const code = (createError as { code?: unknown })?.code;
+          const duplicate = code === 11000;
+          try {
+            await (sentMessage as Message).edit({
+              embeds: [errorEmbed(
+                duplicate ? 'You are already registered.' : 'Registration failed. Please try again.',
+                'Register Error'
+              ).builder],
+              components: []
+            });
+          } catch (e) {
+            console.error('Failed to edit original registration message (duplicate):', e);
+          }
+          await modalInt.reply({ content: duplicate ? 'You are already registered.' : 'Registration failed. Please try again.', ephemeral: true });
+          return;
+        }
         
 
         
