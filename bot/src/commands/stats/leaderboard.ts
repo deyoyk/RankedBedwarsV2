@@ -33,6 +33,22 @@ function getModeConfig(mode: string) {
   return LEADERBOARD_MODES[mode] || LEADERBOARD_MODES.elo;
 }
 
+const totalCache = new Map<string, { at: number; total: number }>();
+const TOTAL_CACHE_TTL_MS = 60000;
+
+async function getCachedTotal(valueField: string): Promise<number> {
+  const now = Date.now();
+  const hit = totalCache.get(valueField);
+  if (hit && now - hit.at < TOTAL_CACHE_TTL_MS) return hit.total;
+  const total = await User.countDocuments({ [valueField]: { $ne: null } });
+  if (totalCache.size >= 100) {
+    const oldest = totalCache.keys().next();
+    if (!oldest.done) totalCache.delete(oldest.value);
+  }
+  totalCache.set(valueField, { at: now, total });
+  return total;
+}
+
 export async function leaderboard(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let page = 0;
   let mode = 'elo';
@@ -75,7 +91,7 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
       .limit(usersPerPage)
       .select(`ign discordId ${valueField}`)
       .lean();
-    const totalUsers = await User.countDocuments({ [valueField]: { $ne: null } });
+    const totalUsers = await getCachedTotal(valueField);
 
     if (!users || users.length === 0) {
       
@@ -138,15 +154,31 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
     }
   }
 
+  let replyMsg: Message | undefined;
+
   async function replyEmbed(embedObj: ReturnType<typeof betterEmbed>, components?: ActionRowBuilder<ButtonBuilder>[]) {
-    if (interaction instanceof ChatInputCommandInteraction || interaction instanceof Message) {
-      await safeReply(interaction, { embeds: [embedObj.builder], components: components || [] });
+    const payload = { embeds: [embedObj.builder], components: components || [] };
+    if (interaction instanceof ChatInputCommandInteraction) {
+      if (replyMsg) {
+        await interaction.editReply(payload).catch(() => {});
+        return;
+      }
+      const msg = await safeReply(interaction, { ...payload, fetchReply: true });
+      replyMsg = msg as unknown as Message | undefined;
+    } else {
+      if (replyMsg) {
+        await replyMsg.edit(payload).catch(() => {});
+        return;
+      }
+      const msg = await safeReply(interaction, payload);
+      replyMsg = msg as unknown as Message | undefined;
     }
   }
 
   await renderPage(page);
 
-  const collector = interaction.channel?.createMessageComponentCollector({ time: 120000 });
+  const scope = replyMsg ?? interaction.channel;
+  const collector = scope?.createMessageComponentCollector({ time: 120000 });
 
   collector?.on('collect', async i => {
     
