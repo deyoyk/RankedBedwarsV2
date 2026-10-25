@@ -4,6 +4,7 @@
 
 export interface MapInfo {
   name: string;
+  physical_name?: string;
   heightlimit: number;
   maxplayers: number;
   locked?: boolean;

@@ -103,6 +103,7 @@ public class MapManager {
     private final Set<String> lockedArenaGroups = ConcurrentHashMap.newKeySet();
     private final Set<String> disabledArenaGroups = ConcurrentHashMap.newKeySet();
     private final Set<String> allowedGroups = new HashSet<>();
+    private volatile boolean mapInfoSendPending = false;
     
     
     
@@ -279,6 +280,21 @@ public class MapManager {
     }
 
     public void sendMapInfoToBot() {
+        synchronized (this) {
+            if (mapInfoSendPending) {
+                return;
+            }
+            mapInfoSendPending = true;
+        }
+        Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+            synchronized (this) {
+                mapInfoSendPending = false;
+            }
+            sendMapInfoToBotInternal();
+        }, 40L);
+    }
+
+    private void sendMapInfoToBotInternal() {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
 			JsonObject mapsJson = new JsonObject();
 			mapsJson.addProperty("type", "maps_info");
@@ -290,6 +306,16 @@ public class MapManager {
             for (ArenaGroup arenaGroup : arenaGroups.values()) {
                 JsonObject entry = new JsonObject();
                 entry.addProperty("name", arenaGroup.getDisplayName());
+                String physicalName = null;
+                for (Map.Entry<String, String> mapEntry : physicalArenaToGroupMap.entrySet()) {
+                    if (arenaGroup.getGroupId().equals(mapEntry.getValue())) {
+                        physicalName = mapEntry.getKey();
+                        break;
+                    }
+                }
+                if (physicalName != null) {
+                    entry.addProperty("physical_name", physicalName);
+                }
                 entry.addProperty("maxplayers", arenaGroup.getMaxPlayers());
                 
             

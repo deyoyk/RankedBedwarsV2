@@ -62,9 +62,14 @@ export async function calculateTeamAverageElo(
 
 type MapSize = {
   name: string;
+  physical_name?: string;
   maxplayers?: number;
   max_players?: number;
 };
+
+function resolveWarpMapName(m: MapSize): string {
+  return m.physical_name ?? m.name;
+}
 
 export const TENTATIVE_MAP_CLAIM_TTL_MS = 30 * 1000;
 
@@ -167,23 +172,26 @@ export async function selectRandomMap(
 
     if (candidates.length > 0) {
       const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      applyClaim(pick.name);
-      return pick.name;
+      const warpName = resolveWarpMapName(pick);
+      applyClaim(warpName);
+      return warpName;
     }
 
     const unlockedCandidates = preferUnblocked(unlockedMaps.filter(m => mapSize(m) === queueData.maxPlayers));
 
     if (unlockedCandidates.length > 0) {
       const pick = unlockedCandidates[Math.floor(Math.random() * unlockedCandidates.length)];
-      applyClaim(pick.name);
-      return pick.name;
+      const warpName = resolveWarpMapName(pick);
+      applyClaim(warpName);
+      return warpName;
     }
 
     const anyUnlocked = preferUnblocked(unlockedMaps);
     if (anyUnlocked.length > 0) {
       const pick = anyUnlocked[Math.floor(Math.random() * anyUnlocked.length)];
-      applyClaim(pick.name);
-      return pick.name;
+      const warpName = resolveWarpMapName(pick);
+      applyClaim(warpName);
+      return warpName;
     }
 
     return 'Aquarius';
