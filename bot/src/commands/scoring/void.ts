@@ -29,7 +29,7 @@ export async function voidGame(interaction: Message | ChatInputCommandInteractio
   }
 
   try {
-    const game = await Game.findOne({ gameId });
+    const game = await Game.findOne({ gameId }).select('state').lean();
     if (!game) {
       await safeReply(interaction, errorEmbed('Game not found!', 'Void Command Error'));
       return;

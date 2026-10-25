@@ -61,7 +61,7 @@ export async function score(interaction: Message | ChatInputCommandInteraction, 
   }
 
   try {
-    const game = await Game.findOne({ gameId });
+    const game = await Game.findOne({ gameId }).select('state').lean();
     if (!game) {
       await safeReply(interaction, errorEmbed('Game not found!', 'Score Command Error'));
       return;
@@ -71,7 +71,7 @@ export async function score(interaction: Message | ChatInputCommandInteraction, 
       return;
     }
 
-    const users = await User.find({ ign: { $in: [...mvps, ...bedbreaks] } });
+    const users = await User.find({ ign: { $in: [...mvps, ...bedbreaks] } }).select('ign discordId').lean();
     const ignToId: Record<string, string> = {};
     for (const user of users) {
       ignToId[user.ign] = user.discordId;

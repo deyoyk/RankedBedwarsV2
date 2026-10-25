@@ -57,7 +57,7 @@ async function parseVoidRequest(interaction: Message | ChatInputCommandInteracti
 }
 
 async function validateVoidRequest(data: VoidRequestData): Promise<{ isValid: true; game: IGame } | { isValid: false; error: string; game?: undefined }> {
-  const game = await Game.findOne({ gameId: data.gameId });
+  const game = await Game.findOne({ gameId: data.gameId }).select('state team1 team2 map');
   if (!game) {
     return { isValid: false, error: 'Game not found.' };
   }
@@ -146,7 +146,7 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
 
   try {
     if (approved) {
-      const freshGame = await Game.findOne({ gameId: data.gameId });
+      const freshGame = await Game.findOne({ gameId: data.gameId }).select('state').lean();
       if (!freshGame) {
         resultEmbed.setDescription(`❌ Void request failed: game not found.`);
       } else if (freshGame.state === 'scored' || freshGame.state === 'voided' || freshGame.state === 'scoring') {

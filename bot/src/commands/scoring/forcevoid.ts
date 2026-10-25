@@ -14,7 +14,7 @@ export async function forcevoid(interaction: Message | ChatInputCommandInteracti
   }
 
   
-  const game = await Game.findOne({ 'channels.text': channel.id });
+  const game = await Game.findOne({ 'channels.text': channel.id }).select('state gameId').lean();
   if (!game) {
     await safeReply(interaction, errorEmbed('No game is associated with this channel.', 'Error'));
     return;

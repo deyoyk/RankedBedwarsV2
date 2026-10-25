@@ -58,7 +58,7 @@ async function parseStrikeRequest(interaction: Message | ChatInputCommandInterac
 }
 
 async function validateStrikeRequest(data: StrikeRequestData): Promise<{ isValid: boolean; error?: string; game?: IGame; team?: string[] }> {
-  const game = await Game.findOne({ gameId: data.gameId });
+  const game = await Game.findOne({ gameId: data.gameId }).select('state team1 team2');
   if (!game) {
     return { isValid: false, error: 'Game not found.' };
   }
@@ -90,7 +90,7 @@ async function createStrikeRequest(interaction: Message | ChatInputCommandIntera
     return;
   }
 
-  const game = await Game.findOne({ gameId: data.gameId });
+  const game = await Game.findOne({ gameId: data.gameId }).select('state team1 team2');
   const team = game?.getTeamOfPlayer(data.requesterId) || [];
   const teamMentions = team.map((id: string) => `<@${id}>`).join(' ');
 
@@ -149,7 +149,7 @@ async function processVoteResults(message: Message, data: StrikeRequestData, vot
 
   try {
     if (approved) {
-      const freshGame = await Game.findOne({ gameId: data.gameId });
+      const freshGame = await Game.findOne({ gameId: data.gameId }).select('state').lean();
       if (!freshGame) {
         resultEmbed.setDescription(`❌ Strike request failed: game not found.`);
       } else if (freshGame.state === 'scored' || freshGame.state === 'voided' || freshGame.state === 'scoring') {
