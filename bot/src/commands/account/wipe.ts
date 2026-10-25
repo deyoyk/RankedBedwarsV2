@@ -28,18 +28,20 @@ export async function wipe(interaction: Message | ChatInputCommandInteraction, a
   }
 
   try {
-    const userDoc = await User.findOne({ discordId: targetId });
-    if (!userDoc) {
+    const zeroed: Record<string, unknown> = {};
+    resetUserStats(zeroed);
+
+    const wiped = await User.findOneAndUpdate(
+      { discordId: targetId },
+      { $set: zeroed },
+      { new: true }
+    );
+    if (!wiped) {
       await safeReply(interaction, errorEmbed('User not found in the database.', 'Wipe Error'));
       return;
     }
 
-    
-    resetUserStats(userDoc);
-
-    await userDoc.save();
-
-    await safeFix(interaction.guild, userDoc.discordId);
+    await safeFix(interaction.guild, wiped.discordId);
 
     await safeReply(interaction, successEmbed(`All stats for ${targetMention} have been wiped.`, 'Wipe Successful'));
   } catch (error) {
