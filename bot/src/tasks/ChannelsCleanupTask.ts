@@ -39,6 +39,8 @@ export class ChannelsCleanupTask {
         return;
       }
 
+      await guild.channels.fetch().catch(() => null);
+
       
       const activeGames = await Game.find({ state: { $in: ['pending', 'active'] } })
         .select('channels.text channels.picking channels.team1Voice channels.team2Voice')
