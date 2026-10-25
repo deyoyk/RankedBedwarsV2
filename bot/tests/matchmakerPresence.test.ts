@@ -61,7 +61,7 @@ beforeEach(() => {
 
 describe('matchmaker presence fast path', () => {
   it('rejects a known-offline player without a live check', async () => {
-    UserModel.findOne.mockImplementation(() => ({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }));
+    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     PresenceService.ingest('Alice', false);
     const mm = makeManager();
 
@@ -72,7 +72,7 @@ describe('matchmaker presence fast path', () => {
   });
 
   it('accepts a known-online player without a live check', async () => {
-    UserModel.findOne.mockImplementation(() => ({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }));
+    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     PresenceService.ingest('Alice', true);
     const mm = makeManager();
 
@@ -83,7 +83,7 @@ describe('matchmaker presence fast path', () => {
   });
 
   it('falls back to a live check when presence is unknown', async () => {
-    UserModel.findOne.mockImplementation(() => ({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }));
+    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     const mm = makeManager();
 
     const valid = await mm.validateSinglePlayer('a', queue, ['a'], new Set(), new Set());

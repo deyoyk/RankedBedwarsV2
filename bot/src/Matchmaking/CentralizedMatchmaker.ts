@@ -819,7 +819,7 @@ export class CentralizedMatchmaker {
     try {
       let user = ctx?.userMap.get(playerId);
       if (!user && !ctx) {
-        user = (await User.findOne({ discordId: playerId }).lean()) ?? undefined;
+        user = (await User.findOne({ discordId: playerId }).select('discordId ign isBanned isFrozen elo partyId').lean()) ?? undefined;
       }
 
       if (!user) {
@@ -898,7 +898,7 @@ export class CentralizedMatchmaker {
       }
 
       const Party = (await import('../models/Party')).default;
-      const party = await Party.findOne({ partyId }).lean();
+      const party = await Party.findOne({ partyId }).select('partyId members').lean();
 
       if (!party) {
         return { valid: false, reason: 'Party not found' };
