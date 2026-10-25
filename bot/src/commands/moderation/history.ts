@@ -1,5 +1,19 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import User, { type IUser } from '../../models/User';
+import User from '../../models/User';
+
+interface HistoryRecordView {
+  reason: string;
+  date: Date;
+  duration?: number | null;
+  moderator: string;
+}
+
+interface HistoryUserView {
+  discordId: string;
+  bans: HistoryRecordView[];
+  mutes: HistoryRecordView[];
+  strikes: HistoryRecordView[];
+}
 
 
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
@@ -8,7 +22,7 @@ import { safeReply } from '../../utils/safeReply';
 export async function history(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let discordId: string;
   let historyType: string;
-  let preloadedUser: Pick<IUser, 'discordId' | 'bans' | 'mutes' | 'strikes'> | null = null;
+  let preloadedUser: HistoryUserView | null = null;
 
   if (interaction instanceof ChatInputCommandInteraction) {
     discordId = interaction.options.getString('user_id', true);
@@ -24,7 +38,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
           { discordId },
           { ign: userInput }
         ]
-      });
+      }).collation({ locale: 'en', strength: 2 }).select('discordId bans mutes strikes').lean();
 
       if (!user) {
         const embed = new EmbedBuilder()
@@ -50,7 +64,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
   }
 
   try {
-    const user = preloadedUser ?? await User.findOne({ discordId });
+    const user = preloadedUser ?? await User.findOne({ discordId }).select('discordId bans mutes strikes').lean();
     if (!user) {
       await safeReply(interaction, errorEmbed('No user found with the specified ID.', 'History Not Found'));
       return;
