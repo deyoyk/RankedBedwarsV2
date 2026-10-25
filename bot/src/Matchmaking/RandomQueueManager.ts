@@ -118,18 +118,8 @@ export class RandomQueueManager {
           
           const team1Avg = await this.calculateTeamAverageElo(teamResult.team1, eloById);
           const team2Avg = await this.calculateTeamAverageElo(teamResult.team2, eloById);
-          
-          const embedGuild = this.client.guilds.cache.first();
-          let embedGameChannel: TextChannel | null = null;
-          if (embedGuild) {
-            const game = await (await import('../models/Game')).default.findOne({ gameId });
-            if (game && game.channels && game.channels.text) {
-              const ch = embedGuild.channels.cache.get(game.channels.text);
-              if (ch && ch instanceof TextChannel) {
-                embedGameChannel = ch;
-              }
-            }
-          }
+
+          const embedGameChannel: TextChannel | null = gameChannel;
           if (embedGameChannel) {
             const embed = await this.buildGameStartEmbed(
               teamResult.team1,
@@ -165,11 +155,6 @@ export class RandomQueueManager {
           gamesCreated++;
 
           console.log(`[RandomQueue] Created game ${gameId}, ${availablePlayers.length} players remaining`);
-
-          
-          if (availablePlayers.length >= queueData.maxPlayers) {
-            await this.sleep(1000);
-          }
 
         } catch (error) {
           console.error(`[RandomQueue] Error creating game:`, error);
@@ -308,10 +293,6 @@ export class RandomQueueManager {
 
   private async selectRandomMap(queueData: QueueLike): Promise<string> {
     return selectRandomMapUtil(this.mapService, queueData);
-  }
-
-  private async sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   private async buildGameStartEmbed(
