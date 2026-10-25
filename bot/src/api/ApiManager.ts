@@ -876,20 +876,20 @@ export class ApiManager {
       if (!seasonParams) return;
       const { seasonNumber, chapterNumber } = seasonParams;
 
-      const user = await this.findUserByQuery(req);
-      if (!user) {
-        res.status(404).json({ error: 'User not found' });
+      const discordid = req.query.discordid as string;
+      const ign = req.query.ign as string;
+      const response = await this.getCached(`seasonStats:${discordid || ign}:${seasonNumber}:${chapterNumber}`, 10000, async () => {
+        const user = await this.findUserByQuery(req);
+        if (!user) return null;
+
+        const seasonStats = await SeasonManager.getUserSeasonStats(user.discordId, seasonNumber, chapterNumber);
+        return seasonStats ?? null;
+      });
+      if (!response) {
+        res.status(404).json({ error: 'User or stats not found for this season' });
         return;
       }
-
-      const seasonStats = await SeasonManager.getUserSeasonStats(user.discordId, seasonNumber, chapterNumber);
-
-      if (!seasonStats) {
-        res.status(404).json({ error: 'No stats found for this user in the specified season' });
-        return;
-      }
-
-      res.json(seasonStats);
+      res.json(response);
     } catch (error) {
       console.error('Error fetching season stats:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -983,28 +983,34 @@ export class ApiManager {
 
   private getLevelInfo = async (req: Request, res: Response): Promise<void> => {
     try {
-      const user = await this.findUserByQuery(req);
-      if (!user) {
+      const discordid = req.query.discordid as string;
+      const ign = req.query.ign as string;
+      const response = await this.getCached(`levelInfo:${discordid || ign}`, 10000, async () => {
+        const user = await this.findUserByQuery(req);
+        if (!user) return null;
+
+        const levelInfo = getLevelInfo(user.experience || 0);
+        const progressPercentage = ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100);
+
+        return {
+          ign: user.ign,
+          discordId: user.discordId,
+          level: levelInfo.level,
+          experience: levelInfo.experience,
+          levelInfo: {
+            experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
+            experienceForNextLevel: levelInfo.experienceForNextLevel,
+            experienceNeededForNext: levelInfo.experienceNeededForNext,
+            totalExperienceForLevel: levelInfo.totalExperienceForLevel,
+            progressPercentage: progressPercentage.toFixed(2)
+          }
+        };
+      });
+      if (!response) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      const levelInfo = getLevelInfo(user.experience || 0);
-      const progressPercentage = ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100);
-
-      res.json({
-        ign: user.ign,
-        discordId: user.discordId,
-        level: levelInfo.level,
-        experience: levelInfo.experience,
-        levelInfo: {
-          experienceForCurrentLevel: levelInfo.experienceForCurrentLevel,
-          experienceForNextLevel: levelInfo.experienceForNextLevel,
-          experienceNeededForNext: levelInfo.experienceNeededForNext,
-          totalExperienceForLevel: levelInfo.totalExperienceForLevel,
-          progressPercentage: progressPercentage.toFixed(2)
-        }
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching level info:', error);
       res.status(500).json({ error: 'Internal server error' });
