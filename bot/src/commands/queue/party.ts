@@ -2,7 +2,6 @@ import { Message, ChatInputCommandInteraction, EmbedBuilder, User as DiscordUser
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { PartyService, type PartyDocument } from '../../services/PartyService';
-import UserModel from '../../models/User';
 
 export async function party(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let action: string;
@@ -24,16 +23,9 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
     action = args[0];
     if (args[1]) {
       const mentionMatch = args[1].match(/^<@!?(\d+)>$/);
-      if (mentionMatch) {
-        const foundUser = await UserModel.findOne({ discordId: mentionMatch[1] });
-        if (foundUser) {
-          targetUser = interaction.client.users.cache.get(foundUser.discordId);
-        }
-      } else {
-        const foundUser = await UserModel.findOne({ discordId: args[1] });
-        if (foundUser) {
-          targetUser = interaction.client.users.cache.get(foundUser.discordId);
-        }
+      const targetId = mentionMatch ? mentionMatch[1] : (/^\d+$/.test(args[1]) ? args[1] : null);
+      if (targetId) {
+        targetUser = interaction.client.users.cache.get(targetId);
       }
     }
   }
