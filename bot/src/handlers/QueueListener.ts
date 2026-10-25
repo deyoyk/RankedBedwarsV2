@@ -149,12 +149,18 @@ export class QueueListener {
     }
   }
 
+  private static readonly QUEUE_TICK_CONCURRENCY = 5;
+
   private async checkAllQueues(): Promise<void> {
     try {
-      const queues = await resolveQuery<QueueLike[]>(Queue.find({ isActive: true }));
+      const queues = await resolveQuery<QueueLike[]>(
+        Queue.find({ isActive: true }),
+        'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
+      );
 
-      for (const queue of queues) {
-        await this.validateQueueState(queue.channelId, queue);
+      for (let i = 0; i < queues.length; i += QueueListener.QUEUE_TICK_CONCURRENCY) {
+        const chunk = queues.slice(i, i + QueueListener.QUEUE_TICK_CONCURRENCY);
+        await Promise.allSettled(chunk.map((queue) => this.validateQueueState(queue.channelId, queue)));
       }
     } catch (error) {
       console.error('[QueueListener] Error in queue monitor:', error);
@@ -170,7 +176,10 @@ export class QueueListener {
           'channelId maxPlayers minElo maxElo isRanked isPicking queueType bypassRoles'
         );
       }
-      if (!queue) return;
+      if (!queue) {
+        this.queueStates.delete(queueId);
+        return;
+      }
 
       const state = this.queueStates.get(queueId);
       if (!state) return;
@@ -318,14 +327,14 @@ export class QueueListener {
         presentByParty.set(user.partyId, present);
       }
 
+      const partyIds = [...presentByParty.keys()];
+      if (partyIds.length === 0) return;
+      const partyDocs = await Party.find({ partyId: { $in: partyIds } }).select('partyId members').lean();
+      const rosterById = new Map(partyDocs.map((p) => [p.partyId, p.members as string[]]));
       for (const [partyId, present] of presentByParty) {
-        let roster = this.partyCache.get(partyId)?.members;
-        if (!roster) {
-          const party = await Party.findOne({ partyId });
-          if (!party?.members) continue;
-          roster = party.members;
-          this.partyCache.set(partyId, { members: roster, timestamp: Date.now() });
-        }
+        const roster = this.partyCache.get(partyId)?.members ?? rosterById.get(partyId);
+        if (!roster) continue;
+        this.partyCache.set(partyId, { members: roster, timestamp: Date.now() });
         if (!roster.every(id => playersInVC.has(id))) continue;
         if (PresenceService.isConnected() && present.some((id) => {
           const ign = ignById.get(id);

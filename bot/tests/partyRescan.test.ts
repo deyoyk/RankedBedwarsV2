@@ -10,7 +10,14 @@ jest.mock('../src/models/User', () => ({
 }));
 jest.mock('../src/models/Party', () => ({
   __esModule: true,
-  default: { findOne: jest.fn() }
+  default: {
+    findOne: jest.fn(),
+    find: jest.fn().mockImplementation((query: any) => {
+      const ids: string[] = query?.partyId?.$in ?? [];
+      const rows = ids.includes('P') ? [{ partyId: 'P', members: ['a', 'b'] }] : [];
+      return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(rows) }) };
+    })
+  }
 }));
 jest.mock('../src/models/Game', () => ({
   __esModule: true,
