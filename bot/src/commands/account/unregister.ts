@@ -26,13 +26,11 @@ export async function unregister(interaction: Message | ChatInputCommandInteract
   }
 
   try {
-    const user = await User.findOne({ discordId: targetUserId });
-    if (!user) {
+    const result = await User.deleteOne({ discordId: targetUserId });
+    if (result.deletedCount === 0) {
       await safeReply(interaction, errorEmbed('User not found in the database.', 'Unregister Error'));
       return;
     }
-    
-    await User.deleteOne({ discordId: targetUserId });
     
     
     await safeFix(interaction.guild, targetUserId);
