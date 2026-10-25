@@ -290,7 +290,7 @@ export class ApiManager {
     if (discordid) {
       user = await User.findOne({ discordId: discordid }).lean();
     } else if (ign) {
-      user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') }).lean();
+      user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).lean();
     }
     return user;
   }
@@ -513,7 +513,7 @@ export class ApiManager {
         return;
       }
       const response = await this.getCached(`userData:ign:${ign.toLowerCase()}`, 10000, async () => {
-        const user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') }).lean();
+        const user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).lean();
         if (!user) return null;
         return this.buildUserWithLevel(user);
       });
@@ -1516,6 +1516,7 @@ export class ApiManager {
         const games = await Game.find()
           .sort({ gameId: -1 })
           .limit(limit)
+          .select('gameId map startTime endTime team1 team2 winners mvps bedbreaks')
           .lean();
 
         const idToIgn = await this.resolveGameIgns(games);
