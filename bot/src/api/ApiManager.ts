@@ -512,13 +512,16 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing IGN or discordid parameter' });
         return;
       }
-      const user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') }).lean();
-      if (!user) {
+      const response = await this.getCached(`userData:ign:${ign.toLowerCase()}`, 10000, async () => {
+        const user = await User.findOne({ ign: new RegExp(`^${escapeRegex(ign)}$`, 'i') }).lean();
+        if (!user) return null;
+        return this.buildUserWithLevel(user);
+      });
+      if (!response) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      res.json(this.buildUserWithLevel(user));
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -532,13 +535,16 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing discordid parameter' });
         return;
       }
-      const user = await User.findOne({ discordId: discordid }).lean();
-      if (!user) {
+      const response = await this.getCached(`userData:id:${discordid}`, 10000, async () => {
+        const user = await User.findOne({ discordId: discordid }).lean();
+        if (!user) return null;
+        return this.buildUserWithLevel(user);
+      });
+      if (!response) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      res.json(this.buildUserWithLevel(user));
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user by discordid:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -552,15 +558,18 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing gameid parameter' });
         return;
       }
-      const Game = await this.getGameModel();
-      const game = await Game.findOne({ gameId: Number(gameid) }).lean();
-      if (!game) {
+      const response = await this.getCached(`game:${gameid}`, 10000, async () => {
+        const Game = await this.getGameModel();
+        const game = await Game.findOne({ gameId: Number(gameid) }).lean();
+        if (!game) return null;
+        const idToIgn = await this.resolveGameIgns([game]);
+        return { ...game, ...this.mapGameIgns(game, idToIgn) };
+      });
+      if (!response) {
         res.status(404).json({ error: 'Game not found' });
         return;
       }
-
-      const idToIgn = await this.resolveGameIgns([game]);
-      res.json({ ...game, ...this.mapGameIgns(game, idToIgn) });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching game:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -574,25 +583,28 @@ export class ApiManager {
         res.status(400).json({ error: 'Missing gameid parameter' });
         return;
       }
-      const Game = await this.getGameModel();
-      const game = await Game.findOne({ gameId: Number(gameid) })
-        .select('gameId map state startTime endTime winners losers timeline')
-        .lean();
-      if (!game) {
+      const response = await this.getCached(`gameTimeline:${gameid}`, 10000, async () => {
+        const Game = await this.getGameModel();
+        const game = await Game.findOne({ gameId: Number(gameid) })
+          .select('gameId map state startTime endTime winners losers timeline')
+          .lean();
+        if (!game) return null;
+        return {
+          gameId: game.gameId,
+          map: game.map,
+          state: game.state,
+          startTime: game.startTime,
+          endTime: game.endTime || null,
+          winners: game.winners || [],
+          losers: game.losers || [],
+          timeline: game.timeline || []
+        };
+      });
+      if (!response) {
         res.status(404).json({ error: 'Game not found' });
         return;
       }
-
-      res.json({
-        gameId: game.gameId,
-        map: game.map,
-        state: game.state,
-        startTime: game.startTime,
-        endTime: game.endTime || null,
-        winners: game.winners || [],
-        losers: game.losers || [],
-        timeline: game.timeline || []
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching game timeline:', error);
       res.status(500).json({ error: 'Internal server error' });
