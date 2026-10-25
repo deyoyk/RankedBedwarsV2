@@ -276,17 +276,14 @@ export class PartyService {
 
       const party = validation.party!;
 
+      await Party.deleteOne({ partyId: party.partyId });
+
       await UserModel.updateMany(
         { partyId: party.partyId },
         { $unset: { partyId: "" } }
       );
 
       await this.removePartyRoles(guild, party.members);
-      await Party.deleteOne({ partyId: party.partyId });
-      await UserModel.updateMany(
-        { partyId: party.partyId },
-        { $unset: { partyId: "" } }
-      );
 
       return { success: true, party };
     } catch (error) {
@@ -334,8 +331,14 @@ export class PartyService {
         return { success: false, message: 'Already the leader' };
       }
 
+      const claimed = await Party.updateOne(
+        { partyId: party.partyId, leader: leaderId },
+        { $set: { leader: targetId } }
+      );
+      if (claimed.matchedCount === 0) {
+        return { success: false, message: 'Party changed, try again' };
+      }
       party.leader = targetId;
-      await party.save();
       await this.updatePartyActivity(party.partyId);
 
       return { success: true, party };
@@ -354,29 +357,37 @@ export class PartyService {
 
       const party = validation.party!;
 
+      let update: Record<string, unknown>;
       switch (setting.toLowerCase()) {
         case 'maxmembers': {
           const maxMembers = parseInt(value);
           if (isNaN(maxMembers) || maxMembers < this.MIN_MEMBERS || maxMembers > this.MAX_MEMBERS) {
             return { success: false, message: `Max members must be between ${this.MIN_MEMBERS} and ${this.MAX_MEMBERS}` };
           }
-          party.maxMembers = maxMembers;
+          update = { maxMembers };
           break;
         }
         case 'private':
-          party.isPrivate = value.toLowerCase() === 'true';
+          update = { isPrivate: value.toLowerCase() === 'true' };
           break;
         case 'description':
           if (value.length > 100) {
             return { success: false, message: 'Description too long (max 100 characters)' };
           }
-          party.description = value;
+          update = { description: value };
           break;
         default:
           return { success: false, message: 'Invalid setting' };
       }
 
-      await party.save();
+      const applied = await Party.updateOne(
+        { partyId: party.partyId, leader: leaderId },
+        { $set: update }
+      );
+      if (applied.matchedCount === 0) {
+        return { success: false, message: 'Party changed, try again' };
+      }
+      Object.assign(party, update);
       await this.updatePartyActivity(party.partyId);
 
       return { success: true, party };
