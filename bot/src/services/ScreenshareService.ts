@@ -18,6 +18,7 @@ export class ScreenshareService {
   private static readonly MAX_ACTIVE_SESSIONS_PER_USER = 1;
   private static readonly MAX_REASON_LENGTH = 500;
   private static readonly MIN_REASON_LENGTH = 10;
+  private static readonly EXPIRY_CLEANUP_CONCURRENCY = 5;
 
   
   static validateScreenshareRequest(targetId: string, requesterId: string, reason: string, imageUrl?: string): ScreenshareValidationResult {
@@ -372,8 +373,11 @@ export class ScreenshareService {
         }
       })));
 
-      for (const session of sessions) {
-        await this.cleanupSession(guild, session as unknown as IScreenshareSession);
+      for (let i = 0; i < sessions.length; i += ScreenshareService.EXPIRY_CLEANUP_CONCURRENCY) {
+        const chunk = sessions.slice(i, i + ScreenshareService.EXPIRY_CLEANUP_CONCURRENCY);
+        await Promise.allSettled(chunk.map((session) =>
+          ScreenshareService.cleanupSession(guild, session as unknown as IScreenshareSession)
+        ));
       }
 
       console.log(`[ScreenshareService] Expired ${sessions.length} screenshare sessions`);
@@ -581,7 +585,7 @@ export class ScreenshareService {
         cleanupTasks.push(
           (async () => {
             try {
-              const channel = await guild.channels.fetch(session.channelId!).catch(() => null);
+              const channel = guild.channels.cache.get(session.channelId!) ?? await guild.channels.fetch(session.channelId!).catch(() => null);
               if (channel) {
                 await channel.delete(`Screenshare session ${session.sessionId} ended`);
                 console.log(`[ScreenshareService] Deleted channel for session ${session.sessionId}`);
@@ -599,7 +603,7 @@ export class ScreenshareService {
         cleanupTasks.push(
           (async () => {
             try {
-              const member = await guild.members.fetch(session.targetId).catch(() => null);
+              const member = guild.members.cache.get(session.targetId) ?? await guild.members.fetch(session.targetId).catch(() => null);
               if (member && member.roles.cache.has(frozenRoleId)) {
                 await member.roles.remove(frozenRoleId, `Screenshare session ${session.sessionId} ended`);
                 console.log(`[ScreenshareService] Removed frozen role from ${member.user.tag}`);
