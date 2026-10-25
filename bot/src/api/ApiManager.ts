@@ -1169,19 +1169,20 @@ export class ApiManager {
       const { discordid } = req.params;
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5, 1), 100);
 
-      const Game = await this.getGameModel();
-      const games = await Game.find({
-        $or: [
-          { team1: discordid },
-          { team2: discordid }
-        ]
-      })
-        .sort({ gameId: -1 })
-        .limit(limit)
-        .select('gameId map winners losers mvps bedbreaks team1 team2 startTime combat')
-        .lean();
+      const response = await this.getCached(`userRecentGames:${discordid}:${limit}`, 10000, async () => {
+        const Game = await this.getGameModel();
+        const games = await Game.find({
+          $or: [
+            { team1: discordid },
+            { team2: discordid }
+          ]
+        })
+          .sort({ gameId: -1 })
+          .limit(limit)
+          .select('gameId map winners losers mvps bedbreaks team1 team2 startTime combat')
+          .lean();
 
-      const result = games.map((game: LeanGame) => {
+        return games.map((game: LeanGame) => {
         const entry = (game.combat || []).find((c) => c.player === discordid);
         return {
           gameId: game.gameId,
@@ -1196,8 +1197,9 @@ export class ApiManager {
           fights: entry && Array.isArray(entry.fights) ? entry.fights.length : 0
         };
       });
+      });
 
-      res.json(result);
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user recent games:', error);
       res.status(500).json({ error: 'Internal server error' });
