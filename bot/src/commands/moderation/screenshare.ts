@@ -44,7 +44,7 @@ export async function screenshare(interaction: ChatInputCommandInteraction) {
 
     let channel: TextChannel;
     try {
-      const channelRaw = await guild.channels.fetch(channelId);
+      const channelRaw = guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
       if (!channelRaw || !channelRaw.isTextBased()) {
         await interaction.editReply({ embeds: [errorEmbed('Screenshare requests channel not found or not a text channel.', 'Screenshare Error').builder] });
         return;
