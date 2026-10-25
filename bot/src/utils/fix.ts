@@ -36,14 +36,25 @@ export async function safeFix(guild: Guild | null, discordId: string): Promise<v
   }
 }
 
-export async function fix(guild: Guild, discordId: string) {
+export interface FixUserInput {
+  discordId: string;
+  elo: number;
+  ign: string;
+  settings?: {
+    toggleprefix?: boolean;
+    togglestaticnick?: boolean;
+    nick?: string;
+  } | null;
+}
+
+export async function fix(guild: Guild, discordId: string, preloaded?: FixUserInput | null) {
   const User = (await import('../models/User')).default;
   const workersManager = WorkersManager.getInstance();
 
   const member = guild.members.cache.get(discordId);
   if (!member) return;
 
-  const user = await User.findOne({ discordId }).select('discordId elo ign settings').lean();
+  const user = preloaded !== undefined ? preloaded : await User.findOne({ discordId }).select('discordId elo ign settings').lean();
   const registeredRole = config.roles.registered;
   const nonRegisteredRole = config.roles.nonRegistered;
   const eloRanks = await getEloRanks();

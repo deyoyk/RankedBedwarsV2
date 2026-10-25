@@ -19,7 +19,7 @@ export class GuildJoinListener {
     try {
       console.log(`[GuildJoinListener] User ${member.user.tag} (${member.id}) joined the server`);
       
-      const user = await User.findOne({ discordId: member.id }).select('_id').lean();
+      const user = await User.findOne({ discordId: member.id }).select('discordId elo ign settings').lean();
       
       if (user) {
         console.log(`[GuildJoinListener] User ${member.user.tag} exists in database, sending welcome back embed`);
@@ -42,7 +42,7 @@ export class GuildJoinListener {
         console.log(`[GuildJoinListener] User ${member.user.tag} is new to the server`);
       }
       
-      await fix(member.guild, member.id);
+      await fix(member.guild, member.id, user);
       console.log(`[GuildJoinListener] Fixed roles and nickname for ${member.user.tag}`);
       
     } catch (error) {
