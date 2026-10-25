@@ -119,37 +119,44 @@ export class QueueListener {
   private async sweepUnknownPresence(): Promise<void> {
     if (!PresenceService.isConnected()) return;
     const now = Date.now();
-    for (const [queueId, state] of this.queueStates) {
-      if (state.players.length === 0) continue;
-      let users: QueueUserBadge[];
-      try {
-        users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
-      } catch (error) {
-        console.error(`[QueueListener] Presence sweep lookup failed for ${queueId}:`, error);
-        continue;
+    const entries = [...this.queueStates.entries()];
+    for (let i = 0; i < entries.length; i += QueueListener.SWEEP_CONCURRENCY) {
+      const chunk = entries.slice(i, i + QueueListener.SWEEP_CONCURRENCY);
+      await Promise.allSettled(chunk.map(([queueId, state]) => this.sweepQueuePresence(queueId, state, now)));
+    }
+  }
+
+  private async sweepQueuePresence(queueId: string, state: QueueState, now: number): Promise<void> {
+    if (state.players.length === 0) return;
+    let users: QueueUserBadge[];
+    try {
+      users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
+    } catch (error) {
+      console.error(`[QueueListener] Presence sweep lookup failed for ${queueId}:`, error);
+      return;
+    }
+    const unknown: string[] = [];
+    for (const user of users) {
+      if (user?.ign && PresenceService.evaluate(user.ign, now) === 'unknown') {
+        unknown.push(user.ign);
       }
-      const unknown: string[] = [];
-      for (const user of users) {
-        if (user?.ign && PresenceService.evaluate(user.ign, now) === 'unknown') {
-          unknown.push(user.ign);
+    }
+    if (unknown.length > 0) {
+      console.log(`[QueueListener] Presence sweep re-checking ${unknown.length} player(s) in queue ${queueId}`);
+    }
+    for (let j = 0; j < unknown.length; j += 5) {
+      const batch = unknown.slice(j, j + 5);
+      const results = await Promise.allSettled(batch.map((ign) => this.wsManager.checkPlayerOnline(ign)));
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          PresenceService.ingest(batch[index], result.value.online === true);
         }
-      }
-      if (unknown.length > 0) {
-        console.log(`[QueueListener] Presence sweep re-checking ${unknown.length} player(s) in queue ${queueId}`);
-      }
-      for (let i = 0; i < unknown.length; i += 5) {
-        const batch = unknown.slice(i, i + 5);
-        const results = await Promise.allSettled(batch.map((ign) => this.wsManager.checkPlayerOnline(ign)));
-        results.forEach((result, index) => {
-          if (result.status === 'fulfilled') {
-            PresenceService.ingest(batch[index], result.value.online === true);
-          }
-        });
-      }
+      });
     }
   }
 
   private static readonly QUEUE_TICK_CONCURRENCY = 5;
+  private static readonly SWEEP_CONCURRENCY = 5;
 
   private async checkAllQueues(): Promise<void> {
     try {
@@ -276,16 +283,46 @@ export class QueueListener {
       }
 
       const guild = this.client.guilds.cache.first();
-      for (const userId of evicted) {
-        try {
-          const member = voiceChannel?.members.get(userId)
-            ?? (guild ? await guild.members.fetch(userId).catch(() => null) : null);
-          if (member) {
-            await this.moveToWaiting({ member } as VoiceState, 'you went offline on the Minecraft server, so you were removed from the queue. Rejoin the server and queue again!');
+      const waitingVcId = config.voicechannels.waitingvc;
+      const reason = 'you went offline on the Minecraft server, so you were removed from the queue. Rejoin the server and queue again!';
+      const evictedIds = [...evicted];
+      const moved: Array<{ id: string; username: string; channelId?: string | null }> = [];
+      for (let i = 0; i < evictedIds.length; i += 5) {
+        const chunk = evictedIds.slice(i, i + 5);
+        const results = await Promise.allSettled(chunk.map(async (userId) => {
+          try {
+            const member = voiceChannel?.members.get(userId)
+              ?? (guild ? await guild.members.fetch(userId).catch(() => null) : null);
+            return member ? { id: userId, username: member.user.username, channelId: member.voice.channelId } : null;
+          } catch (error) {
+            console.error(`[QueueListener] Error resolving offline player ${userId}:`, error);
+            return null;
           }
-        } catch (error) {
-          console.error(`[QueueListener] Error moving offline player ${userId} to waiting:`, error);
+        }));
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) moved.push(result.value);
         }
+      }
+
+      try {
+        if (waitingVcId && moved.length > 0) {
+          const toMove = moved.filter((m) => m.channelId !== waitingVcId).map((m) => m.id);
+          if (toMove.length > 0) {
+            await this.workersManager.moveMembers(toMove, waitingVcId, 6);
+          }
+        }
+        if (config.channels.alertsChannel && moved.length > 0) {
+          await this.workersManager.sendMessage(
+            config.channels.alertsChannel,
+            { content: `Hey ${moved.map((m) => `<@${m.id}>`).join(' ')}, ${reason}` },
+            7
+          );
+        }
+        for (const m of moved) {
+          console.warn(`[QueueListener] User ${m.username} moved to waiting due to: ${reason}`);
+        }
+      } catch (error) {
+        console.error(`[QueueListener] Error moving offline players to waiting:`, error);
       }
 
       if (wasQueueFull && state.players.length < queue.maxPlayers) {

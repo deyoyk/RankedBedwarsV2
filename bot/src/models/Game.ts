@@ -20,6 +20,8 @@ GameSchema.index({ startTime: 1, state: 1 });
 GameSchema.index({ queueId: 1, state: 1 });
 GameSchema.index({ team1: 1 });
 GameSchema.index({ team2: 1 });
+GameSchema.index({ team1: 1, state: 1 });
+GameSchema.index({ team2: 1, state: 1 });
 GameSchema.index({ winners: 1 });
 GameSchema.index({ losers: 1 });
 GameSchema.index({ 'channels.text': 1 });
