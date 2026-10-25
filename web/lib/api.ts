@@ -18,6 +18,21 @@ const MEM_MAX = 200;
 const LS_PREFIX = 'rbw-cache:';
 const LS_MAX = 80;
 
+let lsExpiryIndex: Map<string, number> | null = null;
+
+function lsIndex(): Map<string, number> {
+  if (!lsExpiryIndex) {
+    lsExpiryIndex = new Map();
+    try {
+      for (const k of Object.keys(localStorage)) {
+        if (k.startsWith(LS_PREFIX)) lsExpiryIndex.set(k, lsExpiryOf(k));
+      }
+    } catch {
+    }
+  }
+  return lsExpiryIndex;
+}
+
 function memSet(key: string, entry: CacheEntry): void {
   memoryCache.set(key, entry);
   while (memoryCache.size > MEM_MAX) {
@@ -48,12 +63,16 @@ function readCacheEntry(key: string): CacheEntry | null {
 
 function lsGet(key: string): CacheEntry | null {
   const parsed = readCacheEntry(LS_PREFIX + key);
-  if (!parsed) return null;
+  if (!parsed) {
+    lsIndex().delete(LS_PREFIX + key);
+    return null;
+  }
   if (parsed.expires < Date.now()) {
     try {
       localStorage.removeItem(LS_PREFIX + key);
     } catch {
     }
+    lsIndex().delete(LS_PREFIX + key);
     return null;
   }
   return parsed;
@@ -66,14 +85,19 @@ function lsExpiryOf(key: string): number {
 
 function lsSet(key: string, entry: CacheEntry): void {
   try {
-    const keys = Object.keys(localStorage)
-      .filter((k) => k.startsWith(LS_PREFIX))
-      .map((k) => ({ k, expires: lsExpiryOf(k) }))
-      .sort((a, b) => a.expires - b.expires);
-    while (keys.length >= LS_MAX) {
-      const victim = keys.shift();
-      if (!victim) break;
-      localStorage.removeItem(victim.k);
+    const idx = lsIndex();
+    idx.set(LS_PREFIX + key, entry.expires);
+    if (idx.size >= LS_MAX) {
+      const victims = [...idx.entries()].sort((a, b) => a[1] - b[1]);
+      while (idx.size >= LS_MAX) {
+        const victim = victims.shift();
+        if (!victim) break;
+        try {
+          localStorage.removeItem(victim[0]);
+        } catch {
+        }
+        idx.delete(victim[0]);
+      }
     }
     localStorage.setItem(LS_PREFIX + key, JSON.stringify(entry));
   } catch {
