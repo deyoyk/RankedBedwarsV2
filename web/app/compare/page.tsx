@@ -30,15 +30,9 @@ function CompareInner() {
       <div className="card"><SkeletonRows count={10} /></div>
     );
     try {
-      const resolve = async (query: string) => {
-        if (/^\d+$/.test(query)) return query;
-        const user = await apiGet<{ discordId: string }>(`/rbw/api/user?ign=${encodeURIComponent(query)}`, { ttl: 30000 });
-        return user.discordId;
-      };
-      const [idA, idB] = await Promise.all([resolve(qa), resolve(qb)]);
       const [o1, o2] = await Promise.all([
-        apiGet<{ profile: Record<string, unknown> }>(`/rbw/api/user/${idA}/overview`, { ttl: 30000 }),
-        apiGet<{ profile: Record<string, unknown> }>(`/rbw/api/user/${idB}/overview`, { ttl: 30000 }),
+        apiGet<{ profile: Record<string, unknown> }>(`/rbw/api/user/${encodeURIComponent(qa)}/overview`, { ttl: 30000 }),
+        apiGet<{ profile: Record<string, unknown> }>(`/rbw/api/user/${encodeURIComponent(qb)}/overview`, { ttl: 30000 }),
       ]);
       const p1 = o1.profile;
       const p2 = o2.profile;

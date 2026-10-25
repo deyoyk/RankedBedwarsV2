@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { apiGet } from '@/lib/api';
+import { apiGet, ApiError } from '@/lib/api';
 import { formatNumber, formatValue, timeAgo } from '@/lib/format';
 import { Card, DataTable, EmptyBox, ErrorBox, SkeletonRows, Skeleton, Sparkline, StatCell } from '@/components/ui';
 import { PlayerLink } from '@/components/ui';
@@ -39,19 +39,8 @@ function PlayerInner() {
         setBody(<ErrorBox message="No player specified." detail="Use /player?query=&lt;discord id or IGN&gt;." />);
         return;
       }
-      const isNumeric = /^\d+$/.test(query);
-      let discordId = query;
       try {
-        if (!isNumeric) {
-          const user = await apiGet<{ discordId: string }>(`/rbw/api/user?ign=${encodeURIComponent(query)}`, { ttl: 30000 });
-          discordId = user.discordId;
-        }
-      } catch {
-        if (alive) setBody(<ErrorBox message="Player not found." />);
-        return;
-      }
-      try {
-        const overviewPromise = apiGet<Overview>(`/rbw/api/user/${discordId}/overview`, { ttl: 30000 });
+        const overviewPromise = apiGet<Overview>(`/rbw/api/user/${encodeURIComponent(query)}/overview`, { ttl: 30000 });
         const ranksPromise = apiGet<Array<{ startElo: number; endElo: number; roleName?: string; roleColor?: string }>>('/rbw/api/eloranks', { ttl: 60000 }).catch(() => null);
         const overview = await overviewPromise;
         if (!alive) return;
@@ -196,7 +185,10 @@ function PlayerInner() {
           </>
         );
       } catch (e) {
-        if (alive) setBody(<ErrorBox message="Could not load player." detail={e instanceof Error ? e.message : ''} />);
+        if (alive) {
+          const notFound = e instanceof ApiError && e.status === 404;
+          setBody(<ErrorBox message={notFound ? 'Player not found.' : 'Could not load player.'} detail={notFound ? '' : e instanceof Error ? e.message : ''} />);
+        }
       }
     }
     load();

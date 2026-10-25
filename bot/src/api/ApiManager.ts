@@ -1770,10 +1770,18 @@ export class ApiManager {
 
   private getUserOverview = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid } = req.params;
+      let discordId = req.params.discordid;
+      if (!/^\d+$/.test(discordId)) {
+        const idRow = await User.findOne({ ign: discordId }).collation({ locale: 'en', strength: 2 }).select('discordId').lean();
+        if (!idRow) {
+          res.status(404).json({ error: 'User not found' });
+          return;
+        }
+        discordId = idRow.discordId;
+      }
 
-      const overview = await this.getCached(`userOverview:${discordid}`, 5000, async () => {
-        const user = await User.findOne({ discordId: discordid }).lean();
+      const overview = await this.getCached(`userOverview:${discordId}`, 5000, async () => {
+        const user = await User.findOne({ discordId: discordId }).lean();
         if (!user) return null;
 
         const wins = user.wins || 0;
@@ -1784,7 +1792,7 @@ export class ApiManager {
 
         const levelInfo = getLevelInfo(user.experience || 0);
 
-        const seasonStats = await SeasonStats.find({ discordId: discordid })
+        const seasonStats = await SeasonStats.find({ discordId: discordId })
           .sort({ seasonNumber: -1, chapterNumber: -1 })
           .limit(10)
           .lean();
