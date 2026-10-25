@@ -54,6 +54,7 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
 
     if (totalPages > 1) {
       const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+      let inFlight = false;
 
       const collector = response.createMessageComponentCollector({
         componentType: ComponentType.Button,
@@ -65,7 +66,11 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
           await buttonInteraction.reply({ content: 'You can only use your own pagination buttons!', ephemeral: true });
           return;
         }
-
+        if (inFlight) {
+          await buttonInteraction.deferUpdate().catch(() => {});
+          return;
+        }
+        inFlight = true;
         let newPage = page;
         if (buttonInteraction.customId.startsWith(`${config.commandName}_first_`)) {
           newPage = 1;
@@ -84,6 +89,7 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
         } catch (err) {
           console.error(`Pagination fetch failed for ${config.commandName} page ${newPage}:`, err);
           await buttonInteraction.reply({ content: 'Failed to load that page.', ephemeral: true }).catch(() => {});
+          inFlight = false;
           return;
         }
         const newEmbed = result.buildEmbed(result.items, newPage, totalPages, total, newSkip);
@@ -94,6 +100,8 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
         } catch (err) {
           console.error(`Pagination update failed for ${config.commandName}:`, err);
           return;
+        } finally {
+          inFlight = false;
         }
         page = newPage;
       });
