@@ -9,19 +9,21 @@ export async function queue(interaction: Message | ChatInputCommandInteraction, 
   try {
     const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
     
-    const user = await User.findOne({ discordId: userId }).select('_id').lean();
-    if (!user) {
-      await safeReply(interaction, betterEmbed('You are not registered. Please register first.', '#00AAAA', 'Not Registered'));
-      return;
-    }
-
     const guild = interaction.guild;
     if (!guild) {
       await safeReply(interaction, betterEmbed('This command can only be used in a server.', '#00AAAA', 'Guild Required'));
       return;
     }
 
-    const member = guild.members.cache?.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+    const [user, member] = await Promise.all([
+      User.findOne({ discordId: userId }).select('_id').lean(),
+      guild.members.cache?.get(userId) ?? guild.members.fetch(userId).catch(() => null)
+    ]);
+    if (!user) {
+      await safeReply(interaction, betterEmbed('You are not registered. Please register first.', '#00AAAA', 'Not Registered'));
+      return;
+    }
+
     if (!member?.voice.channel) {
       await safeReply(interaction, betterEmbed('You are not in a voice channel.', '#00AAAA', 'Not in Voice Channel'));
       return;
@@ -40,8 +42,9 @@ export async function queue(interaction: Message | ChatInputCommandInteraction, 
     }
 
     const users = await User.find({ discordId: { $in: playersInQueue } }).select('discordId wins losses wlr mvps').lean();
-    
-    const playerInfo = users.map(user => {
+    const byId = new Map(users.map(u => [u.discordId, u]));
+
+    const playerInfo = playersInQueue.map(id => byId.get(id)).filter(u => u !== undefined).map(user => {
       const wlr = user.wlr !== undefined ? user.wlr : (user.losses > 0 ? (user.wins / user.losses) : user.wins);
       const wlrFormatted = typeof wlr === 'number' ? wlr.toFixed(2) : '0.00';
       const mvpsFormatted = (user.mvps || 0).toString().padStart(2, '0');
