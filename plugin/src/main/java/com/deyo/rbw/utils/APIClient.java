@@ -122,6 +122,7 @@ public class APIClient {
                             + " (attempt " + (attempt + 1) + "/3)");
                     lastFailure = null;
                     if (attempt < 2) {
+                        backoffBeforeRetry(attempt);
                         continue;
                     }
                     return null;
@@ -134,6 +135,7 @@ public class APIClient {
                 if (attempt >= 2) {
                     throw e;
                 }
+                backoffBeforeRetry(attempt);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw e;
@@ -143,6 +145,11 @@ public class APIClient {
             throw lastFailure;
         }
         return null;
+    }
+
+    private void backoffBeforeRetry(int attempt) throws InterruptedException {
+        long delayMs = (long) (200 * Math.pow(2, attempt) + Math.random() * 100);
+        Thread.sleep(delayMs);
     }
 
     private UserData createDefaultUserData() {

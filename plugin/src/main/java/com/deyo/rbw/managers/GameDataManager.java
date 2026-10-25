@@ -17,7 +17,6 @@ import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 
@@ -25,7 +24,14 @@ import java.util.logging.Level;
 
 public class GameDataManager {
 
-    private static final ConcurrentHashMap<String, Object> WARP_FILE_LOCKS = new ConcurrentHashMap<>();
+    private static final int WARP_LOCK_STRIPES = 64;
+    private static final Object[] WARP_LOCK_POOL = new Object[WARP_LOCK_STRIPES];
+
+    static {
+        for (int i = 0; i < WARP_LOCK_STRIPES; i++) {
+            WARP_LOCK_POOL[i] = new Object();
+        }
+    }
 
     private static Object lockFor(File file) {
         String key;
@@ -34,7 +40,7 @@ public class GameDataManager {
         } catch (IOException e) {
             key = file.getAbsolutePath();
         }
-        return WARP_FILE_LOCKS.computeIfAbsent(key, k -> new Object());
+        return WARP_LOCK_POOL[(key.hashCode() & 0x7fffffff) % WARP_LOCK_STRIPES];
     }
     
     private final RankedBedwars plugin;
