@@ -8,7 +8,7 @@ let cachedRanksAt = 0;
 let inFlightRanks: Promise<IEloRank[]> | null = null;
 const RANK_CACHE_TTL_MS = 30000;
 
-async function getEloRanks(): Promise<IEloRank[]> {
+export async function getEloRanks(): Promise<IEloRank[]> {
   const EloRank = (await import('../models/EloRank')).default;
   const now = Date.now();
   if (cachedRanks && now - cachedRanksAt < RANK_CACHE_TTL_MS) return cachedRanks;

@@ -1,14 +1,14 @@
 
 import { Message, ChatInputCommandInteraction } from 'discord.js';
-import EloRank from '../../models/EloRank';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import { getEloRanks } from '../../utils/fix';
 
 
 export async function ranks(interaction: Message | ChatInputCommandInteraction) {
 
   try {
-    const ranks = await EloRank.find().sort({ startElo: 1 }).lean();
+    const ranks = (await getEloRanks()).slice().sort((a, b) => a.startElo - b.startElo);
     if (!ranks.length) {
       await safeReply(interaction, errorEmbed('No ranks found.', 'Ranks'));
       return;
