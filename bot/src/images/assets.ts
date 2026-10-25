@@ -37,8 +37,18 @@ export function staticImageDataUrl(dir: 'themes' | 'games' | 'fallbacks', file: 
   if (hit) return hit;
   const buf = fs.readFileSync(path.resolve(process.cwd(), 'src', 'asserts', dir, file));
   const url = `data:image/png;base64,${buf.toString('base64')}`;
-  dataUrlCache.set(key, url);
+  staticImageCacheStore(key, url);
   return url;
+}
+
+const STATIC_URL_MAX_ENTRIES = 500;
+
+function staticImageCacheStore(key: string, url: string): void {
+  if (!dataUrlCache.has(key) && dataUrlCache.size >= STATIC_URL_MAX_ENTRIES) {
+    const oldest = dataUrlCache.keys().next();
+    if (!oldest.done) dataUrlCache.delete(oldest.value);
+  }
+  dataUrlCache.set(key, url);
 }
 
 async function fetchImageDataUrl(url: string, timeoutMs: number): Promise<string | null> {
@@ -175,9 +185,11 @@ export async function loadAvatarDataUrl(username: string): Promise<string> {
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {
   const key = `skin:${ign.toLowerCase()}`;
   return loadCachedImage(key, async () => {
-    const heads = await fetchImageDataUrl(`https://mc-heads.net/body/${encodeURIComponent(ign)}/144`, 4000);
+    const [heads, fallback] = await Promise.all([
+      fetchImageDataUrl(`https://mc-heads.net/body/${encodeURIComponent(ign)}/144`, 4000),
+      fetchImageDataUrl(`https://nmsr.nickac.dev/fullbody/${encodeURIComponent(ign)}`, 4000)
+    ]);
     if (heads) return { dataUrl: heads, ok: true };
-    const fallback = await fetchImageDataUrl(`https://nmsr.nickac.dev/fullbody/${encodeURIComponent(ign)}`, 4000);
     if (fallback) return { dataUrl: fallback, ok: true };
     return { dataUrl: null, ok: false };
   });
