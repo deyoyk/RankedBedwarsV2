@@ -31,7 +31,7 @@ export async function fixall(interaction: Message | ChatInputCommandInteraction)
     fields: [
       { name: 'What it does', value: '• Update user roles based on ELO\n• Update user nicknames\n• Process all users in batches\n• Respect Discord rate limits', inline: false },
       { name: 'Users to process', value: `${total}`, inline: true },
-      { name: 'Estimated time', value: `${Math.ceil(total / 5)} seconds`, inline: true },
+      { name: 'Estimated time', value: `${Math.ceil(total / 25)} seconds`, inline: true },
       { name: 'Rate limiting', value: '1 second between batches', inline: true }
     ],
     startMessage: 'Starting fix all operation...',
@@ -68,10 +68,16 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
     }
   }
 
-  const batchSize = 5;
+  const batchSize = 25;
   const rateLimitDelay = 1000;
   const updateInterval = 3000;
   const maxStoredErrors = 50;
+
+  try {
+    await interaction.guild!.members.fetch();
+  } catch (error) {
+    console.error('[FixAll] Member pre-warm fetch failed, falling back to per-user lookup:', error);
+  }
 
   let lastId: unknown = null;
   for (;;) {
