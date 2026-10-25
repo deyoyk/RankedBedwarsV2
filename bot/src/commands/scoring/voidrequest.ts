@@ -140,13 +140,20 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
 
   try {
     if (approved) {
-      const wsManager = global._wsManager as WebSocketManager;
-      if (!wsManager) {
-        resultEmbed.setDescription(`❌ Void request failed due to WebSocket manager not being available.`);
+      const freshGame = await Game.findOne({ gameId: data.gameId });
+      if (!freshGame) {
+        resultEmbed.setDescription(`❌ Void request failed: game not found.`);
+      } else if (freshGame.state === 'scored' || freshGame.state === 'voided' || freshGame.state === 'scoring') {
+        resultEmbed.setDescription(`❌ Void request not applied: game state changed to ${freshGame.state}.`);
       } else {
-        const gameManager = new GameManager(message.client, wsManager);
-        await gameManager.voidGame(parseInt(data.gameId), data.reason);
-        resultEmbed.setDescription(`✅ Void approved and applied to Game ID: ${data.gameId}.`);
+        const wsManager = global._wsManager as WebSocketManager;
+        if (!wsManager) {
+          resultEmbed.setDescription(`❌ Void request failed due to WebSocket manager not being available.`);
+        } else {
+          const gameManager = new GameManager(message.client, wsManager);
+          await gameManager.voidGame(parseInt(data.gameId), data.reason);
+          resultEmbed.setDescription(`✅ Void approved and applied to Game ID: ${data.gameId}.`);
+        }
       }
     } else {
       resultEmbed.setDescription(`❌ Void request rejected due to insufficient approval votes.`);

@@ -4,7 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
-import { ensureUserStats, updateDailyElo, computeWlr } from '../../utils/userStats';
+import { ensureUserStats, computeWlr } from '../../utils/userStats';
 
 export async function win(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let targetUserId: string;
@@ -43,13 +43,14 @@ export async function win(interaction: Message | ChatInputCommandInteraction, ar
       return;
     }
 
-    const newWinStreak = (existing.winStreak ?? 0) + 1;
-    const newWlr = computeWlr(existing.wins + 1, existing.losses);
+    const newWlr = computeWlr((existing.wins ?? 0) + 1, existing.losses ?? 0);
+    const newElo = (existing.elo ?? 0) + eloRank.winElo;
     const user = await User.findOneAndUpdate(
       { discordId: targetUserId },
       {
-        $inc: { elo: eloRank.winElo, wins: 1, games: 1 },
-        $set: { winStreak: newWinStreak, loseStreak: 0, wlr: newWlr },
+        $inc: { elo: eloRank.winElo, wins: 1, games: 1, winStreak: 1 },
+        $set: { loseStreak: 0, wlr: newWlr },
+        $push: { dailyElo: { $each: [{ elo: newElo, date: new Date() }], $slice: -30 } },
       },
       { new: true }
     );
@@ -57,8 +58,6 @@ export async function win(interaction: Message | ChatInputCommandInteraction, ar
       await safeReply(interaction, errorEmbed('User not found or not registered.', 'Win Usage Error'));
       return;
     }
-    updateDailyElo(user, user.elo);
-    await user.save();
 
     if (interaction.guild) {
       await fix(interaction.guild, user.discordId);

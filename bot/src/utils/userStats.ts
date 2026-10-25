@@ -79,6 +79,9 @@ export function updateDailyElo(user: UserStatsLike, newElo: number) {
   } else {
     user.dailyElo.push({ elo: newElo, date: new Date() });
   }
+  if (user.dailyElo.length > 30) {
+    user.dailyElo = user.dailyElo.slice(-30);
+  }
 }
 
 export function computeWlr(wins: number, losses: number): number {
