@@ -55,20 +55,14 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
     const { title, field: valueField } = getModeConfig(mode);
 
     if (searchIGN) {
-      const user = await User.findOne({ ign: searchIGN });
+      const user = await User.findOne({ ign: searchIGN }).select(`${valueField} ign`).lean();
       if (!user) {
         const embedObj = errorEmbed(`IGN not found: ${searchIGN}`, 'IGN Not Found');
         await replyEmbed(embedObj);
         return;
       }
-      const allUsers = await User.find({}).sort({ [valueField]: -1 });
-      const pos = allUsers.findIndex(u => u.ign === searchIGN);
-      if (pos === -1) {
-        const embedObj = errorEmbed(`IGN not found in leaderboard: ${searchIGN}`, 'IGN Not Found');
-        await replyEmbed(embedObj);
-        return;
-      }
-      page = Math.floor(pos / usersPerPage);
+      const ahead = await User.countDocuments({ [valueField]: { $gt: (user as Record<string, unknown>)[valueField] } });
+      page = Math.floor(ahead / usersPerPage);
     }
 
     if (searchPosition !== null) {
@@ -78,7 +72,9 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
     const users = await User.find({ [valueField]: { $ne: null } })
       .sort({ [valueField]: -1 })
       .skip(page * usersPerPage)
-      .limit(usersPerPage);
+      .limit(usersPerPage)
+      .select(`ign discordId ${valueField}`)
+      .lean();
     const totalUsers = await User.countDocuments({ [valueField]: { $ne: null } });
 
     if (!users || users.length === 0) {
@@ -199,14 +195,12 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
         searchIGN = modalInt.fields.getTextInputValue('ign_input');
         searchPosition = null;
         
-        const user = await User.findOne({ ign: searchIGN });
+        const user = await User.findOne({ ign: searchIGN }).select('ign').lean();
         if (user) {
           const { field: valueField } = getModeConfig(mode);
-          const allUsers = await User.find({}).sort({ [valueField]: -1 });
-          const pos = allUsers.findIndex(u => u.ign === searchIGN);
-          if (pos !== -1) {
-            page = Math.floor(pos / usersPerPage);
-          }
+          const userValue = (user as unknown as Record<string, unknown>)[valueField];
+          const ahead = await User.countDocuments({ [valueField]: { $gt: userValue } });
+          page = Math.floor(ahead / usersPerPage);
         }
         needsUpdate = true;
         await modalInt.deferUpdate();
