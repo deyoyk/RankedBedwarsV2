@@ -171,6 +171,23 @@ export class CentralizedMatchmaker {
       const queues = await Queue.find({ isActive: true }).lean();
       const now = Date.now();
 
+      const liveIds = new Set(queues.map(q => q.channelId));
+      for (const key of [...this.queueMetrics.keys()]) {
+        if (!liveIds.has(key)) this.queueMetrics.delete(key);
+      }
+      for (const key of [...this.processingStates.keys()]) {
+        if (!liveIds.has(key)) this.processingStates.delete(key);
+      }
+      for (const key of [...this.queueCache.keys()]) {
+        if (!liveIds.has(key)) this.queueCache.delete(key);
+      }
+      for (const key of [...this.validationCache.keys()]) {
+        if (!liveIds.has(key)) this.validationCache.delete(key);
+      }
+      for (const key of [...queuePlayers.keys()]) {
+        if (!liveIds.has(key)) queuePlayers.delete(key);
+      }
+
       this.processPriorityQueue();
 
       const checkPromises = queues.map(async (queue) => {
