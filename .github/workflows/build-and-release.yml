@@ -1,19 +1,25 @@
 name: Build and Release
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (default: v<pom version>)'
+        required: false
+        default: ''
+      create_release:
+        description: 'Create GitHub release'
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: build-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  bot-tests:
+  build-bot:
+    name: Build bot
     runs-on: ubuntu-latest
 
     steps:
@@ -50,16 +56,17 @@ jobs:
       - name: Package bot
         run: |
           cd bot
-          zip -r ../rankedbedwars-bot.zip . -x 'node_modules/*' '.env' '*.log'
+          zip -r ../rbw-bot.zip . -x 'node_modules/*' '.env' '*.log'
 
       - name: Upload bot artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rankedbedwars-bot
-          path: rankedbedwars-bot.zip
+          name: rbw-bot
+          path: rbw-bot.zip
           retention-days: 30
 
-  web-build:
+  build-website:
+    name: Build website
     runs-on: ubuntu-latest
 
     steps:
@@ -85,20 +92,53 @@ jobs:
         working-directory: web
         run: npm run build
 
-      - name: Package web
+      - name: Package website
         run: |
           cd web
-          zip -r ../rbw-web.zip . -x 'node_modules/*' '.env*' '*.log'
+          zip -r ../rbw-website.zip . -x 'node_modules/*' '.env*' '*.log'
 
-      - name: Upload web artifact
+      - name: Upload website artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rbw-web
-          path: rbw-web.zip
+          name: rbw-website
+          path: rbw-website.zip
           retention-days: 30
 
-  build:
-    needs: [bot-tests, web-build]
+  build-plugin:
+    name: Build plugin
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build and test with Maven
+        working-directory: plugin
+        run: mvn clean package
+
+      - name: Rename plugin jar
+        run: |
+          JAR=$(ls plugin/target/RankedBedwars-*.jar | grep -v 'original-' | head -n 1)
+          cp "$JAR" rbw-plugin.jar
+
+      - name: Upload plugin artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rbw-plugin
+          path: rbw-plugin.jar
+          retention-days: 30
+
+  release:
+    name: Publish release
+    needs: [build-bot, build-website, build-plugin]
+    if: inputs.create_release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -106,18 +146,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up JDK 11
         uses: actions/setup-java@v4
         with:
           java-version: '11'
           distribution: 'temurin'
           cache: maven
-      
-      - name: Build and test with Maven
-        working-directory: plugin
-        run: mvn clean package
-      
+
       - name: Get version from pom.xml
         id: version
         working-directory: plugin
@@ -125,57 +161,48 @@ jobs:
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Built version: $VERSION"
-      
+
       - name: Get tag name
         id: tag
         run: |
-          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref_type }}" == "tag" ]; then
-            TAG=${GITHUB_REF#refs/tags/}
+          if [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
           else
             TAG="v${{ steps.version.outputs.version }}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Release tag: $TAG"
-      
-      - name: Upload JAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: RankedBedwars-${{ steps.version.outputs.version }}.jar
-          path: plugin/target/RankedBedwars-*.jar
-          retention-days: 30
 
-      - name: Download bot and web packages
+      - name: Download release assets
         uses: actions/download-artifact@v4
         with:
-          pattern: '{rankedbedwars-bot,rbw-web}'
+          pattern: '{rbw-bot,rbw-website,rbw-plugin}'
           path: release-assets
 
-      - name: Delete previous rolling release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: gh release delete "v${{ steps.version.outputs.version }}" --yes --cleanup-tag || true
+      - name: Delete previous release with same tag
+        run: gh release delete "${{ steps.tag.outputs.tag }}" --yes --cleanup-tag || true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Create Release
-        if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            plugin/target/RankedBedwars-*.jar
-            release-assets/rankedbedwars-bot/rankedbedwars-bot.zip
-            release-assets/rbw-web/rbw-web.zip
+            release-assets/rbw-plugin/rbw-plugin.jar
+            release-assets/rbw-bot/rbw-bot.zip
+            release-assets/rbw-website/rbw-website.zip
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
           body: |
             ## RankedBedwars ${{ steps.version.outputs.version }}
-            
+
             ### Changes
             - See commit history for details
-            
+
             ### Installation
-            1. Plugin: download the JAR from the assets below, place it in your server's `plugins` folder, restart your server
-            2. Bot: download `rankedbedwars-bot.zip`, extract, run `npm ci`, copy `.env.example` to `.env` and fill it in, then `npm start`
-            3. Web: download `rbw-web.zip`, extract, run `npm ci && npm run build`
+            1. Plugin: download `rbw-plugin.jar` from the assets below, place it in your server's `plugins` folder, restart your server
+            2. Bot: download `rbw-bot.zip`, extract, run `npm ci`, copy `.env.example` to `.env` and fill it in, then `npm start`
+            3. Web: download `rbw-website.zip`, extract, run `npm ci && npm run build`
           draft: false
           prerelease: false
         env:
