@@ -25,8 +25,7 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
       const mentionMatch = args[1].match(/^<@!?(\d+)>$/);
       const targetId = mentionMatch ? mentionMatch[1] : (/^\d+$/.test(args[1]) ? args[1] : null);
       if (targetId) {
-        targetUser = interaction.client.users.cache.get(targetId)
-          ?? await interaction.client.users.fetch(targetId).catch(() => null) ?? undefined;
+        targetUser = interaction.client.users.cache.get(targetId) ?? { id: targetId } as DiscordUser;
       }
     }
   }
