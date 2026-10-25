@@ -947,24 +947,28 @@ export class ApiManager {
       if (!pagination) return;
       const { page, pageSize } = pagination;
 
-      const result = await SeasonManager.getSeasonGames(seasonNumber, chapterNumber, page, pageSize);
+      const response = await this.getCached(`seasonGames:${seasonNumber}:${chapterNumber}:${page}:${pageSize}`, 10000, async () => {
+        const result = await SeasonManager.getSeasonGames(seasonNumber, chapterNumber, page, pageSize);
 
-      const idToIgn = await this.resolveGameIgns(result.games);
+        const idToIgn = await this.resolveGameIgns(result.games);
 
-      const gamesWithIgns = result.games.map(game => ({
-        ...game.toObject(),
-        ...this.mapGameIgns(game, idToIgn)
-      }));
+        const gamesWithIgns = result.games.map(game => ({
+          ...game.toObject(),
+          ...this.mapGameIgns(game, idToIgn)
+        }));
 
-      res.json({
-        games: gamesWithIgns,
-        pagination: {
-          page,
-          pageSize,
-          totalGames: result.total,
-          totalPages: result.totalPages
-        }
+        return {
+          games: gamesWithIgns,
+          pagination: {
+            page,
+            pageSize,
+            totalGames: result.total,
+            totalPages: result.totalPages
+          }
+        };
       });
+
+      res.json(response);
     } catch (error) {
       console.error('Error fetching season games:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -1112,47 +1116,47 @@ export class ApiManager {
       const { page, pageSize } = pagination;
       const skip = (page - 1) * pageSize;
 
-      const Game = await this.getGameModel();
-      const games = await Game.find({
-        $or: [
-          { team1: discordid },
-          { team2: discordid }
-        ]
-      })
-        .sort({ gameId: -1 })
-        .skip(skip)
-        .limit(pageSize)
-        .lean();
+      const response = await this.getCached(`userGames:${discordid}:${page}:${pageSize}`, 10000, async () => {
+        const Game = await this.getGameModel();
+        const filter = {
+          $or: [
+            { team1: discordid },
+            { team2: discordid }
+          ]
+        };
+        const games = await Game.find(filter)
+          .sort({ gameId: -1 })
+          .skip(skip)
+          .limit(pageSize)
+          .lean();
 
-      const totalGames = await Game.countDocuments({
-        $or: [
-          { team1: discordid },
-          { team2: discordid }
-        ]
+        const totalGames = await Game.countDocuments(filter);
+
+        const idToIgn = await this.resolveGameIgns(games);
+
+        const gamesWithIgns = games.map((game: LeanGame) => ({
+          ...game,
+          ...this.mapGameIgns(game, idToIgn),
+          playerResult: {
+            won: game.winners.includes(discordid),
+            team: game.team1.includes(discordid) ? 1 : 2,
+            wasMVP: game.mvps.includes(discordid),
+            brokeABed: game.bedbreaks.includes(discordid)
+          }
+        }));
+
+        return {
+          games: gamesWithIgns,
+          pagination: {
+            page,
+            limit: pageSize,
+            totalGames,
+            totalPages: Math.ceil(totalGames / pageSize)
+          }
+        };
       });
 
-      const idToIgn = await this.resolveGameIgns(games);
-
-      const gamesWithIgns = games.map((game: LeanGame) => ({
-        ...game,
-        ...this.mapGameIgns(game, idToIgn),
-        playerResult: {
-          won: game.winners.includes(discordid),
-          team: game.team1.includes(discordid) ? 1 : 2,
-          wasMVP: game.mvps.includes(discordid),
-          brokeABed: game.bedbreaks.includes(discordid)
-        }
-      }));
-
-      res.json({
-        games: gamesWithIgns,
-        pagination: {
-          page,
-          limit: pageSize,
-          totalGames,
-          totalPages: Math.ceil(totalGames / pageSize)
-        }
-      });
+      res.json(response);
     } catch (error) {
       console.error('Error fetching user games:', error);
       res.status(500).json({ error: 'Internal server error' });
