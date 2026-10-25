@@ -8,13 +8,6 @@ interface HistoryRecordView {
   moderator: string;
 }
 
-interface HistoryUserView {
-  discordId: string;
-  bans: HistoryRecordView[];
-  mutes: HistoryRecordView[];
-  strikes: HistoryRecordView[];
-}
-
 
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -22,8 +15,6 @@ import { safeReply } from '../../utils/safeReply';
 export async function history(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let discordId: string;
   let historyType: string;
-  let preloadedUser: HistoryUserView | null = null;
-
   let userInput: string | null = null;
 
   if (interaction instanceof ChatInputCommandInteraction) {
@@ -53,11 +44,11 @@ export async function history(interaction: Message | ChatInputCommandInteraction
 
   if (userInput !== null) {
     const isIdLike = /^<@!?\d+>$/.test(userInput) || /^\d+$/.test(userInput);
-    const user = isIdLike
-      ? await User.findOne({ discordId }).select(`discordId ${recordsField}`).lean()
-      : await User.findOne({ ign: userInput }).collation({ locale: 'en', strength: 2 }).select(`discordId ${recordsField}`).lean();
+    const idRow = isIdLike
+      ? await User.findOne({ discordId }).select('discordId').lean()
+      : await User.findOne({ ign: userInput }).collation({ locale: 'en', strength: 2 }).select('discordId').lean();
 
-    if (!user) {
+    if (!idRow) {
       const embed = new EmbedBuilder()
         .setColor('#00AAAA')
         .setTitle('History Not Found')
@@ -67,38 +58,45 @@ export async function history(interaction: Message | ChatInputCommandInteraction
       return;
     }
 
-    discordId = user.discordId;
-    preloadedUser = user;
+    discordId = idRow.discordId;
   }
 
   try {
-    const user = preloadedUser ?? await User.findOne({ discordId }).select(`discordId ${recordsField}`).lean();
-    if (!user) {
-      await safeReply(interaction, errorEmbed('No user found with the specified ID.', 'History Not Found'));
-      return;
-    }
+    const itemsPerPage = 5;
 
-    const historyItems = user[recordsField];
+    const loadPage = async (page: number): Promise<{ items: HistoryRecordView[]; total: number; totalPages: number }> => {
+      const [agg] = await User.aggregate([
+        { $match: { discordId } },
+        {
+          $project: {
+            _id: 0,
+            items: { $slice: [{ $ifNull: [`$${recordsField}`, []] }, page * itemsPerPage, itemsPerPage] },
+            total: { $size: { $ifNull: [`$${recordsField}`, []] } }
+          }
+        }
+      ]);
+      const total: number = agg?.total ?? 0;
+      return {
+        items: ((agg?.items ?? []) as HistoryRecordView[]),
+        total,
+        totalPages: Math.max(1, Math.ceil(total / itemsPerPage))
+      };
+    };
 
-    if (historyItems.length === 0) {
+    let currentPage = 0;
+    let { items: pageItems, total: totalCount, totalPages } = await loadPage(0);
+    if (totalCount === 0) {
       await safeReply(interaction, successEmbed(`No ${historyType}s found for <@${discordId}>.`, 'No History Found'));
       return;
     }
 
-    const itemsPerPage = 5;
-    let currentPage = 0;
-
-    const generateEmbed = (page: number) => {
-      const start = page * itemsPerPage;
-      const end = start + itemsPerPage;
-      const pageItems = historyItems.slice(start, end);
-
-      const description = pageItems
+    const generateEmbed = (page: number, items: HistoryRecordView[], pages: number, count: number) => {
+      const description = items
         .map((item, index) => {
           const duration = 'duration' in item ? item.duration : 'N/A';
           return `\`\`\`
-${index + 1 + start}. Reason: ${item.reason}
-Date: ${item.date.toDateString()}
+${index + 1 + page * itemsPerPage}. Reason: ${item.reason}
+Date: ${new Date(item.date).toDateString()}
 Duration: ${duration}
 Moderator: ${item.moderator}
 \`\`\``;
@@ -110,12 +108,12 @@ Moderator: ${item.moderator}
         '#00ff99',
         `${historyType.charAt(0).toUpperCase() + historyType.slice(1)} History`
       );
-      embedObj.builder.setFooter({ text: `Page ${page + 1} of ${Math.ceil(historyItems.length / itemsPerPage)}` });
+      embedObj.builder.setFooter({ text: `Page ${page + 1} of ${pages} (${count} total)` });
       embedObj.builder.setTimestamp();
       return embedObj.builder;
     };
 
-    const buildPaginationRow = (page: number) => new ActionRowBuilder<ButtonBuilder>().addComponents(
+    const buildPaginationRow = (page: number, pages: number) => new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId('prev_page')
         .setLabel('Previous')
@@ -125,31 +123,52 @@ Moderator: ${item.moderator}
         .setCustomId('next_page')
         .setLabel('Next')
         .setStyle(ButtonStyle.Primary)
-        .setDisabled(page >= Math.ceil(historyItems.length / itemsPerPage) - 1)
+        .setDisabled(page >= pages - 1)
     );
 
-    const embed = generateEmbed(currentPage);
-    const row = buildPaginationRow(currentPage);
+    const embed = generateEmbed(currentPage, pageItems, totalPages, totalCount);
+    const row = buildPaginationRow(currentPage, totalPages);
 
     const message = await safeReply(interaction, { embeds: [embed], components: [row], fetchReply: true });
     const ownerId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
-    const collector = message.createMessageComponentCollector({ time: 60000 });
+    const collector = (message as unknown as Message | undefined)?.createMessageComponentCollector({
+      filter: (i) => i.user.id === ownerId,
+      time: 60000
+    });
 
-    collector.on('collect', async (buttonInteraction) => {
-      if (buttonInteraction.user.id !== ownerId) {
-        await buttonInteraction.reply({ content: 'You can only use your own history buttons!', ephemeral: true });
-        return;
-      }
+    collector?.on('collect', async (buttonInteraction) => {
       if (buttonInteraction.customId === 'prev_page' && currentPage > 0) {
         currentPage--;
-      } else if (buttonInteraction.customId === 'next_page' && currentPage < Math.ceil(historyItems.length / itemsPerPage) - 1) {
+      } else if (buttonInteraction.customId === 'next_page' && currentPage < totalPages - 1) {
         currentPage++;
+      } else {
+        await buttonInteraction.deferUpdate().catch(() => undefined);
+        return;
       }
 
-      const newEmbed = generateEmbed(currentPage);
-      const newRow = buildPaginationRow(currentPage);
+      try {
+        const loaded = await loadPage(currentPage);
+        pageItems = loaded.items;
+        totalCount = loaded.total;
+        totalPages = loaded.totalPages;
+        if (pageItems.length === 0 && currentPage > 0) {
+          currentPage = totalPages - 1;
+          const retry = await loadPage(currentPage);
+          pageItems = retry.items;
+          totalCount = retry.total;
+          totalPages = retry.totalPages;
+        }
+        await buttonInteraction.update({
+          embeds: [generateEmbed(currentPage, pageItems, totalPages, totalCount)],
+          components: [buildPaginationRow(currentPage, totalPages)]
+        });
+      } catch {
+        await buttonInteraction.deferUpdate().catch(() => undefined);
+      }
+    });
 
-      await buttonInteraction.update({ embeds: [newEmbed], components: [newRow] });
+    collector?.on('end', async () => {
+      await (message as unknown as Message | undefined)?.edit({ components: [] }).catch(() => undefined);
     });
   } catch (error) {
     console.error('Error in history command:', error);
