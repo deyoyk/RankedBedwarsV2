@@ -1,5 +1,5 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import User from '../../models/User';
+import User, { type IUser } from '../../models/User';
 
 
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
@@ -8,6 +8,7 @@ import { safeReply } from '../../utils/safeReply';
 export async function history(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   let discordId: string;
   let historyType: string;
+  let preloadedUser: Pick<IUser, 'discordId' | 'bans' | 'mutes' | 'strikes'> | null = null;
 
   if (interaction instanceof ChatInputCommandInteraction) {
     discordId = interaction.options.getString('user_id', true);
@@ -36,6 +37,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
       }
 
       discordId = user.discordId;
+      preloadedUser = user;
     } else {
       const embed = new EmbedBuilder()
         .setColor('#00AAAA')
@@ -48,7 +50,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
   }
 
   try {
-    const user = await User.findOne({ discordId });
+    const user = preloadedUser ?? await User.findOne({ discordId });
     if (!user) {
       await safeReply(interaction, errorEmbed('No user found with the specified ID.', 'History Not Found'));
       return;
