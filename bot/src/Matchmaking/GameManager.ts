@@ -889,6 +889,10 @@ export class GameManager {
       const resources = this.activeGames.get(gameId);
       if (!resources) return;
 
+      // Free capacity immediately at settle time; the 30s timer below only
+      // deletes Discord channels. Previously the slot was held for 30s after
+      // every score/void, causing spurious max-concurrent-games backpressure.
+      this.activeGames.delete(gameId);
       this.cleaningGames.add(gameId);
 
       this.warpRequests.delete(gameId.toString());
@@ -904,7 +908,6 @@ export class GameManager {
         } catch (error) {
           console.error(`[GameManager] Error cleaning up channels for game ${gameId}:`, error);
         } finally {
-          this.activeGames.delete(gameId);
           this.cleaningGames.delete(gameId);
         }
       }, 30000);
