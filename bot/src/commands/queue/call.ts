@@ -38,7 +38,11 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
       return;
     }
 
-    const senderMember = guild.members.cache.get(senderId) ?? await guild.members.fetch(senderId).catch(() => null);
+    const [senderMember, targetUserDoc, targetMember] = await Promise.all([
+      guild.members.cache?.get(senderId) ?? guild.members.fetch(senderId).catch(() => null),
+      User.findOne({ discordId: targetUser }).select('_id').lean(),
+      guild.members.cache?.get(targetUser) ?? guild.members.fetch(targetUser).catch(() => null)
+    ]);
     const senderVoiceState = senderMember?.voice;
 
     if (!senderVoiceState?.channel) {
@@ -48,17 +52,13 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
 
     const voiceChannel = senderVoiceState.channel as VoiceChannel;
 
-    const [game, targetUserDoc, targetMember] = await Promise.all([
-      Game.findOne({
-        $or: [
-          { 'channels.team1Voice': voiceChannel.id },
-          { 'channels.team2Voice': voiceChannel.id },
-          { 'channels.picking': voiceChannel.id }
-        ]
-      }).select('gameId').lean(),
-      User.findOne({ discordId: targetUser }).select('_id').lean(),
-      guild.members.cache.get(targetUser) ?? guild.members.fetch(targetUser).catch(() => null)
-    ]);
+    const game = await Game.findOne({
+      $or: [
+        { 'channels.team1Voice': voiceChannel.id },
+        { 'channels.team2Voice': voiceChannel.id },
+        { 'channels.picking': voiceChannel.id }
+      ]
+    }).select('gameId').lean();
 
     if (!game) {
       await safeReply(interaction, errorEmbed('You must be in a game voice channel to use this command.', '❌ Invalid Voice Channel'));
