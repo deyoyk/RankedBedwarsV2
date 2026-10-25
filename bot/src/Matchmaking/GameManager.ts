@@ -121,6 +121,38 @@ interface GameVoidContext {
   reason: string;
 }
 
+// Cache EloRank documents across settlements within a short TTL so concurrent
+// score/void calls for the same burst share one query instead of N queries.
+// In-flight requests are de-duplicated via a shared promise.
+let cachedEloRanks: IEloRank[] | null = null;
+let cachedEloRanksAt = 0;
+let inFlightEloRanks: Promise<IEloRank[]> | null = null;
+const ELO_RANK_CACHE_TTL_MS = 30000;
+
+async function getCachedEloRanks(): Promise<IEloRank[]> {
+  const now = Date.now();
+  if (cachedEloRanks && now - cachedEloRanksAt < ELO_RANK_CACHE_TTL_MS) {
+    return cachedEloRanks;
+  }
+  if (inFlightEloRanks) {
+    return inFlightEloRanks;
+  }
+  inFlightEloRanks = (EloRank.find().sort({ startElo: 1 }) as unknown as Promise<IEloRank[]>)
+    .then((ranks) => {
+      cachedEloRanks = ranks;
+      cachedEloRanksAt = Date.now();
+      inFlightEloRanks = null;
+      return ranks;
+    })
+    .catch((err) => {
+      inFlightEloRanks = null;
+      throw err;
+    });
+  return inFlightEloRanks;
+}
+
+const RECENT_GAMES_CAP = 50;
+
 export class GameManager {
   private client: Client;
   private wsManager: WebSocketManager;
@@ -505,13 +537,46 @@ export class GameManager {
       await game.save();
       resources.game = game;
       const allPlayers = [...team1, ...team2];
+      const queueIdStr = String(typeof queue.id === 'number' ? queue.id : parseInt(String(queue.id), 10));
+      const UserModel = User as unknown as {
+        bulkWrite?: (ops: Record<string, unknown>[]) => Promise<unknown>;
+      };
+      if (typeof UserModel.bulkWrite === 'function') {
+        const pendingEntry = {
+          gameId: resources.gameId,
+          queueId: queueIdStr,
+          map: selectedMap,
+          eloGain: 0,
+          kills: 0,
+          deaths: 0,
+          bedBroken: 0,
+          finalKills: 0,
+          date: startTime,
+          state: 'pending',
+          startTime,
+          won: false,
+          isMvp: false
+        };
+        const ops = allPlayers.map((discordId) => ({
+          updateOne: {
+            filter: { discordId },
+            update: {
+              $inc: { games: 1 },
+              $push: { recentGames: { $each: [pendingEntry], $position: 0, $slice: RECENT_GAMES_CAP } }
+            }
+          }
+        }));
+        await UserModel.bulkWrite(ops);
+        console.log(`[GameManager] Game ${resources.gameId} saved to database and users updated`);
+        return;
+      }
       const users = await User.find({ discordId: { $in: allPlayers } });
       const updatePromises = users.map(async (user) => {
         user.games = (user.games || 0) + 1;
         user.recentGames = user.recentGames || [];
         user.recentGames.unshift({
           gameId: resources.gameId,
-          queueId: String(typeof queue.id === 'number' ? queue.id : parseInt(String(queue.id), 10)),
+          queueId: queueIdStr,
           map: selectedMap,
           eloGain: 0,
           kills: 0,
@@ -524,6 +589,9 @@ export class GameManager {
           won: false,
           isMvp: false
         });
+        if (user.recentGames.length > RECENT_GAMES_CAP) {
+          user.recentGames = user.recentGames.slice(0, RECENT_GAMES_CAP);
+        }
         await user.save();
       });
       await Promise.allSettled(updatePromises);
@@ -909,6 +977,10 @@ export class GameManager {
 
 
 
+          if (user.recentGames.length > RECENT_GAMES_CAP) {
+            user.recentGames = user.recentGames.slice(0, RECENT_GAMES_CAP);
+          }
+
           await user.save();
           console.log(`[GameManager] Updated recent games for user ${user.ign || discordId}`);
         } catch (error) {
@@ -960,7 +1032,7 @@ export class GameManager {
       const { game, players } = await this.loadGameWithPlayers(gameResult.gameId);
 
 
-      const eloRanks = await EloRank.find().sort({ startElo: 1 });
+      const eloRanks = await getCachedEloRanks();
 
 
       const ignToId: Record<string, string> = {};
@@ -1257,48 +1329,186 @@ export class GameManager {
     }
   }
 
+  private buildRecentGameEntry(scoreData: PlayerScoreData, game: IGame, now: Date): IRecentGame {
+    return {
+      gameId: game.gameId,
+      queueId: String(parseInt(game.queueId, 10)),
+      map: game.map,
+      eloGain: scoreData.eloChange,
+      elo_before: scoreData.elo_before,
+      elo_after: scoreData.elo_after,
+      kills: scoreData.stats.kills || 0,
+      deaths: scoreData.stats.deaths || 0,
+      bedBroken: scoreData.stats.bedBroken || 0,
+      finalKills: scoreData.stats.finalKills || 0,
+      finalDeaths: scoreData.finalDeaths || 0,
+      won: scoreData.isWinner,
+      isMvp: scoreData.isMvp,
+      date: now,
+      state: 'scored',
+      startTime: game.startTime,
+      endTime: now,
+      diamonds: scoreData.stats.diamonds || 0,
+      irons: scoreData.stats.irons || 0,
+      gold: scoreData.stats.gold || 0,
+      emeralds: scoreData.stats.emeralds || 0,
+      blocksPlaced: scoreData.stats.blocksPlaced || 0,
+      damageDealt: scoreData.stats.damageDealt || 0,
+      damageTaken: scoreData.stats.damageTaken || 0,
+      assists: scoreData.stats.assists || 0,
+      maxStreak: scoreData.stats.maxStreak || 0,
+      firstBlood: scoreData.stats.firstBlood === true,
+      fights: scoreData.stats.fights ? Object.keys(scoreData.stats.fights).length : 0
+    };
+  }
+
+  private applyScoreDataToPlayer(player: IUser, scoreData: PlayerScoreData, game: IGame, gameDurationSeconds: number): IRecentGame {
+    const now = new Date();
+    player.elo = scoreData.elo_after;
+
+    player.experience = (player.experience || 0) + scoreData.experienceGained;
+    player.level = scoreData.level_after;
+
+    if (scoreData.isWinner) {
+      player.wins = (player.wins || 0) + 1;
+      player.winStreak = (player.winStreak || 0) + 1;
+      player.loseStreak = 0;
+    } else {
+      player.losses = (player.losses || 0) + 1;
+      player.loseStreak = (player.loseStreak || 0) + 1;
+      player.winStreak = 0;
+    }
+
+    if (scoreData.isMvp) {
+      player.mvps = (player.mvps || 0) + 1;
+    }
+
+    this.updatePlayerGameStats(player, scoreData.stats);
+
+    player.finalDeaths = (player.finalDeaths || 0) + (scoreData.finalDeaths || 0);
+    player.playtimeSeconds = (player.playtimeSeconds || 0) + gameDurationSeconds;
+    player.peakElo = Math.max(player.peakElo || 0, scoreData.elo_after);
+
+    player.kdr = player.deaths && player.deaths > 0 ? player.kills / player.deaths : player.kills;
+    player.wlr = player.losses && player.losses > 0 ? player.wins / player.losses : player.wins;
+
+    const entry = this.buildRecentGameEntry(scoreData, game, now);
+    if (!player.recentGames) player.recentGames = [];
+    const idx = player.recentGames.findIndex((g) => g.gameId === game.gameId);
+    if (idx !== -1) {
+      player.recentGames[idx] = entry;
+    } else {
+      player.recentGames.unshift(entry);
+    }
+    if (player.recentGames.length > RECENT_GAMES_CAP) {
+      player.recentGames = player.recentGames.slice(0, RECENT_GAMES_CAP);
+    }
+
+    this.updatePlayerDailyEloSync(player);
+
+    return entry;
+  }
+
+  private updatePlayerDailyEloSync(player: IUser): void {
+    try {
+      if (!player.dailyElo) {
+        player.dailyElo = [];
+      }
+      updateDailyElo(player, player.elo);
+      if (player.dailyElo.length > 30) {
+        player.dailyElo = player.dailyElo.slice(-30);
+      }
+    } catch (error) {
+      console.error(`[GameManager] Error updating daily ELO for ${player.discordId}:`, error);
+    }
+  }
+
+  private scalarSetsForScoredPlayer(player: IUser): Record<string, unknown> {
+    return {
+      elo: player.elo,
+      experience: player.experience,
+      level: player.level,
+      wins: player.wins,
+      losses: player.losses,
+      winStreak: player.winStreak,
+      loseStreak: player.loseStreak,
+      mvps: player.mvps,
+      kills: player.kills,
+      deaths: player.deaths,
+      finalKills: player.finalKills,
+      bedBroken: player.bedBroken,
+      diamonds: player.diamonds,
+      irons: player.irons,
+      gold: player.gold,
+      emeralds: player.emeralds,
+      blocksPlaced: player.blocksPlaced,
+      damageDealt: player.damageDealt,
+      damageTaken: player.damageTaken,
+      assists: player.assists,
+      bestStreak: player.bestStreak,
+      firstBloods: player.firstBloods,
+      finalDeaths: player.finalDeaths,
+      playtimeSeconds: player.playtimeSeconds,
+      peakElo: player.peakElo,
+      kdr: player.kdr,
+      wlr: player.wlr,
+      dailyElo: player.dailyElo
+    };
+  }
+
   private async updatePlayerStats(playerScoreData: PlayerScoreData[], game: IGame): Promise<void> {
     try {
       const gameDurationSeconds = this.computeGameDurationSeconds(game);
+      const entries = new Map<string, IRecentGame>();
+      for (const scoreData of playerScoreData) {
+        const entry = this.applyScoreDataToPlayer(scoreData.player, scoreData, game, gameDurationSeconds);
+        entries.set(scoreData.player.discordId, entry);
+      }
+
+      const UserModel = User as unknown as {
+        bulkWrite?: (ops: Record<string, unknown>[]) => Promise<unknown>;
+      };
+      if (typeof UserModel.bulkWrite === 'function') {
+        try {
+          const ops: Record<string, unknown>[] = [];
+          for (const scoreData of playerScoreData) {
+            const entry = entries.get(scoreData.player.discordId);
+            // Remove any stale entry for this game first so the $push below
+            // cannot create duplicates, then push the fresh entry capped at 50.
+            ops.push({
+              updateOne: {
+                filter: { discordId: scoreData.player.discordId },
+                update: { $pull: { recentGames: { gameId: game.gameId } } }
+              }
+            });
+            ops.push({
+              updateOne: {
+                filter: { discordId: scoreData.player.discordId },
+                update: {
+                  $set: this.scalarSetsForScoredPlayer(scoreData.player),
+                  $push: { recentGames: { $each: [entry], $position: 0, $slice: RECENT_GAMES_CAP } }
+                }
+              }
+            });
+          }
+          await UserModel.bulkWrite(ops);
+        } catch (error) {
+          console.error('[GameManager] Error bulk-updating player stats:', error);
+          throw new Error(`Failed to persist ${playerScoreData.length}/${playerScoreData.length} player updates`);
+        }
+        for (const scoreData of playerScoreData) {
+          if (scoreData.leveledUp) {
+            console.log(`[GameManager] Player ${scoreData.player.ign || scoreData.player.discordId} leveled up from ${scoreData.level_before} to ${scoreData.level_after}!`);
+          }
+        }
+        return;
+      }
+
       const updatePromises = playerScoreData.map(async (scoreData) => {
-        const player = scoreData.player;
-
-        player.elo = scoreData.elo_after;
-
-        player.experience = (player.experience || 0) + scoreData.experienceGained;
-        player.level = scoreData.level_after;
-
-        if (scoreData.isWinner) {
-          player.wins = (player.wins || 0) + 1;
-          player.winStreak = (player.winStreak || 0) + 1;
-          player.loseStreak = 0;
-        } else {
-          player.losses = (player.losses || 0) + 1;
-          player.loseStreak = (player.loseStreak || 0) + 1;
-          player.winStreak = 0;
-        }
-
-        if (scoreData.isMvp) {
-          player.mvps = (player.mvps || 0) + 1;
-        }
-
-        this.updatePlayerGameStats(player, scoreData.stats);
-
-        player.finalDeaths = (player.finalDeaths || 0) + (scoreData.finalDeaths || 0);
-        player.playtimeSeconds = (player.playtimeSeconds || 0) + gameDurationSeconds;
-        player.peakElo = Math.max(player.peakElo || 0, scoreData.elo_after);
-
-        player.kdr = player.deaths && player.deaths > 0 ? player.kills / player.deaths : player.kills;
-        player.wlr = player.losses && player.losses > 0 ? player.wins / player.losses : player.wins;
-
-        await this.updatePlayerRecentGames(player, scoreData, game);
-
-        await this.updatePlayerDailyElo(player);
-
-        await player.save();
+        await scoreData.player.save();
 
         if (scoreData.leveledUp) {
-          console.log(`[GameManager] Player ${player.ign || player.discordId} leveled up from ${scoreData.level_before} to ${scoreData.level_after}!`);
+          console.log(`[GameManager] Player ${scoreData.player.ign || scoreData.player.discordId} leveled up from ${scoreData.level_before} to ${scoreData.level_after}!`);
         }
       });
       const results = await Promise.allSettled(updatePromises);
@@ -1381,6 +1591,9 @@ export class GameManager {
         player.recentGames[idx] = entry;
       } else {
         player.recentGames.unshift(entry);
+      }
+      if (player.recentGames.length > RECENT_GAMES_CAP) {
+        player.recentGames = player.recentGames.slice(0, RECENT_GAMES_CAP);
       }
 
 
@@ -1647,17 +1860,194 @@ export class GameManager {
     }
   }
 
+  private applyVoidDataToPlayer(voidData: PlayerVoidData, gameId?: number): { targetGameId: number | null; hadExisting: boolean } {
+    const player = voidData.player;
+    player.elo = voidData.elo_after;
+
+    this.applyRevertPlayerGameStats(player, voidData);
+    const result = this.applyRecentGamesForVoid(player, voidData, gameId);
+    this.updatePlayerDailyEloSync(player);
+    return result;
+  }
+
+  private applyRevertPlayerGameStats(player: IUser, voidData: PlayerVoidData): void {
+    const gameStats = voidData.gameStats;
+    if (!gameStats) {
+      return;
+    }
+    if (gameStats.state !== 'scored') {
+      player.games = Math.max(0, (player.games || 0) - 1);
+      return;
+    }
+    this.revertStatFields(player, gameStats);
+    player.experience = Math.max(0, (player.experience || 0) - voidData.experienceToRevert);
+    player.level = voidData.level_after;
+    player.kdr = player.deaths && player.deaths > 0 ? Number((player.kills / player.deaths).toFixed(2)) : (player.kills || 0);
+    player.wlr = player.losses && player.losses > 0 ? Number((player.wins / player.losses).toFixed(2)) : (player.wins || 0);
+  }
+
+  private applyRecentGamesForVoid(player: IUser, voidData: PlayerVoidData, gameId?: number): { targetGameId: number | null; hadExisting: boolean } {
+    const gameStats = voidData.gameStats;
+    if (!player.recentGames) player.recentGames = [];
+    const targetGameId = gameStats ? gameStats.gameId : gameId;
+    if (!targetGameId) {
+      return { targetGameId: null, hadExisting: false };
+    }
+    const recentGameIdx = player.recentGames.findIndex(g => g.gameId === targetGameId);
+    if (recentGameIdx !== -1) {
+      const existing = player.recentGames[recentGameIdx];
+      if (existing.state === 'scored' || existing.state === 'pending') {
+        existing.state = 'voided';
+        existing.eloGain = 0;
+        existing.won = false;
+        existing.isMvp = false;
+      }
+      return { targetGameId, hadExisting: true };
+    }
+    player.recentGames.unshift({
+      gameId: targetGameId,
+      queueId: '0',
+      map: 'Unknown',
+      eloGain: 0,
+      kills: 0,
+      deaths: 0,
+      bedBroken: 0,
+      finalKills: 0,
+      won: false,
+      isMvp: false,
+      date: new Date(),
+      state: 'voided',
+      startTime: new Date(),
+      endTime: new Date(),
+      diamonds: 0,
+      irons: 0,
+      gold: 0,
+      emeralds: 0,
+      blocksPlaced: 0
+    });
+    if (player.recentGames.length > RECENT_GAMES_CAP) {
+      player.recentGames = player.recentGames.slice(0, RECENT_GAMES_CAP);
+    }
+    return { targetGameId, hadExisting: false };
+  }
+
+  private scalarSetsForVoidedPlayer(player: IUser): Record<string, unknown> {
+    return {
+      elo: player.elo,
+      experience: player.experience,
+      level: player.level,
+      wins: player.wins,
+      losses: player.losses,
+      winStreak: player.winStreak,
+      loseStreak: player.loseStreak,
+      mvps: player.mvps,
+      kills: player.kills,
+      deaths: player.deaths,
+      finalKills: player.finalKills,
+      finalDeaths: player.finalDeaths,
+      bedBroken: player.bedBroken,
+      diamonds: player.diamonds,
+      irons: player.irons,
+      gold: player.gold,
+      emeralds: player.emeralds,
+      blocksPlaced: player.blocksPlaced,
+      damageDealt: player.damageDealt,
+      damageTaken: player.damageTaken,
+      assists: player.assists,
+      bestStreak: player.bestStreak,
+      firstBloods: player.firstBloods,
+      games: player.games,
+      kdr: player.kdr,
+      wlr: player.wlr,
+      dailyElo: player.dailyElo
+    };
+  }
+
   private async revertPlayerStats(playerVoidData: PlayerVoidData[], gameId?: number): Promise<void> {
     try {
+      const meta = new Map<string, { targetGameId: number | null; hadExisting: boolean }>();
+      for (const voidData of playerVoidData) {
+        try {
+          meta.set(voidData.player.discordId, this.applyVoidDataToPlayer(voidData, gameId));
+        } catch (error) {
+          console.error(`[GameManager] Error reverting player ${voidData.player.discordId}:`, error);
+        }
+      }
+
+      const UserModel = User as unknown as {
+        bulkWrite?: (ops: Record<string, unknown>[]) => Promise<unknown>;
+      };
+      if (typeof UserModel.bulkWrite === 'function') {
+        const ops: Record<string, unknown>[] = [];
+        for (const voidData of playerVoidData) {
+          const player = voidData.player;
+          const info = meta.get(player.discordId);
+          const targetGameId = info?.targetGameId ?? (voidData.gameStats ? voidData.gameStats.gameId : gameId);
+          if (!targetGameId) {
+            continue;
+          }
+          if (info?.hadExisting) {
+            ops.push({
+              updateOne: {
+                filter: { discordId: player.discordId, 'recentGames.gameId': targetGameId },
+                update: {
+                  $set: {
+                    ...this.scalarSetsForVoidedPlayer(player),
+                    'recentGames.$.state': 'voided',
+                    'recentGames.$.eloGain': 0,
+                    'recentGames.$.won': false,
+                    'recentGames.$.isMvp': false
+                  }
+                }
+              }
+            });
+          } else {
+            ops.push({
+              updateOne: {
+                filter: { discordId: player.discordId },
+                update: {
+                  $set: this.scalarSetsForVoidedPlayer(player),
+                  $push: {
+                    recentGames: {
+                      $each: [{
+                        gameId: targetGameId,
+                        queueId: '0',
+                        map: 'Unknown',
+                        eloGain: 0,
+                        kills: 0,
+                        deaths: 0,
+                        bedBroken: 0,
+                        finalKills: 0,
+                        won: false,
+                        isMvp: false,
+                        date: new Date(),
+                        state: 'voided',
+                        startTime: new Date(),
+                        endTime: new Date(),
+                        diamonds: 0,
+                        irons: 0,
+                        gold: 0,
+                        emeralds: 0,
+                        blocksPlaced: 0
+                      }],
+                      $position: 0,
+                      $slice: RECENT_GAMES_CAP
+                    }
+                  }
+                }
+              }
+            });
+          }
+        }
+        if (ops.length > 0) {
+          await UserModel.bulkWrite(ops);
+        }
+        return;
+      }
+
       const updatePromises = playerVoidData.map(async (voidData) => {
         try {
-          const player = voidData.player;
-          player.elo = voidData.elo_after;
-
-          await this.revertPlayerGameStats(player, voidData);
-          await this.updatePlayerRecentGamesForVoid(player, voidData, gameId);
-          await this.updatePlayerDailyElo(player);
-          await player.save();
+          await voidData.player.save();
         } catch (error) {
           console.error(`[GameManager] Error reverting player ${voidData.player.discordId}:`, error);
         }
@@ -1766,6 +2156,9 @@ export class GameManager {
           emeralds: 0,
           blocksPlaced: 0
         });
+        if (player.recentGames.length > RECENT_GAMES_CAP) {
+          player.recentGames = player.recentGames.slice(0, RECENT_GAMES_CAP);
+        }
       }
     } catch (error) {
       console.error(`[GameManager] Error updating recent games for void ${player.discordId}:`, error);
