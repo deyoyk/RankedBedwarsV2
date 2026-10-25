@@ -7,6 +7,9 @@ export function registerVcLeaveCleanupListener(client: Client) {
     if (!oldState.channelId || oldState.channelId === newState.channelId) return;
 
     try {
+      const channel = oldState.guild.channels.cache.get(oldState.channelId);
+      if (!channel || !channel.isVoiceBased() || channel.members.size !== 0) return;
+
       const game = await Game.findOne({
         $or: [
           { 'channels.team1Voice': oldState.channelId },
@@ -17,11 +20,8 @@ export function registerVcLeaveCleanupListener(client: Client) {
       if (!game) return;
       if (game.state !== 'scored' && game.state !== 'voided') return;
 
-      const channel = oldState.guild.channels.cache.get(oldState.channelId);
-      if (channel && channel.isVoiceBased() && channel.members.size === 0) {
-        await channel.delete('Team VC is empty after user left and game is scored/voided');
-        console.log(`[VcLeaveCleanupListener] Deleted empty team VC: ${channel.name} (${oldState.channelId})`);
-      }
+      await channel.delete('Team VC is empty after user left and game is scored/voided');
+      console.log(`[VcLeaveCleanupListener] Deleted empty team VC: ${channel.name} (${oldState.channelId})`);
     } catch (error) {
       console.error(`[VcLeaveCleanupListener] Error cleaning up channel ${oldState.channelId}:`, error);
     }
