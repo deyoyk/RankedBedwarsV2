@@ -171,7 +171,9 @@ export class CentralizedMatchmaker {
           }
 
           if (state && state.isProcessing && now - state.lastProcessed > this.LOCK_TIMEOUT) {
-            if (queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking) {
+            const isPicking = queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking;
+            const pickingGraceMs = this.LOCK_TIMEOUT * 3;
+            if (isPicking && now - state.lastProcessed <= pickingGraceMs) {
               return;
             }
             console.warn(`[CentralizedMatchmaker] Queue ${queue.channelId} stuck for ${now - state.lastProcessed}ms, resetting`);
@@ -340,7 +342,7 @@ export class CentralizedMatchmaker {
       let processingResult: QueueProcessingResult;
       try {
         processingResult = isPickingQueue
-          ? await processingPromise
+          ? await withTimeout(processingPromise, 120000, 'Picking')
           : await withTimeout(processingPromise, 30000, 'Processing');
       } catch (processingError) {
         const processingMessage = processingError instanceof Error ? processingError.message : String(processingError);

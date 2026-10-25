@@ -41,7 +41,7 @@ export class PickingQueueManager {
   private workersManager: WorkersManager;
   private activeSessions: Map<number, PickingSession> = new Map();
   private readonly PICK_TIMEOUT = 120000;
-  private readonly SESSION_TIMEOUT = 600000;
+  private readonly SESSION_TIMEOUT = 180000;
 
   constructor(client: Client, gameManager: GameManager, wsManager: WebSocketManager) {
     this.client = client;
