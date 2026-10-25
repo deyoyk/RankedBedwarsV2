@@ -398,24 +398,32 @@ export class QueueListener {
         return;
       }
 
-      try {
-        const onlineCheck = await Promise.race([
-          this.wsManager.checkPlayerOnline(user.ign),
-          new Promise<{ online: boolean }>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), 5000)
-          )
-        ]).catch(() => null);
+      const presence = PresenceService.evaluate(user.ign);
+      if (presence === 'offline') {
+        await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+        return;
+      }
 
-        if (onlineCheck === null) {
-          console.warn(`[QueueListener] Online check timed out for ${user.ign}, allowing queue join`);
-        } else if (!onlineCheck.online) {
-          await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+      if (presence === 'unknown') {
+        try {
+          const onlineCheck = await Promise.race([
+            this.wsManager.checkPlayerOnline(user.ign),
+            new Promise<{ online: boolean }>((_, reject) =>
+              setTimeout(() => reject(new Error('Timeout')), 5000)
+            )
+          ]).catch(() => null);
+
+          if (onlineCheck === null) {
+            console.warn(`[QueueListener] Online check timed out for ${user.ign}, allowing queue join`);
+          } else if (!onlineCheck.online) {
+            await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+            return;
+          }
+        } catch (error) {
+          console.warn(`[QueueListener] Could not check online status for ${user.ign}: ${error}`);
+          await this.moveToWaiting(state, 'Could not verify online status, Hm? Wierd this shouldn\'t be happening!');
           return;
         }
-      } catch (error) {
-        console.warn(`[QueueListener] Could not check online status for ${user.ign}: ${error}`);
-        await this.moveToWaiting(state, 'Could not verify online status, Hm? Wierd this shouldn\'t be happening!');
-        return;
       }
 
       let queueState = this.queueStates.get(queue.channelId);
