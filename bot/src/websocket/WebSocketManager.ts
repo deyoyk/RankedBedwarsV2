@@ -1056,7 +1056,7 @@ export class WebSocketManager {
       
       let requesterMember;
       try {
-        requesterMember = await guild.members.fetch(requesterUser.discordId);
+        requesterMember = guild.members.cache.get(requesterUser.discordId) ?? await guild.members.fetch(requesterUser.discordId);
       } catch (error) {
         console.error(`[WebSocketManager] Could not fetch requester member: ${error}`);
         this.send({
@@ -1088,7 +1088,7 @@ export class WebSocketManager {
           { 'channels.team2Voice': voiceChannel.id },
           { 'channels.picking': voiceChannel.id }
         ]
-      });
+      }).select('gameId channels.text').lean();
 
       if (!game) {
         console.error(`[WebSocketManager] Voice channel ${voiceChannel.id} is not associated with a game`);
@@ -1121,7 +1121,7 @@ export class WebSocketManager {
         
         try {
           const { successEmbed } = await import('../utils/betterembed');
-          const gameChannel = await guild.channels.fetch(game.channels.text);
+          const gameChannel = guild.channels.cache.get(game.channels.text) ?? await guild.channels.fetch(game.channels.text).catch(() => null);
           
           if (gameChannel && gameChannel.isTextBased()) {
             const embedObj = successEmbed(
@@ -1205,7 +1205,7 @@ export class WebSocketManager {
       
       let member;
       try {
-        member = await guild.members.fetch(user.discordId);
+        member = guild.members.cache.get(user.discordId) ?? await guild.members.fetch(user.discordId);
       } catch (error) {
         console.error(`[WebSocketManager] Could not fetch member: ${error}`);
         this.send({
@@ -1236,7 +1236,7 @@ export class WebSocketManager {
         isActive: true,
         minElo: { $lte: user.elo },
         maxElo: { $gte: user.elo }
-      });
+      }).select('channelId').lean();
 
       if (suitableQueues.length === 0) {
         console.error(`[WebSocketManager] No suitable queues found for user ${ign} with ELO ${user.elo}`);
