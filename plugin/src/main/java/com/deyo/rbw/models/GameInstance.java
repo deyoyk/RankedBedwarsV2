@@ -283,7 +283,39 @@ public class GameInstance {
             String team = entry.getValue();
             game.getPlayerBedBroken().put(player, brokenTeams.contains(team));
         }
-        return game;
+        Game snapshot = new Game(
+            game.getGameId(), game.getMap(), game.isRanked(),
+            new ArrayList<>(game.getTeam1()), new ArrayList<>(game.getTeam2()),
+            new ArrayList<>(game.getMvps()), new ArrayList<>(game.getBedBreakers()),
+            game.getStartTime(), game.getDuration(), game.getDate());
+        snapshot.getPlayerKills().putAll(game.getPlayerKills());
+        snapshot.getPlayerDeaths().putAll(game.getPlayerDeaths());
+        snapshot.getPlayerFinalKills().putAll(game.getPlayerFinalKills());
+        snapshot.getPlayerBedsDestroyed().putAll(game.getPlayerBedsDestroyed());
+        snapshot.getPlayerBlocksPlaced().putAll(game.getPlayerBlocksPlaced());
+        snapshot.getPlayerDiamondsCollected().putAll(game.getPlayerDiamondsCollected());
+        snapshot.getPlayerEmeraldsCollected().putAll(game.getPlayerEmeraldsCollected());
+        snapshot.getPlayerGoldCollected().putAll(game.getPlayerGoldCollected());
+        snapshot.getPlayerIronCollected().putAll(game.getPlayerIronCollected());
+        snapshot.getPlayerDamageDealt().putAll(game.getPlayerDamageDealt());
+        snapshot.getPlayerDamageTaken().putAll(game.getPlayerDamageTaken());
+        snapshot.getPlayerAssists().putAll(game.getPlayerAssists());
+        snapshot.getPlayerMaxStreak().putAll(game.getPlayerMaxStreak());
+        snapshot.getPlayerTeamWon().putAll(game.getPlayerTeamWon());
+        snapshot.getPlayerTeamName().putAll(game.getPlayerTeamName());
+        snapshot.getPlayerBedBroken().putAll(game.getPlayerBedBroken());
+        for (Map.Entry<String, Map<String, Game.FightStats>> entry : game.getPlayerFights().entrySet()) {
+            Map<String, Game.FightStats> fightsCopy = new HashMap<>();
+            for (Map.Entry<String, Game.FightStats> fight : entry.getValue().entrySet()) {
+                fightsCopy.put(fight.getKey(), new Game.FightStats(fight.getValue().getKills(), fight.getValue().getDamage()));
+            }
+            snapshot.getPlayerFights().put(entry.getKey(), fightsCopy);
+        }
+        if (game.getFirstBlood() != null) {
+            snapshot.setFirstBlood(game.getFirstBlood());
+        }
+        snapshot.getTimeline().addAll(game.getTimeline());
+        return snapshot;
     }
 
     public String getArenaName() {
