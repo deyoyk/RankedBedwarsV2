@@ -86,9 +86,26 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
       parties: []
     });
 
-    await queue.save();
-
-    const embed = successEmbed('A new queue has been created successfully!', 'Queue Created');
+    let created = false;
+    try {
+      await queue.save();
+      created = true;
+    } catch (error: unknown) {
+      const code = (error as { code?: unknown })?.code;
+      if (code === 11000) {
+        const embed = betterEmbed('A queue already exists for this channel!', '#00AAAA', 'Queue Creation Error');
+        embed.builder.addFields(
+          { name: 'Channel ID', value: channelId, inline: true },
+          { name: 'Max Players', value: maxPlayers.toString(), inline: true },
+          { name: 'ELO Range', value: `${minElo}-${maxElo}`, inline: true }
+        );
+        await safeReply(interaction, embed);
+        return;
+      }
+      throw error;
+    }
+    if (created) {
+      const embed = successEmbed('A new queue has been created successfully!', 'Queue Created');
     embed.builder.addFields(
       { name: 'Channel ID', value: channelId, inline: true },
       { name: 'Max Players', value: maxPlayers.toString(), inline: true },
@@ -98,6 +115,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
       { name: 'Bypass Roles', value: bypassRoles.length > 0 ? bypassRoles.join(', ') : 'None', inline: true }
     );
     await safeReply(interaction, embed);
+    }
   } catch (error) {
     console.error('Error in addqueue command:', error);
     await safeReply(interaction, errorEmbed('There was an error creating the queue.', 'Queue Creation Error'));
