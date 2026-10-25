@@ -3,6 +3,7 @@ import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
+import { escapeRegex } from '../../utils/regexEscape';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 
  
@@ -28,7 +29,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
   try {
     if (!wsManager) throw new Error('WebSocketManager instance required for register.');
     
-    const ignTaken = await User.findOne({ ign: { $regex: `^${ign}$`, $options: 'i' } });
+    const ignTaken = await User.findOne({ ign: { $regex: `^${escapeRegex(ign)}$`, $options: 'i' } }).select('_id').lean();
     if (ignTaken) {
       await safeReply(interaction, errorEmbed('This IGN is already registered to another user.', 'Register Error'));
       return;
@@ -78,7 +79,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
       const inputCode = modalInt.fields.getTextInputValue('reg_code');
       if (inputCode === code) {
         
-        const existingUser = await User.findOne({ discordId });
+        const existingUser = await User.findOne({ discordId }).select('_id').lean();
         if (existingUser) {
           try {
             await (sentMessage as Message).edit({
@@ -91,7 +92,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           await modalInt.reply({ content: 'You are already registered.', ephemeral: true });
           return;
         }
-        const ignTakenAgain = await User.findOne({ ign: { $regex: `^${ign}$`, $options: 'i' } });
+        const ignTakenAgain = await User.findOne({ ign: { $regex: `^${escapeRegex(ign)}$`, $options: 'i' } }).select('_id').lean();
         if (ignTakenAgain) {
           try {
             await (sentMessage as Message).edit({
