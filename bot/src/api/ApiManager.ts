@@ -1468,25 +1468,27 @@ export class ApiManager {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 100);
 
-      const Game = await this.getGameModel();
-      const games = await Game.find()
-        .sort({ gameId: -1 })
-        .limit(limit)
-        .lean();
+      const gamesWithIgns = await this.getCached(`recentGames:${limit}`, 10000, async () => {
+        const Game = await this.getGameModel();
+        const games = await Game.find()
+          .sort({ gameId: -1 })
+          .limit(limit)
+          .lean();
 
-      const idToIgn = await this.resolveGameIgns(games);
+        const idToIgn = await this.resolveGameIgns(games);
 
-      const gamesWithIgns = games.map((game: LeanGame) => ({
-        gameId: game.gameId,
-        map: game.map,
-        date: game.startTime,
-        duration: game.endTime ? Math.floor((game.endTime.getTime() - game.startTime.getTime()) / 1000 / 60) : null,
-        team1: game.team1.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
-        team2: game.team2.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
-        winners: game.winners.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
-        mvps: game.mvps.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
-        bedbreaks: game.bedbreaks.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id }))
-      }));
+        return games.map((game: LeanGame) => ({
+          gameId: game.gameId,
+          map: game.map,
+          date: game.startTime,
+          duration: game.endTime ? Math.floor((game.endTime.getTime() - game.startTime.getTime()) / 1000 / 60) : null,
+          team1: game.team1.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+          team2: game.team2.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+          winners: game.winners.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+          mvps: game.mvps.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id })),
+          bedbreaks: game.bedbreaks.map((id: string) => ({ discordId: id, ign: idToIgn[id] || id }))
+        }));
+      });
 
       res.json(gamesWithIgns);
     } catch (error) {
@@ -1503,15 +1505,19 @@ export class ApiManager {
       const queues = await Queue.find().lean();
       const liveActivity = [];
 
+      const queuedIds = [...new Set(queues.flatMap(q => queuePlayers.get(q.channelId) || []))];
+      const queuedUsers = queuedIds.length > 0
+        ? await User.find({ discordId: { $in: queuedIds } }).select('ign discordId elo').lean()
+        : [];
+      const queuedById = new Map(queuedUsers.map(u => [u.discordId, u]));
+
       for (const queue of queues) {
         const playerIds = queuePlayers.get(queue.channelId) || [];
         if (playerIds.length > 0) {
-          const users = await User.find({ discordId: { $in: playerIds } }).select('ign discordId elo').lean();
-          const players = users.map(u => ({
-            ign: u.ign,
-            discordId: u.discordId,
-            elo: u.elo
-          }));
+          const players = playerIds.map(id => {
+            const u = queuedById.get(id);
+            return u ? { ign: u.ign, discordId: u.discordId, elo: u.elo } : null;
+          }).filter((p): p is { ign: string; discordId: string; elo: number } => p !== null);
 
           liveActivity.push({
             type: 'queue',
