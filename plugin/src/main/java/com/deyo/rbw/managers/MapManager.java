@@ -105,6 +105,7 @@ public class MapManager {
     private final Set<String> allowedGroups = ConcurrentHashMap.newKeySet();
     private final Set<Class<?>> noGetPlayersClasses = ConcurrentHashMap.newKeySet();
     private volatile boolean mapInfoSendPending = false;
+    private volatile String lastMapInfoPayload = null;
     private int autoRefreshCursor = 0;
     private static final int AUTO_REFRESH_MAX_GROUPS_PER_TICK = 3;
     
@@ -306,10 +307,12 @@ public class MapManager {
             JsonArray disabled = new JsonArray();
             JsonArray all = new JsonArray();
 
-            for (ArenaGroup arenaGroup : arenaGroups.values()) {
+            List<ArenaGroup> sortedGroups = new ArrayList<>(arenaGroups.values());
+            sortedGroups.sort(Comparator.comparing(ArenaGroup::getGroupId));
+            for (ArenaGroup arenaGroup : sortedGroups) {
                 JsonObject entry = new JsonObject();
                 entry.addProperty("name", arenaGroup.getDisplayName());
-                String physicalName = arenaGroup.getAllPhysicalArenaNames().stream().findFirst().orElse(null);
+                String physicalName = arenaGroup.getAllPhysicalArenaNames().stream().sorted().findFirst().orElse(null);
                 if (physicalName != null) {
                     entry.addProperty("physical_name", physicalName);
                 }
@@ -332,8 +335,15 @@ public class MapManager {
             mapsJson.add("disabled", disabled);
             mapsJson.add("all", all);
 
+            String payload = mapsJson.toString();
+
             if (plugin.getWebSocketManager() != null && plugin.getWebSocketManager().isConnected()) {
-                plugin.getWebSocketManager().sendMessage(mapsJson.toString());
+                if (payload.equals(lastMapInfoPayload)) {
+                    plugin.debug("Skipping maps info sync: no changes since last send");
+                    return;
+                }
+                lastMapInfoPayload = payload;
+                plugin.getWebSocketManager().sendMessage(payload);
                 plugin.debug("Sent simplified maps information via WebSocket");
             } else {
                 String reason = plugin.getWebSocketManager() == null ? "WebSocketManager is null" : "WebSocket not connected";
