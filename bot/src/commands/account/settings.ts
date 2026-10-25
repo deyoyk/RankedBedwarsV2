@@ -25,7 +25,7 @@ type SettingKey = typeof SETTINGS[number]['key'];
 
 export async function settings(interaction: Message | ChatInputCommandInteraction) {
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
-  const user = await UserModel.findOne({ discordId: userId });
+  const user = await UserModel.findOne({ discordId: userId }).select('settings').lean();
   if (!user) {
     await safeReply(interaction, errorEmbed('You need to register first!', 'Settings Error'));
     return;
@@ -70,7 +70,14 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
     time: 5 * 60 * 1000
   });
 
-  const changedSettings: Record<SettingKey, boolean> = { ...user.settings };
+  const stored = (user.settings ?? {}) as Partial<Record<SettingKey, boolean>>;
+  const changedSettings: Record<SettingKey, boolean> = {
+    toggleprefix: stored.toggleprefix ?? false,
+    togglescoreping: stored.togglescoreping ?? false,
+    togglepartyinvites: stored.togglepartyinvites ?? false,
+    togglestaticnick: stored.togglestaticnick ?? false
+  };
+  const touched = new Set<SettingKey>();
 
   const updateEmbed = async (componentInteraction?: StringSelectMenuInteraction) => {
     const updatedEmbedObj = betterEmbed('Toggle your personal settings below:', '#00AAAA', 'User Settings');
@@ -95,6 +102,7 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
     }
     const key = i.values[0] as SettingKey;
     changedSettings[key] = !changedSettings[key];
+    touched.add(key);
     await updateEmbed(i);
   });
 
@@ -106,8 +114,13 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
       await i.reply({ content: 'This button is not for you!', flags: 64 }); 
       return;
     }
-    Object.assign(user.settings, changedSettings);
-    await user.save();
+    const set: Record<string, boolean> = {};
+    for (const key of touched) {
+      set[`settings.${key}`] = changedSettings[key];
+    }
+    if (Object.keys(set).length > 0) {
+      await UserModel.updateOne({ discordId: userId }, { $set: set });
+    }
     if (interaction.guild) {
       await fix(interaction.guild, userId);
     }
