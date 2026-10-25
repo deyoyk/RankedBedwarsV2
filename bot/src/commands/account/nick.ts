@@ -6,12 +6,6 @@ import { safeReply } from '../../utils/safeReply';
 
 export async function nick(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
-  const user = await UserModel.findOne({ discordId: userId });
-  
-  if (!user) {
-    await safeReply(interaction, errorEmbed('You need to register first!', 'Nickname Error'));
-    return;
-  }
 
   if (!args || args.length === 0 || (args[0].toLowerCase() === 'set' && args.length === 1)) {
     await safeReply(interaction, errorEmbed('Usage: =nick <set/remove> [nickname]', 'Nickname Error'));
@@ -25,19 +19,32 @@ export async function nick(interaction: Message | ChatInputCommandInteraction, a
       await safeReply(interaction, errorEmbed('Please provide a nickname to set.', 'Nickname Error'));
       return;
     }
-    user.settings.nick = nickname;
-    await user.save();
+    const updated = await UserModel.findOneAndUpdate(
+      { discordId: userId },
+      { $set: { 'settings.nick': nickname } },
+      { new: true }
+    );
+    if (!updated) {
+      await safeReply(interaction, errorEmbed('You need to register first!', 'Nickname Error'));
+      return;
+    }
     if (interaction.guild) {
       await fix(interaction.guild, userId);
     }
     await safeReply(interaction, successEmbed(`Your nickname has been set to: **${nickname}**`, 'Nickname Set'));
   } else if (action === 'remove') {
-    if (!user.settings.nick) {
+    const previous = await UserModel.findOneAndUpdate(
+      { discordId: userId },
+      { $set: { 'settings.nick': '' } }
+    );
+    if (!previous) {
+      await safeReply(interaction, errorEmbed('You need to register first!', 'Nickname Error'));
+      return;
+    }
+    if (!previous.settings?.nick) {
       await safeReply(interaction, errorEmbed('You do not have a nickname set.', 'Nickname Error'));
       return;
     }
-    user.settings.nick = '';
-    await user.save();
     if (interaction.guild) {
       await fix(interaction.guild, userId);
     }
