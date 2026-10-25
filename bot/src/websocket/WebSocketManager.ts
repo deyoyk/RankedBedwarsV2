@@ -1362,7 +1362,7 @@ export class WebSocketManager {
       const User = (await import('../models/User')).default;
 
       
-      const queues = await Queue.find().sort({ channelId: 1 });
+      const queues = await Queue.find().sort({ channelId: 1 }).select('channelId minElo maxElo maxPlayers isRanked isPicking ispicking').lean();
       
       const queueStatus: Record<string, QueueStatusEntry> = {};
 
@@ -1373,18 +1373,21 @@ export class WebSocketManager {
       if (this.discordClient) {
         const guild = this.discordClient.guilds.cache.first();
         if (guild) {
-          for (const queue of queues) {
-            try {
-              const cached = guild.channels.cache.get(queue.channelId);
-              const channel = cached ?? await guild.channels.fetch(queue.channelId);
-              if (channel && channel.isVoiceBased()) {
-                channelMemberMap.set(queue.channelId, { channelId: queue.channelId, members: channel.members });
-                for (const [memberId] of channel.members) {
-                  allMemberIds.add(memberId);
+          for (let i = 0; i < queues.length; i += 5) {
+            const chunk = queues.slice(i, i + 5);
+            await Promise.allSettled(chunk.map(async (queue) => {
+              try {
+                const cached = guild.channels.cache.get(queue.channelId);
+                const channel = cached ?? await guild.channels.fetch(queue.channelId).catch(() => null);
+                if (channel && channel.isVoiceBased()) {
+                  channelMemberMap.set(queue.channelId, { channelId: queue.channelId, members: channel.members });
+                  for (const [memberId] of channel.members) {
+                    allMemberIds.add(memberId);
+                  }
                 }
+              } catch {
               }
-            } catch {
-            }
+            }));
           }
         }
       }
@@ -1393,7 +1396,7 @@ export class WebSocketManager {
       const memberIdsArray = Array.from(allMemberIds);
       const userMap = new Map<string, string>();
       if (memberIdsArray.length > 0) {
-        const users = await User.find({ discordId: { $in: memberIdsArray } }).select('discordId ign');
+        const users = await User.find({ discordId: { $in: memberIdsArray } }).select('discordId ign').lean();
         for (const user of users) {
           if (user.ign) userMap.set(user.discordId, user.ign);
         }
