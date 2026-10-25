@@ -1,8 +1,35 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Message, MessageComponentInteraction, ThreadAutoArchiveDuration } from 'discord.js';
+import VoteRequest from '../models/VoteRequest';
 
 export interface VoteData {
   upvote: Set<string>;
   downvote: Set<string>;
+}
+
+export async function claimVoteRequest(gameId: string, scope: string, requesterId: string, messageId?: string): Promise<boolean> {
+  try {
+    await VoteRequest.create({
+      key: `${gameId}:${scope}`,
+      gameId,
+      scope,
+      requesterId,
+      messageId,
+      expireAt: new Date(Date.now() + 60 * 60 * 1000)
+    });
+    return true;
+  } catch (error) {
+    const code = (error as { code?: unknown })?.code;
+    if (code === 11000) return false;
+    throw error;
+  }
+}
+
+export async function releaseVoteRequest(gameId: string, scope: string): Promise<void> {
+  try {
+    await VoteRequest.deleteOne({ key: `${gameId}:${scope}` });
+  } catch (error) {
+    console.error('Error releasing vote request:', error);
+  }
 }
 
 export function createVoteButtons(upLabel: string, downLabel: string, prefix: string): ActionRowBuilder<ButtonBuilder> {

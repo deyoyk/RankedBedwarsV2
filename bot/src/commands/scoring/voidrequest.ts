@@ -4,7 +4,7 @@ import configuration from '../../config/config';
 import { GameManager } from '../../Matchmaking/GameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
-import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed } from '../../utils/voteRequest';
+import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed, claimVoteRequest, releaseVoteRequest } from '../../utils/voteRequest';
 
 interface VoidRequestData {
   gameId: string;
@@ -88,6 +88,12 @@ async function createVoidRequest(interaction: Message | ChatInputCommandInteract
   const allPlayers = [...game.team1, ...game.team2];
   const teamMentions = allPlayers.map((id: string) => `<@${id}>`).join(' ');
 
+  const claimed = await claimVoteRequest(data.gameId, 'void', data.requesterId);
+  if (!claimed) {
+    await safeReply(interaction, { content: 'There is already an open vote request for this game.' });
+    return;
+  }
+
   const embed = createVoidRequestEmbed(data, game);
   const components = createVoteButtons('Approve Void', 'Reject Void', 'void');
 
@@ -164,8 +170,10 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
       embeds: [message.embeds[0], resultEmbed],
       components: []
     });
+    await releaseVoteRequest(data.gameId, 'void');
   } catch (error) {
     console.error('Error processing void request results:', error);
+    await releaseVoteRequest(data.gameId, 'void');
     await message.edit({
       content: `${teamMentions} Error processing void request results.`,
       components: []

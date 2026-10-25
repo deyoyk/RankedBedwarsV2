@@ -3,7 +3,7 @@ import Game, { IGame } from '../../models/Game';
 import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
 import { safeReply } from '../../utils/safeReply';
-import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed } from '../../utils/voteRequest';
+import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed, claimVoteRequest, releaseVoteRequest } from '../../utils/voteRequest';
 
 interface StrikeRequestData {
   gameId: string;
@@ -94,6 +94,12 @@ async function createStrikeRequest(interaction: Message | ChatInputCommandIntera
   const team = game?.getTeamOfPlayer(data.requesterId) || [];
   const teamMentions = team.map((id: string) => `<@${id}>`).join(' ');
 
+  const claimed = await claimVoteRequest(data.gameId, `strike:${data.targetId}`, data.requesterId);
+  if (!claimed) {
+    await safeReply(interaction, { content: 'There is already an open vote request for this target.' });
+    return;
+  }
+
   const embed = createStrikeRequestEmbed(data, game);
   const components = createVoteButtons('Approve Strike', 'Reject Strike', 'strike');
 
@@ -161,8 +167,10 @@ async function processVoteResults(message: Message, data: StrikeRequestData, vot
       embeds: [message.embeds[0], resultEmbed],
       components: []
     });
+    await releaseVoteRequest(data.gameId, `strike:${data.targetId}`);
   } catch (error) {
     console.error('Error processing strike request results:', error);
+    await releaseVoteRequest(data.gameId, `strike:${data.targetId}`);
     await message.edit({
       content: `${teamMentions} Error processing strike request results.`,
       components: []
