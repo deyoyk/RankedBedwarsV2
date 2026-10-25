@@ -1276,7 +1276,7 @@ export class WebSocketManager {
       
       let queueVoiceChannel;
       try {
-        queueVoiceChannel = await guild.channels.fetch(targetQueue.channelId);
+        queueVoiceChannel = guild.channels.cache.get(targetQueue.channelId) ?? await guild.channels.fetch(targetQueue.channelId);
       } catch (error) {
         console.error(`[WebSocketManager] Could not fetch queue voice channel: ${error}`);
         this.send({
