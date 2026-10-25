@@ -562,7 +562,7 @@ export class QueueListener {
       const guild = this.client.guilds.cache.first();
       if (!guild) return { success: false };
 
-      const voiceChannel = await guild.channels.fetch(queue.channelId).catch(() => null);
+      const voiceChannel = guild.channels.cache?.get(queue.channelId) ?? await guild.channels.fetch(queue.channelId).catch(() => null);
       if (!voiceChannel || !voiceChannel.isVoiceBased()) return { success: false };
 
       const playersInVC = new Set(voiceChannel.members.keys());
