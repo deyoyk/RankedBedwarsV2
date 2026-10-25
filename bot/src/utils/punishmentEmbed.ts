@@ -48,12 +48,18 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     return;
   }
 
-  const channelPromise = guild.channels.fetch(channelId);
+  const cachedChannel = guild.channels.cache?.get(channelId) as TextChannel | undefined;
+  const channelPromise = cachedChannel
+    ? Promise.resolve(cachedChannel)
+    : guild.channels.fetch(channelId);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error('Channel fetch timeout')), 3000)
   );
 
-  const channel = await Promise.race([channelPromise, timeoutPromise]).catch(() => null) as TextChannel | null;
+  const [channel, userDoc] = (await Promise.all([
+    Promise.race([channelPromise, timeoutPromise]).catch(() => null),
+    User.findOne({ discordId: targetId }).select('ign').lean().catch(() => null)
+  ])) as [TextChannel | null, { ign?: string } | null];
   if (!channel || !channel.isTextBased()) {
     console.warn(`[PunishmentEmbed] Punishments channel ${channelId} not found or not text-based`);
     return;
@@ -66,11 +72,7 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     moderatorId === 'auto' ? 'Auto-Moderation' : `<@${moderatorId}>`;
   const reasonField = reason?.trim() || 'No reason provided';
 
-  let ign: string | undefined;
-  try {
-    const userDoc = await User.findOne({ discordId: targetId }).select('ign').lean();
-    ign = userDoc?.ign;
-  } catch {}
+  const ign = userDoc?.ign;
 
   const descriptionLines: string[] = [];
   descriptionLines.push(`**User:** ${userMention}${ign ? ` (${ign})` : ''}`);
