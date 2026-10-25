@@ -38,48 +38,42 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
       return;
     }
 
-    const senderMember = guild.members.cache.get(senderId) ?? await guild.members.fetch(senderId);
-    const senderVoiceState = senderMember.voice;
+    const senderMember = guild.members.cache.get(senderId) ?? await guild.members.fetch(senderId).catch(() => null);
+    const senderVoiceState = senderMember?.voice;
 
-    if (!senderVoiceState.channel) {
+    if (!senderVoiceState?.channel) {
       await safeReply(interaction, errorEmbed('You must be in a voice channel to use this command.', '❌ Not in Voice Channel'));
       return;
     }
 
     const voiceChannel = senderVoiceState.channel as VoiceChannel;
 
-    
-    const game = await Game.findOne({
-      $or: [
-        { 'channels.team1Voice': voiceChannel.id },
-        { 'channels.team2Voice': voiceChannel.id },
-        { 'channels.picking': voiceChannel.id }
-      ]
-    }).select('gameId').lean();
+    const [game, targetUserDoc, targetMember] = await Promise.all([
+      Game.findOne({
+        $or: [
+          { 'channels.team1Voice': voiceChannel.id },
+          { 'channels.team2Voice': voiceChannel.id },
+          { 'channels.picking': voiceChannel.id }
+        ]
+      }).select('gameId').lean(),
+      User.findOne({ discordId: targetUser }).select('_id').lean(),
+      guild.members.cache.get(targetUser) ?? guild.members.fetch(targetUser).catch(() => null)
+    ]);
 
     if (!game) {
       await safeReply(interaction, errorEmbed('You must be in a game voice channel to use this command.', '❌ Invalid Voice Channel'));
       return;
     }
 
-    
-    const targetUserDoc = await User.findOne({ discordId: targetUser }).select('_id').lean();
     if (!targetUserDoc) {
       await safeReply(interaction, errorEmbed('The target user is not registered in the system.', '❌ User Not Found'));
       return;
     }
 
-
-    try {
-      const cachedTarget = guild.members.cache.get(targetUser);
-      if (!cachedTarget) {
-        await guild.members.fetch(targetUser);
-      }
-    } catch {
+    if (!targetMember) {
       await safeReply(interaction, errorEmbed('The target user is not a member of this server.', '❌ User Not Found'));
       return;
     }
-
     
 
     try {
