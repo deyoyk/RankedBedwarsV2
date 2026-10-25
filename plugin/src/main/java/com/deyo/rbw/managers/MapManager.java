@@ -102,7 +102,8 @@ public class MapManager {
     
     private final Set<String> lockedArenaGroups = ConcurrentHashMap.newKeySet();
     private final Set<String> disabledArenaGroups = ConcurrentHashMap.newKeySet();
-    private final Set<String> allowedGroups = new HashSet<>();
+    private final Set<String> allowedGroups = ConcurrentHashMap.newKeySet();
+    private final Set<Class<?>> noGetPlayersClasses = ConcurrentHashMap.newKeySet();
     private volatile boolean mapInfoSendPending = false;
     private int autoRefreshCursor = 0;
     private static final int AUTO_REFRESH_MAX_GROUPS_PER_TICK = 3;
@@ -656,15 +657,17 @@ public class MapManager {
             return ((de.marcely.bedwars.api.arena.Arena) arena).getPlayers().isEmpty();
         }
         try {
-            Method getPlayersMethod = getPlayersMethodCache.computeIfAbsent(arena.getClass(), clazz -> {
+            Method getPlayersMethod = getPlayersMethodCache.get(arena.getClass());
+            if (getPlayersMethod == null && !noGetPlayersClasses.contains(arena.getClass())) {
                 try {
-                    Method m = clazz.getMethod("getPlayers");
+                    Method m = arena.getClass().getMethod("getPlayers");
                     m.setAccessible(true);
-                    return m;
+                    getPlayersMethodCache.put(arena.getClass(), m);
+                    getPlayersMethod = m;
                 } catch (NoSuchMethodException e) {
-                    return null;
+                    noGetPlayersClasses.add(arena.getClass());
                 }
-            });
+            }
             if (getPlayersMethod == null) {
                 plugin.getLogger().fine("Could not check players with getPlayers method: no such method on "
                         + arena.getClass().getName());
