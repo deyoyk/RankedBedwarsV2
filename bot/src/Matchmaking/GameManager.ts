@@ -393,8 +393,7 @@ export class GameManager {
       }
 
       const game = resources.game;
-      const team1IGNs = await this.getPlayerIGNs(game.team1);
-      const team2IGNs = await this.getPlayerIGNs(game.team2);
+      const [team1IGNs, team2IGNs] = await this.getTeamsIGNs(game.team1, game.team2);
 
       this.sendWarpRequest(gameId.toString(), game.map, game.isRanked || false, team1IGNs, team2IGNs);
 
@@ -658,8 +657,7 @@ export class GameManager {
     team2: string[]
   ): Promise<void> {
     try {
-      const team1IGNs = await this.getPlayerIGNs(team1);
-      const team2IGNs = await this.getPlayerIGNs(team2);
+      const [team1IGNs, team2IGNs] = await this.getTeamsIGNs(team1, team2);
 
 
       this.wsManager.send({
@@ -687,7 +685,7 @@ export class GameManager {
     try {
       const users = await User.find({
         discordId: { $in: playerIds }
-      }).select('discordId ign');
+      }).select('discordId ign').lean();
 
       const ignMap = new Map(users.map(u => [u.discordId, u.ign]));
       return playerIds.map(id => ignMap.get(id)).filter(Boolean) as string[];
@@ -695,6 +693,21 @@ export class GameManager {
     } catch (error) {
       console.error('[GameManager] Error getting player IGNs:', error);
       return [];
+    }
+  }
+
+  private async getTeamsIGNs(team1: string[], team2: string[]): Promise<[string[], string[]]> {
+    try {
+      const users = await User.find({
+        discordId: { $in: [...team1, ...team2] }
+      }).select('discordId ign').lean();
+
+      const ignMap = new Map(users.map(u => [u.discordId, u.ign]));
+      const toIgns = (ids: string[]): string[] => ids.map(id => ignMap.get(id)).filter(Boolean) as string[];
+      return [toIgns(team1), toIgns(team2)];
+    } catch (error) {
+      console.error('[GameManager] Error getting team IGNs:', error);
+      return [[], []];
     }
   }
 
