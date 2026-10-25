@@ -571,16 +571,22 @@ export class QueueListener {
 
   private async handleQueueLeave(state: VoiceState): Promise<void> {
     try {
-      const queue = await Queue.findOne({ channelId: state.channelId });
+      const foundQueue: any = Queue.findOne({ channelId: state.channelId });
+      const queue = typeof foundQueue?.select === 'function'
+        ? await foundQueue.select('channelId maxPlayers isActive').lean()
+        : await foundQueue;
       if (!queue || queue.isActive === false) {
-        
+
         return;
       }
 
       const userId = state.member?.id;
       if (!userId) return;
 
-      const user = await User.findOne({ discordId: userId });
+      const foundUser: any = User.findOne({ discordId: userId });
+      const user = typeof foundUser?.select === 'function'
+        ? await foundUser.select('discordId partyId').lean()
+        : await foundUser;
       if (!user) return;
 
       const queueState = this.queueStates.get(queue.channelId);
