@@ -42,12 +42,14 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
       return;
     }
 
-    let user = await User.findOne({ discordId: targetUser });
+    const previous = await User.findOneAndUpdate(
+      { discordId: targetUser },
+      { $set: { ign } },
+      { new: false }
+    );
 
-    if (user) {
-      const oldIgn = user.ign;
-      user.ign = ign;
-      await user.save();
+    if (previous) {
+      const oldIgn = previous.ign;
 
       const embed = successEmbed(`Successfully updated registration for <@${targetUser}>`, '✅ User Force Registered');
       embed.builder.addFields(
@@ -58,7 +60,7 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
       );
       await safeReply(interaction, embed);
     } else {
-      user = new User({
+      const user = new User({
         discordId: targetUser,
         ign,
         elo: 0,
@@ -85,7 +87,16 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
         mutes: [],
         bans: []
       });
-      await user.save();
+      try {
+        await user.save();
+      } catch (createError) {
+        const code = (createError as { code?: unknown })?.code;
+        await safeReply(interaction, errorEmbed(
+          code === 11000 ? 'This user is already registered.' : 'There was an error force registering the user.',
+          'Force Register Error'
+        ));
+        return;
+      }
       await safeFix(interaction.guild, targetUser);
 
       const embed = successEmbed(`Successfully force registered <@${targetUser}>`, '✅ User Force Registered');
