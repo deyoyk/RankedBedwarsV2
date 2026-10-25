@@ -881,33 +881,32 @@ public class MapManager {
                               "group says '" + groupId + "' but mapping says '" + mappedGroup + "'");
                 }
             }
-            
-            
-            for (Map.Entry<String, String> mapEntry : physicalArenaToGroupMap.entrySet()) {
-                String physicalArena = mapEntry.getKey();
-                String mappedGroupId = mapEntry.getValue();
-                
-                ArenaGroup mappedGroup = arenaGroups.get(mappedGroupId);
-                if (mappedGroup == null) {
-                    issues.add("Physical arena '" + physicalArena + "' is mapped to non-existent group '" + mappedGroupId + "'");
-                    continue;
+        }
+
+        for (Map.Entry<String, String> mapEntry : physicalArenaToGroupMap.entrySet()) {
+            String physicalArena = mapEntry.getKey();
+            String mappedGroupId = mapEntry.getValue();
+
+            ArenaGroup mappedGroup = arenaGroups.get(mappedGroupId);
+            if (mappedGroup == null) {
+                issues.add("Physical arena '" + physicalArena + "' is mapped to non-existent group '" + mappedGroupId + "'");
+                continue;
+            }
+
+            boolean found = false;
+            for (ArenaVariant variant : mappedGroup.getAvailableVariants()) {
+                if (physicalArena.equals(mappedGroup.getPhysicalArenaName(variant))) {
+                    found = true;
+                    break;
                 }
-                
-                boolean found = false;
-                for (ArenaVariant variant : mappedGroup.getAvailableVariants()) {
-                    if (physicalArena.equals(mappedGroup.getPhysicalArenaName(variant))) {
-                        found = true;
-                        break;
-                    }
-                }
-                
-                if (!found) {
-                    issues.add("Physical arena '" + physicalArena + "' is mapped to group '" + mappedGroupId + 
+            }
+
+            if (!found) {
+                issues.add("Physical arena '" + physicalArena + "' is mapped to group '" + mappedGroupId + 
                               "' but group doesn't contain this arena");
                 }
             }
-        }
-        
+
         if (issues.isEmpty()) {
             plugin.getLogger().info("Arena group validation successful - no issues found");
         } else {
