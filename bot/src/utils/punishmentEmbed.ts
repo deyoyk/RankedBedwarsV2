@@ -133,19 +133,12 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     console.warn(`[PunishmentEmbed] Asset not found for embed thumbnail: ${fileName}`);
   }
 
-  let attempts = 0;
-  const maxAttempts = 3;
-  while (attempts < maxAttempts) {
-    try {
-      await channel.send({ content: userMention, embeds: [embed], files });
-      break;
-    } catch (error) {
-      attempts++;
-      if (attempts >= maxAttempts) {
-        console.error(`[PunishmentEmbed] Failed to send ${type} embed after ${maxAttempts} attempts:`, error);
-        throw error;
-      }
-      await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
-    }
+  try {
+    await channel.send({ content: userMention, embeds: [embed], files });
+  } catch (error) {
+    console.error(`[PunishmentEmbed] Failed to send ${type} embed, queueing one background retry:`, error);
+    void channel
+      .send({ content: userMention, embeds: [embed], files })
+      .catch((retryError) => console.error(`[PunishmentEmbed] Background retry failed for ${type} embed:`, retryError));
   }
 }
