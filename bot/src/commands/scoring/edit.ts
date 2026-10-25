@@ -1,7 +1,7 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
-import UserModel from '../../models/User';
+import UserModel, { type IUser } from '../../models/User';
 
 
 const EDITABLE_STATS = {
@@ -70,8 +70,10 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
   }
 
   try {
-    
-    const user = await UserModel.findOne({ discordId: targetUserId });
+    const foundUser: unknown = UserModel.findOne({ discordId: targetUserId });
+    const user = typeof (foundUser as { lean?: unknown }).lean === 'function'
+      ? await (foundUser as { lean: () => Promise<IUser | null> }).lean()
+      : await (foundUser as Promise<IUser | null>);
     if (!user) {
       await safeReply(interaction, errorEmbed('User not found in the database. They need to register first.', 'Edit Command Error'));
       return;
@@ -94,23 +96,39 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
 
     
     const stat = statToEdit as EditableStat;
-    const oldValue: number = user[stat] ?? 0;
+    const oldValue: number = (user[stat] as number | undefined) ?? 0;
 
     if (typeof convertedValue !== 'number') {
       await safeReply(interaction, errorEmbed(`"${newValue}" is not a valid non-negative number for stat "${statToEdit}".`, 'Edit Command Error'));
       return;
     }
-    user[stat] = convertedValue;
 
-    
+    const set: Record<string, number> = { [stat]: convertedValue };
+    const kills = statToEdit === 'kills' ? convertedValue : (user.kills ?? 0);
+    const deaths = statToEdit === 'deaths' ? convertedValue : (user.deaths ?? 0);
+    const wins = statToEdit === 'wins' ? convertedValue : (user.wins ?? 0);
+    const losses = statToEdit === 'losses' ? convertedValue : (user.losses ?? 0);
+
+    let updatedKdr: number | undefined;
+    let updatedWlr: number | undefined;
     if (statToEdit === 'kills' || statToEdit === 'deaths') {
-      user.kdr = user.deaths > 0 ? parseFloat((user.kills / user.deaths).toFixed(2)) : user.kills;
+      updatedKdr = deaths > 0 ? parseFloat((kills / deaths).toFixed(2)) : kills;
+      set.kdr = updatedKdr;
     }
     if (statToEdit === 'wins' || statToEdit === 'losses') {
-      user.wlr = user.losses > 0 ? parseFloat((user.wins / user.losses).toFixed(2)) : user.wins;
+      updatedWlr = losses > 0 ? parseFloat((wins / losses).toFixed(2)) : wins;
+      set.wlr = updatedWlr;
     }
 
-    await user.save();
+    const updated = await UserModel.findOneAndUpdate(
+      { discordId: targetUserId },
+      { $set: set },
+      { new: true }
+    );
+    if (!updated) {
+      await safeReply(interaction, errorEmbed('User not found in the database. They need to register first.', 'Edit Command Error'));
+      return;
+    }
 
     
     const embed = successEmbed('User stat updated successfully!', 'Stat Edited');
@@ -124,12 +142,12 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
 
     
     if (statToEdit === 'kills' || statToEdit === 'deaths') {
-      embed.builder.addFields({ name: 'Updated KDR', value: String(user.kdr), inline: true });
+      embed.builder.addFields({ name: 'Updated KDR', value: String(updatedKdr), inline: true });
     }
     if (statToEdit === 'wins' || statToEdit === 'losses') {
       embed.builder.addFields(
-        { name: 'Updated WLR', value: String(user.wlr), inline: true },
-        { name: 'Updated Games', value: String(user.games), inline: true }
+        { name: 'Updated WLR', value: String(updatedWlr), inline: true },
+        { name: 'Updated Games', value: String(updated.games), inline: true }
       );
     }
 

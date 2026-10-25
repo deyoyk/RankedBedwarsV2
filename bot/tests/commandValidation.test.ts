@@ -14,7 +14,7 @@ import { escapeRegex } from '../src/utils/regexEscape';
 
 jest.mock('../src/models/User', () => ({
   __esModule: true,
-  default: { findOne: jest.fn(), find: jest.fn() }
+  default: { findOne: jest.fn(), find: jest.fn(), findOneAndUpdate: jest.fn() }
 }));
 jest.mock('../src/models/Game', () => ({
   __esModule: true,
@@ -52,8 +52,6 @@ function message(argsReply = true) {
   } as any;
 }
 
-const mockSave = jest.fn().mockResolvedValue(undefined);
-
 function mockUser(overrides: any = {}) {
   return {
     discordId: '123456789012345678',
@@ -65,7 +63,6 @@ function mockUser(overrides: any = {}) {
     deaths: 5,
     kdr: 2,
     wlr: 2.5,
-    save: mockSave,
     ...overrides
   };
 }
@@ -90,7 +87,7 @@ describe('inputValidation helpers', () => {
 describe('edit command validation', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('rejects Infinity and negative values without saving', async () => {
+  it('rejects Infinity and negative values without writing', async () => {
     const user = mockUser();
     UserModel.findOne.mockResolvedValue(user);
     const interaction = message();
@@ -98,20 +95,25 @@ describe('edit command validation', () => {
     await edit(interaction, ['<@123456789012345678>', 'elo', 'Infinity']);
     await edit(interaction, ['<@123456789012345678>', 'wins', '-3']);
 
-    expect(mockSave).not.toHaveBeenCalled();
+    expect(UserModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(user.elo).toBe(1000);
     expect(interaction.reply).toHaveBeenCalledTimes(2);
   });
 
-  it('accepts finite non-negative values', async () => {
+  it('accepts finite non-negative values with a single atomic update', async () => {
     const user = mockUser();
     UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockResolvedValue({ ...user, elo: 1500 });
     const interaction = message();
 
     await edit(interaction, ['<@123456789012345678>', 'elo', '1500']);
 
-    expect(user.elo).toBe(1500);
-    expect(mockSave).toHaveBeenCalled();
+    expect(UserModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { discordId: '123456789012345678' },
+      { $set: { elo: 1500 } },
+      { new: true }
+    );
+    expect(interaction.reply).toHaveBeenCalledTimes(1);
   });
 });
 
