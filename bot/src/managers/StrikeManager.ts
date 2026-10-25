@@ -3,7 +3,7 @@ import { Guild } from 'discord.js';
 import User from '../models/User';
 import { BanManager } from './BanManager';
 import { parseDuration } from '../utils/parseDuration';
-import { generatePunishmentId, cleanupOperation } from './punishmentBase';
+import { generatePunishmentId } from './punishmentBase';
 import { PunishmentOperation, PunishmentRecord, createPendingOperation, sendPunishmentNotification } from './punishmentHelpers';
 
 interface StrikeManagerStats {
@@ -130,7 +130,7 @@ export class StrikeManager {
       throw wrappedError;
 
     } finally {
-      cleanupOperation(instance.pendingOperations, operation.id);
+      instance.pendingOperations.delete(operation.id);
     }
   }
 
@@ -196,7 +196,7 @@ export class StrikeManager {
       throw wrappedError;
 
     } finally {
-      cleanupOperation(instance.pendingOperations, operation.id);
+      instance.pendingOperations.delete(operation.id);
     }
   }
 

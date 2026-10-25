@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import { generatePunishmentId, cleanupOperation } from '../src/managers/punishmentBase';
+import { generatePunishmentId } from '../src/managers/punishmentBase';
 
 describe('generatePunishmentId', () => {
   it('generates a valid mongoose ObjectId', () => {
@@ -14,17 +14,3 @@ describe('generatePunishmentId', () => {
   });
 });
 
-describe('cleanupOperation', () => {
-  jest.useFakeTimers();
-
-  it('removes the operation after the delay', () => {
-    const operations = new Map<string, any>();
-    operations.set('op1', { status: 'pending' });
-
-    cleanupOperation(operations, 'op1', 1000);
-    expect(operations.has('op1')).toBe(true);
-
-    jest.advanceTimersByTime(1100);
-    expect(operations.has('op1')).toBe(false);
-  });
-});

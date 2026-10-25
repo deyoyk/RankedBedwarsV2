@@ -17,6 +17,14 @@ const mockUser = (): any => ({
   save: mockSave
 });
 
+function chainable<T>(result: T): any {
+  const chain: any = {
+    select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(result) })
+  };
+  chain.then = (resolve: (value: T) => unknown) => Promise.resolve(result).then(resolve);
+  return chain;
+}
+
 function mirrorUpdate(user: any) {
   return async (filter: any, update: any) => {
     if (update.$push) {
@@ -33,7 +41,7 @@ function mirrorUpdate(user: any) {
         }
       }
     }
-    return { matchedCount: 1, modifiedCount: 1, ...user };
+    return chainable({ matchedCount: 1, modifiedCount: 1, ...user });
   };
 }
 
@@ -161,8 +169,14 @@ describe('BanManager.unban', () => {
   it('clears the ban status with a single update', async () => {
     const user = mockUser();
     user.isBanned = true;
-    UserModel.updateOne.mockImplementation(mirrorUpdate(user));
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation((filter: any, update: any) => {
+      if (update.$set) {
+        for (const [path, value] of Object.entries(update.$set)) {
+          (user as any)[path] = value;
+        }
+      }
+      return chainable({ discordId: user.discordId, ign: user.ign });
+    });
 
     await BanManager.unban(guildMock() as any, '123', 'mod', 'Expired');
 
@@ -172,8 +186,12 @@ describe('BanManager.unban', () => {
 
   it('does nothing for users who are not banned', async () => {
     const user = mockUser();
-    UserModel.updateOne.mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) })
+    });
+    UserModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(user) })
+    });
 
     await BanManager.unban(guildMock() as any, '123', 'mod');
     expect(mockSave).not.toHaveBeenCalled();
@@ -236,8 +254,14 @@ describe('MuteManager.unmute', () => {
   it('clears the mute status with a single update', async () => {
     const user = mockUser();
     user.isMuted = true;
-    UserModel.updateOne.mockImplementation(mirrorUpdate(user));
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation((filter: any, update: any) => {
+      if (update.$set) {
+        for (const [path, value] of Object.entries(update.$set)) {
+          (user as any)[path] = value;
+        }
+      }
+      return chainable({ discordId: user.discordId, ign: user.ign });
+    });
 
     await MuteManager.unmute(guildMock() as any, '123', 'mod', 'Expired');
 
@@ -247,8 +271,12 @@ describe('MuteManager.unmute', () => {
 
   it('does nothing for users who are not muted', async () => {
     const user = mockUser();
-    UserModel.updateOne.mockResolvedValue({ matchedCount: 0, modifiedCount: 0 });
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(null) })
+    });
+    UserModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(user) })
+    });
 
     await MuteManager.unmute(guildMock() as any, '123', 'mod');
     expect(mockSave).not.toHaveBeenCalled();

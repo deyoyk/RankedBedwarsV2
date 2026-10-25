@@ -2,7 +2,7 @@ import config from '../config/config';
 import { Guild } from 'discord.js';
 import User from '../models/User';
 import { parseDuration } from '../utils/parseDuration';
-import { generatePunishmentId, cleanupOperation } from './punishmentBase';
+import { generatePunishmentId } from './punishmentBase';
 import {
   PunishmentOperation,
   PunishmentManagerStats,
@@ -138,7 +138,7 @@ export abstract class TimedPunishmentManager {
     } catch (error) {
       handleOperationError(error, operation, this.stats, kind.type, targetId);
     } finally {
-      cleanupOperation(this.pendingOperations, operation.id);
+      this.pendingOperations.delete(operation.id);
     }
   }
 
@@ -152,20 +152,19 @@ export abstract class TimedPunishmentManager {
         throw new Error(`Invalid ${kind.undoType} parameters`);
       }
 
-      const cleared = await User.updateOne(
+      const user = await User.findOneAndUpdate(
         { discordId: targetId, [kind.statusField]: true },
-        { $set: { [kind.statusField]: false } }
-      );
-      if (cleared.matchedCount === 0) {
-        const exists = await User.findOne({ discordId: targetId });
+        { $set: { [kind.statusField]: false } },
+        { new: true }
+      ).select('discordId ign').lean();
+      if (!user) {
+        const exists = await User.findOne({ discordId: targetId }).select('_id').lean();
         if (!exists) {
           throw new Error(`User ${targetId} not found in database`);
         }
         console.warn(`[${kind.logName}] User ${targetId} is not currently ${kind.activeWord}`);
         return;
       }
-
-      const user = (await User.findOne({ discordId: targetId })) ?? { discordId: targetId, ign: undefined as string | undefined };
 
       const promises: Promise<unknown>[] = [];
 
@@ -189,7 +188,7 @@ export abstract class TimedPunishmentManager {
     } catch (error) {
       handleOperationError(error, operation, this.stats, kind.undoType, targetId);
     } finally {
-      cleanupOperation(this.pendingOperations, operation.id);
+      this.pendingOperations.delete(operation.id);
     }
   }
 
