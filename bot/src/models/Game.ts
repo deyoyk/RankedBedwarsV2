@@ -16,6 +16,7 @@ const GameSchema: Schema = new Schema({
 });
 
 GameSchema.index({ state: 1 });
+GameSchema.index({ startTime: 1, state: 1 });
 GameSchema.index({ queueId: 1, state: 1 });
 GameSchema.index({ team1: 1 });
 GameSchema.index({ team2: 1 });

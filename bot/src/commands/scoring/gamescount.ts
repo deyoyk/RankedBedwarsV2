@@ -12,6 +12,8 @@ const DURATIONS = [
   { label: '30 Days', value: '30d', days: 30 },
 ];
 
+const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 1280, height: 720 });
+
 export async function gamescount(interaction: Message | ChatInputCommandInteraction) {
   let selectedDuration = '30d';
 
@@ -32,7 +34,7 @@ export async function gamescount(interaction: Message | ChatInputCommandInteract
       d.setDate(d.getDate() + i);
       keys.push(`${d.getMonth() + 1}/${d.getDate()}`);
     }
-    const games = await Game.find({ startTime: { $gte: startDate } }).select('startTime state');
+    const games = await Game.find({ startTime: { $gte: startDate } }).select('startTime state').lean();
     const states = ['pending', 'voided', 'scored'];
     const counts: Record<string, Record<string, number>> = {};
     for (const state of states) {
@@ -50,11 +52,6 @@ export async function gamescount(interaction: Message | ChatInputCommandInteract
   }
 
 async function renderChart(keys: string[], counts: Record<string, Record<string, number>>) {
-    const width = 1280;
-    const height = 720;
-
-    const chartJSNodeCanvas = new ChartJSNodeCanvas({ width, height });
-    
     const totalGames = keys.map(k => 
         (counts['pending'][k] || 0) + 
         (counts['voided'][k] || 0) + 
