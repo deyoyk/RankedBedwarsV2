@@ -76,11 +76,7 @@ export class ScreenshareCleanupTask {
 
   private async cleanupGuildSessions(guild: Guild): Promise<number> {
     try {
-      const beforeCount = await ScreenshareService.getActiveSessions();
-      await ScreenshareService.expireSessions(guild);
-      const afterCount = await ScreenshareService.getActiveSessions();
-      
-      return beforeCount.length - afterCount.length;
+      return await ScreenshareService.expireSessions(guild);
     } catch (error) {
       console.error(`[ScreenshareCleanupTask] Error cleaning up sessions for guild ${guild.name}:`, error);
       return 0;

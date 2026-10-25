@@ -321,7 +321,7 @@ export class ScreenshareService {
     }
   }
 
-  static async expireSessions(guild: Guild): Promise<void> {
+  static async expireSessions(guild: Guild): Promise<number> {
     try {
       const now = new Date();
       const sessions = await ScreenshareSession.find({
@@ -344,8 +344,10 @@ export class ScreenshareService {
       if (sessions.length > 0) {
         console.log(`[ScreenshareService] Expired ${sessions.length} screenshare sessions`);
       }
+      return sessions.length;
     } catch (error) {
       console.error('[ScreenshareService] Error expiring sessions:', error);
+      return 0;
     }
   }
 
