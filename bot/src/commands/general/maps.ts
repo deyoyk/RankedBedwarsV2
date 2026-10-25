@@ -17,7 +17,7 @@ export async function maps(
     return;
   }
   
-  const mapService = new MapService(wsManager);
+  const mapService = MapService.getSharedInstance(wsManager);
   
   const allMapNames: string[] = (await mapService.getAllMaps()).map(m => m.name);
   if (!allMapNames.length) {
@@ -26,7 +26,7 @@ export async function maps(
   }
 
   let page = 0;
-  const pageSize = 15;
+  const pageSize = 25;
   const totalPages = Math.ceil(allMapNames.length / pageSize);
 
   const buildEmbed = (page: number) => {
