@@ -12,12 +12,12 @@ export async function games(interaction: Message | ChatInputCommandInteraction, 
     emptyMessage: 'There are no games in the database.',
     emptyTitle: 'No Games Found',
     perPage: 15,
-    fetchPage: async (skip, limit) => {
-      const total = await Game.countDocuments();
+    fetchPage: async (skip, limit, total) => {
+      const totalCount = total ?? await Game.countDocuments();
       const items = await Game.find().sort({ gameId: -1 }).skip(skip).limit(limit).select('gameId state').lean();
       return {
         items,
-        total,
+        total: totalCount,
         buildEmbed: (games, page, totalPages, totalGames, skip) => {
           const embed = betterEmbed(
             `Showing games ${skip + 1}-${skip + games.length} of ${totalGames}`,

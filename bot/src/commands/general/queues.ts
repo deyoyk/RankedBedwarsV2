@@ -20,12 +20,12 @@ export async function queues(interaction: Message | ChatInputCommandInteraction,
     emptyMessage: 'There are no queues in the database.',
     emptyTitle: 'No Queues Found',
     perPage: 10,
-    fetchPage: async (skip, limit) => {
-      const total = await Queue.countDocuments();
+    fetchPage: async (skip, limit, total) => {
+      const totalCount = total ?? await Queue.countDocuments();
       const items = await Queue.find().sort({ channelId: 1 }).skip(skip).limit(limit).select('channelId minElo maxElo maxPlayers isRanked isPicking').lean();
       return {
         items,
-        total,
+        total: totalCount,
         buildEmbed: (queues, page, totalPages, totalQueues, skip) => {
           const embedObj = betterEmbed(
             `Showing queues ${skip + 1}-${skip + queues.length} of ${totalQueues}`,

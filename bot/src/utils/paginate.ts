@@ -8,7 +8,7 @@ export interface PaginationConfig<T> {
   emptyMessage: string;
   emptyTitle: string;
   perPage: number;
-  fetchPage: (skip: number, limit: number) => Promise<{ items: T[]; total: number; buildEmbed: (items: T[], page: number, totalPages: number, total: number, skip: number) => EmbedBuilder }>;
+  fetchPage: (skip: number, limit: number, total?: number) => Promise<{ items: T[]; total: number; buildEmbed: (items: T[], page: number, totalPages: number, total: number, skip: number) => EmbedBuilder }>;
 }
 
 export async function paginate<T>(interaction: Message | ChatInputCommandInteraction, config: PaginationConfig<T>): Promise<void> {
@@ -85,7 +85,7 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
         const newSkip = Math.max(0, (newPage - 1) * config.perPage);
         let result;
         try {
-          result = await config.fetchPage(newSkip, config.perPage);
+          result = await config.fetchPage(newSkip, config.perPage, total);
         } catch (err) {
           console.error(`Pagination fetch failed for ${config.commandName} page ${newPage}:`, err);
           await buttonInteraction.reply({ content: 'Failed to load that page.', ephemeral: true }).catch(() => {});
