@@ -1,6 +1,6 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import { safeReply } from '../../utils/safeReply';
-import User, { IUser } from '../../models/User';
+import User from '../../models/User';
 import Season from '../../models/Season';
 import { betterEmbed } from '../../utils/betterembed';
 import { resolveTheme } from '../../themes';
@@ -20,7 +20,9 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
 
   
 
-  const user: IUser | null = await User.findOne({ discordId: targetUserId });
+  const user = await User.findOne({ discordId: targetUserId })
+    .select('discordId ign wins losses games kills deaths mvps elo winStreak loseStreak wlr kdr finalKills bedBroken finalDeaths playtimeSeconds experience recentGames createdAt')
+    .lean();
 
   if (!user) {
     const notFoundEmbed = betterEmbed('User not found or not registered.', '#00AAAA', 'Stats Error');
@@ -125,10 +127,8 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
   });
 
   
-  async function calculatePosition(discordId: string): Promise<number> {
-    const current = await User.findOne({ discordId });
-    if (!current) return 0;
-    const higher = await User.countDocuments({ elo: { $gt: current.elo } });
+  async function calculatePosition(_discordId: string): Promise<number> {
+    const higher = await User.countDocuments({ elo: { $gt: elo } });
     return higher + 1;
   }
 
