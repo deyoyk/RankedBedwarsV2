@@ -76,13 +76,13 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
   let lastId: unknown = null;
   for (;;) {
     const filter: Record<string, unknown> = lastId === null ? {} : { _id: { $gt: lastId } };
-    const batch = await User.find(filter).select('_id discordId ign').sort({ _id: 1 }).limit(batchSize).lean();
+    const batch = await User.find(filter).select('_id discordId elo ign settings').sort({ _id: 1 }).limit(batchSize).lean();
     if (batch.length === 0) break;
     lastId = (batch[batch.length - 1] as { _id: unknown })._id;
 
     const batchPromises = batch.map(async (user) => {
       try {
-        await fix(interaction.guild!, user.discordId);
+        await fix(interaction.guild!, user.discordId, { discordId: user.discordId, elo: user.elo, ign: user.ign, settings: user.settings });
         progress.successful++;
         console.log(`[FixAll] Successfully fixed user ${user.discordId} (${user.ign || 'Unknown'})`);
       } catch (error) {
