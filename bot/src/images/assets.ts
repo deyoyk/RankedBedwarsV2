@@ -67,10 +67,16 @@ const IMAGE_TTL_MS = 24 * 60 * 60 * 1000;
 const IMAGE_NEGATIVE_TTL_MS = 60 * 1000;
 const IMAGE_MAX_ENTRIES = 5000;
 const IMAGE_MAX_CONCURRENT = 4;
+const IMAGE_ACQUIRE_TIMEOUT_MS = 5000;
+
+interface ImageWaiter {
+  resolve: (acquired: boolean) => void;
+  timer: NodeJS.Timeout;
+}
 
 const imageCache = new Map<string, CachedImageEntry>();
 const imageInflight = new Map<string, Promise<string | null>>();
-const imageWaitQueue: Array<() => void> = [];
+const imageWaitQueue: ImageWaiter[] = [];
 let imageInFlightCount = 0;
 
 function imageCacheGet(key: string, now: number): string | null {
@@ -92,23 +98,30 @@ function imageCacheStore(key: string, dataUrl: string, ok: boolean): void {
   imageCache.set(key, { at: Date.now(), dataUrl, ok });
 }
 
-function acquireImageSlot(): Promise<void> {
+function acquireImageSlot(): Promise<boolean> {
   if (imageInFlightCount < IMAGE_MAX_CONCURRENT) {
     imageInFlightCount += 1;
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
-  return new Promise<void>((resolve) => {
-    imageWaitQueue.push(() => {
-      imageInFlightCount += 1;
-      resolve();
-    });
+  return new Promise<boolean>((resolve) => {
+    const waiter: ImageWaiter = {
+      resolve,
+      timer: setTimeout(() => {
+        const idx = imageWaitQueue.indexOf(waiter);
+        if (idx >= 0) imageWaitQueue.splice(idx, 1);
+        resolve(false);
+      }, IMAGE_ACQUIRE_TIMEOUT_MS)
+    };
+    imageWaitQueue.push(waiter);
   });
 }
 
 function releaseImageSlot(): void {
   const next = imageWaitQueue.shift();
   if (next) {
-    next();
+    clearTimeout(next.timer);
+    imageInFlightCount += 1;
+    next.resolve(true);
   } else {
     imageInFlightCount = Math.max(0, imageInFlightCount - 1);
   }
@@ -123,7 +136,11 @@ async function loadCachedImage(
   const ongoing = imageInflight.get(key);
   if (ongoing) return ongoing;
   const task = (async (): Promise<string | null> => {
-    await acquireImageSlot();
+    const acquired = await acquireImageSlot();
+    if (!acquired) {
+      imageInflight.delete(key);
+      return null;
+    }
     try {
       const result = await loader();
       if (result.dataUrl) {
