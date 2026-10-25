@@ -4,7 +4,7 @@ import { ChannelsCleanupTask } from '../src/tasks/ChannelsCleanupTask';
 
 jest.mock('../src/models/Party', () => ({
   __esModule: true,
-  default: { find: jest.fn(), deleteOne: jest.fn().mockResolvedValue({}) }
+  default: { find: jest.fn(), deleteOne: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({}) }
 }));
 jest.mock('../src/models/User', () => ({
   __esModule: true,

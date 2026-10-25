@@ -1,4 +1,4 @@
-import { Client, Guild } from 'discord.js';
+import { Client } from 'discord.js';
 import Party from '../models/Party';
 import UserModel from '../models/User';
 import { PartyService } from '../services/PartyService';
@@ -56,8 +56,20 @@ export class PartyCleanupTask {
         return;
       }
 
-      for (const party of inactiveParties) {
-        await this.disbandInactiveParty(party, guild);
+      const partyIds = inactiveParties.map(party => party.partyId);
+      const memberIds = [...new Set(inactiveParties.flatMap(party => party.members ?? []))];
+
+      await UserModel.updateMany(
+        { partyId: { $in: partyIds } },
+        { $unset: { partyId: "" } }
+      );
+      await Party.deleteMany({ partyId: { $in: partyIds } });
+
+      const batchSize = 25;
+      for (let i = 0; i < memberIds.length; i += batchSize) {
+        await Promise.allSettled(
+          memberIds.slice(i, i + batchSize).map(memberId => PartyService.removePartyRoles(guild, [memberId]))
+        );
       }
 
       console.log(`[PartyCleanupTask] Successfully disbanded ${inactiveParties.length} inactive parties`);
@@ -65,22 +77,6 @@ export class PartyCleanupTask {
       console.error('[PartyCleanupTask] Error during party cleanup:', error);
     } finally {
       this.isRunning = false;
-    }
-  }
-
-  private async disbandInactiveParty(party: { partyId: string; members: string[]; lastActiveTime?: Date }, guild: Guild) {
-    try {
-      await UserModel.updateMany(
-        { partyId: party.partyId },
-        { $unset: { partyId: "" } }
-      );
-
-      await PartyService.removePartyRoles(guild, party.members);
-      await Party.deleteOne({ partyId: party.partyId });
-
-      console.log(`[PartyCleanupTask] Disbanded inactive party ${party.partyId} (last active: ${party.lastActiveTime})`);
-    } catch (error) {
-      console.error(`[PartyCleanupTask] Error disbanding party ${party.partyId}:`, error);
     }
   }
 }

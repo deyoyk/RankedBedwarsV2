@@ -488,7 +488,8 @@ export class PartyService {
 
   private static async updateRolesForMember(memberId: string, guild: Guild, roles: Record<number, string>, targetRole: string | null): Promise<void> {
     try {
-      const member = await guild.members.fetch(memberId);
+      const cached = guild.members.cache.get(memberId);
+      const member = cached ?? await guild.members.fetch(memberId).catch(() => null);
       if (member) {
         const roleIdsToRemove = [roles[2], roles[3], roles[4]].filter((roleId): roleId is string => !!roleId);
         if (roleIdsToRemove.length > 0) {
