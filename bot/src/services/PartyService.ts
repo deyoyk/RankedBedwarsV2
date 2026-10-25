@@ -71,9 +71,31 @@ export class PartyService {
         description: ''
       });
 
-      await party.save();
-      user.partyId = partyId;
-      await user.save();
+      let saved = false;
+      try {
+        await party.save();
+        saved = true;
+      } catch (error) {
+        console.error('[PartyService] Error saving new party:', error);
+        return { success: false, error: 'Failed to create party' };
+      }
+
+      const claim = await UserModel.updateOne(
+        {
+          discordId: userId,
+          $or: [{ partyId: { $exists: false } }, { partyId: null }, { partyId: '' }]
+        },
+        { $set: { partyId } }
+      );
+      const matchedCount = (claim as { matchedCount?: number; n?: number }).matchedCount
+        ?? (claim as { n?: number }).n
+        ?? 0;
+      if (matchedCount < 1) {
+        if (saved) {
+          await Party.deleteOne({ partyId }).catch(() => undefined);
+        }
+        return { success: false, error: 'Already in a party' };
+      }
 
       return { success: true, party };
     } catch (error) {
