@@ -1414,40 +1414,42 @@ export class ApiManager {
 
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
 
-      const sortObj: Record<string, 1 | -1> = {};
-      sortObj[mode] = -1;
+      const topPlayers = await this.getCached(`topPlayers:${mode}:${limit}`, 10000, async () => {
+        const sortObj: Record<string, 1 | -1> = {};
+        sortObj[mode] = -1;
 
-      const users = await User.find()
-        .sort(sortObj)
-        .limit(limit)
-        .select('ign discordId elo wins losses kills deaths games mvps bedBroken experience level finalDeaths playtimeSeconds peakElo damageDealt damageTaken assists bestStreak firstBloods')
-        .lean();
+        const users = await User.find()
+          .sort(sortObj)
+          .limit(limit)
+          .select('ign discordId elo wins losses kills deaths games mvps bedBroken experience level finalDeaths playtimeSeconds peakElo damageDealt damageTaken assists bestStreak firstBloods')
+          .lean();
 
-      const topPlayers = users.map((user, index) => {
-        const levelInfo = getLevelInfo(user.experience || 0);
-        const rawValue: unknown = user[mode as keyof typeof user];
-        return {
-          rank: index + 1,
-          ign: user.ign,
-          discordId: user.discordId,
-          elo: user.elo,
-          wins: user.wins,
-          losses: user.losses,
-          kills: user.kills,
-          deaths: user.deaths,
-          games: user.games,
-          mvps: user.mvps,
-          bedBroken: user.bedBroken,
-          finalDeaths: user.finalDeaths || 0,
-          playtimeSeconds: user.playtimeSeconds || 0,
-          peakElo: user.peakElo || 0,
-          level: user.level || levelInfo.level,
-          experience: user.experience || 0,
-          kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A',
-          wlr: user.losses > 0 ? (user.wins / user.losses).toFixed(2) : 'N/A',
-          winRate: user.games > 0 ? ((user.wins / user.games) * 100).toFixed(1) + '%' : 'N/A',
-          [mode]: typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0
-        };
+        return users.map((user, index) => {
+          const levelInfo = getLevelInfo(user.experience || 0);
+          const rawValue: unknown = user[mode as keyof typeof user];
+          return {
+            rank: index + 1,
+            ign: user.ign,
+            discordId: user.discordId,
+            elo: user.elo,
+            wins: user.wins,
+            losses: user.losses,
+            kills: user.kills,
+            deaths: user.deaths,
+            games: user.games,
+            mvps: user.mvps,
+            bedBroken: user.bedBroken,
+            finalDeaths: user.finalDeaths || 0,
+            playtimeSeconds: user.playtimeSeconds || 0,
+            peakElo: user.peakElo || 0,
+            level: user.level || levelInfo.level,
+            experience: user.experience || 0,
+            kdr: user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : 'N/A',
+            wlr: user.losses > 0 ? (user.wins / user.losses).toFixed(2) : 'N/A',
+            winRate: user.games > 0 ? ((user.wins / user.games) * 100).toFixed(1) + '%' : 'N/A',
+            [mode]: typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0
+          };
+        });
       });
 
       res.json({
@@ -1712,70 +1714,75 @@ export class ApiManager {
     try {
       const { discordid } = req.params;
 
-      const user = await User.findOne({ discordId: discordid }).lean();
-      if (!user) {
+      const overview = await this.getCached(`userOverview:${discordid}`, 5000, async () => {
+        const user = await User.findOne({ discordId: discordid }).lean();
+        if (!user) return null;
+
+        const wins = user.wins || 0;
+        const losses = user.losses || 0;
+        const kills = user.kills || 0;
+        const deaths = user.deaths || 0;
+        const games = user.games || 0;
+
+        const levelInfo = getLevelInfo(user.experience || 0);
+
+        const seasonStats = await SeasonStats.find({ discordId: discordid })
+          .sort({ seasonNumber: -1, chapterNumber: -1 })
+          .limit(10)
+          .lean();
+
+        const seasonHistory = seasonStats.map(stats => ({
+          season: stats.seasonNumber,
+          chapter: stats.chapterNumber,
+          elo: stats.elo,
+          wins: stats.wins,
+          losses: stats.losses,
+          kills: stats.kills,
+          deaths: stats.deaths,
+          games: stats.games,
+          mvps: stats.mvps,
+          bedBroken: stats.bedBroken,
+          finalDeaths: stats.finalDeaths,
+          playtimeSeconds: stats.playtimeSeconds,
+          peakElo: stats.peakElo,
+          level: stats.level || getLevelInfo(stats.experience || 0).level,
+          kdr: stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : 'N/A',
+          wlr: stats.losses > 0 ? (stats.wins / stats.losses).toFixed(2) : 'N/A'
+        }));
+
+        return {
+          discordId: user.discordId,
+          ign: user.ign,
+          profile: {
+            ...user,
+            winRate: games > 0 ? ((wins / games) * 100).toFixed(1) + '%' : 'N/A',
+            kdr: deaths > 0 ? (kills / deaths).toFixed(2) : 'N/A',
+            wlr: losses > 0 ? (wins / losses).toFixed(2) : 'N/A',
+            levelInfo
+          },
+          recentGames: (user.recentGames || []).slice(0, 10),
+          dailyElo: user.dailyElo || [],
+          level: {
+            level: levelInfo.level,
+            experience: levelInfo.experience,
+            levelInfo
+          },
+          currentStreak: {
+            winStreak: user.winStreak ?? (user as unknown as { winstreak?: number }).winstreak ?? 0,
+            loseStreak: user.loseStreak ?? (user as unknown as { losestreak?: number }).losestreak ?? 0
+          },
+          seasonHistory: {
+            totalSeasons: seasonHistory.length,
+            seasons: seasonHistory
+          }
+        };
+      });
+
+      if (!overview) {
         res.status(404).json({ error: 'User not found' });
         return;
       }
-
-      const wins = user.wins || 0;
-      const losses = user.losses || 0;
-      const kills = user.kills || 0;
-      const deaths = user.deaths || 0;
-      const games = user.games || 0;
-
-      const levelInfo = getLevelInfo(user.experience || 0);
-
-      const seasonStats = await SeasonStats.find({ discordId: discordid })
-        .sort({ seasonNumber: -1, chapterNumber: -1 })
-        .limit(10)
-        .lean();
-
-      const seasonHistory = seasonStats.map(stats => ({
-        season: stats.seasonNumber,
-        chapter: stats.chapterNumber,
-        elo: stats.elo,
-        wins: stats.wins,
-        losses: stats.losses,
-        kills: stats.kills,
-        deaths: stats.deaths,
-        games: stats.games,
-        mvps: stats.mvps,
-        bedBroken: stats.bedBroken,
-        finalDeaths: stats.finalDeaths,
-        playtimeSeconds: stats.playtimeSeconds,
-        peakElo: stats.peakElo,
-        level: stats.level || getLevelInfo(stats.experience || 0).level,
-        kdr: stats.deaths > 0 ? (stats.kills / stats.deaths).toFixed(2) : 'N/A',
-        wlr: stats.losses > 0 ? (stats.wins / stats.losses).toFixed(2) : 'N/A'
-      }));
-
-      res.json({
-        discordId: user.discordId,
-        ign: user.ign,
-        profile: {
-          ...user,
-          winRate: games > 0 ? ((wins / games) * 100).toFixed(1) + '%' : 'N/A',
-          kdr: deaths > 0 ? (kills / deaths).toFixed(2) : 'N/A',
-          wlr: losses > 0 ? (wins / losses).toFixed(2) : 'N/A',
-          levelInfo
-        },
-        recentGames: (user.recentGames || []).slice(0, 10),
-        dailyElo: user.dailyElo || [],
-        level: {
-          level: levelInfo.level,
-          experience: levelInfo.experience,
-          levelInfo
-        },
-        currentStreak: {
-          winStreak: user.winStreak ?? (user as unknown as { winstreak?: number }).winstreak ?? 0,
-          loseStreak: user.loseStreak ?? (user as unknown as { losestreak?: number }).losestreak ?? 0
-        },
-        seasonHistory: {
-          totalSeasons: seasonHistory.length,
-          seasons: seasonHistory
-        }
-      });
+      res.json(overview);
     } catch (error) {
       console.error('Error fetching user overview:', error);
       res.status(500).json({ error: 'Internal server error' });
