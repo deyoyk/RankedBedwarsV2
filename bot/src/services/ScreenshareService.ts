@@ -46,7 +46,7 @@ export class ScreenshareService {
 
   static async checkScreensharePermissions(guild: Guild, userId: string): Promise<ScreensharePermissionCheck> {
     try {
-      const member = await guild.members.fetch(userId).catch(() => null);
+      const member = guild.members.cache?.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
       if (!member) {
         return { hasPermission: false, error: 'User not found in guild' };
       }
@@ -153,7 +153,7 @@ export class ScreenshareService {
       }
 
       
-      const targetMember = await guild.members.fetch(targetId).catch(() => null);
+      const targetMember = guild.members.cache?.get(targetId) ?? await guild.members.fetch(targetId).catch(() => null);
       if (!targetMember) {
         return { success: false, error: 'Target user not found in server' };
       }
@@ -243,8 +243,8 @@ export class ScreenshareService {
       }
 
       
-      let member: GuildMember | null = null;
-      for (let i = 0; i < 3; i++) {
+      let member: GuildMember | null = guild.members.cache?.get(session.targetId) ?? null;
+      for (let i = 0; i < 3 && !member; i++) {
         try {
           member = await guild.members.fetch(session.targetId);
           break;

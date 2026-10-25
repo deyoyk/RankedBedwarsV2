@@ -57,7 +57,7 @@ export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
     }
 
     
-    const member = await guild.members.fetch(user.id).catch(() => null);
+    const member = guild.members.cache?.get(user.id) ?? await guild.members.fetch(user.id).catch(() => null);
     const screensharerRoleId = config.roles.screensharer;
     
     if (!member) {
