@@ -19,7 +19,7 @@ export class GuildJoinListener {
     try {
       console.log(`[GuildJoinListener] User ${member.user.tag} (${member.id}) joined the server`);
       
-      const user = await User.findOne({ discordId: member.id });
+      const user = await User.findOne({ discordId: member.id }).select('_id').lean();
       
       if (user) {
         console.log(`[GuildJoinListener] User ${member.user.tag} exists in database, sending welcome back embed`);
