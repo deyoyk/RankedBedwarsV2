@@ -5,7 +5,7 @@ import { safeReply } from '../../utils/safeReply';
 
  
 
-const retryCounts: Record<number, { count: number; at: number }> = {};
+const retryCounts = new Map<number, { count: number; at: number }>();
 const RETRY_RECORD_TTL_MS = 60 * 60 * 1000;
 const MAX_TRACKED_RETRIES = 5000;
 
@@ -23,12 +23,19 @@ export async function retry(interaction: Message | ChatInputCommandInteraction, 
     return;
   }
   const now = Date.now();
-  const tracked = retryCounts[gameId];
+  const tracked = retryCounts.get(gameId);
   const attempts = (tracked && now - tracked.at < RETRY_RECORD_TTL_MS ? tracked.count : 0) + 1;
-  retryCounts[gameId] = { count: attempts, at: now };
-  if (Object.keys(retryCounts).length > MAX_TRACKED_RETRIES) {
-    const oldest = Object.keys(retryCounts).slice(0, Object.keys(retryCounts).length - MAX_TRACKED_RETRIES);
-    for (const id of oldest) delete retryCounts[Number(id)];
+  retryCounts.set(gameId, { count: attempts, at: now });
+  if (retryCounts.size > MAX_TRACKED_RETRIES) {
+    for (const [id, entry] of retryCounts) {
+      if (now - entry.at >= RETRY_RECORD_TTL_MS) retryCounts.delete(id);
+      if (retryCounts.size <= MAX_TRACKED_RETRIES) break;
+    }
+    while (retryCounts.size > MAX_TRACKED_RETRIES) {
+      const oldest = retryCounts.keys().next();
+      if (oldest.done) break;
+      retryCounts.delete(oldest.value);
+    }
   }
   if (attempts > 2) {
     await safeReply(interaction, errorEmbed(`Game \`${gameId}\` has already been retried twice.`, 'Error'));
