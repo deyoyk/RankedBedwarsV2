@@ -98,6 +98,8 @@ UserSchema.index({ elo: -1 });
 UserSchema.index({ wins: -1 });
 UserSchema.index({ kills: -1 });
 UserSchema.index({ isBanned: 1, isFrozen: 1 });
+UserSchema.index({ isBanned: 1 });
+UserSchema.index({ isMuted: 1 });
 UserSchema.index({ partyId: 1 }, { sparse: true });
 UserSchema.index({ 'bans.id': 1 }, { sparse: true });
 UserSchema.index({ 'mutes.id': 1 }, { sparse: true });

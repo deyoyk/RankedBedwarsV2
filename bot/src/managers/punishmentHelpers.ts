@@ -172,15 +172,21 @@ export async function autoExpirePunishments(
   const expiredUsers: ExpiredPunishmentEntry[] = [];
   const BATCH_SIZE = 100;
 
-  let skip = 0;
+  let lastId: unknown = null;
   while (true) {
-    const users = await User.find({
+    const filter: Record<string, unknown> = {
       [config.statusField]: true,
-      [`${config.recordsField}.0`]: { $exists: true }
-    }).select(`discordId ${config.recordsField} ign`).limit(BATCH_SIZE).skip(skip);
+      [`${config.recordsField}.0`]: { $exists: true },
+      ...(lastId === null ? {} : { _id: { $gt: lastId } })
+    };
+    const users = await User.find(filter)
+      .select(`discordId ${config.recordsField} ign`)
+      .sort({ _id: 1 })
+      .limit(BATCH_SIZE)
+      .lean();
 
     if (users.length === 0) break;
-    skip += users.length;
+    lastId = (users[users.length - 1] as { _id: unknown })._id;
 
     for (const user of users) {
       try {
@@ -189,7 +195,7 @@ export async function autoExpirePunishments(
         if (lastRecord && lastRecord.duration > 0) {
           const expiry = new Date(lastRecord.date.getTime() + lastRecord.duration * 60000);
           if (now >= expiry) {
-            expiredUsers.push({ user, lastRecord });
+            expiredUsers.push({ user: { discordId: user.discordId, ign: user.ign }, lastRecord });
           }
         }
       } catch (error) {
