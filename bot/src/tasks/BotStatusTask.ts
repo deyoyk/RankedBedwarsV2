@@ -64,7 +64,7 @@ export class BotStatusTask {
         return;
       }
 
-      const channel = await guild.channels.fetch(config.channels.botstatusChannel) as TextChannel;
+      const channel = (guild.channels.cache?.get(config.channels.botstatusChannel) ?? await guild.channels.fetch(config.channels.botstatusChannel)) as TextChannel;
       if (!channel || !channel.isTextBased()) {
         console.error('[BotStatusTask] Bot status channel not found or not text-based');
         return;
@@ -132,7 +132,12 @@ export class BotStatusTask {
 
     try {
       
-      const queueStatus = await this.getQueueStatus();
+      const [queueStatus, wsStatus, arenaStatus, mongoStatus] = await Promise.all([
+        this.getQueueStatus(),
+        this.getWebSocketStatus(),
+        this.getArenaStatus(),
+        this.getMongoDBStatus()
+      ]);
       embed.addFields({
         name: '  Queue Status',
         value: [
@@ -144,7 +149,6 @@ export class BotStatusTask {
       });
 
       
-      const wsStatus = await this.getWebSocketStatus();
       embed.addFields({
         name: '  Websocket',
         value: [
@@ -157,7 +161,6 @@ export class BotStatusTask {
       });
 
       
-      const arenaStatus = await this.getArenaStatus();
       embed.addFields({
         name: '  Arena Status',
         value: [
@@ -197,7 +200,6 @@ export class BotStatusTask {
       });
 
       
-      const mongoStatus = await this.getMongoDBStatus();
       embed.addFields({
         name: '  Database',
         value: [
@@ -221,21 +223,12 @@ export class BotStatusTask {
   private async getQueueStatus() {
     try {
       const Queue = (await import('../models/Queue')).default;
-      const queues = await Queue.find().select('isRanked').lean();
-      
-      const total = queues.length;
-      let ranked = 0;
-      let unranked = 0;
+      const [total, ranked] = await Promise.all([
+        Queue.countDocuments(),
+        Queue.countDocuments({ isRanked: true })
+      ]);
 
-      for (const queue of queues) {
-        if (queue.isRanked) {
-          ranked++;
-        } else {
-          unranked++;
-        }
-      }
-
-      return { total, ranked, unranked };
+      return { total, ranked, unranked: total - ranked };
     } catch (error) {
       console.error('[BotStatusTask] Error getting queue status:', error);
       return { total: 0, ranked: 0, unranked: 0 };
