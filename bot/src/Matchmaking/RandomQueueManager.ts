@@ -49,10 +49,29 @@ export class RandomQueueManager {
 
       console.log(`[RandomQueue] Processing ${availablePlayers.length} players, max ${maxGames} games`);
 
+      // Single batched read for the whole queue snapshot; reused for team
+      // balancing and average-elo computation instead of re-querying per game.
+      const userDocsById = new Map<string, any>();
+      const eloById = new Map<string, number>();
+      try {
+        const fetched = await User.find({
+          discordId: { $in: players }
+        }).select('discordId partyId elo').lean();
+        for (const doc of fetched ?? []) {
+          userDocsById.set(doc.discordId, doc);
+          if (typeof doc.elo === 'number') {
+            eloById.set(doc.discordId, doc.elo);
+          }
+        }
+      } catch (error) {
+        console.error(`[RandomQueue] Error batch-fetching users:`, error);
+      }
+      const preloaded = { userDocsById, eloById };
+
       while (availablePlayers.length >= queueData.maxPlayers && gamesCreated < maxGames) {
         try {
           
-          const teamResult = await this.selectBalancedTeams(availablePlayers, queueData);
+          const teamResult = await this.selectBalancedTeams(availablePlayers, queueData, preloaded);
 
           if (teamResult.team1.length + teamResult.team2.length !== queueData.maxPlayers) {
             console.warn(`[RandomQueue] Invalid team selection, breaking`);
@@ -97,8 +116,8 @@ export class RandomQueueManager {
           }
 
           
-          const team1Avg = await this.calculateTeamAverageElo(teamResult.team1);
-          const team2Avg = await this.calculateTeamAverageElo(teamResult.team2);
+          const team1Avg = await this.calculateTeamAverageElo(teamResult.team1, eloById);
+          const team2Avg = await this.calculateTeamAverageElo(teamResult.team2, eloById);
           
           const embedGuild = this.client.guilds.cache.first();
           let embedGameChannel: TextChannel | null = null;
@@ -166,7 +185,11 @@ export class RandomQueueManager {
     }
   }
 
-  private async selectBalancedTeams(players: string[], queueData: QueueLike): Promise<TeamBalanceResult> {
+  private async selectBalancedTeams(
+    players: string[],
+    queueData: QueueLike,
+    preloaded?: { userDocsById: Map<string, any>; eloById: Map<string, number> }
+  ): Promise<TeamBalanceResult> {
     try {
       if (players.length < queueData.maxPlayers) {
         throw new Error('Not enough players for team selection');
@@ -174,9 +197,20 @@ export class RandomQueueManager {
 
       const partyGroups = new Map<string, string[]>();
 
-      const users = await User.find({
-        discordId: { $in: players }
-      }).select('discordId partyId elo').lean();
+      let users: Array<{ discordId: string; partyId?: string | null; elo: number }>;
+      let userEloMap: Map<string, number>;
+      if (preloaded && preloaded.userDocsById.size > 0) {
+        users = players
+          .map(id => preloaded.userDocsById.get(id))
+          .filter((u): u is { discordId: string; partyId?: string | null; elo: number } => Boolean(u));
+        userEloMap = preloaded.eloById;
+      } else {
+        const fetched = await User.find({
+          discordId: { $in: players }
+        }).select('discordId partyId elo').lean();
+        users = fetched ?? [];
+        userEloMap = new Map(users.map(u => [u.discordId, u.elo]));
+      }
 
       if (users.length === 0) {
         throw new Error('No users found in database');
@@ -232,7 +266,6 @@ export class RandomQueueManager {
       }
 
       const remainingSoloPlayers = soloPlayers.filter(p => !usedPlayers.has(p));
-      const userEloMap = new Map(users.map(u => [u.discordId, u.elo]));
 
       remainingSoloPlayers.sort((a, b) => {
         const eloA = userEloMap.get(a) || 0;
@@ -252,8 +285,8 @@ export class RandomQueueManager {
         usedPlayers.add(playerId);
       }
 
-      const team1Elo = await this.calculateTeamAverageElo(team1);
-      const team2Elo = await this.calculateTeamAverageElo(team2);
+      const team1Elo = await this.calculateTeamAverageElo(team1, userEloMap);
+      const team2Elo = await this.calculateTeamAverageElo(team2, userEloMap);
       const averageEloDiff = Math.abs(team1Elo - team2Elo);
 
       return {
@@ -269,8 +302,8 @@ export class RandomQueueManager {
     }
   }
 
-  private async calculateTeamAverageElo(playerIds: string[]): Promise<number> {
-    return calculateTeamAverageElo(playerIds);
+  private async calculateTeamAverageElo(playerIds: string[], eloById?: Map<string, number>): Promise<number> {
+    return calculateTeamAverageElo(playerIds, eloById);
   }
 
   private async selectRandomMap(queueData: QueueLike): Promise<string> {

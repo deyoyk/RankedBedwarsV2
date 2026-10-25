@@ -23,18 +23,36 @@ export function normalizeIgnKey(ign: string): string {
   return (ign ?? '').trim().toLowerCase();
 }
 
-export async function calculateTeamAverageElo(playerIds: string[]): Promise<number> {
+export function calculateTeamAverageEloFromDocs(docs: Array<{ elo?: number | null }>): number {
+  if (docs.length === 0) return 0;
+  const totalElo = docs.reduce((sum, user) => sum + (user.elo || 0), 0);
+  return Math.round(totalElo / docs.length);
+}
+
+export async function calculateTeamAverageElo(
+  playerIds: string[],
+  preloadedElos?: Map<string, number>
+): Promise<number> {
   try {
     const ids = normalizeIdList(playerIds);
     if (ids.length === 0) return 0;
+
+    if (preloadedElos) {
+      const elos: number[] = [];
+      for (const id of ids) {
+        const elo = preloadedElos.get(id);
+        if (typeof elo === 'number') elos.push(elo);
+      }
+      if (elos.length === 0) return 0;
+      return Math.round(elos.reduce((sum, elo) => sum + elo, 0) / elos.length);
+    }
 
     const users = await User.find({
       discordId: { $in: ids }
     }).select('elo');
 
     if (users.length === 0) return 0;
-    const totalElo = users.reduce((sum, user) => sum + (user.elo || 0), 0);
-    return Math.round(totalElo / users.length);
+    return calculateTeamAverageEloFromDocs(users);
   } catch (error) {
     console.error('[MatchmakingUtils] Error calculating team average ELO:', error);
     return 0;
