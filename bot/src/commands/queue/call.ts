@@ -38,7 +38,7 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
       return;
     }
 
-    const senderMember = await guild.members.fetch(senderId);
+    const senderMember = guild.members.cache.get(senderId) ?? await guild.members.fetch(senderId);
     const senderVoiceState = senderMember.voice;
 
     if (!senderVoiceState.channel) {
@@ -55,7 +55,7 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
         { 'channels.team2Voice': voiceChannel.id },
         { 'channels.picking': voiceChannel.id }
       ]
-    });
+    }).select('gameId').lean();
 
     if (!game) {
       await safeReply(interaction, errorEmbed('You must be in a game voice channel to use this command.', '❌ Invalid Voice Channel'));
@@ -63,15 +63,18 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
     }
 
     
-    const targetUserDoc = await User.findOne({ discordId: targetUser });
+    const targetUserDoc = await User.findOne({ discordId: targetUser }).select('_id').lean();
     if (!targetUserDoc) {
       await safeReply(interaction, errorEmbed('The target user is not registered in the system.', '❌ User Not Found'));
       return;
     }
 
-    
+
     try {
-      await guild.members.fetch(targetUser);
+      const cachedTarget = guild.members.cache.get(targetUser);
+      if (!cachedTarget) {
+        await guild.members.fetch(targetUser);
+      }
     } catch {
       await safeReply(interaction, errorEmbed('The target user is not a member of this server.', '❌ User Not Found'));
       return;
