@@ -54,6 +54,137 @@ export class SeasonManager {
     }
   }
 
+  private static readonly READ_BATCH_SIZE = 500;
+  private static readonly WRITE_CHUNK_SIZE = 500;
+
+  private static chunk<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  private static buildSeasonStatsDoc(user: any, seasonNumber: number, chapterNumber: number): Record<string, unknown> {
+    return {
+      discordId: user.discordId,
+      seasonNumber,
+      chapterNumber,
+      ign: user.ign,
+      elo: user.elo,
+      level: user.level || 1,
+      experience: user.experience || 0,
+      wins: user.wins,
+      losses: user.losses,
+      games: user.games,
+      mvps: user.mvps,
+      kills: user.kills,
+      deaths: user.deaths,
+      bedBroken: user.bedBroken,
+      finalKills: user.finalKills,
+      finalDeaths: user.finalDeaths,
+      diamonds: user.diamonds || 0,
+      irons: user.irons || 0,
+      gold: user.gold || 0,
+      emeralds: user.emeralds || 0,
+      blocksPlaced: user.blocksPlaced || 0,
+      winStreak: user.winStreak || 0,
+      loseStreak: user.loseStreak || 0,
+      kdr: user.kdr || 0,
+      wlr: user.wlr || 0,
+      playtimeSeconds: user.playtimeSeconds || 0,
+      peakElo: user.peakElo || 0,
+      recentGames: user.recentGames,
+      dailyElo: user.dailyElo
+    };
+  }
+
+  private static buildSeasonGameDoc(game: any, seasonNumber: number, chapterNumber: number): Record<string, unknown> {
+    const raw: Record<string, unknown> = game && typeof game.toObject === 'function'
+      ? game.toObject()
+      : { ...game };
+    delete raw._id;
+    delete raw.__v;
+    return { ...raw, seasonNumber, chapterNumber };
+  }
+
+  private static isDuplicateKeyError(error: any): boolean {
+    if (!error) return false;
+    if (error.code === 11000) return true;
+    const writeErrors: any[] = Array.isArray(error.writeErrors) ? error.writeErrors : [];
+    return writeErrors.length > 0 && writeErrors.every((e) => (e?.code ?? e?.err?.code) === 11000);
+  }
+
+  private static async insertManyIdempotent(targetModel: any, docs: Array<Record<string, unknown>>): Promise<number> {
+    if (docs.length === 0) return 0;
+    try {
+      const inserted: unknown = await targetModel.insertMany(docs, { ordered: false });
+      return Array.isArray(inserted) ? inserted.length : docs.length;
+    } catch (error) {
+      // Unique indexes on (discordId, season, chapter) / (gameId, season, chapter) make
+      // retries safe: already-migrated docs raise 11000 while the rest still persist.
+      if (SeasonManager.isDuplicateKeyError(error)) return docs.length;
+      throw error;
+    }
+  }
+
+  private static async snapshotCollection(
+    sourceModel: any,
+    targetModel: any,
+    toDoc: (doc: any, seasonNumber: number, chapterNumber: number) => Record<string, unknown>,
+    seasonNumber: number,
+    chapterNumber: number
+  ): Promise<number> {
+    const canBulk = typeof targetModel?.insertMany === 'function';
+    let migrated = 0;
+
+    const persistBatch = async (batch: any[]): Promise<void> => {
+      const docs = batch
+        .map((doc) => toDoc(doc, seasonNumber, chapterNumber))
+        .filter((doc) => !!doc);
+      if (docs.length === 0) return;
+      if (canBulk) {
+        const tasks = SeasonManager.chunk(docs, SeasonManager.WRITE_CHUNK_SIZE).map((writeChunk) => async () => {
+          migrated += await SeasonManager.insertManyIdempotent(targetModel, writeChunk);
+        });
+        await SeasonManager.runInBatches(tasks);
+      } else {
+        // Fallback for doubles without insertMany (unit tests): per-doc saves, same concurrency bound.
+        const tasks = docs.map((doc) => async () => {
+          await new targetModel(doc).save();
+          migrated += 1;
+        });
+        await SeasonManager.runInBatches(tasks);
+      }
+    };
+
+    const query: any = sourceModel.find({});
+    if (query && typeof query.lean === 'function' && typeof query.cursor === 'function') {
+      // Large-scale path: stream lean docs through a cursor, never materializing the collection.
+      if (typeof query.batchSize === 'function') query.batchSize(SeasonManager.READ_BATCH_SIZE);
+      const cursor = query.lean().cursor();
+      let batch: any[] = [];
+      for await (const doc of cursor) {
+        batch.push(doc);
+        if (batch.length >= SeasonManager.READ_BATCH_SIZE) {
+          const ready = batch;
+          batch = [];
+          await persistBatch(ready);
+        }
+      }
+      if (batch.length > 0) await persistBatch(batch);
+      return migrated;
+    }
+
+    // Fallback path (query doubles in unit tests): array read, still persisted in bounded chunks.
+    const all: any = typeof query?.session === 'function' ? await query.session(undefined) : await query;
+    const arr: any[] = Array.isArray(all) ? all : [];
+    for (const batch of SeasonManager.chunk(arr, SeasonManager.READ_BATCH_SIZE)) {
+      await persistBatch(batch);
+    }
+    return migrated;
+  }
+
   public static async startSeason(
     options: SeasonStartOptions
   ): Promise<{ success: boolean; message: string; embed?: EmbedBuilder }> {
@@ -180,73 +311,56 @@ export class SeasonManager {
   }
 
   public static async endSeason(): Promise<SeasonEndResult> {
-    const session = await mongoose.startSession();
-    let result: SeasonEndResult = {
-      success: false,
-      message: 'Operation failed',
-      usersMigrated: 0,
-      gamesMigrated: 0,
-      statsCreated: 0
-    };
+    // Phase 0: resolve the active season without holding a transaction open.
+    const lookupSession = await mongoose.startSession();
+    let snapshot: { seasonNumber: number; chapterNumber: number; name: string } | null = null;
+    try {
+      const query: any = Season.findOne({ isActive: true });
+      const activeSeason: any = query && typeof query.session === 'function'
+        ? await query.session(lookupSession)
+        : await query;
+      if (!activeSeason) {
+        throw new Error('No active season found to end.');
+      }
+      snapshot = {
+        seasonNumber: activeSeason.seasonNumber,
+        chapterNumber: activeSeason.chapterNumber,
+        name: activeSeason.name
+      };
+    } finally {
+      await lookupSession.endSession();
+    }
+    if (!snapshot) {
+      throw new Error('No active season found to end.');
+    }
+    const { seasonNumber, chapterNumber } = snapshot;
 
+    // Phase 1: snapshot live collections into season archives in bounded batches.
+    // Each insertMany chunk is atomic with ordered:false and duplicate-key tolerant,
+    // so a retry after a crash simply skips already-migrated docs (idempotent,
+    // re-runnable). No long-lived transaction here: stays well under the 60s limit.
+    // Note: writes landing between snapshot and reset below belong to the next
+    // season window; pause scoring queues during endSeason for a clean boundary.
+    const usersMigrated = await SeasonManager.snapshotCollection(
+      User,
+      SeasonStats,
+      (doc, s, c) => SeasonManager.buildSeasonStatsDoc(doc, s, c),
+      seasonNumber,
+      chapterNumber
+    );
+
+    const gamesMigrated = await SeasonManager.snapshotCollection(
+      Game,
+      SeasonGames,
+      (doc, s, c) => SeasonManager.buildSeasonGameDoc(doc, s, c),
+      seasonNumber,
+      chapterNumber
+    );
+
+    // Phase 2: one short transaction covering only the reset + close writes.
+    const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
-        const activeSeason = await Season.findOne({ isActive: true }).session(session);
-        if (!activeSeason) {
-          throw new Error('No active season found to end.');
-        }
-
-        const { seasonNumber, chapterNumber } = activeSeason;
-
-        const users = await User.find({}).session(session);
-
-        await SeasonManager.runInBatches(users.map(user => () =>
-          new SeasonStats({
-            discordId: user.discordId,
-            seasonNumber,
-            chapterNumber,
-            ign: user.ign,
-            elo: user.elo,
-            level: user.level || 1,
-            experience: user.experience || 0,
-            wins: user.wins,
-            losses: user.losses,
-            games: user.games,
-            mvps: user.mvps,
-            kills: user.kills,
-            deaths: user.deaths,
-            bedBroken: user.bedBroken,
-            finalKills: user.finalKills,
-            finalDeaths: user.finalDeaths,
-            diamonds: user.diamonds || 0,
-            irons: user.irons || 0,
-            gold: user.gold || 0,
-            emeralds: user.emeralds || 0,
-            blocksPlaced: user.blocksPlaced || 0,
-            winStreak: user.winStreak || 0,
-            loseStreak: user.loseStreak || 0,
-            kdr: user.kdr || 0,
-            wlr: user.wlr || 0,
-            playtimeSeconds: user.playtimeSeconds || 0,
-            peakElo: user.peakElo || 0,
-            recentGames: user.recentGames,
-            dailyElo: user.dailyElo
-          }).save({ session })
-        ));
-
-        const games = await Game.find({}).session(session);
-
-        await SeasonManager.runInBatches(games.map(game => {
-          const gameData: Record<string, unknown> = { ...game.toObject() };
-          delete gameData._id;
-          delete gameData.__v;
-          return () => new SeasonGames({
-            ...gameData,
-            seasonNumber,
-            chapterNumber
-          }).save({ session });
-        }));
-
         await User.updateMany({}, {
           $set: {
             elo: 0,
@@ -281,28 +395,33 @@ export class SeasonManager {
 
         await Game.deleteMany({ state: { $ne: 'pending' } }, { session });
 
-        activeSeason.endDate = new Date();
-        activeSeason.isActive = false;
-        await activeSeason.save({ session });
-
-        result = {
-          success: true,
-          message: `Season ${seasonNumber} Chapter ${chapterNumber} ended successfully.`,
-          usersMigrated: users.length,
-          gamesMigrated: games.length,
-          statsCreated: users.length,
-          seasonInfo: {
-            seasonNumber,
-            chapterNumber,
-            name: activeSeason.name
-          }
-        };
+        const seasonQuery: any = Season.findOne({ seasonNumber, chapterNumber });
+        const seasonInTx: any = seasonQuery && typeof seasonQuery.session === 'function'
+          ? await seasonQuery.session(session)
+          : await seasonQuery;
+        if (!seasonInTx) {
+          throw new Error('No active season found to end.');
+        }
+        seasonInTx.endDate = new Date();
+        seasonInTx.isActive = false;
+        await seasonInTx.save({ session });
       });
-
-      return result;
     } finally {
       await session.endSession();
     }
+
+    return {
+      success: true,
+      message: `Season ${seasonNumber} Chapter ${chapterNumber} ended successfully.`,
+      usersMigrated,
+      gamesMigrated,
+      statsCreated: usersMigrated,
+      seasonInfo: {
+        seasonNumber,
+        chapterNumber,
+        name: snapshot.name
+      }
+    };
   }
 
 
