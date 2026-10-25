@@ -104,6 +104,8 @@ public class MapManager {
     private final Set<String> disabledArenaGroups = ConcurrentHashMap.newKeySet();
     private final Set<String> allowedGroups = new HashSet<>();
     private volatile boolean mapInfoSendPending = false;
+    private int autoRefreshCursor = 0;
+    private static final int AUTO_REFRESH_MAX_GROUPS_PER_TICK = 3;
     
     
     
@@ -697,9 +699,14 @@ public class MapManager {
             if (!com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable()) {
                 return;
             }
-            
-            Set<String> locked = new HashSet<>(lockedArenaGroups);
-            for (String groupId : locked) {
+            if (lockedArenaGroups.isEmpty()) {
+                return;
+            }
+            List<String> locked = new ArrayList<>(lockedArenaGroups);
+            int total = locked.size();
+            int count = Math.min(total, AUTO_REFRESH_MAX_GROUPS_PER_TICK);
+            for (int i = 0; i < count; i++) {
+                String groupId = locked.get((autoRefreshCursor + i) % total);
                 ArenaGroup group = arenaGroups.get(groupId);
                 if (group == null) continue;
                 
@@ -726,6 +733,7 @@ public class MapManager {
                     plugin.debug("Auto-unlocked arena group '" + groupId + "' because all its arenas are empty.");
                 }
             }
+            autoRefreshCursor = (autoRefreshCursor + count) % total;
         }, 100L, 100L); 
     }
     
