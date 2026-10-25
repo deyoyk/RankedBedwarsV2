@@ -548,7 +548,8 @@ export class SeasonManager {
         .sort(sortObj)
         .skip(skip)
         .limit(validLimit)
-        .select(`ign ${mode}`);
+        .select(`ign ${mode}`)
+        .lean();
 
       const entries = seasonStats.map((stats, index) => ({
         position: index + 1 + skip,
