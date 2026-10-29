@@ -1,11 +1,12 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
 
-export async function wipe(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function wipe(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetId: string | undefined;
   let targetMention: string | undefined;
 

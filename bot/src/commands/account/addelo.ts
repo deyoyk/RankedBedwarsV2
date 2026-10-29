@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { safeReply } from '../../utils/safeReply';
@@ -7,7 +8,7 @@ import { safeReply } from '../../utils/safeReply';
 
 
 
-export async function addelo(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function addelo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let roleId: string;
   let startElo: number;
   let endElo: number;

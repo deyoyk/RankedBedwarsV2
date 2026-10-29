@@ -7,6 +7,7 @@ import {
   ButtonBuilder,
   ButtonStyle
 } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 
 import { errorEmbed, betterEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -22,7 +23,7 @@ const SETTINGS = [
 ] as const;
 type SettingKey = typeof SETTINGS[number]['key'];
 
-export async function settings(interaction: Message | ChatInputCommandInteraction) {
+export async function settings(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
   const user = await UserModel.findOne({ discordId: userId }).select('settings').lean();
   if (!user) {

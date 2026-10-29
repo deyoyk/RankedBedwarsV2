@@ -1,5 +1,6 @@
 import { safeReply } from '../../utils/safeReply';
 import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, ComponentType } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
 import { betterEmbed } from '../../utils/betterembed';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
@@ -17,7 +18,7 @@ const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 1280, height: 720 });
 const gamesChartCache = new Map<string, { at: number; buffer: Buffer }>();
 const GAMES_CHART_TTL_MS = 30000;
 
-export async function gamescount(interaction: Message | ChatInputCommandInteraction) {
+export async function gamescount(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let selectedDuration = '30d';
 
   function getStartDate(duration: string) {

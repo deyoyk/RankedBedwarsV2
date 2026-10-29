@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User, { IUser } from '../../models/User';
 import { betterEmbed, errorEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -49,7 +50,7 @@ async function getCachedTotal(valueField: string): Promise<number> {
   return total;
 }
 
-export async function leaderboard(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function leaderboard(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let page = 0;
   let mode = 'elo';
   const usersPerPage = 10;
@@ -160,7 +161,7 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
     const payload = { embeds: [embedObj.builder], components: components || [] };
     if (interaction instanceof ChatInputCommandInteraction) {
       if (replyMsg) {
-        await interaction.editReply(payload).catch(() => {});
+        await safeReply(interaction, payload).catch(() => {});
         return;
       }
       const msg = await safeReply(interaction, { ...payload, fetchReply: true });

@@ -1,9 +1,10 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { betterEmbed } from '../../utils/betterembed';
 import Game from '../../models/Game';
 
-export async function gameinfo(interaction: Message | ChatInputCommandInteraction, args?: string[]): Promise<void> {
+export async function gameinfo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
   let gameId: number | undefined;
   if (interaction instanceof ChatInputCommandInteraction) {
     gameId = interaction.options.getInteger('game_id', true);

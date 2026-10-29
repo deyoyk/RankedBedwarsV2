@@ -12,7 +12,7 @@ interface VoidRequestData {
   requesterId: string;
 }
 
-export async function voidrequest(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function voidrequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   try {
     const requestData = await parseVoidRequest(interaction, args);
     if (!requestData) return;
@@ -30,7 +30,7 @@ export async function voidrequest(interaction: Message | ChatInputCommandInterac
   }
 }
 
-async function parseVoidRequest(interaction: Message | ChatInputCommandInteraction, args?: string[]): Promise<VoidRequestData | null> {
+async function parseVoidRequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<VoidRequestData | null> {
   const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 
   if (interaction instanceof ChatInputCommandInteraction) {
@@ -152,11 +152,11 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
       } else if (freshGame.state === 'scored' || freshGame.state === 'voided' || freshGame.state === 'scoring') {
         resultEmbed.setDescription(`❌ Void request not applied: game state changed to ${freshGame.state}.`);
       } else {
-        const wsManager = global._wsManager as WebSocketManager;
-        if (!wsManager) {
+        const resolvedWs = (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
+        if (!resolvedWs) {
           resultEmbed.setDescription(`❌ Void request failed due to WebSocket manager not being available.`);
         } else {
-          const gameManager = new GameManager(message.client, wsManager);
+          const gameManager = new GameManager(message.client, resolvedWs!);
           await gameManager.voidGame(parseInt(data.gameId), data.reason);
           resultEmbed.setDescription(`✅ Void approved and applied to Game ID: ${data.gameId}.`);
         }

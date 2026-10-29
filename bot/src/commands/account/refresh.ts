@@ -1,9 +1,10 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { fix } from '../../utils/fix';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
-export async function refresh(interaction: Message | ChatInputCommandInteraction) {
+export async function refresh(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
   if (!interaction.guild) {
     await safeReply(interaction, errorEmbed('This command can only be used in a server.', 'Refresh Error'));

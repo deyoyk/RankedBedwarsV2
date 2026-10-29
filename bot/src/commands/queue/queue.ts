@@ -1,11 +1,12 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { betterEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
 
-export async function queue(interaction: Message | ChatInputCommandInteraction, _args?: string[]) {
+export async function queue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   try {
     const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
     

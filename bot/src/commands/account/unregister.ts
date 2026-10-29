@@ -1,11 +1,12 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
 
 
-export async function unregister(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function unregister(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetUserId: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {

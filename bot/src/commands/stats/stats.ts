@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import Season from '../../models/Season';
@@ -8,7 +9,7 @@ import { getLevelInfo } from '../../utils/levelSystem';
 
  
 
-export async function stats(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function stats(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetUserId: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {

@@ -1,10 +1,11 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import UserModel from '../../models/User';
 import { fix } from '../../utils/fix';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
-export async function nick(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function nick(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 
   if (!args || args.length === 0 || (args[0].toLowerCase() === 'set' && args.length === 1)) {

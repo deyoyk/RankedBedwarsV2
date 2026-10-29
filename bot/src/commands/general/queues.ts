@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Queue from '../../models/Queue';
 import { betterEmbed } from '../../utils/betterembed';
 import { paginate } from '../../utils/paginate';
@@ -13,7 +14,7 @@ type QueueListItem = {
   isPicking?: boolean;
 };
 
-export async function queues(interaction: Message | ChatInputCommandInteraction, _args?: string[]) {
+export async function queues(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   await paginate<QueueListItem>(interaction, {
     commandName: 'queues',
     title: 'Queues',

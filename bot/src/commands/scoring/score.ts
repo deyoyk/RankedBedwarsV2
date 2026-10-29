@@ -14,7 +14,7 @@ interface ScoreParams {
   reason: string;
 }
 
-function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args?: string[]): ScoreParams | null {
+function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): ScoreParams | null {
   if (interaction instanceof ChatInputCommandInteraction) {
     const gameId = interaction.options.getInteger('game_id');
     const winningTeam = interaction.options.getInteger('winning_team') ?? interaction.options.getInteger('winningteam');
@@ -45,7 +45,7 @@ function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args
   }
 }
 
-export async function score(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function score(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   const params = parseScoreArgs(interaction, args);
   if (!params) {
     await safeReply(interaction, errorEmbed('Usage: =score <gameId> <winningTeam:1|2> [mvps_comma] [bedbreaks_comma] [reason]', 'Score Command Error'));
@@ -77,13 +77,13 @@ export async function score(interaction: Message | ChatInputCommandInteraction, 
       ignToId[user.ign] = user.discordId;
     }
 
-    const wsManager = global._wsManager as WebSocketManager;
-    if (!wsManager) {
+    const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
+    if (!resolvedWs) {
       await safeReply(interaction, errorEmbed('WebSocket manager not available.', 'Score Command Error'));
       return;
     }
 
-    const gameManager = new GameManager(interaction.client, wsManager);
+    const gameManager = new GameManager(interaction.client, resolvedWs!);
     await gameManager.scoreGame({ gameId, winningTeam, mvps, bedbreaks, reason });
 
     await safeReply(interaction, successEmbed(

@@ -1,11 +1,22 @@
-import { ChatInputCommandInteraction, GuildMember, TextChannel } from 'discord.js';
+import { Message, ChatInputCommandInteraction, GuildMember, TextChannel } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
 
-export async function ssclose(interaction: ChatInputCommandInteraction) {
-  const reason = interaction.options.getString('reason', true);
+export async function ssclose(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+  void wsManager;
+  let reason: string;
+  if (interaction instanceof ChatInputCommandInteraction) {
+    reason = interaction.options.getString('reason', true);
+  } else {
+    if (!args || args.length < 1) {
+      await safeReply(interaction, errorEmbed('Usage: =ssclose <reason>', 'Screenshare Error'));
+      return;
+    }
+    reason = args.join(' ');
+  }
   const channel = interaction.channel as TextChannel;
   const guild = interaction.guild;
 
@@ -33,14 +44,19 @@ export async function ssclose(interaction: ChatInputCommandInteraction) {
   }
 
   try {
+    if (!channel) {
+      await safeReply(interaction, errorEmbed('Channel not available.', 'Screenshare Error'));
+      return;
+    }
     const session = await ScreenshareService.getSessionByChannelId(channel.id);
     if (!session) {
       await safeReply(interaction, errorEmbed('This command can only be used in a screenshare session channel.', 'Screenshare Error'));
       return;
     }
 
-    const result = await ScreenshareService.closeSession(guild, session.sessionId, interaction.user.id, reason);
-    
+    const closerId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+    const result = await ScreenshareService.closeSession(guild, session.sessionId, closerId, reason);
+
     if (!result.success) {
       await safeReply(interaction, errorEmbed(result.error!, 'Screenshare Error'));
       return;
@@ -51,7 +67,7 @@ export async function ssclose(interaction: ChatInputCommandInteraction) {
       { name: 'Session ID', value: session.sessionId, inline: true },
       { name: 'Target', value: `<@${session.targetId}>`, inline: true },
       { name: 'Reason', value: reason, inline: true },
-      { name: 'Closed by', value: `<@${interaction.user.id}>`, inline: true }
+      { name: 'Closed by', value: `<@${closerId}>`, inline: true }
     );
 
     await safeReply(interaction, { embeds: [successEmbedObj.builder] });

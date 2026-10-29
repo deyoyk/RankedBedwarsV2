@@ -2,7 +2,7 @@ import { wipeeveryone } from '../commands/account/wipeeveryone';
 import { wipe } from '../commands/account/wipe';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
-import { Client, ChatInputCommandInteraction, Message, Collection, ButtonInteraction, SlashCommandBuilder, type ApplicationCommandDataResolvable, type ApplicationCommandOptionData } from 'discord.js';
+import { Client, Collection, ButtonInteraction, SlashCommandBuilder, type ApplicationCommandDataResolvable, type ApplicationCommandOptionData } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
 import { addelo } from '../commands/account/addelo';
@@ -23,6 +23,7 @@ import { unban } from '../commands/moderation/unban';
 import { games } from '../commands/general/games';
 import { CommandHandler } from '../handlers/CommandHandler';
 import { WebSocketManager } from '../websocket/WebSocketManager';
+import type { BotCommandFn } from '../types/commands';
 import { strikerequest } from '../commands/scoring/strikerequest';
 import { voidrequest } from '../commands/scoring/voidrequest';
 import { stats } from '../commands/stats/stats';
@@ -48,12 +49,12 @@ import { ssclose } from '../commands/moderation/ssclose';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
 import { ScreenshareService } from '../services/ScreenshareService';
 import { fixall } from '../commands/account/fixall';
-import { executeStartSeason } from '../commands/season/startseason';
-import { executeEndSeason } from '../commands/season/endseason';
-import { executeListSeasons } from '../commands/season/listseasons';
-import { execute as level } from '../commands/stats/level';
+import { startseason } from '../commands/season/startseason';
+import { endseason } from '../commands/season/endseason';
+import { listseasons } from '../commands/season/listseasons';
+import { level } from '../commands/stats/level';
 import { seasoninfo } from '../commands/season/seasoninfo';
-import { executeQueueControl, queueControlData } from '../commands/queue/queuecontrol';
+import { queuecontrol, queueControlData } from '../commands/queue/queuecontrol';
 
 
 
@@ -64,7 +65,7 @@ interface Command {
   description: string;
   options?: ApplicationCommandOptionData[];
   apiData?: ReturnType<SlashCommandBuilder['toJSON']>;
-  execute: (interaction: Message | ChatInputCommandInteraction, args?: string[]) => Promise<void>;
+  execute: BotCommandFn;
 }
 
 export class CommandManager {
@@ -213,10 +214,8 @@ export class CommandManager {
     }
   }
 
-  private regChat(name: string, description: string, execute: (interaction: ChatInputCommandInteraction) => Promise<unknown>, options: ApplicationCommandOptionData[] = [], apiData?: Command['apiData']) {
-    this.reg(name, description, async (interaction) => {
-      if (interaction instanceof ChatInputCommandInteraction) await execute(interaction);
-    }, options, apiData);
+  private regChat(name: string, description: string, execute: Command['execute'], options: ApplicationCommandOptionData[] = [], apiData?: Command['apiData']) {
+    this.reg(name, description, execute, options, apiData);
   }
 
   private registerCommands() {
@@ -239,15 +238,13 @@ export class CommandManager {
     this.reg('gameinfo', 'Show detailed info for a game by game ID', gameinfo, [
       { name: 'game_id', description: 'The ID of the game', type: 4, required: true }
     ]);
-    this.reg('maps', 'Show available maps and select mode', async (interaction, args) => {
-      await maps(interaction, args, this.commandHandler['wsManager']);
-    });
+    this.reg('maps', 'Show available maps and select mode', maps);
     this.reg('ranks', 'Show the list of ELO ranks', ranks);
     this.reg('help', 'Show help menu', help);
   }
 
   private registerQueueCommands() {
-    this.regChat('queuecontrol', 'Enable or disable queues by type or specific queue', executeQueueControl, [], queueControlData.toJSON());
+    this.regChat('queuecontrol', 'Enable or disable queues by type or specific queue', queuecontrol, [], queueControlData.toJSON());
     this.reg('queue', 'Show information about players in the current queue', queue);
     this.reg('party', 'Party management', party, [
       { name: 'action', description: 'Party action to perform', type: 3, required: true, choices: [
@@ -355,7 +352,8 @@ export class CommandManager {
     ]);
     this.regChat('screenshare', 'Request a screenshare on a user', screenshare, [
       { name: 'user', description: 'User to screenshare', type: 6, required: true },
-      { name: 'reason', description: 'Reason for the screenshare', type: 3, required: true }
+      { name: 'reason', description: 'Reason for the screenshare', type: 3, required: true },
+      { name: 'image', description: 'Proof image attachment', type: 11, required: false }
     ]);
     this.regChat('ssclose', 'Close a screenshare session', ssclose, [
       { name: 'reason', description: 'Reason for closing the session', type: 3, required: true }
@@ -433,15 +431,14 @@ export class CommandManager {
   }
 
   private registerSeasonCommands() {
-    this.regChat('startseason', 'Start a new season', executeStartSeason, [
+    this.regChat('startseason', 'Start a new season', startseason, [
       { name: 'season', description: 'Season number', type: 4, required: true },
       { name: 'chapter', description: 'Chapter number', type: 4, required: true },
       { name: 'name', description: 'Name of the new season', type: 3, required: true },
       { name: 'description', description: 'Description of the new season', type: 3, required: false }
     ]);
-    this.regChat('endseason', 'End the current active season and migrate data', executeEndSeason);
-    this.regChat('listseasons', 'List all seasons', executeListSeasons);
-    this.reg('seasoninfo', 'Show current season information and allowed items', seasoninfo);
+    this.regChat('endseason', 'End the current active season and migrate data', endseason);
+    this.regChat('listseasons', 'List all seasons', listseasons);
     this.reg('seasoninfo', 'Show current season information and allowed items', seasoninfo);
   }
 

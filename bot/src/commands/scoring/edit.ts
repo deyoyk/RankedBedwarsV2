@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import UserModel, { type IUser } from '../../models/User';
@@ -27,7 +28,7 @@ const EDITABLE_STATS = {
 
 type EditableStat = keyof typeof EDITABLE_STATS;
 
-export async function edit(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function edit(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetUserId: string;
   let statToEdit: string;
   let newValue: string;

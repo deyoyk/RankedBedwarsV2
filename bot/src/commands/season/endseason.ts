@@ -1,12 +1,14 @@
-import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
+import { safeReply } from '../../utils/safeReply';
 
-export async function executeEndSeason(interaction: ChatInputCommandInteraction) {
-    await interaction.deferReply();
-
+export async function endseason(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+    void args;
+    void wsManager;
     try {
         const result = await SeasonManager.endSeason();
-        
+
 
         if (result.success) {
             const embed = new EmbedBuilder()
@@ -23,14 +25,14 @@ export async function executeEndSeason(interaction: ChatInputCommandInteraction)
                 .setFooter({ text: 'All user stats have been reset and games cleared for the new season' })
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [embed] });
+            await safeReply(interaction, { embeds: [embed] });
         } else {
             const embed = new EmbedBuilder()
                 .setColor('#00AAAA')
                 .setTitle('❌ Error')
                 .setDescription(result.message);
 
-            await interaction.editReply({ embeds: [embed] });
+            await safeReply(interaction, { embeds: [embed] });
         }
     } catch (error) {
         console.error('Error ending season:', error);
@@ -40,6 +42,9 @@ export async function executeEndSeason(interaction: ChatInputCommandInteraction)
             .setTitle('❌ Error')
             .setDescription('An error occurred while ending the season. Please check the logs and try again.');
 
-        await interaction.editReply({ embeds: [embed] });
+        await safeReply(interaction, { embeds: [embed] });
     }
 }
+
+// Backward-compatible alias (previous export name).
+export const executeEndSeason = endseason;

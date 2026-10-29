@@ -1,8 +1,9 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { MuteManager } from '../../managers/MuteManager';
 import { executeModerationAction } from '../../utils/modCommands';
 
-export async function mute(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function mute(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   await executeModerationAction(interaction, args, {
     commandName: 'mute',
     actionVerb: 'Muted',

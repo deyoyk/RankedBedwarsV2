@@ -1,4 +1,5 @@
-import { ChatInputCommandInteraction, EmbedBuilder, Message } from 'discord.js';
+import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { parse } from 'yaml';
 import fs from 'fs';
 import path from 'path';
@@ -14,7 +15,9 @@ interface SeasonInfo {
   field3value: string[];
 }
 
-export async function seasoninfo(interaction: ChatInputCommandInteraction | Message) {
+export async function seasoninfo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+  void args;
+  void wsManager;
   try {
     const configPath = path.join(__dirname, '../../config/seasoninfo.yml');
     

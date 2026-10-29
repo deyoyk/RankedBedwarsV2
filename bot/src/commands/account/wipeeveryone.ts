@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction, ButtonStyle } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
 import { executeWithConfirmation } from '../../utils/confirmAction';
@@ -6,7 +7,7 @@ import { successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
 
-export async function wipeeveryone(interaction: Message | ChatInputCommandInteraction) {
+export async function wipeeveryone(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   const total = await User.countDocuments();
   if (!total) {
     const { errorEmbed } = await import('../../utils/betterembed');
@@ -39,7 +40,7 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
 
   let progressMsg: Message | undefined = undefined;
   if (interaction instanceof ChatInputCommandInteraction) {
-    await interaction.editReply({
+    await safeReply(interaction, {
       embeds: [successEmbed(`Starting wipe for **${total}** users...`, 'Wipe Everyone Progress').builder]
     });
   } else {
@@ -63,7 +64,7 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
       'Wipe Everyone Progress'
     );
     if (interaction instanceof ChatInputCommandInteraction) {
-      await interaction.editReply({ embeds: [embed.builder] });
+      await safeReply(interaction, { embeds: [embed.builder] });
     } else if (progressMsg) {
       await progressMsg.edit({ embeds: [embed.builder] });
     }
@@ -100,7 +101,7 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
     'Wipe Everyone Complete'
   );
   if (interaction instanceof ChatInputCommandInteraction) {
-    await interaction.editReply({ embeds: [embed.builder] });
+    await safeReply(interaction, { embeds: [embed.builder] });
   } else if (progressMsg) {
     await progressMsg.edit({ embeds: [embed.builder] });
   }

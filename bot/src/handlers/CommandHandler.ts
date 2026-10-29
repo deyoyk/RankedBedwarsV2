@@ -11,11 +11,9 @@ import { checkPermission } from '../utils/permissions';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 
-export type CommandFn = (
-  interaction: Message | ChatInputCommandInteraction,
-  args?: string[],
-  wsManager?: WebSocketManager
-) => Promise<void> | void;
+import type { BotCommandFn } from '../types/commands';
+
+export type CommandFn = BotCommandFn;
 
 export class CommandHandler {
   private client: Client;

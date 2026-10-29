@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
 import { IRecentGame } from '../../models/gameBase';
@@ -10,7 +11,7 @@ interface RecentGamesData {
   requesterId: string;
 }
 
-export async function recentgames(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function recentgames(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   try {
     const data = await parseRecentGamesRequest(interaction, args);
     if (!data) return;
@@ -30,7 +31,7 @@ export async function recentgames(interaction: Message | ChatInputCommandInterac
   }
 }
 
-async function parseRecentGamesRequest(interaction: Message | ChatInputCommandInteraction, args?: string[]): Promise<RecentGamesData | null> {
+async function parseRecentGamesRequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<RecentGamesData | null> {
   const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
   let page = 0;
   let userFilter: string | undefined;
@@ -220,7 +221,8 @@ async function setupPaginationCollector(interaction: Message | ChatInputCommandI
   collector.on('end', async () => {
     try {
       if (interaction instanceof ChatInputCommandInteraction && interaction.replied) {
-        await interaction.editReply({ components: [] });
+        const { safeReply } = await import('../../utils/safeReply');
+        await safeReply(interaction, { components: [] });
       }
     } catch (error) {
       console.error('Error cleaning up pagination:', error);

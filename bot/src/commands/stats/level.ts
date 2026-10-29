@@ -1,30 +1,47 @@
-import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { getLevelInfo, EXPERIENCE_REWARDS } from '../../utils/levelSystem';
 import { safeReply } from '../../utils/safeReply';
 
-export async function execute(interaction: ChatInputCommandInteraction) {
+export async function level(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+    void wsManager;
     try {
-        const targetUser = interaction.options.getUser('user') || interaction.user;
-        const user = await User.findOne({ discordId: targetUser.id }).select('discordId ign experience').lean();
+        let targetId: string;
+        let targetAvatar: string | undefined;
+        let targetUsername: string | undefined;
+        if (interaction instanceof ChatInputCommandInteraction) {
+            const targetUser = interaction.options.getUser('user') || interaction.user;
+            targetId = targetUser.id;
+            targetAvatar = targetUser.displayAvatarURL();
+            targetUsername = targetUser.username;
+        } else {
+            if (args && args.length > 0) {
+                const m = args[0].match(/^<@!?(\d+)>$/);
+                targetId = m ? m[1] : args[0].replace(/[<@!>]/g, '');
+            } else {
+                targetId = interaction.author.id;
+            }
+        }
+        const user = await User.findOne({ discordId: targetId }).select('discordId ign experience').lean();
 
         if (!user) {
             const embed = new EmbedBuilder()
                 .setColor('#00AAAA')
-                .setTitle('❌ User Not Found')
+                .setTitle('\u274c User Not Found')
                 .setDescription('This user is not registered in the system.');
 
-            return safeReply(interaction, { embeds: [embed], ephemeral: true });
+            await safeReply(interaction, { embeds: [embed], ephemeral: true });
+            return;
         }
 
         const levelInfo = getLevelInfo(user.experience || 0);
         const progressPercentage = ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100);
-        const progressBar = '█'.repeat(Math.floor(progressPercentage / 5)) + '░'.repeat(20 - Math.floor(progressPercentage / 5));
+        const progressBar = '\u2588'.repeat(Math.floor(progressPercentage / 5)) + '\u2591'.repeat(20 - Math.floor(progressPercentage / 5));
 
         const embed = new EmbedBuilder()
             .setColor('#00ff00')
-            .setTitle(`Level Information - ${user.ign || targetUser.username}`)
-            .setThumbnail(targetUser.displayAvatarURL())
+            .setTitle(`Level Information - ${user.ign || targetUsername || targetId}`)
             .addFields(
                 {
                     name: 'Current Level',
@@ -67,6 +84,7 @@ export async function execute(interaction: ChatInputCommandInteraction) {
             )
             .setFooter({ text: 'Keep playing to level up!' })
             .setTimestamp();
+        if (targetAvatar) embed.setThumbnail(targetAvatar);
 
         await safeReply(interaction, { embeds: [embed] });
 
@@ -75,9 +93,12 @@ export async function execute(interaction: ChatInputCommandInteraction) {
 
         const embed = new EmbedBuilder()
             .setColor('#00AAAA')
-            .setTitle('❌ Error')
+            .setTitle('\u274c Error')
             .setDescription('An error occurred while fetching level information.');
 
         await safeReply(interaction, { embeds: [embed], ephemeral: true });
     }
 }
+
+// Backward-compatible alias (previous export name).
+export const execute = level;

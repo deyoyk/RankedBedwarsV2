@@ -1,18 +1,22 @@
-import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Season from '../../models/Season';
 import { safeReply } from '../../utils/safeReply';
 
-export async function executeListSeasons(interaction: ChatInputCommandInteraction) {
+export async function listseasons(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+  void args;
+  void wsManager;
   try {
     const seasons = await Season.find({}).sort({ seasonNumber: 1, chapterNumber: 1 });
-    
+
     if (seasons.length === 0) {
       const embed = new EmbedBuilder()
         .setColor('#ff9900')
         .setTitle('Seasons List')
         .setDescription('No seasons have been created yet.');
-      
-      return interaction.reply({ embeds: [embed] });
+
+      await safeReply(interaction, { embeds: [embed] });
+      return;
     }
 
     const embeds = [];
@@ -37,14 +41,18 @@ export async function executeListSeasons(interaction: ChatInputCommandInteractio
       embeds.push(chunkEmbed);
     }
 
-    safeReply(interaction, { embeds });
+    await safeReply(interaction, { embeds });
   } catch (error) {
     console.error('Error listing seasons:', error);
-    
+
     const embed = new EmbedBuilder()
       .setColor('#00AAAA')
       .setTitle('❌ Error')
       .setDescription('An error occurred while fetching seasons.');
-    
+
     await safeReply(interaction, { embeds: [embed], ephemeral: true });  }
 }
+
+// Backward-compatible aliases (previous export names).
+export const executeListSeasons = listseasons;
+export const executeListseasons = listseasons;

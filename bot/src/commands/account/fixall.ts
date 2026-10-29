@@ -1,4 +1,6 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, ButtonStyle } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { safeReply } from '../../utils/safeReply';
 import { fix } from '../../utils/fix';
 import User from '../../models/User';
 import { executeWithConfirmation } from '../../utils/confirmAction';
@@ -13,7 +15,7 @@ interface FixAllProgress {
   lastUpdateTime: number;
 }
 
-export async function fixall(interaction: Message | ChatInputCommandInteraction) {
+export async function fixall(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   const total = await User.countDocuments();
   if (!total) {
     const { safeReply } = await import('../../utils/safeReply');
@@ -56,7 +58,7 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
   let progressMsg: Message | undefined = undefined;
   
   if (interaction instanceof ChatInputCommandInteraction) {
-    await interaction.editReply({
+    await safeReply(interaction, {
       embeds: [createProgressEmbed(progress)]
     });
   } else {
@@ -117,7 +119,7 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
         if (progressMsg) {
           await progressMsg.edit({ embeds: [createProgressEmbed(progress)] });
         } else if (interaction instanceof ChatInputCommandInteraction) {
-          await interaction.editReply({ embeds: [createProgressEmbed(progress)] });
+          await safeReply(interaction, { embeds: [createProgressEmbed(progress)] });
         }
       } catch (updateError) {
         console.error('[FixAll] Failed to update progress embed:', updateError);
@@ -134,7 +136,7 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
   if (progressMsg) {
     await progressMsg.edit({ embeds: [finalEmbed] });
   } else if (interaction instanceof ChatInputCommandInteraction) {
-    await interaction.editReply({ embeds: [finalEmbed] });
+    await safeReply(interaction, { embeds: [finalEmbed] });
   }
 
   console.log(`[FixAll] Completed fix for ${total} users. Success: ${progress.successful}, Failed: ${progress.failed}`);

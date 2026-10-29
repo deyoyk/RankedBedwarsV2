@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
@@ -6,7 +7,7 @@ import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
 import { ensureUserStats, computeWlr } from '../../utils/userStats';
 
-export async function lose(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function lose(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetId: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {

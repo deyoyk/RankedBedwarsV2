@@ -5,7 +5,7 @@ import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
-export async function forcevoid(interaction: Message | ChatInputCommandInteraction) {
+export async function forcevoid(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   
   const channel = interaction.channel;
   if (!channel || channel.type !== 0) { 
@@ -33,13 +33,13 @@ export async function forcevoid(interaction: Message | ChatInputCommandInteracti
   }
 
   try {
-    const wsManager = global._wsManager as WebSocketManager;
-    if (!wsManager) {
+    const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
+    if (!resolvedWs) {
       await safeReply(interaction, errorEmbed('WebSocket manager not available.', 'Error'));
       return;
     }
     
-    const gameManager = new GameManager(interaction.client, wsManager);
+    const gameManager = new GameManager(interaction.client, resolvedWs!);
     await gameManager.voidGame(game.gameId, reason);
     
     if (interaction instanceof ChatInputCommandInteraction) {

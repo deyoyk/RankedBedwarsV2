@@ -1,5 +1,7 @@
 
 import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, EmbedBuilder, ButtonBuilder, ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
+import type { WebSocketManager } from '../websocket/WebSocketManager';
+import { safeReply } from '../utils/safeReply';
 import fs from 'fs';
 import path from 'path';
 import pkg from '../../package.json';
@@ -79,7 +81,9 @@ function getCommandRoles(cmd: string): string {
   }
 }
 
-export async function help(interaction: ChatInputCommandInteraction | Message) {
+export async function help(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+  void args;
+  void wsManager;
   try {
     const commandCategories = await getCommandCategories();
     console.log('[Help] Command categories:', Object.keys(commandCategories));
@@ -92,43 +96,18 @@ export async function help(interaction: ChatInputCommandInteraction | Message) {
     const selectMenu = buildCategorySelectMenu(commandCategories);
 
     if (selectMenu.options.length === 0) {
-      const replyContent = { content: 'No command categories found.' };
-      if ('reply' in interaction) {
-        await interaction.reply(replyContent);
-      } else {
-        const msg = interaction as Message;
-        const channel = msg.channel;
-        if (channel && 'send' in channel && typeof channel.send === 'function') {
-          await channel.send(replyContent);
-        }
-      }
+      await safeReply(interaction, { content: 'No command categories found.' });
       return;
     }
 
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
 
-    if ('reply' in interaction && typeof interaction.reply === 'function') {
-      await interaction.reply({ embeds: [embed], components: [row.toJSON()] });
-    } else {
-      const msg = interaction as Message;
-      const channel = msg.channel;
-      if (channel && 'send' in channel && typeof channel.send === 'function') {
-        await channel.send({ embeds: [embed], components: [row.toJSON()] });
-      }
-    }
+    await safeReply(interaction, { embeds: [embed], components: [row] });
   } catch (error) {
     console.error('Error in help command:', error);
     
     try {
-      if ('isRepliable' in interaction && interaction.isRepliable()) {
-        if (interaction.replied) {
-          await interaction.followUp({ content: 'There was an error loading the help menu. Please try again.', flags: 64 });
-        } else if (interaction.deferred) {
-          await interaction.editReply({ content: 'There was an error loading the help menu. Please try again.' });
-        } else {
-          await interaction.reply({ content: 'There was an error loading the help menu. Please try again.', flags: 64 });
-        }
-      }
+      await safeReply(interaction, { content: 'There was an error loading the help menu. Please try again.' });
     } catch (followUpError) {
       console.error('Error sending followUp:', followUpError);
     }

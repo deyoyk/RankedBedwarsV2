@@ -1,11 +1,12 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
 import { safeReply } from '../../utils/safeReply';
 
 
-export async function removequeue(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function removequeue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let channelId: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {

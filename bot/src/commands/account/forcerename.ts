@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
@@ -7,7 +8,7 @@ import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
 
 
 
-export async function forcerename(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function forcerename(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetUser: string | null;
   let newIgn: string;
 

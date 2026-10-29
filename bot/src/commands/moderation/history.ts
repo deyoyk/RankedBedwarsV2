@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 
 interface HistoryRecordView {
@@ -12,7 +13,7 @@ interface HistoryRecordView {
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
-export async function history(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function history(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let discordId: string;
   let historyType: string;
   let userInput: string | null = null;

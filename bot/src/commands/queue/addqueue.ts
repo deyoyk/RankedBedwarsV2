@@ -1,4 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import Queue from '../../models/Queue';
@@ -7,7 +8,7 @@ import Queue from '../../models/Queue';
 
 
 
-export async function addqueue(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function addqueue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let channelId: string;
   let maxPlayers: number;
   let minElo: number;

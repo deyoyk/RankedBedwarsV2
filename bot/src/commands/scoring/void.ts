@@ -8,7 +8,7 @@ import { safeReply } from '../../utils/safeReply';
  
 
 
-export async function voidGame(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function voidGame(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let gameId: number;
   let reason: string;
 
@@ -41,13 +41,13 @@ export async function voidGame(interaction: Message | ChatInputCommandInteractio
     }
 
     
-    const wsManager = global._wsManager as WebSocketManager;
-    if (!wsManager) {
+    const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
+    if (!resolvedWs) {
       await safeReply(interaction, errorEmbed('WebSocket manager not available.', 'Void Command Error'));
       return;
     }
     
-    const gameManager = new GameManager(interaction.client, wsManager);
+    const gameManager = new GameManager(interaction.client, resolvedWs!);
     await gameManager.voidGame(gameId, reason);
     
     await safeReply(interaction, successEmbed(`Game ${gameId} has been voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game channels will be deleted in 30 seconds.`, 'Game Voided'));

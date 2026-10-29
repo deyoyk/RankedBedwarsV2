@@ -1,9 +1,10 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, User as DiscordUser, Guild, ComponentType } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { PartyService, type PartyDocument } from '../../services/PartyService';
 
-export async function party(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function party(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let action: string;
   let targetUser: DiscordUser | undefined;
   let extraArgs: string[] | undefined;

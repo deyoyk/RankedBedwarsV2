@@ -1,4 +1,5 @@
 import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game, { IGame } from '../../models/Game';
 import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
@@ -12,7 +13,7 @@ interface StrikeRequestData {
   requesterId: string;
 }
 
-export async function strikerequest(interaction: Message | ChatInputCommandInteraction, args?: string[]) {
+export async function strikerequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   try {
     const requestData = await parseStrikeRequest(interaction, args);
     if (!requestData) return;
@@ -30,7 +31,7 @@ export async function strikerequest(interaction: Message | ChatInputCommandInter
   }
 }
 
-async function parseStrikeRequest(interaction: Message | ChatInputCommandInteraction, args?: string[]): Promise<StrikeRequestData | null> {
+async function parseStrikeRequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<StrikeRequestData | null> {
   const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 
   if (interaction instanceof ChatInputCommandInteraction) {
