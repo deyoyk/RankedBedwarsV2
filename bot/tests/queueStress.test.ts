@@ -335,6 +335,54 @@ describe('picking final revalidation', () => {
     const result = await (mgr as any).revalidateFinalTeams(teams, channel, { minElo: 0, maxElo: 3000 });
     expect(result !== null).toBe(expected);
   });
+
+  it('drops players who went offline in Minecraft', async () => {
+    jest.clearAllMocks();
+    const { PickingQueueManager } = await import('../src/Matchmaking/PickingQueueManager');
+    const { PresenceService } = require('../src/services/PresenceService');
+    PresenceService.evaluate.mockImplementation((ign: string) => (ign === 'C' ? 'offline' : 'online'));
+    try {
+      GameModel.findOne.mockImplementation(() => ({
+        select: () => ({ lean: async () => null }),
+        lean: async () => null,
+      }));
+      UserModel.find.mockImplementation(() => chainable(
+        ['a', 'b', 'c', 'd'].map(id => ({ discordId: id, ign: id.toUpperCase(), isBanned: false, isFrozen: false, elo: 1000 }))
+      ));
+      const mgr = new PickingQueueManager({} as any, {} as any, wsManagerMock as any);
+      const channel = { members: { keys: () => ['a', 'b', 'c', 'd'][Symbol.iterator]() } } as any;
+      const result = await (mgr as any).revalidateFinalTeams(
+        { team1: ['a', 'b'], team2: ['c', 'd'] }, channel, { minElo: 0, maxElo: 3000 }
+      );
+      expect(result).toBeNull();
+    } finally {
+      PresenceService.evaluate.mockReturnValue('online');
+    }
+  });
+
+  it('lets players with unknown presence through to the online check', async () => {
+    jest.clearAllMocks();
+    const { PickingQueueManager } = await import('../src/Matchmaking/PickingQueueManager');
+    const { PresenceService } = require('../src/services/PresenceService');
+    PresenceService.evaluate.mockReturnValue('unknown');
+    try {
+      GameModel.findOne.mockImplementation(() => ({
+        select: () => ({ lean: async () => null }),
+        lean: async () => null,
+      }));
+      UserModel.find.mockImplementation(() => chainable(
+        ['a', 'b', 'c', 'd'].map(id => ({ discordId: id, ign: id.toUpperCase(), isBanned: false, isFrozen: false, elo: 1000 }))
+      ));
+      const mgr = new PickingQueueManager({} as any, {} as any, wsManagerMock as any);
+      const channel = { members: { keys: () => ['a', 'b', 'c', 'd'][Symbol.iterator]() } } as any;
+      const result = await (mgr as any).revalidateFinalTeams(
+        { team1: ['a', 'b'], team2: ['c', 'd'] }, channel, { minElo: 0, maxElo: 3000 }
+      );
+      expect(result).not.toBeNull();
+    } finally {
+      PresenceService.evaluate.mockReturnValue('online');
+    }
+  });
 });
 
 describe('random draft revalidation', () => {
@@ -370,4 +418,86 @@ describe('random draft revalidation', () => {
     GameModel.findOne.mockImplementation(() => { throw new Error('db down'); });
     expect(await (mgr as any).revalidateDraftedPlayers(['a', 'b'], queueData)).toEqual([]);
   });
+
+  it('drops players who went offline in Minecraft', async () => {
+    jest.clearAllMocks();
+    const { RandomQueueManager } = await import('../src/Matchmaking/RandomQueueManager');
+    const { PresenceService } = require('../src/services/PresenceService');
+    PresenceService.evaluate.mockImplementation((ign: string) => (ign === 'A' ? 'offline' : 'online'));
+    try {
+      const guild: any = {
+        channels: {
+          cache: new Map([[Q1, { id: Q1, isVoiceBased: () => true, members: new Map([['a', {}], ['b', {}]]) }]]),
+          fetch: jest.fn().mockResolvedValue(undefined),
+        },
+      };
+      const mgr = new RandomQueueManager({ guilds: { cache: { first: () => guild } } } as any, {} as any, wsManagerMock as any);
+      UserModel.find.mockImplementation(() => chainable([
+        { discordId: 'a', ign: 'A', isBanned: false, isFrozen: false, elo: 1000 },
+        { discordId: 'b', ign: 'B', isBanned: false, isFrozen: false, elo: 1000 },
+      ]));
+      GameModel.findOne.mockImplementation(() => ({
+        select: () => ({ lean: async () => null }),
+        lean: async () => null,
+      }));
+      const queueData = { channelId: Q1, maxPlayers: 8, minElo: 0, maxElo: 3000, isActive: true };
+      expect(await (mgr as any).revalidateDraftedPlayers(['a', 'b'], queueData)).toEqual(['b']);
+    } finally {
+      PresenceService.evaluate.mockReturnValue('online');
+    }
+  });
+});
+
+describe('verified voice moves', () => {
+  const VC = '1390000000000000001';
+
+  function voiceGuild(members: string[]) {
+    return {
+      channels: {
+        cache: new Map([[VC, {
+          id: VC,
+          isVoiceBased: () => true,
+          members: new Map(members.map(id => [id, {}])),
+        }]]),
+        fetch: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+  }
+
+  it('retries failed moves and reports who is still missing', async () => {
+    jest.clearAllMocks();
+    const { GameManager } = await import('../src/Matchmaking/GameManager');
+    const gm = new GameManager({} as any, wsManagerMock as any);
+    const moveMock = jest.fn()
+      .mockResolvedValueOnce([
+        { status: 'fulfilled', value: undefined },
+        { status: 'rejected', reason: new Error('rate limited') },
+      ])
+      .mockResolvedValue([
+        { status: 'fulfilled', value: undefined },
+        { status: 'fulfilled', value: undefined },
+      ]);
+    (gm as any).workersManager.moveMembers = moveMock;
+    const missing = await (gm as any).movePlayersToVoice(
+      { channels: voiceGuild(['a', 'b']).channels } as any, ['a', 'b'], VC
+    );
+    expect(missing).toEqual([]);
+    expect(moveMock).toHaveBeenCalledTimes(2);
+  }, 20000);
+
+  it('returns players that never arrive', async () => {
+    jest.clearAllMocks();
+    const { GameManager } = await import('../src/Matchmaking/GameManager');
+    const gm = new GameManager({} as any, wsManagerMock as any);
+    const moveMock = jest.fn().mockResolvedValue([
+      { status: 'fulfilled', value: undefined },
+      { status: 'fulfilled', value: undefined },
+    ]);
+    (gm as any).workersManager.moveMembers = moveMock;
+    const missing = await (gm as any).movePlayersToVoice(
+      { channels: voiceGuild(['a']).channels } as any, ['a', 'b'], VC
+    );
+    expect(missing).toEqual(['b']);
+    expect(moveMock).toHaveBeenCalledTimes(1);
+  }, 20000);
 });

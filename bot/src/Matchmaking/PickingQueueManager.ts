@@ -18,6 +18,7 @@ import { GameManager } from './GameManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
 import { WorkersManager } from '../managers/WorkersManager';
+import { PresenceService } from '../services/PresenceService';
 
 import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil, getPlayerIGNs as getPlayerIGNsUtil } from './utils';
 
@@ -540,16 +541,34 @@ export class PickingQueueManager {
     }
   }
 
-  private async moveAllToPickingVC(guild: Guild, playerIds: string[], vcId: string): Promise<void> {
+  private async moveAllToPickingVC(guild: Guild, playerIds: string[], vcId: string): Promise<string[]> {
+    const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
     try {
       console.log(`[PickingQueue] Moving ${playerIds.length} players to picking VC using WorkersManager`);
-      
-      
-      await this.workersManager.moveMembers(playerIds, vcId, 8); 
-      
-      console.log(`[PickingQueue] Successfully moved players to picking voice channel`);
+
+      const first = await this.workersManager.moveMembers(playerIds, vcId, 8);
+      let failed = playerIds.filter((_, i) => first[i]?.status === 'rejected');
+      if (failed.length > 0) {
+        await sleep(2000);
+        const retry = await this.workersManager.moveMembers(failed, vcId, 8);
+        failed = failed.filter((_, i) => retry[i]?.status === 'rejected');
+      }
+
+      const channel = guild.channels.cache?.get(vcId) ?? await guild.channels.fetch(vcId).catch(() => null);
+      let missing = failed;
+      if (channel && channel.isVoiceBased()) {
+        const present = new Set(channel.members.keys());
+        missing = playerIds.filter(id => !present.has(id));
+      }
+      if (missing.length > 0) {
+        console.warn(`[PickingQueue] ${missing.length} player(s) missing from picking VC ${vcId}: ${missing.join(', ')}`);
+      } else {
+        console.log(`[PickingQueue] Successfully moved players to picking voice channel`);
+      }
+      return missing;
     } catch (error) {
       console.error('[PickingQueue] Error moving players to picking VC:', error);
+      return [...playerIds];
     }
   }
 
@@ -1113,13 +1132,14 @@ export class PickingQueueManager {
         find: (filter: unknown) => unknown;
       };
       const userQuery: unknown = User.find({ discordId: { $in: drafted } });
-      const uq = userQuery as { select?: (fields: string) => { lean: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> }; lean?: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> };
+      const uq = userQuery as { select?: (fields: string) => { lean: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number; ign?: string }>> }; lean?: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number; ign?: string }>> };
       const users = typeof uq.select === 'function'
-        ? await uq.select('discordId isBanned isFrozen elo').lean()
-        : (typeof uq.lean === 'function' ? await uq.lean() : await userQuery as Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>);
+        ? await uq.select('discordId isBanned isFrozen elo ign').lean()
+        : (typeof uq.lean === 'function' ? await uq.lean() : await userQuery as Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number; ign?: string }>);
       const eligible = new Set(
         (users ?? [])
           .filter(u => !u.isBanned && !u.isFrozen && u.elo !== undefined && u.elo >= queueData.minElo && u.elo <= queueData.maxElo)
+          .filter(u => !u.ign || PresenceService.evaluate(u.ign) !== 'offline')
           .map(u => u.discordId)
       );
       const ineligible = drafted.filter(p => !eligible.has(p));

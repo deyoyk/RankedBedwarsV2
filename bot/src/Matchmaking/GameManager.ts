@@ -421,6 +421,11 @@ export class GameManager {
 
       const game = resources.game;
       const [team1IGNs, team2IGNs] = await this.getTeamsIGNs(game.team1, game.team2);
+      const expected = game.team1.length + game.team2.length;
+      const actual = team1IGNs.length + team2IGNs.length;
+      if (actual !== expected) {
+        console.warn(`[GameManager] Game ${gameId} warping with ${actual}/${expected} players resolved (some IGNs missing, game will start short-handed)`);
+      }
 
       this.sendWarpRequest(gameId.toString(), game.map, game.isRanked || false, team1IGNs, team2IGNs);
 
@@ -648,28 +653,51 @@ export class GameManager {
     resources: GameResources
   ): Promise<void> {
     try {
-      const movePromises = [
+      const [missing1, missing2] = await Promise.all([
         this.movePlayersToVoice(guild, team1, resources.team1Voice.id),
         this.movePlayersToVoice(guild, team2, resources.team2Voice.id)
-      ];
+      ]);
 
-      await Promise.allSettled(movePromises);
-      console.log(`[GameManager] Moved players to voice channels for game ${resources.gameId}`);
+      const missing = [...missing1, ...missing2];
+      if (missing.length > 0) {
+        console.warn(`[GameManager] Game ${resources.gameId} started with ${missing.length} player(s) missing from voice: ${missing.join(', ')}`);
+      } else {
+        console.log(`[GameManager] Moved players to voice channels for game ${resources.gameId}`);
+      }
 
     } catch (error) {
       console.error(`[GameManager] Error moving players to voice channels:`, error);
     }
   }
 
-  private async movePlayersToVoice(guild: Guild, playerIds: string[], voiceChannelId: string): Promise<void> {
+  private async movePlayersToVoice(guild: Guild, playerIds: string[], voiceChannelId: string): Promise<string[]> {
+    const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
     try {
       console.log(`[GameManager] Moving ${playerIds.length} players to voice channel ${voiceChannelId} using WorkersManager`);
 
-      await this.workersManager.moveMembers(playerIds, voiceChannelId, 7);  
+      const first = await this.workersManager.moveMembers(playerIds, voiceChannelId, 7);
+      let failed = playerIds.filter((_, i) => first[i]?.status === 'rejected');
+      if (failed.length > 0) {
+        await sleep(2000);
+        const retry = await this.workersManager.moveMembers(failed, voiceChannelId, 7);
+        failed = failed.filter((_, i) => retry[i]?.status === 'rejected');
+      }
 
-      console.log(`[GameManager] Successfully moved players to voice channel`);
+      const channel = guild.channels.cache?.get(voiceChannelId) ?? await guild.channels.fetch(voiceChannelId).catch(() => null);
+      let missing = failed;
+      if (channel && channel.isVoiceBased()) {
+        const present = new Set(channel.members.keys());
+        missing = playerIds.filter(id => !present.has(id));
+      }
+      if (missing.length > 0) {
+        console.warn(`[GameManager] ${missing.length} player(s) missing from voice channel ${voiceChannelId} after move: ${missing.join(', ')}`);
+      } else {
+        console.log(`[GameManager] Successfully moved players to voice channel`);
+      }
+      return missing;
     } catch (error) {
       console.error('[GameManager] Error in movePlayersToVoice:', error);
+      return [...playerIds];
     }
   }
 

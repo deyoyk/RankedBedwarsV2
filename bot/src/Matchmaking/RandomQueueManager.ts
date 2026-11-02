@@ -6,6 +6,7 @@ import { MapService } from '../managers/MapManager';
 import { GameManager } from './GameManager';
 import config from '../config/config';
 import { WorkersManager } from '../managers/WorkersManager';
+import { PresenceService } from '../services/PresenceService';
 import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil } from './utils';
 
 interface QueueLike {
@@ -326,13 +327,14 @@ export class RandomQueueManager {
         find: (filter: unknown) => unknown;
       };
       const userQuery: unknown = User.find({ discordId: { $in: alive } });
-      const uq = userQuery as { select?: (fields: string) => { lean: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> }; lean?: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> };
+      const uq = userQuery as { select?: (fields: string) => { lean: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number; ign?: string }>> }; lean?: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number; ign?: string }>> };
       const users = typeof uq.select === 'function'
-        ? await uq.select('discordId isBanned isFrozen elo').lean()
-        : (typeof uq.lean === 'function' ? await uq.lean() : await userQuery as Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>);
+        ? await uq.select('discordId isBanned isFrozen elo ign').lean()
+        : (typeof uq.lean === 'function' ? await uq.lean() : await userQuery as Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number; ign?: string }>);
       const eligible = new Set(
         (users ?? [])
           .filter(u => !u.isBanned && !u.isFrozen && u.elo !== undefined && u.elo >= queueData.minElo && u.elo <= queueData.maxElo)
+          .filter(u => !u.ign || PresenceService.evaluate(u.ign) !== 'offline')
           .map(u => u.discordId)
       );
       alive = alive.filter(p => eligible.has(p));
