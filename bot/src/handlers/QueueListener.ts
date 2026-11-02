@@ -66,6 +66,7 @@ export class QueueListener {
   private processingLocks: Map<string, NodeJS.Timeout> = new Map();
   private queueChannelCache: Map<string, { exists: boolean; ts: number }> = new Map();
   private rescanKeys: Map<string, { key: string; ts: number }> = new Map();
+  private playerLocks: Map<string, Promise<void>> = new Map();
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
   private readonly CHANNEL_CACHE_TTL = 30000;
@@ -391,20 +392,76 @@ export class QueueListener {
       const userId = newState.member?.id;
       if (!userId) return;
 
-      const [wasQueueChannel, isQueueChannel] = await Promise.all([
-        this.isQueueChannel(oldState.channelId),
-        this.isQueueChannel(newState.channelId)
-      ]);
+      await this.withPlayerLock(userId, async () => {
+        const [wasQueueChannel, isQueueChannel] = await Promise.all([
+          this.isQueueChannel(oldState.channelId),
+          this.isQueueChannel(newState.channelId)
+        ]);
 
-      if (!wasQueueChannel && isQueueChannel) {
-        await this.handleQueueJoin(newState);
-      } else if (wasQueueChannel && !isQueueChannel) {
-        await this.handleQueueLeave(oldState);
-      } else if (wasQueueChannel && isQueueChannel && oldState.channelId !== newState.channelId) {
-        await this.handleQueueSwitch(oldState, newState);
-      }
+        if (!wasQueueChannel && isQueueChannel) {
+          await this.handleQueueJoin(newState);
+        } else if (wasQueueChannel && !isQueueChannel) {
+          await this.handleQueueLeave(oldState);
+        } else if (wasQueueChannel && isQueueChannel && oldState.channelId !== newState.channelId) {
+          await this.handleQueueSwitch(oldState, newState);
+        }
+      });
     } catch (error) {
       console.error('[QueueListener] Error in handleVoiceStateUpdate:', error);
+    }
+  }
+
+  private async withPlayerLock<T>(userId: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.playerLocks.get(userId) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const current = new Promise<void>(resolve => { release = resolve; });
+    const chain = previous.then(() => current);
+    this.playerLocks.set(userId, chain);
+    await previous;
+    try {
+      return await fn();
+    } finally {
+      release();
+      void chain.then(() => {
+        if (this.playerLocks.get(userId) === chain) {
+          this.playerLocks.delete(userId);
+        }
+      });
+    }
+  }
+
+  private removeFromOtherQueues(userIds: string[], exceptChannelId: string): void {
+    if (userIds.length === 0) return;
+    const remove = new Set(userIds);
+    for (const [channelId, state] of this.queueStates) {
+      if (channelId === exceptChannelId || state.players.length === 0) continue;
+      const before = state.players.length;
+      state.players = state.players.filter(p => !remove.has(p));
+      if (state.players.length === before) continue;
+      for (const [partyId, members] of state.parties) {
+        if (members.some(m => remove.has(m))) {
+          state.parties.delete(partyId);
+        }
+      }
+      state.lastUpdate = Date.now();
+      queuePlayers.set(channelId, [...state.players]);
+      console.log(`[QueueListener] Removed ${before - state.players.length} stale entrant(s) from queue ${channelId} (now in ${exceptChannelId})`);
+    }
+  }
+
+  private async isPlayerInActiveGame(discordId: string): Promise<{ gameId: number } | null> {
+    try {
+      const game = await resolveQuery<{ gameId: number } | null>(
+        Game.findOne({
+          $or: [{ team1: discordId }, { team2: discordId }],
+          state: { $in: ['pending', 'active'] }
+        }),
+        'gameId'
+      );
+      return game ?? null;
+    } catch (error) {
+      console.error('[QueueListener] Error checking active game:', error);
+      return null;
     }
   }
 
@@ -500,6 +557,15 @@ export class QueueListener {
           processing: false
         };
         this.queueStates.set(queue.channelId, queueState);
+      }
+
+      if (!user.partyId) {
+        const activeGame = await this.isPlayerInActiveGame(userId);
+        if (activeGame) {
+          await this.moveToWaiting(state, `you are already in game #${activeGame.gameId}`);
+          return;
+        }
+        this.removeFromOtherQueues([userId], queue.channelId);
       }
 
       const wasQueueFull = queueState.players.length >= queue.maxPlayers;
@@ -622,6 +688,7 @@ export class QueueListener {
       }
 
       queueState.parties.set(partyId, partyMembers);
+      this.removeFromOtherQueues(partyMembers, queue.channelId);
 
       for (const memberId of partyMembers) {
         if (!queueState.players.includes(memberId)) {

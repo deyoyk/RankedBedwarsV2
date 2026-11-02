@@ -1199,6 +1199,29 @@ export class WebSocketManager {
         return;
       }
 
+      const Game = (await import('../models/Game')).default;
+      let activeGame: { gameId: number } | null = null;
+      try {
+        const activeQuery: unknown = Game.findOne({
+          $or: [{ team1: user.discordId }, { team2: user.discordId }],
+          state: { $in: ['pending', 'active'] }
+        });
+        const aq = activeQuery as { select?: (fields: string) => { lean: () => Promise<{ gameId: number } | null> }; lean?: () => Promise<{ gameId: number } | null> };
+        activeGame = typeof aq.select === 'function'
+          ? await aq.select('gameId').lean()
+          : (typeof aq.lean === 'function' ? await aq.lean() : (await activeQuery as { gameId: number } | null));
+      } catch (error) {
+        console.error(`[WebSocketManager] Error checking active game for ${ign}:`, error);
+      }
+      if (activeGame) {
+        this.send({
+          type: 'queuefromingame_fail',
+          reason: `You are already in game #${activeGame.gameId}`,
+          uuid
+        } as QueueFromInGameFailurePayload);
+        return;
+      }
+
       
       const guild = this.discordClient?.guilds.cache.first();
       if (!guild) {
@@ -1260,7 +1283,17 @@ export class WebSocketManager {
       
       const { queuePlayers } = await import('../types/queuePlayersMemory');
 
-      
+      for (const queue of suitableQueues) {
+        if ((queuePlayers.get(queue.channelId) || []).includes(user.discordId)) {
+          console.log(`[WebSocketManager] User ${ign} is already queued, skipping move`);
+          this.send({
+            type: 'queuefromingame_success',
+            uuid
+          } as QueueFromInGameSuccessPayload);
+          return;
+        }
+      }
+
       let targetQueue = suitableQueues[0];
       let maxPlayers = 0;
 
@@ -1310,7 +1343,12 @@ export class WebSocketManager {
         
         await member.voice.setChannel(queueVoiceChannel);
 
-        
+        for (const [channelId, listed] of queuePlayers) {
+          if (channelId !== targetQueue.channelId && listed.includes(user.discordId)) {
+            queuePlayers.set(channelId, listed.filter(id => id !== user.discordId));
+          }
+        }
+
         const currentPlayers = queuePlayers.get(targetQueue.channelId) || [];
         if (!currentPlayers.includes(user.discordId)) {
           currentPlayers.push(user.discordId);

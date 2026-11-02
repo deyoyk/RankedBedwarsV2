@@ -377,12 +377,16 @@ export class PickingQueueManager {
         throw new Error('Picking process failed or was cancelled');
       }
 
-      
+      const verifiedFinalTeams = await this.revalidateFinalTeams(finalTeams, resources!.pickingChannel);
+      if (!verifiedFinalTeams) {
+        throw new Error('Final team revalidation failed (players left or entered a game during picking)');
+      }
+
       await this.gameManager.createGame(
         gameId,
         queueData,
-        finalTeams.team1,
-        finalTeams.team2,
+        verifiedFinalTeams.team1,
+        verifiedFinalTeams.team2,
         selectedMap
       );
 
@@ -1078,6 +1082,49 @@ export class PickingQueueManager {
       
     } catch (error) {
       console.error(`[PickingQueue] Game ${session.gameId} - Error fixing team imbalance:`, error);
+    }
+  }
+
+  private async revalidateFinalTeams(
+    teams: { team1: string[]; team2: string[] },
+    pickingChannel: VoiceChannel
+  ): Promise<{ team1: string[]; team2: string[] } | null> {
+    try {
+      const team1 = [...new Set(teams.team1)];
+      const team2 = [...new Set(teams.team2)];
+      if (team1.length !== teams.team1.length || team2.length !== teams.team2.length) {
+        console.warn('[PickingQueue] Final revalidation failed: duplicate players on teams');
+        return null;
+      }
+      const overlap = team1.some(p => team2.includes(p));
+      if (overlap) {
+        console.warn('[PickingQueue] Final revalidation failed: player on both teams');
+        return null;
+      }
+      const present = new Set(pickingChannel.members.keys());
+      const drafted = [...team1, ...team2];
+      const missing = drafted.filter(p => !present.has(p));
+      if (missing.length > 0) {
+        console.warn(`[PickingQueue] Final revalidation failed: ${missing.length} player(s) left picking: ${missing.join(', ')}`);
+        return null;
+      }
+      const Game = (await import('../models/Game')).default as unknown as {
+        findOne: (filter: unknown) => unknown;
+      };
+      const clashQuery: unknown = Game.findOne({
+        $or: [{ team1: { $in: drafted } }, { team2: { $in: drafted } }],
+        state: { $in: ['pending', 'active'] }
+      });
+      const q = clashQuery as { select?: (fields: string) => { lean: () => Promise<unknown> }; lean?: () => Promise<unknown> };
+      const clash = typeof q.select === 'function' ? await q.select('gameId').lean() : (typeof q.lean === 'function' ? await q.lean() : await clashQuery);
+      if (clash) {
+        console.warn('[PickingQueue] Final revalidation failed: a drafted player entered another game during picking');
+        return null;
+      }
+      return { team1, team2 };
+    } catch (error) {
+      console.error('[PickingQueue] Error in final team revalidation:', error);
+      return null;
     }
   }
 

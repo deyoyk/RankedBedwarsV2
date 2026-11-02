@@ -8,6 +8,7 @@ import { PickingQueueManager } from './PickingQueueManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { PresenceService } from '../services/PresenceService';
+import { claimPlayers, releasePlayers, isClaimedByOther } from './draftClaims';
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout;
@@ -63,6 +64,7 @@ interface ValidationCtx {
   userMap: Map<string, ValidatedUserDoc>;
   partyMap: Map<string, ValidatedPartyDoc>;
   partyMemberMap: Map<string, ValidatedUserDoc>;
+  inGameSet: Set<string>;
 }
 
 async function resolveLean<T>(query: unknown): Promise<T> {
@@ -320,6 +322,7 @@ export class CentralizedMatchmaker {
 
     const errors: string[] = [];
     let gamesCreated = 0;
+    let validPlayers: string[] = [];
 
     try {
       const queue = await this.getQueueSafely(queueId);
@@ -328,20 +331,25 @@ export class CentralizedMatchmaker {
         return { success: false, gamesCreated: 0, errors };
       }
 
-      const players = queuePlayers.get(queueId) || [];
-      state.priority = this.calculateQueuePriority(players.length, queue.maxPlayers, metrics.lastProcessedAt);
+      const rawPlayers = queuePlayers.get(queueId) || [];
+      state.priority = this.calculateQueuePriority(rawPlayers.length, queue.maxPlayers, metrics.lastProcessedAt);
+      const players = [...new Set(rawPlayers)];
+      if (players.length !== rawPlayers.length) {
+        queuePlayers.set(queueId, players);
+      }
 
       if (players.length < queue.maxPlayers) {
         return { success: true, gamesCreated: 0 };
       }
 
-      let validPlayers: string[];
+      let validated: string[];
       try {
-        validPlayers = await withTimeout(this.validatePlayers(players, queue), 5000, 'Validation');
+        validated = await withTimeout(this.validatePlayers(players, queue), 5000, 'Validation');
       } catch (validationError) {
         console.warn(`[CentralizedMatchmaker] Player validation failed for ${queueId}:`, validationError);
         return { success: false, gamesCreated: 0, errors: ['Player validation timed out'] };
       }
+      validPlayers = validated;
 
       if (validPlayers.length !== players.length) {
         const currentQueuePlayers = queuePlayers.get(queueId) || [];
@@ -364,8 +372,14 @@ export class CentralizedMatchmaker {
         return { success: true, gamesCreated: 0 };
       }
 
+      claimPlayers(validPlayers, queueId);
+      const runnable = validPlayers.filter(p => !isClaimedByOther(p, queueId));
+      if (runnable.length < queue.maxPlayers) {
+        return { success: true, gamesCreated: 0 };
+      }
+
       const queueType = this.determineQueueType(queue);
-      const maxPossibleGames = Math.floor(validPlayers.length / queue.maxPlayers);
+      const maxPossibleGames = Math.floor(runnable.length / queue.maxPlayers);
       const capacityLimit = this.MAX_CONCURRENT_GAMES - activeGames - gameBuffer;
       const maxGamesForThisQueue = Math.min(maxPossibleGames, capacityLimit, 10);
 
@@ -379,8 +393,8 @@ export class CentralizedMatchmaker {
       }
 
       const processingPromise: Promise<QueueProcessingResult> = isPickingQueue
-        ? this.pickingQueueManager.processQueue(validPlayers, queue, maxGamesForThisQueue)
-        : this.randomQueueManager.processQueue(validPlayers, queue, maxGamesForThisQueue);
+        ? this.pickingQueueManager.processQueue(runnable, queue, maxGamesForThisQueue)
+        : this.randomQueueManager.processQueue(runnable, queue, maxGamesForThisQueue);
 
       let processingResult: QueueProcessingResult;
       try {
@@ -413,11 +427,11 @@ export class CentralizedMatchmaker {
       if (gamesCreated > 0) {
         const usedPlayers = new Set(processingResult.usedPlayers);
         const currentQueuePlayers = queuePlayers.get(queueId) || [];
-        const snapshotSet = new Set(validPlayers);
+        const snapshotSet = new Set(runnable);
         const presentAfter = await this.getPresentMembers(queueId);
         const stillPresent = (p: string) => !presentAfter || presentAfter.has(p);
         const joinedDuringProcessing = currentQueuePlayers.filter(p => !snapshotSet.has(p) && stillPresent(p));
-        const remainingPlayers = validPlayers.filter(p => !usedPlayers.has(p) && stillPresent(p));
+        const remainingPlayers = runnable.filter(p => !usedPlayers.has(p) && stillPresent(p));
         queuePlayers.set(queueId, [...remainingPlayers, ...joinedDuringProcessing]);
       }
 
@@ -455,6 +469,7 @@ export class CentralizedMatchmaker {
 
     } finally {
       const processingTime = Date.now() - startTime;
+      releasePlayers(validPlayers, queueId);
       state.isProcessing = false;
       state.lastProcessed = Date.now();
 
@@ -562,6 +577,26 @@ export class CentralizedMatchmaker {
       }
       const userMap = new Map<string, ValidatedUserDoc>(userDocs.map(u => [u.discordId, u]));
 
+      const inGameSet = new Set<string>();
+      try {
+        const Game = (await import('../models/Game')).default as unknown as {
+          find: (filter: unknown) => unknown;
+        };
+        const activeGames = (await resolveLean<Array<{ team1?: string[]; team2?: string[] }>>(
+          Game.find({
+            $or: [{ team1: { $in: pendingIds } }, { team2: { $in: pendingIds } }],
+            state: { $in: ['pending', 'active'] }
+          })
+        )) ?? [];
+        for (const game of activeGames ?? []) {
+          for (const id of [...(game.team1 ?? []), ...(game.team2 ?? [])]) {
+            inGameSet.add(id);
+          }
+        }
+      } catch (error) {
+        console.error('[CentralizedMatchmaker] Error batch-fetching active games for validation:', error);
+      }
+
       const partyIds = [...new Set(userDocs.map(u => u.partyId).filter(Boolean))];
       const partyMap = new Map<string, ValidatedPartyDoc>();
       if (partyIds.length > 0) {
@@ -608,7 +643,7 @@ export class CentralizedMatchmaker {
         }
       }
 
-      const ctx = { userMap, partyMap, partyMemberMap };
+      const ctx = { userMap, partyMap, partyMemberMap, inGameSet };
       const checkedParties = new Set<string>();
       const invalidParties = new Set<string>();
       const presenceTasks: Array<() => Promise<void>> = [];
@@ -693,6 +728,11 @@ export class CentralizedMatchmaker {
 
     if (user.isBanned || user.isFrozen) {
       console.warn(`[CentralizedMatchmaker] User ${playerId} is banned or frozen`);
+      return { decision: 'invalid' };
+    }
+
+    if (ctx.inGameSet.has(playerId)) {
+      console.warn(`[CentralizedMatchmaker] User ${playerId} is already in an active game`);
       return { decision: 'invalid' };
     }
 
