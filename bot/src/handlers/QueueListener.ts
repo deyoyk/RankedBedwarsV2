@@ -219,8 +219,19 @@ export class QueueListener {
         }
       }
 
+      const inGameIds = await this.findInGamePlayers(state.players);
+      if (inGameIds.size > 0) {
+        for (const playerId of inGameIds) {
+          console.log(`[QueueListener] Player ${playerId} is in an active game, removing from queue ${queueId}`);
+        }
+        for (const [partyId, members] of validParties) {
+          if (members.some(m => inGameIds.has(m))) {
+            validParties.delete(partyId);
+          }
+        }
+      }
 
-      state.players = validPlayers;
+      state.players = validPlayers.filter(p => !inGameIds.has(p));
       state.parties = validParties;
       state.lastUpdate = Date.now();
 
@@ -415,9 +426,13 @@ export class QueueListener {
     const previous = this.playerLocks.get(userId) ?? Promise.resolve();
     let release: () => void = () => {};
     const current = new Promise<void>(resolve => { release = resolve; });
-    const chain = previous.then(() => current);
+    const chain = previous.then(() => current, () => current);
     this.playerLocks.set(userId, chain);
-    await previous;
+    try {
+      await previous;
+    } catch {
+      console.warn(`[QueueListener] Recovered a poisoned player lock for ${userId}`);
+    }
     try {
       return await fn();
     } finally {
@@ -447,6 +462,30 @@ export class QueueListener {
       queuePlayers.set(channelId, [...state.players]);
       console.log(`[QueueListener] Removed ${before - state.players.length} stale entrant(s) from queue ${channelId} (now in ${exceptChannelId})`);
     }
+  }
+
+  private async findInGamePlayers(discordIds: string[]): Promise<Set<string>> {
+    const inGame = new Set<string>();
+    if (discordIds.length === 0) return inGame;
+    try {
+      const Game = (await import('../models/Game')).default as unknown as {
+        find: (filter: unknown) => unknown;
+      };
+      const games = await resolveQuery<Array<{ team1?: string[]; team2?: string[] }>>(
+        Game.find({
+          $or: [{ team1: { $in: discordIds } }, { team2: { $in: discordIds } }],
+          state: { $in: ['pending', 'active'] }
+        })
+      );
+      for (const game of games ?? []) {
+        for (const id of [...(game.team1 ?? []), ...(game.team2 ?? [])]) {
+          inGame.add(id);
+        }
+      }
+    } catch (error) {
+      console.error('[QueueListener] Error checking in-game players:', error);
+    }
+    return inGame;
   }
 
   private async isPlayerInActiveGame(discordId: string): Promise<{ gameId: number } | null> {

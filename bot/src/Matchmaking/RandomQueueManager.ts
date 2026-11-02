@@ -76,7 +76,23 @@ export class RandomQueueManager {
             break;
           }
 
-          
+          const presentTeam = await this.revalidateDraftedPlayers(
+            [...teamResult.team1, ...teamResult.team2],
+            queueData.channelId
+          );
+          if (presentTeam.length !== queueData.maxPlayers) {
+            const missing = new Set(
+              [...teamResult.team1, ...teamResult.team2].filter(p => !presentTeam.includes(p))
+            );
+            if (missing.size === 0) {
+              console.warn(`[RandomQueue] Invalid draft after revalidation, breaking`);
+              break;
+            }
+            console.warn(`[RandomQueue] ${missing.size} drafted player(s) left or entered a game, reselecting`);
+            availablePlayers = availablePlayers.filter(p => !missing.has(p));
+            continue;
+          }
+
           const gameId = await this.gameManager.getNextGameId();
           const selectedMap = await this.selectRandomMap(queueData);
           
@@ -291,6 +307,42 @@ export class RandomQueueManager {
 
   private async selectRandomMap(queueData: QueueLike): Promise<string> {
     return selectRandomMapUtil(this.mapService, queueData);
+  }
+
+  private async revalidateDraftedPlayers(drafted: string[], queueChannelId: string): Promise<string[]> {
+    try {
+      const unique = [...new Set(drafted)];
+      const guild = this.client.guilds.cache.first();
+      let present: Set<string> | null = null;
+      if (guild) {
+        const channel = guild.channels.cache?.get(queueChannelId) ?? await guild.channels.fetch(queueChannelId).catch(() => null);
+        if (channel && channel.isVoiceBased()) {
+          present = new Set(channel.members.keys());
+        }
+      }
+      let alive = present ? unique.filter(p => present.has(p)) : unique;
+      if (alive.length === 0) return [];
+      const Game = (await import('../models/Game')).default as unknown as {
+        findOne: (filter: unknown) => unknown;
+      };
+      const clashQuery: unknown = Game.findOne({
+        $or: [{ team1: { $in: alive } }, { team2: { $in: alive } }],
+        state: { $in: ['pending', 'active'] }
+      });
+      const q = clashQuery as { select?: (fields: string) => { lean: () => Promise<unknown> }; lean?: () => Promise<unknown> };
+      const clash = typeof q.select === 'function'
+        ? await q.select('team1 team2').lean()
+        : (typeof q.lean === 'function' ? await q.lean() : await clashQuery);
+      const busy = clash as unknown as { team1?: string[]; team2?: string[] } | null;
+      if (busy) {
+        const busySet = new Set([...(busy.team1 ?? []), ...(busy.team2 ?? [])]);
+        alive = alive.filter(p => !busySet.has(p));
+      }
+      return alive;
+    } catch (error) {
+      console.error('[RandomQueue] Error revalidating drafted players, failing closed:', error);
+      return [];
+    }
   }
 
   private async buildGameStartEmbed(

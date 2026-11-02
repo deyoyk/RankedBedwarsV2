@@ -387,6 +387,7 @@ export class WebSocketManager {
   private checkPlayerCallbacks: Map<string, Set<(online: boolean, original_ign_case?: string) => void>> = new Map();
   private listeners: { [type: string]: Set<(msg: IncomingPayload) => void> } = {};
   private globalHandlers: { [type: string]: ((msg: IncomingPayload) => void) | undefined } = {};
+  private queueFromInGameLocks: Map<string, Promise<void>> = new Map();
   private gameManager: GameManagerLike | null = null;
   private queueStatusInterval: NodeJS.Timeout | null = null;
   private heartbeatInterval: NodeJS.Timeout | null = null;
@@ -1172,6 +1173,34 @@ export class WebSocketManager {
   }
 
   private async handleQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
+    const key = (msg?.ign || '').toLowerCase();
+    if (!key) {
+      await this.processQueueFromInGame(msg);
+      return;
+    }
+    const previous = this.queueFromInGameLocks.get(key) ?? Promise.resolve();
+    let release: () => void = () => {};
+    const current = new Promise<void>(resolve => { release = resolve; });
+    const chain = previous.then(() => current, () => current);
+    this.queueFromInGameLocks.set(key, chain);
+    try {
+      await previous;
+    } catch {
+      console.warn(`[WebSocketManager] Recovered a poisoned queue lock for ${key}`);
+    }
+    try {
+      await this.processQueueFromInGame(msg);
+    } finally {
+      release();
+      void chain.then(() => {
+        if (this.queueFromInGameLocks.get(key) === chain) {
+          this.queueFromInGameLocks.delete(key);
+        }
+      });
+    }
+  }
+
+  private async processQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
     try {
       console.log(`[WebSocketManager] Handling queue from in game: ${JSON.stringify(msg)}`);
       const { ign, uuid } = msg;
