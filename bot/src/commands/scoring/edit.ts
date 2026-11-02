@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import UserModel, { type IUser } from '../../models/User';
+import config from '../../config/config';
 
 
 const EDITABLE_STATS = {
@@ -42,7 +43,7 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
     if (!args || args.length !== 3) {
       const availableStats = Object.keys(EDITABLE_STATS).join(', ');
       await safeReply(interaction, errorEmbed(
-        `Usage: =edit <@user> <stat> <value>\n\nAvailable stats:\n${availableStats}`, 
+        `Usage: ${config.prefix}edit <@user> <stat> <value>\n\nAvailable stats:\n${availableStats}`, 
         'Edit Command Usage Error'
       ));
       return;

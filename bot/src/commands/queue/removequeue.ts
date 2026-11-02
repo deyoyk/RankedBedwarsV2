@@ -4,6 +4,7 @@ import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
 import { safeReply } from '../../utils/safeReply';
+import config from '../../config/config';
 
 
 export async function removequeue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
@@ -13,7 +14,7 @@ export async function removequeue(interaction: Message | ChatInputCommandInterac
     channelId = interaction.options.getString('channel_id', true);
   } else {
     if (!args || args.length !== 1) {
-      await safeReply(interaction, errorEmbed('Usage: =removequeue <channelId>', 'Queue Removal Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}removequeue <channelId>`, 'Queue Removal Error'));
       return;
     }
     channelId = args[0];

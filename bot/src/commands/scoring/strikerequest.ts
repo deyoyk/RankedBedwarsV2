@@ -42,7 +42,7 @@ async function parseStrikeRequest(interaction: Message | ChatInputCommandInterac
     return { gameId, targetId: target.id, reason, requesterId };
   } else {
     if (!args || args.length < 3) {
-      await safeReply(interaction, 'Usage: =strikerequest <gameid> <target> <reason>');
+      await safeReply(interaction, `Usage: ${configuration.prefix}strikerequest <gameid> <target> <reason>`);
       return null;
     }
 

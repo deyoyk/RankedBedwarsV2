@@ -4,6 +4,7 @@ import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import Game from '../../models/Game';
 import User from '../../models/User';
+import config from '../../config/config';
 
  
 
@@ -18,7 +19,7 @@ export async function call(interaction: Message | ChatInputCommandInteraction, a
     senderId = interaction.user.id;
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =call <@user>', 'Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}call <@user>`, 'Usage Error'));
       return;
     }
     const userArg = args[0];

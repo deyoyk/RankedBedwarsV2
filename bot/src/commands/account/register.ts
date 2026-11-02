@@ -4,6 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
+import config from '../../config/config';
 
  
 
@@ -17,7 +18,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
     discordId = interaction.user.id;
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =register <ign>', 'Register Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}register <ign>`, 'Register Usage Error'));
       return;
     }
     ign = args[0];

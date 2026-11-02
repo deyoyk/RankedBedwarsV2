@@ -4,6 +4,7 @@ import { GameManager } from '../../Matchmaking/GameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import config from '../../config/config';
 
  
 
@@ -17,12 +18,12 @@ export async function voidGame(interaction: Message | ChatInputCommandInteractio
     reason = interaction.options.getString('reason') || `voided by <@${interaction.user.id}>: no reason provided`;
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =void <gameId> [reason]', 'Void Command Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}void <gameId> [reason]`, 'Void Command Error'));
       return;
     }
     gameId = parseInt(args[0], 10);
     if (!Number.isInteger(gameId) || gameId <= 0) {
-      await safeReply(interaction, errorEmbed('Usage: =void <gameId> [reason]', 'Void Command Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}void <gameId> [reason]`, 'Void Command Error'));
       return;
     }
     reason = args.slice(1).join(' ') || `voided by <@${interaction.author.id}>: no reason provided`;

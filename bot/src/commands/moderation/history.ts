@@ -1,6 +1,7 @@
 import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
+import config from '../../config/config';
 
 interface HistoryRecordView {
   reason: string;
@@ -30,7 +31,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
       const embed = new EmbedBuilder()
         .setColor('#00AAAA')
         .setTitle('History Command Error')
-        .setDescription('Usage: =history <userId|mention|IGN> <type>')
+        .setDescription(`Usage: ${config.prefix}history <userId|mention|IGN> <type>`)
         .setTimestamp();
       await safeReply(interaction, { embeds: [embed] });
       return;

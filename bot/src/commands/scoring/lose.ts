@@ -6,6 +6,7 @@ import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
 import { ensureUserStats, computeWlr } from '../../utils/userStats';
+import config from '../../config/config';
 
 export async function lose(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetId: string;
@@ -19,7 +20,7 @@ export async function lose(interaction: Message | ChatInputCommandInteraction, a
     targetId = user.id;
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =lose <@user>', 'Lose Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}lose <@user>`, 'Lose Usage Error'));
       return;
     }
     const mentionMatch = args[0].match(/^<@!?(\d+)>$/);

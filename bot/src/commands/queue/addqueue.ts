@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import Queue from '../../models/Queue';
+import config from '../../config/config';
 
 
 
@@ -30,7 +31,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
     }
   } else {
     if (!args || args.length < 6) {
-      await safeReply(interaction, errorEmbed('Usage: =addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <isPicking> [bypassRoles]', 'Queue Creation Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <isPicking> [bypassRoles]`, 'Queue Creation Error'));
       return;
     }
     channelId = args[0];

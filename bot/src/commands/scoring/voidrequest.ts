@@ -40,7 +40,7 @@ async function parseVoidRequest(interaction: Message | ChatInputCommandInteracti
     return { gameId, reason, requesterId };
   } else {
     if (!args || args.length < 2) {
-      await safeReply(interaction, 'Usage: =voidrequest <gameid> <reason>');
+      await safeReply(interaction, `Usage: ${configuration.prefix}voidrequest <gameid> <reason>`);
       return null;
     }
 

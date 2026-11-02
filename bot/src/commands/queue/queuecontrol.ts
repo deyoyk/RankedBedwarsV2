@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Queue from '../../models/Queue';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed } from '../../utils/betterembed';
+import config from '../../config/config';
 
 function addQueueOptions(sub: SlashCommandSubcommandBuilder) {
   return sub
@@ -41,14 +42,14 @@ export async function queuecontrol(interaction: Message | ChatInputCommandIntera
     queueId = interaction.options.getString('queue_id') ?? undefined;
   } else {
     if (!args || args.length < 2) {
-      await safeReply(interaction, errorEmbed('Usage: =queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]', 'QueueControl Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'QueueControl Usage Error'));
       return;
     }
     sub = args[0].toLowerCase();
     type = args[1].toLowerCase();
     queueId = args[2];
     if ((sub !== 'enable' && sub !== 'disable') || (type !== 'ranked' && type !== 'unranked' && type !== 'specific')) {
-      await safeReply(interaction, errorEmbed('Usage: =queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]', 'QueueControl Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'QueueControl Usage Error'));
       return;
     }
   }

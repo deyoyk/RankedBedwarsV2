@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed } from '../../utils/betterembed';
+import config from '../../config/config';
 
 export async function startseason(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
   void wsManager;
@@ -18,7 +19,7 @@ export async function startseason(interaction: Message | ChatInputCommandInterac
     description = interaction.options.getString('description') || '';
   } else {
     if (!args || args.length < 3) {
-      await safeReply(interaction, errorEmbed('Usage: =startseason <season> <chapter> <name> [description]', 'StartSeason Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}startseason <season> <chapter> <name> [description]`, 'StartSeason Usage Error'));
       return;
     }
     seasonNumber = parseInt(args[0], 10);
@@ -26,7 +27,7 @@ export async function startseason(interaction: Message | ChatInputCommandInterac
     name = args[2];
     description = args.slice(3).join(' ') || '';
     if (!Number.isInteger(seasonNumber) || !Number.isInteger(chapterNumber)) {
-      await safeReply(interaction, errorEmbed('Usage: =startseason <season> <chapter> <name> [description]', 'StartSeason Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}startseason <season> <chapter> <name> [description]`, 'StartSeason Usage Error'));
       return;
     }
   }

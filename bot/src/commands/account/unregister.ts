@@ -4,6 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
+import config from '../../config/config';
 
 
 export async function unregister(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
@@ -14,7 +15,7 @@ export async function unregister(interaction: Message | ChatInputCommandInteract
     targetUserId = user.id;
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =unregister <@user>', 'Unregister Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}unregister <@user>`, 'Unregister Error'));
       return;
     }
     const userArg = args[0];

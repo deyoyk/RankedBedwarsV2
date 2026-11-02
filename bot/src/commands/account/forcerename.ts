@@ -5,6 +5,7 @@ import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
 import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
+import config from '../../config/config';
 
 
 
@@ -18,7 +19,7 @@ export async function forcerename(interaction: Message | ChatInputCommandInterac
     newIgn = interaction.options.getString('new_ign', true);
   } else {
     if (!args || args.length < 2) {
-      await safeReply(interaction, errorEmbed('Usage: =forcerename <user> <newign>', 'Force Rename Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}forcerename <user> <newign>`, 'Force Rename Error'));
       return;
     }
     targetUser = parseDiscordId(args[0]);

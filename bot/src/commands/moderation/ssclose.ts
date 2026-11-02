@@ -12,7 +12,7 @@ export async function ssclose(interaction: Message | ChatInputCommandInteraction
     reason = interaction.options.getString('reason', true);
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =ssclose <reason>', 'Screenshare Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}ssclose <reason>`, 'Screenshare Error'));
       return;
     }
     reason = args.join(' ');

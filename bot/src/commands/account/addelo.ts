@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { safeReply } from '../../utils/safeReply';
+import config from '../../config/config';
 
  
 
@@ -33,7 +34,7 @@ export async function addelo(interaction: Message | ChatInputCommandInteraction,
     }
   } else {
     if (!args || args.length < 6) {
-      await safeReply(interaction, errorEmbed('Usage: =addelo <roleId> <startElo> <endElo> <winElo> <loseElo> <mvpElo> [bedElo]', 'ELO Rank Creation Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}addelo <roleId> <startElo> <endElo> <winElo> <loseElo> <mvpElo> [bedElo]`, 'ELO Rank Creation Error'));
       return;
     }
     roleId = args[0];

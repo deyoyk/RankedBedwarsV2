@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { betterEmbed } from '../../utils/betterembed';
 import Game from '../../models/Game';
+import config from '../../config/config';
 
 export async function gameinfo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
   let gameId: number | undefined;
@@ -10,7 +11,7 @@ export async function gameinfo(interaction: Message | ChatInputCommandInteractio
     gameId = interaction.options.getInteger('game_id', true);
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, 'Usage: =gameinfo <gameId>');
+      await safeReply(interaction, `Usage: ${config.prefix}gameinfo <gameId>`);
       return;
     }
     gameId = parseInt(args[0]);

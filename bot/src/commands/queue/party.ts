@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { PartyService, type PartyDocument } from '../../services/PartyService';
+import config from '../../config/config';
 
 export async function party(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let action: string;
@@ -18,7 +19,7 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
     else if (argsString) extraArgs = argsString.split(/\s+/);
   } else {
     if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed('Usage: =party <action> [user]', 'Party Usage Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}party <action> [user]`, 'Party Usage Error'));
       return;
     }
     action = args[0];
@@ -85,7 +86,7 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
           ? interaction.options.getString('party_id')
           : extraArgs?.[1];
         if (!partyIdToJoin) {
-          await safeReply(interaction, errorEmbed('Usage: =party join <partyId>', 'Party Usage Error'));
+          await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}party join <partyId>`, 'Party Usage Error'));
           return;
         }
         await handleJoinParty(interaction, userId, partyIdToJoin, guild);

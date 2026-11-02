@@ -6,6 +6,7 @@ import Season from '../../models/Season';
 import { betterEmbed } from '../../utils/betterembed';
 import { resolveTheme } from '../../themes';
 import { getLevelInfo } from '../../utils/levelSystem';
+import config from '../../config/config';
 
  
 
@@ -32,7 +33,7 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
   }
 
   if (!(interaction instanceof ChatInputCommandInteraction) && (!args || args.length === 0)) {
-    const usageEmbed = betterEmbed('Usage: =stats <@user|userId>', '#ffcc00', 'Stats Usage');
+    const usageEmbed = betterEmbed(`Usage: ${config.prefix}stats <@user|userId>`, '#ffcc00', 'Stats Usage');
     await safeReply(interaction, { embeds: [usageEmbed.builder] });
     return;
   }

@@ -1,6 +1,7 @@
 import { Message, ChatInputCommandInteraction, Guild } from 'discord.js';
 import { safeReply } from './safeReply';
 import { successEmbed, errorEmbed } from './betterembed';
+import config from '../config/config';
 
 type ModerationEmbed = ReturnType<typeof successEmbed>;
 
@@ -30,10 +31,10 @@ function parseInteractionInput(
 
   if (!args || args.length < 1) {
     const usage = options.hasDuration
-      ? `Usage: =${options.commandName} <@user> [duration] [reason]`
+      ? `Usage: ${config.prefix}${options.commandName} <@user> [duration] [reason]`
       : options.hasReason
-        ? `Usage: =${options.commandName} <@user> [reason]`
-        : `Usage: =${options.commandName} <userId>`;
+        ? `Usage: ${config.prefix}${options.commandName} <@user> [reason]`
+        : `Usage: ${config.prefix}${options.commandName} <userId>`;
     return { error: usage };
   }
 

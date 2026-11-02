@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { safeReply } from '../../utils/safeReply';
+import config from '../../config/config';
 
 
 export async function removeelo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
@@ -12,7 +13,7 @@ export async function removeelo(interaction: Message | ChatInputCommandInteracti
     roleId = interaction.options.getString('role_id', true);
   } else {
     if (!args || args.length !== 1) {
-      await safeReply(interaction, errorEmbed('Usage: =removeelo <roleId>', 'ELO Rank Removal Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}removeelo <roleId>`, 'ELO Rank Removal Error'));
       return;
     }
     roleId = args[0];

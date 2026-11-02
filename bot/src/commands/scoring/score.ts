@@ -5,6 +5,7 @@ import Game from '../../models/Game';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import config from '../../config/config';
 
 interface ScoreParams {
   gameId: number;
@@ -48,7 +49,7 @@ function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args
 export async function score(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   const params = parseScoreArgs(interaction, args);
   if (!params) {
-    await safeReply(interaction, errorEmbed('Usage: =score <gameId> <winningTeam:1|2> [mvps_comma] [bedbreaks_comma] [reason]', 'Score Command Error'));
+    await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}score <gameId> <winningTeam:1|2> [mvps_comma] [bedbreaks_comma] [reason]`, 'Score Command Error'));
     return;
   }
 

@@ -5,6 +5,7 @@ import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
+import config from '../../config/config';
 
 export async function wipe(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let targetId: string | undefined;
@@ -16,7 +17,7 @@ export async function wipe(interaction: Message | ChatInputCommandInteraction, a
     targetMention = `<@${user.id}>`;
   } else {
     if (!args || args.length !== 1) {
-      await safeReply(interaction, errorEmbed('Usage: =wipe <@user>', 'Wipe Error'));
+      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}wipe <@user>`, 'Wipe Error'));
       return;
     }
     const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
