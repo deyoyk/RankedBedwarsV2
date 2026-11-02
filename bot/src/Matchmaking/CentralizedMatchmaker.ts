@@ -430,7 +430,7 @@ export class CentralizedMatchmaker {
         const snapshotSet = new Set(runnable);
         const presentAfter = await this.getPresentMembers(queueId);
         const stillPresent = (p: string) => !presentAfter || presentAfter.has(p);
-        const joinedDuringProcessing = currentQueuePlayers.filter(p => !snapshotSet.has(p) && stillPresent(p));
+        const joinedDuringProcessing = currentQueuePlayers.filter(p => !snapshotSet.has(p) && !usedPlayers.has(p) && stillPresent(p));
         const remainingPlayers = runnable.filter(p => !usedPlayers.has(p) && stillPresent(p));
         queuePlayers.set(queueId, [...remainingPlayers, ...joinedDuringProcessing]);
       }

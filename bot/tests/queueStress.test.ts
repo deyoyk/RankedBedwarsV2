@@ -305,21 +305,34 @@ describe('party admission guards', () => {
 });
 
 describe('picking final revalidation', () => {
+  const eligibleUsers = (overrides: Record<string, any> = {}) => {
+    const base: Record<string, any> = {
+      a: { discordId: 'a', isBanned: false, isFrozen: false, elo: 1000 },
+      b: { discordId: 'b', isBanned: false, isFrozen: false, elo: 1000 },
+      c: { discordId: 'c', isBanned: false, isFrozen: false, elo: 1000 },
+      d: { discordId: 'd', isBanned: false, isFrozen: false, elo: 1000 },
+    };
+    for (const [k, v] of Object.entries(overrides)) base[k] = { ...base[k], ...v };
+    return Object.values(base);
+  };
   it.each([
-    ['clean teams pass', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c', 'd'], null, true],
-    ['duplicates fail', { team1: ['a', 'a'], team2: ['c', 'd'] }, ['a', 'c', 'd'], null, false],
-    ['leaver fails', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c'], null, false],
-    ['in-game player fails', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c', 'd'], { team1: ['x'], team2: ['a'] }, false],
-  ])('%s', async (_label, teams: any, present: string[], clash: any, expected: boolean) => {
+    ['clean teams pass', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c', 'd'], null, {}, true],
+    ['duplicates fail', { team1: ['a', 'a'], team2: ['c', 'd'] }, ['a', 'c', 'd'], null, {}, false],
+    ['leaver fails', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c'], null, {}, false],
+    ['in-game player fails', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c', 'd'], { team1: ['x'], team2: ['a'] }, {}, false],
+    ['banned player fails', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c', 'd'], null, { b: { isBanned: true } }, false],
+    ['out-of-range elo fails', { team1: ['a', 'b'], team2: ['c', 'd'] }, ['a', 'b', 'c', 'd'], null, { d: { elo: 99999 } }, false],
+  ])('%s', async (_label, teams: any, present: string[], clash: any, userOverrides: any, expected: boolean) => {
     jest.clearAllMocks();
     const { PickingQueueManager } = await import('../src/Matchmaking/PickingQueueManager');
     GameModel.findOne.mockImplementation(() => ({
       select: () => ({ lean: async () => clash }),
       lean: async () => clash,
     }));
+    UserModel.find.mockImplementation(() => chainable(eligibleUsers(userOverrides)));
     const mgr = new PickingQueueManager({} as any, {} as any, wsManagerMock as any);
     const channel = { members: { keys: () => present[Symbol.iterator]() } } as any;
-    const result = await (mgr as any).revalidateFinalTeams(teams, channel);
+    const result = await (mgr as any).revalidateFinalTeams(teams, channel, { minElo: 0, maxElo: 3000 });
     expect(result !== null).toBe(expected);
   });
 });
@@ -335,12 +348,26 @@ describe('random draft revalidation', () => {
       },
     };
     const mgr = new RandomQueueManager({ guilds: { cache: { first: () => guild } } } as any, {} as any, wsManagerMock as any);
+    UserModel.find.mockImplementation(() => chainable([
+      { discordId: 'a', isBanned: false, isFrozen: false, elo: 1000 },
+      { discordId: 'b', isBanned: false, isFrozen: false, elo: 1000 },
+    ]));
     GameModel.findOne.mockImplementation(() => ({
       select: () => ({ lean: async () => ({ team1: ['b'], team2: ['x'] }) }),
       lean: async () => null,
     }));
-    expect(await (mgr as any).revalidateDraftedPlayers(['a', 'b', 'c'], Q1)).toEqual(['a']);
+    const queueData = { channelId: Q1, maxPlayers: 8, minElo: 0, maxElo: 3000, isActive: true };
+    expect(await (mgr as any).revalidateDraftedPlayers(['a', 'b', 'c'], queueData)).toEqual(['a']);
+    UserModel.find.mockImplementation(() => chainable([
+      { discordId: 'a', isBanned: true, isFrozen: false, elo: 1000 },
+      { discordId: 'b', isBanned: false, isFrozen: false, elo: 1000 },
+    ]));
+    GameModel.findOne.mockImplementation(() => ({
+      select: () => ({ lean: async () => null }),
+      lean: async () => null,
+    }));
+    expect(await (mgr as any).revalidateDraftedPlayers(['a', 'b'], queueData)).toEqual(['b']);
     GameModel.findOne.mockImplementation(() => { throw new Error('db down'); });
-    expect(await (mgr as any).revalidateDraftedPlayers(['a', 'b'], Q1)).toEqual([]);
+    expect(await (mgr as any).revalidateDraftedPlayers(['a', 'b'], queueData)).toEqual([]);
   });
 });

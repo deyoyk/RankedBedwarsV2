@@ -377,9 +377,9 @@ export class PickingQueueManager {
         throw new Error('Picking process failed or was cancelled');
       }
 
-      const verifiedFinalTeams = await this.revalidateFinalTeams(finalTeams, resources!.pickingChannel);
+      const verifiedFinalTeams = await this.revalidateFinalTeams(finalTeams, resources!.pickingChannel, queueData);
       if (!verifiedFinalTeams) {
-        throw new Error('Final team revalidation failed (players left or entered a game during picking)');
+        throw new Error('Final team revalidation failed (players left, changed status, or entered a game during picking)');
       }
 
       await this.gameManager.createGame(
@@ -1087,7 +1087,8 @@ export class PickingQueueManager {
 
   private async revalidateFinalTeams(
     teams: { team1: string[]; team2: string[] },
-    pickingChannel: VoiceChannel
+    pickingChannel: VoiceChannel,
+    queueData: QueueLike
   ): Promise<{ team1: string[]; team2: string[] } | null> {
     try {
       const team1 = [...new Set(teams.team1)];
@@ -1106,6 +1107,24 @@ export class PickingQueueManager {
       const missing = drafted.filter(p => !present.has(p));
       if (missing.length > 0) {
         console.warn(`[PickingQueue] Final revalidation failed: ${missing.length} player(s) left picking: ${missing.join(', ')}`);
+        return null;
+      }
+      const User = (await import('../models/User')).default as unknown as {
+        find: (filter: unknown) => unknown;
+      };
+      const userQuery: unknown = User.find({ discordId: { $in: drafted } });
+      const uq = userQuery as { select?: (fields: string) => { lean: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> }; lean?: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> };
+      const users = typeof uq.select === 'function'
+        ? await uq.select('discordId isBanned isFrozen elo').lean()
+        : (typeof uq.lean === 'function' ? await uq.lean() : await userQuery as Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>);
+      const eligible = new Set(
+        (users ?? [])
+          .filter(u => !u.isBanned && !u.isFrozen && u.elo !== undefined && u.elo >= queueData.minElo && u.elo <= queueData.maxElo)
+          .map(u => u.discordId)
+      );
+      const ineligible = drafted.filter(p => !eligible.has(p));
+      if (ineligible.length > 0) {
+        console.warn(`[PickingQueue] Final revalidation failed: ${ineligible.length} player(s) no longer eligible: ${ineligible.join(', ')}`);
         return null;
       }
       const Game = (await import('../models/Game')).default as unknown as {

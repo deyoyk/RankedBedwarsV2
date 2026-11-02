@@ -78,7 +78,7 @@ export class RandomQueueManager {
 
           const presentTeam = await this.revalidateDraftedPlayers(
             [...teamResult.team1, ...teamResult.team2],
-            queueData.channelId
+            queueData
           );
           if (presentTeam.length !== queueData.maxPlayers) {
             const missing = new Set(
@@ -309,18 +309,33 @@ export class RandomQueueManager {
     return selectRandomMapUtil(this.mapService, queueData);
   }
 
-  private async revalidateDraftedPlayers(drafted: string[], queueChannelId: string): Promise<string[]> {
+  private async revalidateDraftedPlayers(drafted: string[], queueData: QueueLike): Promise<string[]> {
     try {
       const unique = [...new Set(drafted)];
       const guild = this.client.guilds.cache.first();
       let present: Set<string> | null = null;
       if (guild) {
-        const channel = guild.channels.cache?.get(queueChannelId) ?? await guild.channels.fetch(queueChannelId).catch(() => null);
+        const channel = guild.channels.cache?.get(queueData.channelId) ?? await guild.channels.fetch(queueData.channelId).catch(() => null);
         if (channel && channel.isVoiceBased()) {
           present = new Set(channel.members.keys());
         }
       }
       let alive = present ? unique.filter(p => present.has(p)) : unique;
+      if (alive.length === 0) return [];
+      const User = (await import('../models/User')).default as unknown as {
+        find: (filter: unknown) => unknown;
+      };
+      const userQuery: unknown = User.find({ discordId: { $in: alive } });
+      const uq = userQuery as { select?: (fields: string) => { lean: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> }; lean?: () => Promise<Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>> };
+      const users = typeof uq.select === 'function'
+        ? await uq.select('discordId isBanned isFrozen elo').lean()
+        : (typeof uq.lean === 'function' ? await uq.lean() : await userQuery as Array<{ discordId: string; isBanned?: boolean; isFrozen?: boolean; elo?: number }>);
+      const eligible = new Set(
+        (users ?? [])
+          .filter(u => !u.isBanned && !u.isFrozen && u.elo !== undefined && u.elo >= queueData.minElo && u.elo <= queueData.maxElo)
+          .map(u => u.discordId)
+      );
+      alive = alive.filter(p => eligible.has(p));
       if (alive.length === 0) return [];
       const Game = (await import('../models/Game')).default as unknown as {
         findOne: (filter: unknown) => unknown;

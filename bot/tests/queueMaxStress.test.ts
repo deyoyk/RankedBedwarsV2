@@ -377,3 +377,260 @@ describe('admission fuzz across seeds', () => {
     expect(first).toBe(second);
   });
 });
+
+describe('perf and resource-leak guards', () => {
+  it('sweep over a full house finishes fast and leaves no residue', async () => {
+    jest.clearAllMocks();
+    queuePlayers.clear();
+    const { clearAllDraftClaims, isClaimedByOther } = await import('../src/Matchmaking/draftClaims');
+    clearAllDraftClaims();
+    const ids = Array.from({ length: 500 }, (_, i) => `900000000000000${String(i).padStart(2, '0')}`);
+    const docs = ids.map(id => ({ discordId: id, ign: `U${id.slice(-4)}`, partyId: null, elo: 1000, isBanned: false, isFrozen: false }));
+    QueueModel.findOne.mockImplementation((filter: any) => chainable(queueDoc(filter.channelId, 600)));
+    UserModel.findOne.mockImplementation((filter: any) => chainable(docs.find(d => d.discordId === filter.discordId) ?? null));
+    UserModel.find.mockImplementation((filter: any) => chainable(docs.filter(d => filter.discordId.$in.includes(d.discordId))));
+    GameModel.findOne.mockImplementation(() => chainable(null));
+    GameModel.find.mockImplementation(() => chainable([]));
+    const vcMembers = new Map(ids.map(id => [id, {}]));
+    const guild: any = {
+      channels: {
+        cache: new Map(QUEUES.map(q => [q, { id: q, isVoiceBased: () => true, members: q === Q1 ? vcMembers : new Map() }])),
+        fetch: jest.fn().mockResolvedValue(undefined),
+      },
+      members: { cache: new Map(), fetch: jest.fn() },
+    };
+    const { QueueListener } = await import('../src/handlers/QueueListener');
+    const listener = new QueueListener(
+      { guilds: { cache: { first: () => guild } } } as any,
+      wsMock,
+      { getActiveGameCount: () => 100 } as any
+    );
+    try {
+      (listener as any).queueStates.set(Q1, {
+        players: [...ids], parties: new Map(), lastUpdate: 0, processing: false,
+      });
+      queuePlayers.set(Q1, [...ids]);
+      const start = Date.now();
+      await (listener as any).validateQueueState(Q1);
+      const elapsed = Date.now() - start;
+      expect(elapsed).toBeLessThan(3000);
+      expect(queuePlayers.get(Q1)).toHaveLength(500);
+      expect(isClaimedByOther(ids[0], Q2)).toBe(false);
+      expect(((listener as any).playerLocks as Map<string, unknown>).size).toBe(0);
+    } finally {
+      try { (listener as any).matchmaker?.cleanup?.(); } catch { /* ignore */ }
+    }
+  });
+
+  it('draft claims drain after processing', async () => {
+    jest.clearAllMocks();
+    queuePlayers.clear();
+    const { clearAllDraftClaims, isClaimedByOther } = await import('../src/Matchmaking/draftClaims');
+    clearAllDraftClaims();
+    const users = ['x', 'y'].map(id => ({ discordId: id, ign: id.toUpperCase(), partyId: null, elo: 1000, isBanned: false, isFrozen: false }));
+    QueueModel.findOne.mockImplementation((filter: any) => chainable(queueDoc(filter.channelId, 2)));
+    UserModel.find.mockImplementation(() => chainable(users));
+    UserModel.findOne.mockImplementation((filter: any) => chainable(users.find(u => u.discordId === filter.discordId) ?? null));
+    GameModel.find.mockImplementation(() => chainable([]));
+    GameModel.findOne.mockImplementation(() => chainable(null));
+    const gameManagerMock: any = {
+      getActiveGameCount: () => 0,
+      getNextGameId: async () => 1,
+      createGame: jest.fn(async (id: number) => ({ gameId: id })),
+      updateGameMap: jest.fn(async () => {}),
+      initiateGameWarp: jest.fn(async () => {}),
+    };
+    const { CentralizedMatchmaker } = await import('../src/Matchmaking/CentralizedMatchmaker');
+    const mm = new CentralizedMatchmaker(
+      { guilds: { cache: { first: () => undefined } } } as any,
+      wsMock,
+      gameManagerMock
+    );
+    try {
+      queuePlayers.set(Q1, ['x', 'y']);
+      const r = await mm.processQueue(Q1);
+      expect(r.gamesCreated).toBe(1);
+      for (const id of ['x', 'y']) {
+        for (const q of [Q1, Q2, 'other']) {
+          expect(isClaimedByOther(id, q)).toBe(false);
+        }
+      }
+    } finally {
+      (mm as any)?.cleanup?.();
+    }
+  });
+});
+
+describe('full lifecycle live simulation', () => {
+  const USERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map(id => ({
+    discordId: id, ign: id.toUpperCase(), partyId: null, elo: 1000,
+    isBanned: false, isFrozen: false,
+  }));
+  const byId: Record<string, any> = Object.fromEntries(USERS.map(u => [u.discordId, u]));
+  let liveGames: Array<{ gameId: number; team1: string[]; team2: string[]; state: string }>;
+  let nextId: number;
+  let mm: any;
+  let listener: any;
+  let createdTeams: string[][];
+
+  function voiceState(channelId: string | null, userId: string) {
+    return {
+      channelId,
+      member: {
+        id: userId,
+        user: { username: userId },
+        roles: { cache: new Map() },
+        voice: { channelId },
+      },
+    } as any;
+  }
+
+  function assertNoDoubleBooking() {
+    const active = liveGames.flatMap(g => [...g.team1, ...g.team2]);
+    expect(new Set(active).size).toBe(active.length);
+  }
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    queuePlayers.clear();
+    const { clearAllDraftClaims } = await import('../src/Matchmaking/draftClaims');
+    clearAllDraftClaims();
+    liveGames = [];
+    nextId = 100;
+    createdTeams = [];
+    QueueModel.findOne.mockImplementation((filter: any) => chainable(queueDoc(filter.channelId)));
+    UserModel.find.mockImplementation((filter: any) => chainable(
+      byId ? Object.values(byId).filter((u: any) => filter.discordId.$in.includes(u.discordId)) : []
+    ));
+    UserModel.findOne.mockImplementation((filter: any) => chainable(byId[filter.discordId] ?? null));
+    GameModel.find.mockImplementation((filter: any) => {
+      const ids = (filter?.$or ?? []).flatMap((o: any) => {
+        const v = Object.values(o)[0] as any;
+        return v?.$in ?? [];
+      });
+      return chainable(liveGames.filter(g => g.team1.concat(g.team2).some(id => ids.includes(id))));
+    });
+    GameModel.findOne.mockImplementation((filter: any) => {
+      if (filter?.gameId) {
+        const g = liveGames.find(x => x.gameId === filter.gameId);
+        return chainable(g ? { ...g, channels: {} } : null);
+      }
+      const ids = (filter?.$or ?? []).flatMap((o: any) => {
+        const v = Object.values(o)[0] as any;
+        return typeof v === 'string' ? [v] : (v?.$in ?? []);
+      });
+      const hit = liveGames.find(g => g.team1.concat(g.team2).some(id => ids.includes(id)));
+      return chainable(hit ? { gameId: hit.gameId } : null);
+    });
+    const gameManagerMock: any = {
+      getActiveGameCount: () => 0,
+      getNextGameId: async () => nextId++,
+      createGame: jest.fn(async (id: number, _q: any, t1: string[], t2: string[]) => {
+        liveGames.push({ gameId: id, team1: [...t1], team2: [...t2], state: 'active' });
+        createdTeams.push([...t1, ...t2]);
+        return { gameId: id };
+      }),
+      updateGameMap: jest.fn(async () => {}),
+      initiateGameWarp: jest.fn(async () => {}),
+    };
+    const { CentralizedMatchmaker } = await import('../src/Matchmaking/CentralizedMatchmaker');
+    mm = new CentralizedMatchmaker(
+      { guilds: { cache: { first: () => undefined } } } as any,
+      wsMock,
+      gameManagerMock
+    );
+    const { QueueListener } = await import('../src/handlers/QueueListener');
+    listener = new QueueListener(
+      { guilds: { cache: { first: () => undefined } } } as any,
+      wsMock,
+      { getActiveGameCount: () => 100 } as any
+    );
+  });
+
+  afterEach(() => {
+    try { mm?.cleanup?.(); } catch { /* ignore */ }
+    try { (listener as any)?.matchmaker?.cleanup?.(); } catch { /* ignore */ }
+  });
+
+  async function join(u: string) {
+    await listener.handleVoiceStateUpdate(voiceState(null, u), voiceState(Q1, u));
+  }
+  async function leave(u: string) {
+    await listener.handleVoiceStateUpdate(voiceState(Q1, u), voiceState(null, u));
+  }
+
+  it('queue, draft, settle, requeue across rounds without double-booking', async () => {
+    await join('a');
+    await join('b');
+    let r = await mm.processQueue(Q1);
+    expect(r.gamesCreated).toBe(1);
+    assertNoDoubleBooking();
+    await leave('a');
+    await leave('b');
+
+    await join('c');
+    await join('d');
+    r = await mm.processQueue(Q1);
+    expect(r.gamesCreated).toBe(1);
+    assertNoDoubleBooking();
+    expect(liveGames).toHaveLength(2);
+    await leave('c');
+    await leave('d');
+
+    const [g1] = liveGames.splice(0, 1);
+    expect(g1.team1.concat(g1.team2).sort()).toEqual(['a', 'b']);
+    await join('e');
+    await join('f');
+    r = await mm.processQueue(Q1);
+    expect(r.gamesCreated).toBe(1);
+    expect(createdTeams.flat().filter(id => id === 'e')).toHaveLength(1);
+    assertNoDoubleBooking();
+    await leave('e');
+    await leave('f');
+
+    liveGames.splice(0, liveGames.length);
+    await join('a');
+    await join('h');
+    r = await mm.processQueue(Q1);
+    expect(r.gamesCreated).toBe(1);
+    assertNoDoubleBooking();
+    const lastGame = createdTeams[createdTeams.length - 1];
+    expect(lastGame.sort()).toEqual(['a', 'h']);
+  });
+
+  it('concurrent draft and churn never double-books', async () => {
+    const present = new Set(['a', 'b', 'd', 'e']);
+    const guild: any = {
+      channels: {
+        cache: new Map([[Q1, {
+          id: Q1,
+          isVoiceBased: () => true,
+          get members() { return new Map([...present].map(id => [id, {}])); },
+        }]]),
+        fetch: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+    const { CentralizedMatchmaker } = await import('../src/Matchmaking/CentralizedMatchmaker');
+    const mm2 = new CentralizedMatchmaker(
+      { guilds: { cache: { first: () => guild } } } as any,
+      wsMock,
+      (mm as any).gameManager
+    );
+    try {
+      for (const u of ['a', 'b', 'c', 'd']) await join(u);
+      const draft = mm2.processQueue(Q1);
+      await join('e');
+      await leave('c');
+      present.delete('c');
+      const result = await draft;
+      expect(result.gamesCreated).toBeGreaterThanOrEqual(1);
+      assertNoDoubleBooking();
+      const flat = createdTeams.flat();
+      expect(new Set(flat).size).toBe(flat.length);
+      expect(flat).not.toContain('c');
+      expect(queuePlayers.get(Q1) || []).not.toContain('c');
+    } finally {
+      (mm2 as any)?.cleanup?.();
+    }
+  });
+});

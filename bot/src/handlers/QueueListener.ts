@@ -464,6 +464,23 @@ export class QueueListener {
     }
   }
 
+  private async evictInGamePlayers(queueState: QueueState, channelId: string): Promise<void> {
+    if (queueState.players.length === 0) return;
+    const inGame = await this.findInGamePlayers(queueState.players);
+    if (inGame.size === 0) return;
+    for (const playerId of inGame) {
+      console.log(`[QueueListener] Player ${playerId} is in an active game, removing from queue ${channelId}`);
+    }
+    queueState.players = queueState.players.filter(p => !inGame.has(p));
+    for (const [partyId, members] of queueState.parties) {
+      if (members.some(m => inGame.has(m))) {
+        queueState.parties.delete(partyId);
+      }
+    }
+    queueState.lastUpdate = Date.now();
+    queuePlayers.set(channelId, [...queueState.players]);
+  }
+
   private async findInGamePlayers(discordIds: string[]): Promise<Set<string>> {
     const inGame = new Set<string>();
     if (discordIds.length === 0) return inGame;
@@ -471,6 +488,7 @@ export class QueueListener {
       const Game = (await import('../models/Game')).default as unknown as {
         find: (filter: unknown) => unknown;
       };
+      if (!Game || typeof Game.find !== 'function') return inGame;
       const games = await resolveQuery<Array<{ team1?: string[]; team2?: string[] }>>(
         Game.find({
           $or: [{ team1: { $in: discordIds } }, { team2: { $in: discordIds } }],
@@ -606,6 +624,8 @@ export class QueueListener {
         }
         this.removeFromOtherQueues([userId], queue.channelId);
       }
+
+      await this.evictInGamePlayers(queueState, queue.channelId);
 
       const wasQueueFull = queueState.players.length >= queue.maxPlayers;
 
