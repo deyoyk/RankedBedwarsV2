@@ -410,21 +410,45 @@ export class PickingQueueManager {
         gameId
       );
 
-      
+      let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
+      try {
+        const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
+        const roster = await fetchGameStartRoster([...finalTeams.team1, ...finalTeams.team2]);
+        const captains = session.captains;
+        const toTeam = (ids: string[]) => ids.map(id => {
+          const entry = roster.get(id);
+          return {
+            discordId: id,
+            username: entry?.username ?? ignMap.get(id) ?? id,
+            elo: entry?.elo ?? 0,
+            isCaptain: captains.includes(id),
+          };
+        });
+        if (roster.size > 0) {
+          const buffer = await generateGameStartImageBuffer(gameId, toTeam(finalTeams.team1), toTeam(finalTeams.team2), {
+            mapName: selectedMap,
+            modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
+          });
+          startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
+        }
+      } catch (imageError) {
+        console.error(`[PickingQueue] Failed to generate game start image for game ${gameId}:`, imageError);
+      }
+
       if (config.channels.gamesChannel) {
         await this.workersManager.sendMessage(
           config.channels.gamesChannel,
-          { embeds: [gameStartEmbed] },
-          8 
+          { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+          8
         );
       }
 
-      
+
       if (resources.gameChannel) {
         await this.workersManager.sendMessage(
           resources.gameChannel.id,
-          { embeds: [gameStartEmbed] },
-          8 
+          { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+          8
         );
       }
 

@@ -145,21 +145,38 @@ export class RandomQueueManager {
               gameId
             );
 
-            
+            let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
+            try {
+              const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
+              const roster = await fetchGameStartRoster([...teamResult.team1, ...teamResult.team2]);
+              const toTeam = (ids: string[]) => ids.map(id => {
+                const entry = roster.get(id);
+                return { discordId: id, username: entry?.username ?? id, elo: entry?.elo ?? 0, isCaptain: false };
+              });
+              if (roster.size > 0) {
+                const buffer = await generateGameStartImageBuffer(gameId, toTeam(teamResult.team1), toTeam(teamResult.team2), {
+                  mapName: selectedMap,
+                  modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
+                });
+                startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
+              }
+            } catch (imageError) {
+              console.error(`[RandomQueue] Failed to generate game start image for game ${gameId}:`, imageError);
+            }
+
             if (config.channels.gamesChannel) {
               await this.workersManager.sendMessage(
                 config.channels.gamesChannel,
-                { embeds: [embed] },
-                8 
+                { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
+                8
               );
             }
 
-            
             if (embedGameChannel) {
               await this.workersManager.sendMessage(
                 embedGameChannel.id,
-                { embeds: [embed] },
-                8 
+                { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
+                8
               );
             }
           }
