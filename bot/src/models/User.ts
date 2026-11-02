@@ -25,6 +25,7 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
   };
   recentGames: IRecentGame[];
   partyId?: string;
+  lastPlayedAt?: Date;
   dailyElo: IDailyElo[];
   strikes: Array<{
     id: string;
@@ -70,6 +71,7 @@ const UserSchema: Schema = new Schema({
   },
   recentGames: [recentGameSubdoc],
   partyId: { type: String },
+  lastPlayedAt: { type: Date, index: true },
   dailyElo: [dailyEloSubdoc],
   strikes: [{
     id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },

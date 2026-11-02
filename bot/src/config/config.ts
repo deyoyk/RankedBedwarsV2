@@ -97,6 +97,25 @@ interface Config {
   };
   serverip: string;
   bot_stats_text: string;
+
+  eloDecay: {
+    enabled: boolean;
+    inactivityDays: number;
+    midMin: number;
+    midMax: number;
+    midAmount: number;
+    highMin: number;
+    highAmount: number;
+    rankGraceDays: number;
+  };
+  winStreakBonus: {
+    enabled: boolean;
+    tiers: string;
+  };
+  bounty: {
+    enabled: boolean;
+    tiers: string;
+  };
   
 }
 
@@ -110,6 +129,16 @@ while (clean(process.env[`WORKER_TOKEN_${i}`])) {
 
 const parsedCommonPartySize = parseInt(clean(process.env.COMMON_PARTY_SIZE) || '8', 10);
 const parsedPartyQueueSize = parseInt(clean(process.env.PARTY_QUEUE_SIZE) || '1', 10);
+
+function parsedPositiveInt(raw: string | undefined, fallback: number): number {
+  const v = parseInt(clean(raw) || '', 10);
+  return Number.isInteger(v) && v > 0 ? v : fallback;
+}
+
+function parsedNonNegativeInt(raw: string | undefined, fallback: number): number {
+  const v = parseInt(clean(raw) || '', 10);
+  return Number.isInteger(v) && v >= 0 ? v : fallback;
+}
 
 const configuration: Config = {
   embed: {
@@ -181,7 +210,25 @@ const configuration: Config = {
     default: 'warn'
   },
   serverip: clean(process.env.SERVER_IP) || 'play.deyo.lol',
-  bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS'
+  bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',
+  eloDecay: {
+    enabled: clean(process.env.ELO_DECAY_ENABLED) !== 'false',
+    inactivityDays: parsedPositiveInt(process.env.ELO_DECAY_INACTIVITY_DAYS, 5),
+    midMin: parsedNonNegativeInt(process.env.ELO_DECAY_MID_MIN, 800),
+    midMax: parsedNonNegativeInt(process.env.ELO_DECAY_MID_MAX, 1199),
+    midAmount: parsedPositiveInt(process.env.ELO_DECAY_MID_AMOUNT, 35),
+    highMin: parsedNonNegativeInt(process.env.ELO_DECAY_HIGH_MIN, 1200),
+    highAmount: parsedPositiveInt(process.env.ELO_DECAY_HIGH_AMOUNT, 60),
+    rankGraceDays: parsedNonNegativeInt(process.env.ELO_DECAY_RANK_GRACE_DAYS, 5),
+  },
+  winStreakBonus: {
+    enabled: clean(process.env.ELO_STREAK_BONUS_ENABLED) !== 'false',
+    tiers: clean(process.env.ELO_STREAK_BONUSES) || '10:5,15:10,20:15',
+  },
+  bounty: {
+    enabled: clean(process.env.ELO_BOUNTY_ENABLED) !== 'false',
+    tiers: clean(process.env.ELO_BOUNTIES) || '5:5,10:10,15:15,25:20',
+  },
 };
 
 export default configuration;

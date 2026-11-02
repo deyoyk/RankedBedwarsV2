@@ -400,6 +400,7 @@ export class SeasonManager {
             peakElo: 0,
             recentGames: [],
             dailyElo: [],
+            lastPlayedAt: new Date(),
             seasonNumber: null,
             chapterNumber: null
           }

@@ -18,6 +18,7 @@ import { WorkersManager } from '../managers/WorkersManager';
 import { updateDailyElo } from '../utils/userStats';
 import type { IRecentGame } from '../models/gameBase';
 import type { ICombatEntry } from '../models/gameTypes';
+import { parseTiers, streakBonusFor, bountyForOpponentStreak, type ProgressionTier } from '../utils/eloProgression';
 
 interface PlayerScoreData {
   player: IUser;
@@ -27,6 +28,9 @@ interface PlayerScoreData {
   eloChange: number;
   elo_before: number;
   elo_after: number;
+  streakBonus: number;
+  bountyBonus: number;
+  newWinStreak: number;
   stats: PlayerData;
   finalDeaths: number;
   experienceGained: number;
@@ -149,6 +153,29 @@ async function getCachedEloRanks(): Promise<IEloRank[]> {
 }
 
 const RECENT_GAMES_CAP = 50;
+
+let cachedStreakRaw: string | null = null;
+let cachedStreakTiers: ProgressionTier[] = [];
+let cachedBountyRaw: string | null = null;
+let cachedBountyTiers: ProgressionTier[] = [];
+
+function getStreakTiers(): ProgressionTier[] {
+  const raw = config.winStreakBonus.tiers;
+  if (cachedStreakRaw !== raw) {
+    cachedStreakTiers = parseTiers(raw, []);
+    cachedStreakRaw = raw;
+  }
+  return cachedStreakTiers;
+}
+
+function getBountyTiers(): ProgressionTier[] {
+  const raw = config.bounty.tiers;
+  if (cachedBountyRaw !== raw) {
+    cachedBountyTiers = parseTiers(raw, []);
+    cachedBountyRaw = raw;
+  }
+  return cachedBountyTiers;
+}
 
 export class GameManager {
   private client: Client;
@@ -1229,13 +1256,38 @@ export class GameManager {
         eloChange = this.calculateScoreElo(player, rank, isWinner, isMvp, isBedBreaker);
       }
 
+      const newWinStreak = isWinner ? (player.winStreak || 0) + 1 : 0;
+
+      let streakBonus = 0;
+      if (isWinner && config.winStreakBonus.enabled) {
+        streakBonus = streakBonusFor(newWinStreak, getStreakTiers());
+      }
+
+      let bountyBonus = 0;
+      if (isWinner && config.bounty.enabled) {
+        const loserIds = context.winningTeam === 1 ? context.game.team2 : context.game.team1;
+        let maxOpponentStreak = 0;
+        for (const p of context.players) {
+          if (loserIds.includes(p.discordId)) {
+            maxOpponentStreak = Math.max(maxOpponentStreak, p.winStreak || 0);
+          }
+        }
+        bountyBonus = bountyForOpponentStreak(maxOpponentStreak, getBountyTiers());
+      }
+
+      eloChange += streakBonus + bountyBonus;
+
       const playerIgn = context.idToIgn[player.discordId];
       const stats = { ...(playerIgn ? context.playerData[playerIgn.toLowerCase()] || {} : {}) };
       if (isBedBreaker) {
         stats.bedBroken = Math.max(typeof stats.bedBroken === 'number' ? stats.bedBroken : 0, 1);
       }
 
-      return this.buildPlayerScoreData(player, isWinner, isMvp, isBedBreaker, eloChange, stats);
+      return this.buildPlayerScoreData(player, isWinner, isMvp, isBedBreaker, eloChange, stats, {
+        streakBonus,
+        bountyBonus,
+        newWinStreak,
+      });
     } catch (error) {
       console.error('[GameManager] Error processing player:', error);
       throw error;
@@ -1244,7 +1296,8 @@ export class GameManager {
 
   private buildPlayerScoreData(
     player: IUser, isWinner: boolean, isMvp: boolean, isBedBreaker: boolean,
-    eloChange: number, stats: PlayerData & { finalDeaths?: unknown; finaldeaths?: unknown }
+    eloChange: number, stats: PlayerData & { finalDeaths?: unknown; finaldeaths?: unknown },
+    extra?: { streakBonus: number; bountyBonus: number; newWinStreak: number }
   ) {
     const experienceGained = this.calculateExperienceGained(isWinner, isMvp, isBedBreaker, stats);
     const oldExperience = player.experience || 0;
@@ -1263,6 +1316,9 @@ export class GameManager {
       eloChange,
       elo_before: player.elo,
       elo_after: Math.max(0, player.elo + eloChange),
+      streakBonus: extra?.streakBonus ?? 0,
+      bountyBonus: extra?.bountyBonus ?? 0,
+      newWinStreak: extra?.newWinStreak ?? 0,
       stats,
       finalDeaths,
       experienceGained,
@@ -1383,6 +1439,7 @@ export class GameManager {
   private applyScoreDataToPlayer(player: IUser, scoreData: PlayerScoreData, game: IGame, gameDurationSeconds: number): IRecentGame {
     const now = new Date();
     player.elo = scoreData.elo_after;
+    player.lastPlayedAt = now;
 
     player.experience = (player.experience || 0) + scoreData.experienceGained;
     player.level = scoreData.level_after;
@@ -1444,6 +1501,7 @@ export class GameManager {
   private scalarSetsForScoredPlayer(player: IUser): Record<string, unknown> {
     return {
       elo: player.elo,
+      lastPlayedAt: player.lastPlayedAt,
       experience: player.experience,
       level: player.level,
       wins: player.wins,
@@ -1671,6 +1729,8 @@ export class GameManager {
       if (!guild) return;
 
       const mentions = this.getMentionString(playerScoreData);
+      const bonusLines = this.getProgressionBonusLines(playerScoreData, context);
+      const notificationContent = bonusLines ? `${mentions}\n${bonusLines}` : mentions;
 
       const winnersIds = context.winningTeam === 1 ? context.game.team1 : context.game.team2;
       const losersIds = context.winningTeam === 1 ? context.game.team2 : context.game.team1;
@@ -1708,8 +1768,8 @@ export class GameManager {
         console.error('[GameManager] Failed generating score image, sending embed only:', e);
       }
 
-      await this.sendToScoringChannel(guild, mentions, imageBuffer);
-      await this.sendToGameChannel(guild, context.game, null, mentions, imageBuffer);
+      await this.sendToScoringChannel(guild, notificationContent, imageBuffer);
+      await this.sendToGameChannel(guild, context.game, null, notificationContent, imageBuffer);
 
     } catch (error) {
       console.error('[GameManager] Error sending score notifications:', error);
@@ -1723,6 +1783,25 @@ export class GameManager {
       return playerScoreData.map(p => `<@${p.player.discordId}>`).join(' ');
     } catch (error) {
       console.error('[GameManager] Error getting mention string:', error);
+      return '';
+    }
+  }
+
+  private getProgressionBonusLines(playerScoreData: PlayerScoreData[], context: GameScoreContext): string {
+    try {
+      const lines: string[] = [];
+      for (const p of playerScoreData) {
+        const name = context.idToIgn[p.player.discordId] || p.player.discordId;
+        if (p.streakBonus > 0 && p.newWinStreak > 0) {
+          lines.push(`:fire: <@${p.player.discordId}> (${name}) hit a ${p.newWinStreak} win streak (+${p.streakBonus} Elo)`);
+        }
+        if (p.bountyBonus > 0) {
+          lines.push(`:dart: <@${p.player.discordId}> (${name}) claimed a streak bounty (+${p.bountyBonus} Elo)`);
+        }
+      }
+      return lines.join('\n');
+    } catch (error) {
+      console.error('[GameManager] Error building progression bonus lines:', error);
       return '';
     }
   }
@@ -1881,6 +1960,7 @@ export class GameManager {
   private applyVoidDataToPlayer(voidData: PlayerVoidData, gameId?: number): { targetGameId: number | null; hadExisting: boolean } {
     const player = voidData.player;
     player.elo = voidData.elo_after;
+    player.lastPlayedAt = new Date();
 
     this.applyRevertPlayerGameStats(player, voidData);
     const result = this.applyRecentGamesForVoid(player, voidData, gameId);
@@ -1952,6 +2032,7 @@ export class GameManager {
   private scalarSetsForVoidedPlayer(player: IUser): Record<string, unknown> {
     return {
       elo: player.elo,
+      lastPlayedAt: player.lastPlayedAt,
       experience: player.experience,
       level: player.level,
       wins: player.wins,

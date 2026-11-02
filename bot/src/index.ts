@@ -10,6 +10,7 @@ import { PartyCleanupTask } from './tasks/PartyCleanupTask';
 import { ChannelsCleanupTask } from './tasks/ChannelsCleanupTask';
 import { StatusRotationTask } from './tasks/StatusRotationTask';
 import { ScreenshareCleanupTask } from './tasks/ScreenshareCleanupTask';
+import { EloDecayTask } from './tasks/EloDecayTask';
 import { WorkersManager } from './managers/WorkersManager';
 
 import { GuildJoinListener } from './handlers/GuildJoinListener';
@@ -68,6 +69,7 @@ let partyCleanupTask: PartyCleanupTask;
 let channelsCleanupTask: ChannelsCleanupTask;
 let statusRotationTask: StatusRotationTask;
 let screenshareCleanupTask: ScreenshareCleanupTask;
+let eloDecayTask: EloDecayTask;
 let gameManager: GameManager | undefined;
 let workersManager: WorkersManager;
 
@@ -113,6 +115,8 @@ client.once('ready', async () => {
     statusRotationTask.start();
     screenshareCleanupTask = new ScreenshareCleanupTask(client);
     screenshareCleanupTask.start();
+    eloDecayTask = new EloDecayTask(client);
+    eloDecayTask.start();
 
     const { GameManager } = await import('./Matchmaking/GameManager');
     gameManager = new GameManager(client, wsManager);
