@@ -143,12 +143,13 @@ export async function selectRandomMap(
     const useMatchmakingPath =
       typeof svc.getReservedMapsForMatchmaking === 'function' &&
       typeof svc.getUnlockedMapsForMatchmaking === 'function';
-    const reservedMaps = useMatchmakingPath
-      ? await svc.getReservedMapsForMatchmaking!(forceRefresh)
-      : await svc.getReservedMaps(forceRefresh);
-    const unlockedMaps = useMatchmakingPath
-      ? await svc.getUnlockedMapsForMatchmaking!(forceRefresh)
-      : await svc.getUnlockedMaps(forceRefresh);
+    const reservedPromise = useMatchmakingPath
+      ? svc.getReservedMapsForMatchmaking!(forceRefresh)
+      : (typeof svc.getReservedMaps === 'function' ? svc.getReservedMaps(forceRefresh) : Promise.resolve([] as MapSize[]));
+    const unlockedPromise = useMatchmakingPath
+      ? svc.getUnlockedMapsForMatchmaking!(forceRefresh)
+      : (typeof svc.getUnlockedMaps === 'function' ? svc.getUnlockedMaps(forceRefresh) : Promise.resolve([] as MapSize[]));
+    const [reservedMaps, unlockedMaps] = await Promise.all([reservedPromise, unlockedPromise]);
 
     pruneRecentMapPicks();
     const blocked = new Set<string>([...recentMapPicks.keys(), ...excludedNames]);

@@ -26,7 +26,7 @@ import { startseason } from '../src/commands/season/startseason';
 
 jest.mock('../src/models/User', () => ({
   __esModule: true,
-  default: { findOne: jest.fn().mockResolvedValue(null), find: jest.fn().mockResolvedValue([]) },
+  default: { findOne: jest.fn().mockResolvedValue(null), find: jest.fn().mockResolvedValue([]), aggregate: jest.fn().mockResolvedValue([]) },
 }));
 jest.mock('../src/models/Game', () => ({
   __esModule: true,

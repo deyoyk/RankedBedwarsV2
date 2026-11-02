@@ -97,6 +97,7 @@ const UserSchema: Schema = new Schema({
 
 UserSchema.index({ ign: 1 }, { collation: { locale: 'en', strength: 2 } });
 UserSchema.index({ elo: -1 });
+UserSchema.index({ elo: 1, lastPlayedAt: 1 });
 UserSchema.index({ wins: -1 });
 UserSchema.index({ kills: -1 });
 UserSchema.index({ isBanned: 1, isFrozen: 1 });

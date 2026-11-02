@@ -1213,18 +1213,38 @@ export class GameManager {
       for (const [key, value] of Object.entries(context.playerData || {})) {
         statsByIgn[String(key).toLowerCase()] = value as PlayerData;
       }
+      const fightsByIgn: Record<string, { rows: Record<string, FightStatRow>; lowerKeys: Map<string, string> }> = {};
       const fightsOf = (ign: string): Record<string, FightStatRow> => {
-        const stats = statsByIgn[ign.toLowerCase()];
-        return (stats && stats.fights && typeof stats.fights === 'object') ? stats.fights : {};
+        const key = ign.toLowerCase();
+        let cached = fightsByIgn[key];
+        if (!cached) {
+          const stats = statsByIgn[key];
+          const rows = (stats && stats.fights && typeof stats.fights === 'object') ? stats.fights : {};
+          const lowerKeys = new Map<string, string>();
+          for (const k of Object.keys(rows)) {
+            if (!lowerKeys.has(k.toLowerCase())) lowerKeys.set(k.toLowerCase(), k);
+          }
+          cached = fightsByIgn[key] = { rows, lowerKeys };
+        }
+        return cached.rows;
+      };
+      const mirrorRowOf = (opponent: string, ignLower: string): FightStatRow | undefined => {
+        const key = opponent.toLowerCase();
+        let cached = fightsByIgn[key];
+        if (!cached) {
+          fightsOf(opponent);
+          cached = fightsByIgn[key];
+        }
+        const mirrorKey = cached?.lowerKeys.get(ignLower);
+        return mirrorKey ? cached.rows[mirrorKey] : undefined;
       };
       return context.players.map((player) => {
         const ign = context.idToIgn[player.discordId] || '';
-        const stats = statsByIgn[ign.toLowerCase()] || {};
+        const ignLower = ign.toLowerCase();
+        const stats = statsByIgn[ignLower] || {};
         const ownFights = fightsOf(ign);
         const fights = Object.entries(ownFights).slice(0, 16).map(([opponent, row]) => {
-          const mirrorRows = fightsOf(opponent);
-          const mirrorKey = Object.keys(mirrorRows).find((k) => k.toLowerCase() === ign.toLowerCase());
-          const mirrorRow = mirrorKey ? mirrorRows[mirrorKey] : undefined;
+          const mirrorRow = mirrorRowOf(opponent, ignLower);
           const rowDamage = row.damage_dealt ?? row.damageDealt ?? row.damage ?? 0;
           const mirrorDamage = mirrorRow?.damage_dealt ?? mirrorRow?.damageDealt ?? mirrorRow?.damage;
           return {
@@ -1257,9 +1277,16 @@ export class GameManager {
   private async processAllPlayers(context: GameScoreContext): Promise<PlayerScoreData[]> {
     try {
       const playerScoreData: PlayerScoreData[] = [];
+      const loserIds = new Set(context.winningTeam === 1 ? context.game.team2 : context.game.team1);
+      let maxLoserStreak = 0;
+      for (const player of context.players) {
+        if (loserIds.has(player.discordId)) {
+          maxLoserStreak = Math.max(maxLoserStreak, player.winStreak || 0);
+        }
+      }
 
       for (const player of context.players) {
-        const scoreData = await this.processPlayerScore(player, context);
+        const scoreData = await this.processPlayerScore(player, context, maxLoserStreak);
         playerScoreData.push(scoreData);
       }
 
@@ -1270,7 +1297,7 @@ export class GameManager {
     }
   }
 
-  private async processPlayerScore(player: IUser, context: GameScoreContext): Promise<PlayerScoreData> {
+  private async processPlayerScore(player: IUser, context: GameScoreContext, maxLoserStreak: number): Promise<PlayerScoreData> {
     try {
       const isWinner = (context.winningTeam === 1 && context.game.team1.includes(player.discordId)) ||
         (context.winningTeam === 2 && context.game.team2.includes(player.discordId));
@@ -1293,14 +1320,7 @@ export class GameManager {
 
       let bountyBonus = 0;
       if (isWinner && config.bounty.enabled) {
-        const loserIds = context.winningTeam === 1 ? context.game.team2 : context.game.team1;
-        let maxOpponentStreak = 0;
-        for (const p of context.players) {
-          if (loserIds.includes(p.discordId)) {
-            maxOpponentStreak = Math.max(maxOpponentStreak, p.winStreak || 0);
-          }
-        }
-        bountyBonus = bountyForOpponentStreak(maxOpponentStreak, getBountyTiers());
+        bountyBonus = bountyForOpponentStreak(maxLoserStreak, getBountyTiers());
       }
 
       eloChange += streakBonus + bountyBonus;
@@ -1760,11 +1780,11 @@ export class GameManager {
       const bonusLines = this.getProgressionBonusLines(playerScoreData, context);
       const notificationContent = bonusLines ? `${mentions}\n${bonusLines}` : mentions;
 
-      const winnersIds = context.winningTeam === 1 ? context.game.team1 : context.game.team2;
-      const losersIds = context.winningTeam === 1 ? context.game.team2 : context.game.team1;
+      const winnersIds = new Set<string>(context.winningTeam === 1 ? context.game.team1 : context.game.team2);
+      const losersIds = new Set<string>(context.winningTeam === 1 ? context.game.team2 : context.game.team1);
 
       const winners = playerScoreData
-        .filter(p => winnersIds.includes(p.player.discordId))
+        .filter(p => winnersIds.has(p.player.discordId))
         .map(p => ({
           discordId: p.player.discordId,
           username: context.idToIgn[p.player.discordId] || 'Unknown',
@@ -1777,7 +1797,7 @@ export class GameManager {
         }));
 
       const losers = playerScoreData
-        .filter(p => losersIds.includes(p.player.discordId))
+        .filter(p => losersIds.has(p.player.discordId))
         .map(p => ({
           discordId: p.player.discordId,
           username: context.idToIgn[p.player.discordId] || 'Unknown',

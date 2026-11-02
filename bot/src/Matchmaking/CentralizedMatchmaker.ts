@@ -65,6 +65,7 @@ interface ValidationCtx {
   partyMap: Map<string, ValidatedPartyDoc>;
   partyMemberMap: Map<string, ValidatedUserDoc>;
   inGameSet: Set<string>;
+  queuedSet: Set<string>;
 }
 
 async function resolveLean<T>(query: unknown): Promise<T> {
@@ -643,7 +644,7 @@ export class CentralizedMatchmaker {
         }
       }
 
-      const ctx = { userMap, partyMap, partyMemberMap, inGameSet };
+      const ctx = { userMap, partyMap, partyMemberMap, inGameSet, queuedSet: new Set(playerIds) };
       const checkedParties = new Set<string>();
       const invalidParties = new Set<string>();
       const presenceTasks: Array<() => Promise<void>> = [];
@@ -652,7 +653,7 @@ export class CentralizedMatchmaker {
       for (const index of pendingIndexes) {
         const playerId = playerIds[index];
         try {
-          const outcome = this.evaluatePlayerLocal(playerId, queue, playerIds, ctx, checkedParties, invalidParties);
+          const outcome = this.evaluatePlayerLocal(playerId, queue, ctx, checkedParties, invalidParties);
 
           if (outcome.decision === 'valid') {
             validFlags[index] = true;
@@ -709,7 +710,6 @@ export class CentralizedMatchmaker {
   private evaluatePlayerLocal(
     playerId: string,
     queue: QueueLike,
-    allPlayersInQueue: string[],
     ctx: ValidationCtx,
     checkedParties: Set<string>,
     invalidParties: Set<string>
@@ -745,7 +745,7 @@ export class CentralizedMatchmaker {
       if (invalidParties.has(user.partyId)) return { decision: 'invalid' };
       if (!checkedParties.has(user.partyId)) {
         checkedParties.add(user.partyId);
-        const partyValidation = this.validatePartyLocal(user.partyId, queue, allPlayersInQueue, ctx);
+        const partyValidation = this.validatePartyLocal(user.partyId, queue, ctx);
         if (!partyValidation.valid) {
           console.warn(`[CentralizedMatchmaker] Party ${user.partyId} validation failed: ${partyValidation.reason}`);
           invalidParties.add(user.partyId);
@@ -771,7 +771,6 @@ export class CentralizedMatchmaker {
   private validatePartyLocal(
     partyId: string,
     queue: QueueLike,
-    playersInQueue: string[],
     ctx: ValidationCtx
   ): { valid: boolean; reason?: string } {
     const party = ctx.partyMap.get(partyId);
@@ -785,7 +784,7 @@ export class CentralizedMatchmaker {
     }
 
     const partyMembers = party.members;
-    const partyMembersInQueue = partyMembers.filter((memberId: string) => playersInQueue.includes(memberId));
+    const partyMembersInQueue = partyMembers.filter((memberId: string) => ctx.queuedSet.has(memberId));
 
     if (partyMembersInQueue.length !== partyMembers.length) {
       return {
@@ -794,9 +793,8 @@ export class CentralizedMatchmaker {
       };
     }
 
-    const queuedSet = new Set(playersInQueue);
     for (const memberId of partyMembers) {
-      const member = ctx.userMap.get(memberId) ?? (queuedSet.has(memberId) ? undefined : ctx.partyMemberMap.get(memberId));
+      const member = ctx.userMap.get(memberId) ?? (ctx.queuedSet.has(memberId) ? undefined : ctx.partyMemberMap.get(memberId));
       if (!member) {
         return {
           valid: false,
@@ -887,7 +885,7 @@ export class CentralizedMatchmaker {
         if (!checkedParties.has(user.partyId)) {
           checkedParties.add(user.partyId);
           const partyValidation = ctx
-            ? this.validatePartyLocal(user.partyId, queue, allPlayersInQueue, ctx)
+            ? this.validatePartyLocal(user.partyId, queue, ctx)
             : await this.validateParty(user.partyId, queue, allPlayersInQueue);
           if (!partyValidation.valid) {
             console.warn(`[CentralizedMatchmaker] Party ${user.partyId} validation failed: ${partyValidation.reason}`);
@@ -934,7 +932,7 @@ export class CentralizedMatchmaker {
   ): Promise<{ valid: boolean; reason?: string }> {
     try {
       if (ctx) {
-        return this.validatePartyLocal(partyId, queue, playersInQueue, ctx);
+        return this.validatePartyLocal(partyId, queue, ctx);
       }
 
       const Party = (await import('../models/Party')).default;
@@ -949,7 +947,8 @@ export class CentralizedMatchmaker {
       }
 
       const partyMembers = party.members;
-      const partyMembersInQueue = partyMembers.filter(memberId => playersInQueue.includes(memberId));
+      const queuedSet = new Set(playersInQueue);
+      const partyMembersInQueue = partyMembers.filter((memberId: string) => queuedSet.has(memberId));
 
       if (partyMembersInQueue.length !== partyMembers.length) {
         return { 

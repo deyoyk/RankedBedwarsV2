@@ -1,11 +1,17 @@
 const claims = new Map<string, { owner: string; expiresAt: number }>();
 const CLAIM_TTL_MS = 180000;
+const MAX_CLAIMS = 10000;
 
 function prune(now: number = Date.now()): void {
   for (const [playerId, claim] of claims) {
     if (claim.expiresAt <= now) {
       claims.delete(playerId);
     }
+  }
+  while (claims.size > MAX_CLAIMS) {
+    const oldest = claims.keys().next();
+    if (oldest.done) break;
+    claims.delete(oldest.value);
   }
 }
 

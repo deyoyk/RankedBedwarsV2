@@ -65,25 +65,58 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
   const playtime = playSecs < 3600 ? `${Math.floor(playSecs / 60)}m` : playSecs < 86400 ? `${Math.floor(playSecs / 3600)}h` : `${Math.floor(playSecs / 86400)}d`;
   const streak = winStreak > 0 ? `+${winStreak}` : loseStreak > 0 ? `-${loseStreak}` : '0';
 
-  const rankOf = async (field: string, value: number): Promise<string> => {
-    const higher = await User.countDocuments({ [field]: { $gt: value } });
-    return `#${higher + 1}`;
+  const rankFields = [
+    'wins',
+    'losses',
+    'wlr',
+    'kills',
+    'kdr',
+    'mvps',
+    'winStreak',
+    'playtimeSeconds',
+    'finalKills',
+    'bedBroken',
+    'finalDeaths',
+  ] as const;
+  const rankValues: Record<(typeof rankFields)[number], number> = {
+    wins,
+    losses,
+    wlr: user.wlr || 0,
+    kills,
+    kdr: user.kdr || 0,
+    mvps,
+    winStreak,
+    playtimeSeconds: playSecs,
+    finalKills: user.finalKills || 0,
+    bedBroken: user.bedBroken || 0,
+    finalDeaths: user.finalDeaths || 0,
   };
+  type FacetStage = { $match: Record<string, unknown> } | { $count: string };
+  const rankFacet: Record<string, FacetStage[]> = {};
+  for (const field of rankFields) {
+    rankFacet[`${field}Rank`] = [{ $match: { [field]: { $gt: rankValues[field] } } }, { $count: 'n' }];
+  }
+  rankFacet.position = [{ $match: { elo: { $gt: elo } } }, { $count: 'n' }];
 
-  const season = await Season.findOne({ isActive: true }).lean();
-  const [winsRank, lossesRank, wlrRank, killsRank, kdrRank, mvpsRank, streakRank, playtimeRank, finalKillsRank, bedsRank, finalDeathsRank] = await Promise.all([
-    rankOf('wins', wins),
-    rankOf('losses', losses),
-    rankOf('wlr', user.wlr || 0),
-    rankOf('kills', kills),
-    rankOf('kdr', user.kdr || 0),
-    rankOf('mvps', mvps),
-    rankOf('winStreak', winStreak),
-    rankOf('playtimeSeconds', playSecs),
-    rankOf('finalKills', user.finalKills || 0),
-    rankOf('bedBroken', user.bedBroken || 0),
-    rankOf('finalDeaths', user.finalDeaths || 0),
-  ]);
+  const seasonPromise = Season.findOne({ isActive: true }).lean();
+  const [facetCounts] = (await User.aggregate([{ $facet: rankFacet }])) as Array<Record<string, Array<{ n: number }>>>;
+  const season = await seasonPromise;
+
+  const higherOf = (key: string): number => facetCounts?.[key]?.[0]?.n ?? 0;
+  const rankOf = (key: string): string => `#${higherOf(key) + 1}`;
+
+  const winsRank = rankOf('winsRank');
+  const lossesRank = rankOf('lossesRank');
+  const wlrRank = rankOf('wlrRank');
+  const killsRank = rankOf('killsRank');
+  const kdrRank = rankOf('kdrRank');
+  const mvpsRank = rankOf('mvpsRank');
+  const streakRank = rankOf('winStreakRank');
+  const playtimeRank = rankOf('playtimeSecondsRank');
+  const finalKillsRank = rankOf('finalKillsRank');
+  const bedsRank = rankOf('bedBrokenRank');
+  const finalDeathsRank = rankOf('finalDeathsRank');
+  const position = higherOf('position') + 1;
 
   const playerData = {
     discordid: user.discordId,
@@ -130,8 +163,8 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
 
   
   async function calculatePosition(_discordId: string): Promise<number> {
-    const higher = await User.countDocuments({ elo: { $gt: elo } });
-    return higher + 1;
+    void _discordId;
+    return position;
   }
 
   const generator = resolveTheme('default');

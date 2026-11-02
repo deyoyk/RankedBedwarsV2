@@ -62,6 +62,7 @@ jest.mock('../src/models/User', () => ({
     countDocuments: jest.fn().mockResolvedValue(5),
     create: jest.fn().mockResolvedValue({ ...mockUserDoc }),
     deleteMany: jest.fn().mockResolvedValue({}),
+    aggregate: jest.fn().mockResolvedValue([]),
   },
 }));
 jest.mock('../src/models/Game', () => ({

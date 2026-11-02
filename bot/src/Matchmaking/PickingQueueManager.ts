@@ -721,9 +721,9 @@ export class PickingQueueManager {
         findUser = (playerId: string) => users.find(u => u.discordId === playerId) as unknown as { ign?: string; elo: number; wins: number; losses: number; kills: number; deaths: number } | undefined;
       }
 
-      const options = await Promise.all(availablePlayers.map(async (playerId) => {
+      const options = availablePlayers.map((playerId) => {
         const user = findUser(playerId);
-        
+
         if (!user) {
           return {
             label: `Player ${playerId.substring(0, 8)}...`,
@@ -732,16 +732,16 @@ export class PickingQueueManager {
           };
         }
 
-        
+
         const wlr = user.losses > 0 ? (user.wins / user.losses).toFixed(2) : user.wins.toString();
         const kdr = user.deaths > 0 ? (user.kills / user.deaths).toFixed(2) : user.kills.toString();
-        
+
         return {
           label: user.ign || `Player ${playerId.substring(0, 8)}...`,
           value: playerId,
           description: `${user.elo} ELO | ${wlr} WLR | ${kdr} KDR`
         };
-      }));
+      });
 
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(`pick_player_${session.gameId}`)

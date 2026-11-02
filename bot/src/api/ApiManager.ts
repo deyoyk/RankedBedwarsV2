@@ -335,9 +335,11 @@ export class ApiManager {
   }
 
   private async getGlobalCounts() {
-    const totalUsers = await User.countDocuments();
     const Game = await this.getGameModel();
-    const totalGames = await Game.countDocuments();
+    const [totalUsers, totalGames] = await Promise.all([
+      User.countDocuments(),
+      Game.countDocuments(),
+    ]);
     return { totalUsers, totalGames };
   }
 
@@ -803,7 +805,10 @@ export class ApiManager {
         }
       }
 
-      punishments.sort((a, b) => this.punishmentTime(b.date) - this.punishmentTime(a.date));
+      const withTime = punishments.map(p => ({ p, t: this.punishmentTime(p.date) }));
+      withTime.sort((a, b) => b.t - a.t);
+      punishments.length = 0;
+      for (const { p } of withTime) punishments.push(p);
 
       const allIds = Array.from(new Set([...staffIds, ...targetIds]));
       const idToIgn: Record<string, string> = {};
@@ -1379,7 +1384,9 @@ export class ApiManager {
           ...formatPunishments(user.bans || [], 'ban'),
           ...formatPunishments(user.mutes || [], 'mute'),
           ...formatPunishments(user.strikes || [], 'strike')
-        ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        ].map(p => ({ p, t: new Date(p.date).getTime() }))
+          .sort((a, b) => b.t - a.t)
+          .map(({ p }) => p);
 
         return {
           ign: user.ign,
