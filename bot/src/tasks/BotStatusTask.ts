@@ -23,7 +23,7 @@ export class BotStatusTask {
     this.client = client;
     this.wsManager = wsManager;
     this.startTime = new Date();
-    this.statusImagePath = path.resolve(process.cwd(), 'src', 'asserts', 'status', 'rbw.gif');
+    this.statusImagePath = path.resolve(process.cwd(), 'src', 'assets', 'status', 'rbw.gif');
   }
 
   public async start() {

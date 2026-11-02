@@ -22,7 +22,7 @@ export function loadImageFonts(): ImageFont[] {
   if (cachedFonts) return cachedFonts;
   cachedFonts = [];
   for (const spec of FONT_SPECS) {
-    const full = path.resolve(process.cwd(), 'src', 'asserts', 'fonts', spec.file);
+    const full = path.resolve(process.cwd(), 'src', 'assets', 'fonts', spec.file);
     if (!fs.existsSync(full)) continue;
     cachedFonts.push({ name: spec.name, data: fs.readFileSync(full), weight: 400, style: 'normal' });
   }
@@ -35,7 +35,7 @@ export function staticImageDataUrl(dir: 'themes' | 'games' | 'fallbacks', file: 
   const key = `${dir}/${file}`;
   const hit = dataUrlCache.get(key);
   if (hit) return hit;
-  const buf = fs.readFileSync(path.resolve(process.cwd(), 'src', 'asserts', dir, file));
+  const buf = fs.readFileSync(path.resolve(process.cwd(), 'src', 'assets', dir, file));
   const url = `data:image/png;base64,${buf.toString('base64')}`;
   staticImageCacheStore(key, url);
   return url;

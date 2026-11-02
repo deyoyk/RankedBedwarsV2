@@ -45,8 +45,8 @@ function resolveAssetPath(fileName: string): string | null {
   const hit = assetPathCache.get(fileName);
   if (hit !== undefined) return hit;
   const candidatePaths = [
-    path.resolve(process.cwd(), 'src', 'asserts', 'punishments', fileName),
-    path.resolve(process.cwd(), 'asserts', 'punishments', fileName)
+    path.resolve(process.cwd(), 'src', 'assets', 'punishments', fileName),
+    path.resolve(process.cwd(), 'assets', 'punishments', fileName)
   ];
   const found = candidatePaths.find(p => fs.existsSync(p)) ?? null;
   if (assetPathCache.size >= 100) {
