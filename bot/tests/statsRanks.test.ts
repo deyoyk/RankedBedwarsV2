@@ -37,7 +37,7 @@ jest.mock('../src/models/Season', () => ({
 }));
 
 const captured: { playerData?: any; helpers?: any; bufferCalls: number } = { bufferCalls: 0 };
-jest.mock('../src/themes', () => ({
+jest.mock('../src/assets/stats-theme', () => ({
   resolveTheme: jest.fn(() => async (playerData: any, recentGames: any, helpers: any) => {
     captured.playerData = playerData;
     captured.helpers = helpers;

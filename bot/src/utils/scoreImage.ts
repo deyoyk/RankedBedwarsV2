@@ -1,6 +1,6 @@
-import { loadAvatarDataUrl, staticImageDataUrl } from '../images/assets';
-import { renderPng } from '../images/renderer';
-import { scoreTemplate, ScoreTemplatePlayer } from '../images/templates/score';
+import { loadAvatarDataUrl, staticImageDataUrl } from '../assets/assets';
+import { renderPng } from '../assets/renderer';
+import { scoreTemplate, ScoreTemplatePlayer } from '../assets/games/score';
 
 type PlayerLine = {
   discordId: string;

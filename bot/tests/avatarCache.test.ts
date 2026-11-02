@@ -1,4 +1,4 @@
-import { loadAvatarDataUrl, loadSkinDataUrl } from '../src/images/assets';
+import { loadAvatarDataUrl, loadSkinDataUrl } from '../src/assets/assets';
 
 const fetchMock = jest.fn();
 

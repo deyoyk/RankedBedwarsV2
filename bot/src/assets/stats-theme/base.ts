@@ -1,6 +1,6 @@
-import { loadSkinDataUrl } from '../images/assets';
-import { renderPng } from '../images/renderer';
-import { defaultTemplate, DefaultTile } from '../images/templates/default';
+import { loadSkinDataUrl } from '../assets';
+import { renderPng } from '../renderer';
+import { defaultTemplate, DefaultTile } from './default';
 
 export type PlayerData = {
   discordid: string;

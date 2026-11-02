@@ -182,7 +182,7 @@ jest.mock('../src/utils/voteRequest', () => ({
   claimVoteRequest: jest.fn().mockResolvedValue(true),
   releaseVoteRequest: jest.fn().mockResolvedValue(undefined),
 }));
-jest.mock('../src/themes', () => ({
+jest.mock('../src/assets/stats-theme', () => ({
   resolveTheme: jest.fn().mockReturnValue(jest.fn().mockResolvedValue(Buffer.from('img'))),
   themes: ['default'],
 }));

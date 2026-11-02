@@ -4,7 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import Season from '../../models/Season';
 import { betterEmbed } from '../../utils/betterembed';
-import { resolveTheme } from '../../themes';
+import { resolveTheme } from '../../assets/stats-theme';
 import { getLevelInfo } from '../../utils/levelSystem';
 import config from '../../config/config';
 

@@ -1,9 +1,9 @@
 import { generateScoreImageBuffer } from '../src/utils/scoreImage';
-import { generateThemeImage } from '../src/themes/base';
-import { scoreTemplate } from '../src/images/templates/score';
-import { defaultTemplate } from '../src/images/templates/default';
-import { staticImageDataUrl } from '../src/images/assets';
-import { themes, resolveTheme } from '../src/themes';
+import { generateThemeImage } from '../src/assets/stats-theme/base';
+import { scoreTemplate } from '../src/assets/games/score';
+import { defaultTemplate } from '../src/assets/stats-theme/default';
+import { staticImageDataUrl } from '../src/assets/assets';
+import { themes, resolveTheme } from '../src/assets/stats-theme';
 
 jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
 
