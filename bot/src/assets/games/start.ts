@@ -1,4 +1,17 @@
 import { h, VNode } from '../renderer';
+import {
+  accent,
+  avatar,
+  badge,
+  COLORS,
+  decor,
+  divider,
+  gameFooter,
+  MEDIUM,
+  panel,
+  rootStyle,
+  text,
+} from '../theme';
 
 export type StartTemplatePlayer = {
   username: string;
@@ -21,66 +34,214 @@ export type StartTemplateInput = {
 
 const WIDTH = 1920;
 const HEIGHT = 1080;
-const NAME_FONT = 'ADAMCGPRO';
+
 const CARD_W = 800;
 const CARD_X1 = 80;
 const CARD_X2 = 1040;
-const CARD_TOP = 260;
-const HEADER_H = 96;
-const ROW_H = 84;
+const CARD_TOP = 240;
+const CARD_BOTTOM = 936;
+const HEADER_H = 64;
+const COLUMNS_H = 32;
+const SUMMARY_H = 60;
+const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
 
-function grain(): VNode {
-  return h('svg', { width: WIDTH, height: HEIGHT, style: { position: 'absolute', left: 0, top: 0 } },
-    h('filter', { id: 'startgrain' },
-      h('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.8', numOctaves: '2' }),
-      h('feColorMatrix', { type: 'saturate', values: '0' })),
-    h('rect', { width: WIDTH, height: HEIGHT, filter: 'url(#startgrain)', opacity: '0.05' }));
+// Column offsets inside a card.
+const NAME_X = 86;
+const NAME_W = 490;
+const CPT_X = 590;
+const CPT_W = 56;
+const ELO_X = 666;
+const ELO_W = 110;
+
+function header(input: StartTemplateInput): VNode {
+  return h('div', {},
+    badge((WIDTH - 174) / 2, 30, 174, `GAME #${input.gameId}`, {
+      color: COLORS.text,
+      background: 'rgba(21,31,45,0.9)',
+      border: COLORS.line,
+      height: 34,
+      size: 13,
+      letterSpacing: 1.4,
+    }),
+
+    text(0, 76, WIDTH, 82, 'MATCH START', 68, COLORS.text, MEDIUM, 'center', 2.4),
+
+    text(
+      0, 164, WIDTH, 28,
+      `${input.mapName} · ${input.modeLabel}`,
+      26, COLORS.cyan, MEDIUM, 'center', 1.2,
+    ),
+
+    divider((WIDTH - 120) / 2, 210, 120, COLORS.cyan, 2),
+  );
 }
 
-function teamCard(title: string, avg: number, players: StartTemplatePlayer[], left: number, accent: string): VNode[] {
-  const rows = players.flatMap((p, i) => {
-    const top = CARD_TOP + HEADER_H + i * ROW_H;
-    const y = top + 22;
-    return [
-      h('div', { style: { position: 'absolute', left, top, width: CARD_W, height: ROW_H, backgroundColor: i % 2 === 0 ? 'rgba(38,48,140,0.55)' : 'rgba(12,16,48,0.55)' } }),
-      h('img', { src: p.avatar, width: 40, height: 40, style: { position: 'absolute', left: left + 24, top: y, borderRadius: 8 } }),
-      h('div', { style: { position: 'absolute', left: left + 82, top: y - 2, display: 'flex', flexDirection: 'row', alignItems: 'center', height: 46 } },
-        h('div', { style: { fontFamily: NAME_FONT, fontSize: 38, color: '#FFFFFF', lineHeight: '44px' } }, p.username),
-        p.isCaptain ? h('div', {
-          style: {
-            marginLeft: 12, backgroundColor: '#000000', borderRadius: 10,
-            paddingLeft: 14, paddingRight: 14, paddingTop: 3, paddingBottom: 3,
-            fontFamily: NAME_FONT, fontSize: 30, color: '#FFD54A', lineHeight: '36px',
-          },
-        }, 'CPT') : null,
-      ),
-      h('div', { style: { position: 'absolute', left: left + CARD_W - 220, top: y, width: 196, textAlign: 'right', fontFamily: NAME_FONT, fontSize: 38, color: '#B9B9C7', lineHeight: '44px' } }, String(p.elo)),
-    ];
-  });
+function playerRow(
+  p: StartTemplatePlayer,
+  cardX: number,
+  rowTop: number,
+  rowH: number,
+  index: number,
+): (VNode | null)[] {
+  const avatarSize = Math.max(24, Math.min(48, rowH - 18));
+  const nameSize = Math.max(
+    15,
+    Math.min(34, rowH - 16, Math.floor(760 / Math.max(6, p.username.length))),
+  );
+  const eloSize = Math.max(12, Math.min(26, rowH - 24));
+  const cptH = Math.max(18, Math.min(24, rowH - 18));
+  const cptSize = Math.max(9, Math.min(11, rowH - 24));
+  const rowY = rowTop + (rowH - avatarSize) / 2;
+
   return [
-    h('div', { style: { position: 'absolute', left, top: CARD_TOP, width: CARD_W, height: HEADER_H, backgroundColor: accent } }),
-    h('div', { style: { position: 'absolute', left: left + 24, top: CARD_TOP + 14, fontFamily: NAME_FONT, fontSize: 40, color: '#FFFFFF', lineHeight: '46px' } }, title),
-    h('div', { style: { position: 'absolute', left: left + CARD_W - 324, top: CARD_TOP + 14, width: 300, textAlign: 'right', fontFamily: NAME_FONT, fontSize: 40, color: '#FFFFFF', lineHeight: '46px' } }, `AVG ${avg}`),
-    ...rows,
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: cardX,
+        top: rowTop,
+        width: CARD_W,
+        height: rowH,
+        backgroundColor: index % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.10)',
+      },
+    }),
+
+    avatar(p.avatar, cardX + 24, rowY, avatarSize, 10),
+
+    text(
+      cardX + NAME_X, rowTop, NAME_W, rowH,
+      p.username,
+      nameSize, COLORS.text, MEDIUM,
+    ),
+
+    p.isCaptain
+      ? badge(cardX + CPT_X, rowTop + (rowH - cptH) / 2, CPT_W, 'CPT', {
+          color: COLORS.gold,
+          background: 'rgba(251,191,36,0.12)',
+          border: 'rgba(251,191,36,0.36)',
+          height: cptH,
+          size: cptSize,
+          letterSpacing: 0.8,
+        })
+      : null,
+
+    text(
+      cardX + ELO_X, rowTop, ELO_W, rowH,
+      String(p.elo),
+      eloSize, COLORS.text, MEDIUM, 'right',
+    ),
+
+    divider(cardX + 24, rowTop + rowH - 1, CARD_W - 48, COLORS.lineSoft, 1),
   ];
 }
 
-export function startTemplate(input: StartTemplateInput): { root: VNode; width: number; height: number } {
-  const subtitle = `${input.mapName} · ${input.modeLabel}`;
-  const root = h('div', {
-    style: {
-      display: 'flex', position: 'relative', width: WIDTH, height: HEIGHT,
-      backgroundImage: 'linear-gradient(180deg, #070b1d 0%, #131a3f 55%, #070b1d 100%)',
-    },
-  },
-    grain(),
-    h('div', { style: { position: 'absolute', left: 0, top: 40, width: WIDTH, textAlign: 'center', fontFamily: 'PoppinsLight', fontSize: 44, color: '#757474' } }, `GAME #${input.gameId}`),
-    h('div', { style: { position: 'absolute', left: 0, top: 92, width: WIDTH, textAlign: 'center', fontFamily: NAME_FONT, fontSize: 72, color: '#FFFFFF', lineHeight: '78px' } }, 'MATCH START'),
-    h('div', { style: { position: 'absolute', left: 0, top: 182, width: WIDTH, textAlign: 'center', fontFamily: NAME_FONT, fontSize: 40, color: '#8fd6ff', lineHeight: '46px' } }, subtitle),
-    ...teamCard('TEAM GREEN', input.team1Avg, input.team1, CARD_X1, 'rgba(22,120,60,0.85)'),
-    ...teamCard('TEAM RED', input.team2Avg, input.team2, CARD_X2, 'rgba(160,32,32,0.85)'),
-    input.serverName ? h('div', { style: { position: 'absolute', left: 120, top: 952, fontFamily: 'PoppinsLight', fontSize: 54, color: '#757474' } }, input.serverName) : null,
-    input.inviteLink ? h('div', { style: { position: 'absolute', left: 1200, top: 952, width: 640, textAlign: 'center', fontFamily: 'PoppinsLight', fontSize: 54, color: '#757474' } }, input.inviteLink) : null,
+function teamCard(
+  players: StartTemplatePlayer[],
+  cardX: number,
+  top: number,
+  cardH: number,
+  rowH: number,
+  maxRows: number,
+  title: string,
+  avg: number,
+  color: string,
+): (VNode | null)[] {
+  const summaryTop = top + cardH - SUMMARY_H;
+  const rowsTop = top + HEADER_H + COLUMNS_H;
+  const playerCount = players.length;
+  const totalElo = players.reduce((sum, p) => sum + (p.elo || 0), 0);
+  const spread = players.length > 0
+    ? Math.max(...players.map(p => p.elo || 0)) - Math.min(...players.map(p => p.elo || 0))
+    : 0;
+
+  const rows = players.flatMap((p, i) =>
+    playerRow(p, cardX, rowsTop + i * rowH, rowH, i),
   );
+
+  const empty = playerCount === 0
+    ? text(
+        cardX + 24, rowsTop, CARD_W - 48, maxRows * rowH,
+        'NO PLAYERS',
+        15, COLORS.faint, MEDIUM, 'center', 1.8,
+      )
+    : null;
+
+  return [
+    panel(cardX, top, CARD_W, cardH, 20),
+    accent(cardX, top, 4, HEADER_H, color, 4),
+
+    text(cardX + 28, top + 13, 320, 26, title, 16, color, MEDIUM, 'left', 1.8),
+    text(
+      cardX + 28, top + 37, 320, 18,
+      `${playerCount} ${playerCount === 1 ? 'PLAYER' : 'PLAYERS'}`,
+      10, COLORS.muted, MEDIUM, 'left', 1.6,
+    ),
+    text(
+      cardX + CARD_W - 328, top + 20, 300, 26,
+      `AVG ${avg}`,
+      20, COLORS.text, MEDIUM, 'right', 0.8,
+    ),
+
+    divider(cardX + 24, top + HEADER_H, CARD_W - 48, COLORS.line, 1),
+
+    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 10, COLORS.faint, MEDIUM, 'left', 1.6),
+    text(cardX + ELO_X, top + HEADER_H, ELO_W, COLUMNS_H, 'ELO', 10, COLORS.faint, MEDIUM, 'right', 1.4),
+
+    ...rows,
+    empty,
+
+    divider(cardX + 24, summaryTop, CARD_W - 48, COLORS.line, 1),
+
+    text(cardX + 28, summaryTop + 11, 300, 18, 'TOTAL ELO', 10, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(cardX + 28, summaryTop + 29, 300, 24, String(totalElo), 20, COLORS.text, MEDIUM),
+
+    text(cardX + CARD_W - 288, summaryTop + 11, 260, 18, 'ELO SPREAD', 10, COLORS.muted, MEDIUM, 'right', 1.4),
+    text(cardX + CARD_W - 288, summaryTop + 29, 260, 24, String(spread), 20, COLORS.text, MEDIUM, 'right'),
+  ];
+}
+
+function versus(top: number, cardH: number): VNode {
+  return h('div', {
+    style: {
+      position: 'absolute',
+      left: WIDTH / 2 - 36,
+      top: top + cardH / 2 - 36,
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      backgroundColor: '#0a1018',
+      borderWidth: 1,
+      borderStyle: 'solid',
+      borderColor: COLORS.line,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: MEDIUM,
+      fontSize: 22,
+      letterSpacing: 1.4,
+      color: COLORS.text,
+    },
+  }, 'VS');
+}
+
+export function startTemplate(input: StartTemplateInput): { root: VNode; width: number; height: number } {
+  const maxRows = Math.max(1, input.team1.length, input.team2.length);
+  const available = CARD_BOTTOM - CARD_TOP;
+  const rowH = Math.max(32, Math.min(108, Math.floor((available - CARD_CHROME) / maxRows)));
+  const cardH = CARD_CHROME + maxRows * rowH;
+  const cardTop = CARD_TOP + Math.max(0, Math.floor((available - cardH) / 2));
+
+  const root = h('div', { style: rootStyle(WIDTH, HEIGHT) },
+    decor(WIDTH, HEIGHT, 'start'),
+
+    header(input),
+
+    ...teamCard(input.team1, CARD_X1, cardTop, cardH, rowH, maxRows, 'TEAM GREEN', input.team1Avg, COLORS.green),
+    ...teamCard(input.team2, CARD_X2, cardTop, cardH, rowH, maxRows, 'TEAM RED', input.team2Avg, COLORS.red),
+
+    versus(cardTop, cardH),
+
+    gameFooter(WIDTH, input.serverName, input.inviteLink),
+  );
+
   return { root, width: WIDTH, height: HEIGHT };
 }

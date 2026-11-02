@@ -1,4 +1,17 @@
 import { h, VNode } from '../renderer';
+import {
+  accent,
+  badge,
+  COLORS,
+  decor,
+  divider,
+  FONT,
+  MEDIUM,
+  panel,
+  rootStyle,
+  sectionLabel,
+  text,
+} from '../theme';
 
 export type DefaultTile = {
   value: string;
@@ -29,143 +42,292 @@ export type DefaultTemplateInput = {
 
 const WIDTH = 1400;
 const HEIGHT = 940;
-const PANEL = '#11141d';
-const LINE = '#232936';
-const MUTED = '#8a8a95';
-const CYAN = '#22d3ee';
 
-function grain(): VNode {
-  return h('svg', { width: WIDTH, height: HEIGHT, style: { position: 'absolute', left: 0, top: 0 } },
-    h('filter', { id: 'defaultgrain' },
-      h('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.9', numOctaves: '2' }),
-      h('feColorMatrix', { type: 'saturate', values: '0' })),
-    h('rect', { width: WIDTH, height: HEIGHT, filter: 'url(#defaultgrain)', opacity: '0.05' }));
-}
+const RANK_TEXT = COLORS.purple;
+const RANK_BG = 'rgba(167,139,250,0.10)';
+const RANK_BORDER = 'rgba(167,139,250,0.32)';
 
-function diamond(cx: number, cy: number, size: number, color: string): VNode {
-  const s = size / 2;
-  return h('svg', { width: size, height: size, style: { position: 'absolute', left: Math.round(cx - s), top: Math.round(cy - s) } },
-    h('polygon', { points: `${s},0 ${size},${s} ${s},${size} 0,${s}`, fill: color }));
-}
-
-function levelRing(progress: number, level: number, skin: string | null): VNode {
-  const r = 78;
-  const c = 2 * Math.PI * r;
-  const filled = Math.round(c * Math.min(1, Math.max(0, progress)));
-  return h('div', { style: { position: 'absolute', left: 70, top: 48, width: 180, height: 180 } },
-    h('svg', { width: 180, height: 180, style: { position: 'absolute', left: 0, top: 0 } },
-      h('circle', { cx: 90, cy: 90, r, fill: 'none', stroke: '#232936', strokeWidth: 10 }),
-      h('circle', { cx: 90, cy: 90, r, fill: 'none', stroke: CYAN, strokeWidth: 10, strokeDasharray: `${filled} ${Math.round(c)}`, strokeLinecap: 'round', transform: 'rotate(-90 90 90)' })),
-    h('div', { style: { position: 'absolute', left: 18, top: 18, width: 144, height: 144, borderRadius: 72, overflow: 'hidden', backgroundColor: '#15151c' } },
-      skin ? h('img', { src: skin, width: 144, height: 345, style: { position: 'absolute', left: 0, top: 0 } }) : null),
+function header(): VNode {
+  return h('div', {},
     h('div', {
       style: {
-        position: 'absolute', left: 45, top: 188 - 48, width: 90, height: 34, borderRadius: 17,
-        backgroundColor: '#0e7490', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontFamily: 'PoppinsMedium', fontSize: 20, color: '#FFFFFF',
+        position: 'absolute',
+        left: 60,
+        top: 23,
+        width: 10,
+        height: 10,
+        borderRadius: 3,
+        backgroundColor: COLORS.cyan,
       },
-    }, `LVL ${level}`));
+    }),
+    text(79, 16, 220, 24, 'RANKED BEDWARS', 14, COLORS.text, MEDIUM, 'left', 1.4),
+    text(242, 18, 260, 22, 'PLAYER STATISTICS', 11, COLORS.muted, MEDIUM, 'left', 2),
+    text(1040, 18, 300, 22, 'PROFILE CARD', 11, COLORS.faint, MEDIUM, 'right', 2),
+  );
+}
+
+function hero(input: DefaultTemplateInput): VNode {
+  const progress = Math.max(0, Math.min(1, input.xpProgress));
+
+  return h('div', {},
+    panel(60, 54, 1280, 230, 20),
+
+    accent(60, 54, 4, 230, COLORS.cyan, 4),
+
+    // Skin frame
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: 92,
+        top: 84,
+        width: 148,
+        height: 148,
+        borderRadius: 18,
+        backgroundColor: COLORS.panelRaised,
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: COLORS.line,
+        overflow: 'hidden',
+      },
+    },
+      input.skin
+        ? h('img', {
+            src: input.skin,
+            width: 148,
+            height: 355,
+            style: {
+              position: 'absolute',
+              left: 0,
+              top: 0,
+            },
+          })
+        : null,
+    ),
+
+    badge(270, 78, 132, 'PLAYER PROFILE', {
+      color: COLORS.cyan,
+      background: 'rgba(77,225,242,0.08)',
+      border: 'rgba(77,225,242,0.28)',
+      height: 28,
+      size: 12,
+      letterSpacing: 1.2,
+    }),
+
+    text(
+      270, 114, 600, 62,
+      input.ign,
+      input.ign.length > 14 ? 42 : 54,
+      COLORS.text,
+      MEDIUM,
+       'left',
+       0.4,
+    ),
+
+    text(272, 180, 520, 24, input.joined, 15, COLORS.muted),
+
+    // Level progress
+    sectionLabel(270, 212, 'LEVEL PROGRESS', COLORS.muted, COLORS.cyan),
+    text(270, 236, 180, 24, `LEVEL ${input.level}`, 16, COLORS.cyan, MEDIUM),
+    text(
+      660, 238, 190, 22,
+      `${input.xpToNext.toLocaleString()} XP TO NEXT`,
+      12, COLORS.muted, FONT, 'right',
+    ),
+
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: 270,
+        top: 266,
+        width: 580,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#22303e',
+        overflow: 'hidden',
+      },
+    },
+      h('div', {
+        style: {
+          width: `${progress * 100}%`,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: COLORS.cyan,
+        },
+      }),
+    ),
+
+    // Rating area
+    divider(940, 86, 1, COLORS.line, 166),
+
+    text(990, 94, 280, 22, 'COMPETITIVE RATING', 12, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(
+      990, 122, 280, 70,
+      `${input.elo.toLocaleString()} RR`,
+      58, COLORS.cyan, MEDIUM,
+    ),
+    text(990, 202, 280, 20, 'GLOBAL RANK', 11, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(990, 222, 280, 32, `#${input.globalRank}`, 26, COLORS.text, MEDIUM),
+  );
+}
+
+function record(input: DefaultTemplateInput): VNode {
+  const winRate = Math.max(0, Math.min(1, input.winRate));
+
+  return h('div', {},
+    panel(60, 310, 1280, 150, 18),
+
+    sectionLabel(88, 330, 'RECORD', COLORS.muted, COLORS.cyan),
+    text(170, 330, 220, 20, 'LIFETIME', 11, COLORS.faint, MEDIUM, 'left', 1.6),
+
+    divider(340, 354, 1, COLORS.line, 88),
+    divider(1060, 354, 1, COLORS.line, 88),
+
+    // Wins
+    text(88, 358, 230, 60, input.wins, 50, COLORS.green, MEDIUM),
+    text(88, 420, 180, 22, 'TOTAL WINS', 12, COLORS.muted, FONT, 'left', 1),
+
+    // Losses
+    text(1070, 358, 200, 60, input.losses, 50, COLORS.red, MEDIUM, 'right'),
+    text(1070, 420, 200, 22, 'TOTAL LOSSES', 12, COLORS.muted, FONT, 'right', 1),
+
+    // Win rate
+    text(
+      360, 338, 680, 46,
+      `${(winRate * 100).toFixed(1)}%`,
+      38, COLORS.text, MEDIUM, 'center',
+    ),
+    text(360, 386, 680, 22, 'WIN RATE', 12, COLORS.muted, MEDIUM, 'center', 1.4),
+
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: 390,
+        top: 424,
+        width: 620,
+        height: 7,
+        borderRadius: 4,
+        backgroundColor: COLORS.red,
+        overflow: 'hidden',
+      },
+    },
+      h('div', {
+        style: {
+          width: `${winRate * 100}%`,
+          height: 7,
+          backgroundColor: COLORS.green,
+          borderRadius: 4,
+        },
+      }),
+    ),
+
+    text(390, 438, 620, 18, input.winCaption, 11, COLORS.muted, FONT, 'center'),
+  );
 }
 
 function statTile(x: number, y: number, t: DefaultTile): VNode {
-  return h('div', {
-    style: {
-      position: 'absolute', left: x, top: y, width: 300, height: 125,
-      backgroundColor: PANEL, borderRadius: 12,
-      borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
-    },
-  },
-    h('div', { style: { position: 'absolute', left: 0, top: 14, width: 5, height: 97, borderRadius: 3, backgroundColor: t.accent } }),
-    h('div', { style: { position: 'absolute', left: 28, top: 18, fontFamily: 'PoppinsMedium', fontSize: 54, color: '#FFFFFF', lineHeight: '56px' } }, t.value),
-    h('div', { style: { position: 'absolute', left: 28, top: 86, fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, t.label),
-    h('div', {
-      style: {
-        position: 'absolute', right: 14, top: 14, width: 74, height: 28, borderRadius: 14,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderWidth: 1, borderStyle: 'solid', borderColor: '#a78bfa',
-        fontFamily: 'PoppinsMedium', fontSize: 17, color: '#a78bfa',
-      },
-    }, t.rank),
+  return h('div', {},
+    panel(x, y, 300, 118, 16),
+
+    accent(x + 18, y + 18, 3, 82, t.accent || COLORS.cyan),
+
+    text(x + 34, y + 14, 244, 54, t.value, 38, COLORS.text, MEDIUM),
+
+    text(
+      x + 34, y + 74, 232, 22,
+      t.label,
+      12, COLORS.muted, FONT, 'left', 0.9,
+    ),
+
+    badge(x + 216, y + 16, 66, t.rank || '-', {
+      color: RANK_TEXT,
+      background: RANK_BG,
+      border: RANK_BORDER,
+      height: 26,
+      size: 12,
+    }),
   );
 }
 
-function rightText(left: number, top: number, width: number, fontSize: number, font: string, color: string, text: string, height?: number): VNode {
-  return h('div', {
-    style: {
-      position: 'absolute', left, top, width, height: height ?? fontSize,
-      textAlign: 'right', fontFamily: font, fontSize, color, lineHeight: `${height ?? fontSize}px`,
-    },
-  }, text);
+function stats(input: DefaultTemplateInput): VNode {
+  const xs = [60, 386, 712, 1038];
+  const ys = [486, 616];
+
+  return h('div', {},
+    sectionLabel(60, 464, 'PERFORMANCE', COLORS.muted, COLORS.cyan),
+    text(1040, 466, 300, 20, 'SEASON TOTALS', 11, COLORS.faint, MEDIUM, 'right', 1.6),
+
+    ...input.tiles.slice(0, 8).map((t, i) =>
+      statTile(xs[i % 4], ys[Math.floor(i / 4)], t),
+    ),
+  );
 }
 
-export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; width: number; height: number } {
-  const barW = 640;
-  const greenW = Math.round(barW * Math.min(1, Math.max(0, input.winRate)));
-  const ignSize = input.ign.length <= 12 ? 68 : 48;
-  const tileXs = [70, 390, 710, 1030];
-  const root = h('div', {
-    style: {
-      display: 'flex', position: 'relative', width: WIDTH, height: HEIGHT,
-      backgroundImage: `linear-gradient(160deg, #0d1226 0%, #0b0e17 55%, #07090f 100%)`,
-    },
-  },
-    grain(),
-    h('div', { style: { position: 'absolute', left: 0, top: 0, width: WIDTH, height: 300, backgroundImage: `linear-gradient(180deg, rgba(34,211,238,0.07) 0%, rgba(34,211,238,0) 100%)` } }),
-    levelRing(input.xpProgress, input.level, input.skin),
-    h('div', { style: { position: 'absolute', left: 285, top: 62, fontFamily: 'PoppinsMedium', fontSize: ignSize, color: '#e8e8ef', lineHeight: '70px' } }, input.ign),
-    input.joined ? h('div', { style: { position: 'absolute', left: 287, top: 140, fontFamily: 'PoppinsRegular', fontSize: 22, color: MUTED } }, input.joined) : null,
-    h('div', { style: { position: 'absolute', left: 287, top: 182, fontFamily: 'PoppinsMedium', fontSize: 18, color: CYAN } }, 'LEVEL PROGRESS'),
-    rightText(560, 180, 190, 18, 'PoppinsRegular', MUTED, `${input.xpToNext} XP TO NEXT`, 24),
-    h('div', { style: { position: 'absolute', left: 287, top: 208, width: 463, height: 8, borderRadius: 4, backgroundColor: LINE } }),
-    rightText(1115, 66, 215, 62, 'PoppinsMedium', CYAN, `${input.elo} RR`, 66),
-    rightText(1115, 138, 215, 22, 'PoppinsRegular', MUTED, `#${input.globalRank} GLOBAL`, 26),
-    h('div', {
-      style: {
-        position: 'absolute', left: 70, top: 268, width: 1260, height: 150,
-        backgroundColor: 'rgba(17,20,29,0.85)', borderRadius: 14,
-        borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
-      },
-    }),
-    diamond(108, 296, 16, CYAN),
-    h('div', { style: { position: 'absolute', left: 124, top: 284, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, 'RECORD'),
-    h('div', { style: { position: 'absolute', left: 100, top: 306, fontFamily: 'PoppinsMedium', fontSize: 60, color: '#00e676', lineHeight: '62px' } }, input.wins),
-    h('div', { style: { position: 'absolute', left: 102, top: 372, fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, input.wins === '1' ? 'WIN' : 'WINS'),
-    rightText(1150, 306, 150, 60, 'PoppinsMedium', '#ff5252', input.losses, 62),
-    h('div', { style: { position: 'absolute', left: 330, top: 318, width: barW, height: 12, borderRadius: 6, overflow: 'hidden', backgroundColor: LINE } },
-      h('div', { style: { position: 'absolute', left: 0, top: 0, width: greenW, height: 12, borderRadius: 6, backgroundColor: '#00c853' } }),
-      h('div', { style: { position: 'absolute', right: 0, top: 0, width: barW - greenW, height: 12, borderRadius: 6, backgroundColor: '#ff5252' } })),
-    h('div', { style: { position: 'absolute', left: 430, top: 338, width: 440, textAlign: 'center', fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, input.winCaption),
-    h('div', { style: { position: 'absolute', left: 1150, top: 372, width: 150, textAlign: 'right', fontFamily: 'PoppinsRegular', fontSize: 19, color: MUTED } }, 'LOSSES'),
-    ...input.tiles.slice(0, 4).map((t, i) => statTile(tileXs[i], 443, t)),
-    ...input.tiles.slice(4, 8).map((t, i) => statTile(tileXs[i], 588, t)),
-    h('div', {
-      style: {
-        position: 'absolute', left: 70, top: 738, width: 1260, height: 110,
-        backgroundColor: 'rgba(17,20,29,0.85)', borderRadius: 14,
-        borderWidth: 1, borderStyle: 'solid', borderColor: LINE,
-      },
-    }),
-    diamond(108, 762, 15, CYAN),
-    h('div', { style: { position: 'absolute', left: 124, top: 751, fontFamily: 'PoppinsMedium', fontSize: 19, color: MUTED } }, 'COMBAT'),
-    ...[130, 520, 910].map((x, i) => {
-      const t = input.combat[i] || { value: '-', label: '', rank: '' };
-      return h('div', { style: { position: 'absolute', left: x, top: 786, width: 300 } },
-        h('div', { style: { fontFamily: 'PoppinsMedium', fontSize: 40, color: '#FFFFFF', lineHeight: '42px' } }, t.value,
-          h('span', { style: { marginLeft: 12, fontFamily: 'PoppinsRegular', fontSize: 18, color: MUTED } }, t.label)),
-        h('div', {
-          style: {
-            position: 'absolute', right: 0, top: 6, width: 72, height: 28, borderRadius: 14,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderWidth: 1, borderStyle: 'solid', borderColor: '#a78bfa',
-            fontFamily: 'PoppinsMedium', fontSize: 17, color: '#a78bfa',
-          },
-        }, t.rank),
-        i < 2 ? h('div', { style: { position: 'absolute', right: -45, top: 0, width: 1, height: 52, backgroundColor: LINE } }) : null,
+function combat(input: DefaultTemplateInput): VNode {
+  const positions = [110, 510, 910];
+
+  return h('div', {},
+    panel(60, 755, 1280, 105, 18),
+
+    sectionLabel(84, 768, 'COMBAT', COLORS.muted, COLORS.cyan),
+
+    ...positions.map((x, i) => {
+      const t = input.combat[i] || {
+        value: '-',
+        label: '',
+        rank: '',
+        accent: COLORS.cyan,
+      };
+
+      return h('div', {},
+        accent(x, 796, 3, 40, t.accent || COLORS.cyan),
+
+        text(x + 14, 794, 120, 44, t.value, 30, COLORS.text, MEDIUM),
+        text(x + 140, 802, 160, 28, t.label, 13, COLORS.muted),
+        badge(x + 292, 800, 65, t.rank || '-', {
+          color: RANK_TEXT,
+          background: RANK_BG,
+          border: RANK_BORDER,
+          height: 26,
+          size: 12,
+        }),
+
+        i < 2 ? divider(x + 380, 796, 1, COLORS.line, 40) : null,
       );
     }),
-    h('div', { style: { position: 'absolute', left: 70, top: 872, fontFamily: 'PoppinsMedium', fontSize: 20, color: MUTED } }, input.seasonLine1),
-    h('div', { style: { position: 'absolute', left: 70, top: 894, fontFamily: 'PoppinsRegular', fontSize: 18, color: '#55555e' } }, input.seasonLine2),
-    input.footerBrand ? rightText(1090, 878, 240, 26, 'PoppinsMedium', '#55555e', input.footerBrand, 32) : null,
   );
-  return { root, width: WIDTH, height: HEIGHT };
+}
+
+function footer(input: DefaultTemplateInput): VNode {
+  return h('div', {},
+    divider(60, 872, 1280, COLORS.line, 1),
+
+    text(60, 884, 600, 20, input.seasonLine1, 12, COLORS.muted, MEDIUM, 'left', 1.2),
+    text(60, 906, 760, 18, input.seasonLine2, 11, COLORS.faint),
+
+    input.footerBrand
+      ? text(940, 886, 400, 22, input.footerBrand, 12, COLORS.faint, MEDIUM, 'right', 0.6)
+      : null,
+  );
+}
+
+export function defaultTemplate(
+  input: DefaultTemplateInput,
+): { root: VNode; width: number; height: number } {
+  const root = h('div', { style: rootStyle(WIDTH, HEIGHT) },
+    decor(WIDTH, HEIGHT, 'stats'),
+
+    header(),
+
+    hero(input),
+    record(input),
+    stats(input),
+    combat(input),
+    footer(input),
+  );
+
+  return {
+    root,
+    width: WIDTH,
+    height: HEIGHT,
+  };
 }

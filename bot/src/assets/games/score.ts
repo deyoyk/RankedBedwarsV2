@@ -1,4 +1,18 @@
 import { h, VNode } from '../renderer';
+import {
+  accent,
+  avatar,
+  badge,
+  COLORS,
+  decor,
+  divider,
+  FONT,
+  gameFooter,
+  MEDIUM,
+  panel,
+  rootStyle,
+  text,
+} from '../theme';
 
 export type ScoreTemplatePlayer = {
   username: string;
@@ -20,72 +34,238 @@ export type ScoreTemplateInput = {
 
 const WIDTH = 1920;
 const HEIGHT = 1080;
-const NAME_FONT = 'ADAMCGPRO';
-const ROW_H = 93;
-const CARD_X = 185;
 
-function eloChangeText(p: ScoreTemplatePlayer): string {
-  const before = p.elo_before ?? p.oldElo ?? 0;
-  const after = p.elo_after ?? p.newElo ?? 0;
-  const delta = after - before;
-  return `${delta >= 0 ? '+' : ''}${delta}`;
+const CARD_W = 850;
+const CARD_XS = [80, 990];
+const CARD_TOP = 236;
+const CARD_BOTTOM = 944;
+const HEADER_H = 64;
+const COLUMNS_H = 32;
+const SUMMARY_H = 64;
+const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
+
+// Column offsets inside a card.
+const NAME_X = 86;
+const NAME_W = 300;
+const MVP_X = 394;
+const MVP_W = 54;
+const DELTA_X = 450;
+const DELTA_W = 140;
+const BEFORE_X = 610;
+const BEFORE_W = 80;
+const ARROW_X = 696;
+const ARROW_W = 24;
+const AFTER_X = 726;
+const AFTER_W = 100;
+
+function beforeElo(p: ScoreTemplatePlayer): number {
+  return p.elo_before ?? p.oldElo ?? 0;
 }
 
-function eloColumn(top: number, left: number, text: string, color: string): VNode {
-  return h('div', {
-    style: {
-      position: 'absolute', left, top, width: 240,
-      textAlign: 'center', fontFamily: NAME_FONT, fontSize: 40, color, lineHeight: '46px',
-    },
-  }, text);
+function afterElo(p: ScoreTemplatePlayer): number {
+  return p.elo_after ?? p.newElo ?? 0;
 }
 
-function grain(): VNode {
-  return h('svg', { width: WIDTH, height: HEIGHT, style: { position: 'absolute', left: 0, top: 0 } },
-    h('filter', { id: 'scoregrain' },
-      h('feTurbulence', { type: 'fractalNoise', baseFrequency: '0.8', numOctaves: '2' }),
-      h('feColorMatrix', { type: 'saturate', values: '0' })),
-    h('rect', { width: WIDTH, height: HEIGHT, filter: 'url(#scoregrain)', opacity: '0.05' }));
+function eloDelta(p: ScoreTemplatePlayer): number {
+  return afterElo(p) - beforeElo(p);
 }
 
-function row(p: ScoreTemplatePlayer, top: number, band: string): VNode[] {
-  const y = top + 24;
-  return [
-    h('div', { style: { position: 'absolute', left: 0, top, width: WIDTH, height: ROW_H, backgroundColor: band } }),
-    h('img', { src: p.avatar, width: 40, height: 40, style: { position: 'absolute', left: CARD_X, top: y + 3, borderRadius: 8 } }),
-    h('div', { style: { position: 'absolute', left: CARD_X + 58, top: y, display: 'flex', flexDirection: 'row', alignItems: 'center', height: 46 } },
-      h('div', { style: { fontFamily: NAME_FONT, fontSize: 40, color: '#FFFFFF', lineHeight: '46px' } }, p.username),
-      p.mvp ? h('div', {
-        style: {
-          marginLeft: 12, backgroundColor: '#000000', borderRadius: 10,
-          paddingLeft: 16, paddingRight: 16, paddingTop: 4, paddingBottom: 4,
-          fontFamily: NAME_FONT, fontSize: 36, color: '#FFFFFF', lineHeight: '40px',
-        },
-      }, 'MVP') : null,
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function header(input: ScoreTemplateInput): VNode {
+  const playerCount = input.winners.length + input.losers.length;
+
+  return h('div', {},
+    badge((WIDTH - 174) / 2, 30, 174, `GAME #${input.gameId}`, {
+      color: COLORS.text,
+      background: 'rgba(21,31,45,0.9)',
+      border: COLORS.line,
+      height: 34,
+      size: 13,
+      letterSpacing: 1.4,
+    }),
+
+    text(0, 76, WIDTH, 82, 'MATCH RESULTS', 68, COLORS.text, MEDIUM, 'center', 2.4),
+
+    text(
+      0, 164, WIDTH, 28,
+      `${playerCount} PLAYERS · FINAL SCOREBOARD`,
+      14, COLORS.muted, MEDIUM, 'center', 2.4,
     ),
-    eloColumn(y, CARD_X + 1010, eloChangeText(p), '#FFFFFF'),
-    eloColumn(y, CARD_X + 1171, String(p.elo_before ?? p.oldElo ?? 0), '#757474'),
-    eloColumn(y, CARD_X + 1379, String(p.elo_after ?? p.newElo ?? 0), '#FFFFFF'),
+
+    divider((WIDTH - 120) / 2, 210, 120, COLORS.cyan, 2),
+  );
+}
+
+function playerRow(
+  p: ScoreTemplatePlayer,
+  cardX: number,
+  rowTop: number,
+  rowH: number,
+  index: number,
+): (VNode | null)[] {
+  const avatarSize = Math.max(24, Math.min(48, rowH - 18));
+  const nameSize = Math.max(
+    15,
+    Math.min(34, rowH - 16, Math.floor(520 / Math.max(6, p.username.length))),
+  );
+  const eloSize = Math.max(12, Math.min(22, rowH - 24));
+  const deltaSize = Math.max(13, Math.min(26, rowH - 20));
+  const mvpH = Math.max(18, Math.min(24, rowH - 18));
+  const mvpSize = Math.max(9, Math.min(11, rowH - 24));
+  const delta = eloDelta(p);
+  const deltaColor = delta > 0 ? COLORS.green : delta < 0 ? COLORS.red : COLORS.muted;
+  const rowY = rowTop + (rowH - avatarSize) / 2;
+
+  return [
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: cardX,
+        top: rowTop,
+        width: CARD_W,
+        height: rowH,
+        backgroundColor: index % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.10)',
+      },
+    }),
+
+    avatar(p.avatar, cardX + 24, rowY, avatarSize, 10),
+
+    text(
+      cardX + NAME_X, rowTop, NAME_W, rowH,
+      p.username,
+      nameSize, COLORS.text, MEDIUM,
+    ),
+
+    p.mvp
+      ? badge(cardX + MVP_X, rowTop + (rowH - mvpH) / 2, MVP_W, 'MVP', {
+          color: COLORS.gold,
+          background: 'rgba(251,191,36,0.12)',
+          border: 'rgba(251,191,36,0.36)',
+          height: mvpH,
+          size: mvpSize,
+          letterSpacing: 0.8,
+        })
+      : null,
+
+    text(
+      cardX + DELTA_X, rowTop, DELTA_W, rowH,
+      signed(delta),
+      deltaSize, deltaColor, MEDIUM, 'center',
+    ),
+
+    text(
+      cardX + BEFORE_X, rowTop, BEFORE_W, rowH,
+      String(beforeElo(p)),
+      eloSize, COLORS.muted, FONT, 'right',
+    ),
+
+    text(
+      cardX + ARROW_X, rowTop, ARROW_W, rowH,
+      '›',
+      eloSize, COLORS.faint, FONT, 'center',
+    ),
+
+    text(
+      cardX + AFTER_X, rowTop, AFTER_W, rowH,
+      String(afterElo(p)),
+      eloSize, COLORS.text, MEDIUM, 'right',
+    ),
+
+    divider(cardX + 24, rowTop + rowH - 1, CARD_W - 48, COLORS.lineSoft, 1),
   ];
 }
 
-function teamCard(players: ScoreTemplatePlayer[], top: number): VNode[] {
-  return players.flatMap((p, i) => row(p, top + i * ROW_H, i % 2 === 0 ? 'rgba(38,48,140,0.55)' : 'rgba(12,16,48,0.55)'));
+function teamCard(
+  players: ScoreTemplatePlayer[],
+  cardX: number,
+  top: number,
+  cardH: number,
+  rowH: number,
+  maxRows: number,
+  title: string,
+  subtitle: string,
+  color: string,
+): (VNode | null)[] {
+  const summaryTop = top + cardH - SUMMARY_H;
+  const rowsTop = top + HEADER_H + COLUMNS_H;
+  const playerCount = players.length;
+
+  const totalBefore = players.reduce((sum, p) => sum + beforeElo(p), 0);
+  const totalAfter = players.reduce((sum, p) => sum + afterElo(p), 0);
+  const totalDelta = totalAfter - totalBefore;
+  const avgAfter = playerCount > 0 ? Math.round(totalAfter / playerCount) : 0;
+  const deltaColor = totalDelta > 0 ? COLORS.green : totalDelta < 0 ? COLORS.red : COLORS.muted;
+
+  const rows = players.flatMap((p, i) =>
+    playerRow(p, cardX, rowsTop + i * rowH, rowH, i),
+  );
+
+  const empty = playerCount === 0
+    ? text(
+        cardX + 24, rowsTop, CARD_W - 48, maxRows * rowH,
+        'NO PLAYERS RECORDED',
+        15, COLORS.faint, MEDIUM, 'center', 1.6,
+      )
+    : null;
+
+  return [
+    panel(cardX, top, CARD_W, cardH, 20),
+    accent(cardX, top, 4, HEADER_H, color, 4),
+
+    text(cardX + 28, top + 13, 300, 26, title, 15, color, MEDIUM, 'left', 1.8),
+    text(cardX + 28, top + 37, 320, 18, subtitle, 10, COLORS.muted, MEDIUM, 'left', 1.6),
+    text(
+      cardX + CARD_W - 228, top + 21, 200, 26,
+      `${playerCount} ${playerCount === 1 ? 'PLAYER' : 'PLAYERS'}`,
+      12, COLORS.muted, MEDIUM, 'right', 1.2,
+    ),
+
+    divider(cardX + 24, top + HEADER_H, CARD_W - 48, COLORS.line, 1),
+
+    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 10, COLORS.faint, MEDIUM, 'left', 1.6),
+    text(cardX + DELTA_X, top + HEADER_H, DELTA_W, COLUMNS_H, 'ELO CHANGE', 10, COLORS.faint, MEDIUM, 'center', 1.4),
+    text(cardX + BEFORE_X, top + HEADER_H, BEFORE_W, COLUMNS_H, 'BEFORE', 10, COLORS.faint, MEDIUM, 'right', 1.2),
+    text(cardX + AFTER_X, top + HEADER_H, AFTER_W, COLUMNS_H, 'AFTER', 10, COLORS.faint, MEDIUM, 'right', 1.2),
+
+    ...rows,
+    empty,
+
+    divider(cardX + 24, summaryTop, CARD_W - 48, COLORS.line, 1),
+
+    text(cardX + 28, summaryTop + 12, 300, 18, 'TOTAL ELO CHANGE', 10, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(cardX + 28, summaryTop + 30, 300, 24, `${signed(totalDelta)} RR`, 20, deltaColor, MEDIUM),
+
+    text(cardX + CARD_W - 288, summaryTop + 12, 260, 18, 'AVERAGE ELO', 10, COLORS.muted, MEDIUM, 'right', 1.4),
+    text(cardX + CARD_W - 288, summaryTop + 30, 260, 24, String(avgAfter), 20, COLORS.text, MEDIUM, 'right'),
+  ];
 }
 
 export function scoreTemplate(input: ScoreTemplateInput): { root: VNode; width: number; height: number } {
-  const root = h('div', {
-    style: {
-      display: 'flex', position: 'relative', width: WIDTH, height: HEIGHT,
-      backgroundImage: 'linear-gradient(180deg, #070b1d 0%, #131a3f 55%, #070b1d 100%)',
-    },
-  },
-    grain(),
-    h('div', { style: { position: 'absolute', left: 120, top: 45, fontFamily: 'PoppinsLight', fontSize: 54, color: '#757474' } }, `GAME #${input.gameId}`),
-    input.serverName ? h('div', { style: { position: 'absolute', left: 120, top: 952, fontFamily: 'PoppinsLight', fontSize: 54, color: '#757474' } }, input.serverName) : null,
-    input.inviteLink ? h('div', { style: { position: 'absolute', left: 1200, top: 952, width: 640, textAlign: 'center', fontFamily: 'PoppinsLight', fontSize: 54, color: '#757474' } }, input.inviteLink) : null,
-    ...teamCard(input.winners, 170),
-    ...teamCard(input.losers, 600),
+  const maxRows = Math.max(1, input.winners.length, input.losers.length);
+  const available = CARD_BOTTOM - CARD_TOP;
+  const rowH = Math.max(34, Math.min(104, Math.floor((available - CARD_CHROME) / maxRows)));
+  const cardH = CARD_CHROME + maxRows * rowH;
+  const cardTop = CARD_TOP + Math.max(0, Math.floor((available - cardH) / 2));
+
+  const root = h('div', { style: rootStyle(WIDTH, HEIGHT) },
+    decor(WIDTH, HEIGHT, 'score'),
+
+    header(input),
+
+    ...teamCard(
+      input.winners, CARD_XS[0], cardTop, cardH, rowH, maxRows,
+      'WINNERS', 'WINNING TEAM', COLORS.green,
+    ),
+    ...teamCard(
+      input.losers, CARD_XS[1], cardTop, cardH, rowH, maxRows,
+      'LOSERS', 'LOSING TEAM', COLORS.red,
+    ),
+
+    gameFooter(WIDTH, input.serverName, input.inviteLink),
   );
+
   return { root, width: WIDTH, height: HEIGHT };
 }
