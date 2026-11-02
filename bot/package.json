@@ -12,6 +12,7 @@
     "validate": "node scripts/validate-config.cjs",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
+    "preview": "ts-node preview-local.ts",
     "test": "jest --runInBand --silent",
     "test:watch": "jest --watch"
   },
