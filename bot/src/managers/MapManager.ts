@@ -1,5 +1,6 @@
 import { MapInfo } from '../types/MapInfoMemory';
 import { WebSocketManager } from '../websocket/WebSocketManager';
+import config from '../config/config';
 
 export const DEFAULT_MAP_CACHE_TTL_MS = 60 * 1000;
 export const MATCHMAKING_MAP_CACHE_TTL_MS = 5 * 1000;
@@ -33,6 +34,7 @@ export class MapService {
   private mapsVersion: number = 0;
   private lastFingerprint: string = '';
   private recentPicks: Map<string, number> = new Map();
+  private pickHistory: string[] = [];
 
   constructor(wsManager: WebSocketManager) {
     this.wsManager = wsManager;
@@ -70,6 +72,16 @@ export class MapService {
     if (!name) return;
     this.pruneRecentPicks();
     this.recentPicks.set(name, Date.now());
+    const cap = config.mapFrequency.historySize > 0 ? config.mapFrequency.historySize : 50;
+    this.pickHistory.push(name);
+    if (this.pickHistory.length > cap * 2) {
+      this.pickHistory.splice(0, this.pickHistory.length - cap * 2);
+    }
+  }
+
+  public getRecentPickHistory(limit?: number): string[] {
+    const cap = limit && limit > 0 ? limit : (config.mapFrequency.historySize > 0 ? config.mapFrequency.historySize : 50);
+    return this.pickHistory.slice(-cap);
   }
 
   public getRecentlyClaimedNames(ttlMs: number = TENTATIVE_MAP_CLAIM_TTL_MS): Set<string> {

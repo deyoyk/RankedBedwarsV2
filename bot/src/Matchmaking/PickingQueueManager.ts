@@ -265,7 +265,7 @@ export class PickingQueueManager {
           
           
           const gameId = await this.gameManager.getNextGameId();
-          const selectedMap = await this.selectRandomMap(queueData);
+          const selectedMap = await this.selectRandomMap(queueData, selectedPlayers);
 
           
           const pickingResult = await this.runCaptainPicking(
@@ -983,8 +983,8 @@ export class PickingQueueManager {
     return calculateTeamAverageElo(playerIds);
   }
 
-  private async selectRandomMap(queueData: QueueLike): Promise<string> {
-    return selectRandomMapUtil(this.mapService, queueData);
+  private async selectRandomMap(queueData: QueueLike, playerIds?: string[]): Promise<string> {
+    return selectRandomMapUtil(this.mapService, queueData, playerIds ? { playerIds } : undefined);
   }
 
   private handlePickingTimeout(gameId: number): void {

@@ -1,5 +1,7 @@
 import User from '../models/User';
 import { MapService } from '../managers/MapManager';
+import config from '../config/config';
+import { scoreMapsByFrequency, pickLeastPlayedMap, resolveMapFrequencyOptions } from '../utils/mapFrequency';
 
 export function normalizeIdList(ids: string[]): string[] {
   const seen = new Set<string>();
@@ -105,6 +107,7 @@ function toExcludedSet(excluded?: Set<string> | string[]): Set<string> {
 export interface SelectRandomMapOptions {
   forceRefresh?: boolean;
   excludedNames?: Set<string> | string[];
+  playerIds?: string[];
 }
 
 function resolveSelectArgs(
@@ -169,28 +172,72 @@ export async function selectRandomMap(
       try { svc.claimMap?.(name); } catch { /* ignore */ }
     };
 
+    const freqOpts = resolveMapFrequencyOptions(config.mapFrequency);
+    const optPlayerIds = (typeof optionsOrForceRefresh === 'object' && optionsOrForceRefresh !== null && !Array.isArray(optionsOrForceRefresh))
+      ? (optionsOrForceRefresh as SelectRandomMapOptions).playerIds
+      : undefined;
+    const frequencyIds = freqOpts.enabled ? normalizeIdList(optPlayerIds ?? []) : [];
+    let playerRecent: string[][] = [];
+    let globalHistory: string[] = [];
+    if (frequencyIds.length > 0) {
+      try {
+        const docs = await User.find({ discordId: { $in: frequencyIds } }).select('discordId recentGames').lean() as Array<{ discordId: string; recentGames?: Array<{ map?: unknown; date?: unknown }> }>;
+        const byId = new Map((docs ?? []).map(d => [d.discordId, d]));
+        playerRecent = frequencyIds.map(id => {
+          const games = [...(byId.get(id)?.recentGames ?? [])];
+          games.sort((a, b) => new Date(b.date as never).getTime() - new Date(a.date as never).getTime());
+          return games
+            .slice(0, freqOpts.lookbackGames)
+            .map(g => g.map)
+            .filter((m): m is string => typeof m === 'string' && m.length > 0);
+        });
+      } catch {
+        playerRecent = [];
+      }
+      try {
+        const svcAny = svc as unknown as { getRecentPickHistory?: (limit?: number) => string[]; getRecentlyClaimedNames?: (ttlMs?: number) => Set<string> };
+        if (typeof svcAny.getRecentPickHistory === 'function') {
+          globalHistory = svcAny.getRecentPickHistory(freqOpts.historySize);
+        } else if (typeof svcAny.getRecentlyClaimedNames === 'function') {
+          globalHistory = [...(svcAny.getRecentlyClaimedNames() ?? [])];
+        }
+      } catch {
+        globalHistory = [];
+      }
+    }
+
+    const pickFromTier = (tier: MapSize[]): MapSize | null => {
+      if (tier.length === 0) return null;
+      if (playerRecent.length === 0 && globalHistory.length === 0) {
+        return tier[Math.floor(Math.random() * tier.length)];
+      }
+      const scored = scoreMapsByFrequency(tier.map(m => m.name), playerRecent, globalHistory, freqOpts);
+      const chosen = pickLeastPlayedMap(scored);
+      return tier.find(m => m.name === chosen) ?? tier[Math.floor(Math.random() * tier.length)];
+    };
+
     const candidates = preferUnblocked(reservedMaps.filter(m => mapSize(m) === queueData.maxPlayers));
 
-    if (candidates.length > 0) {
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      const warpName = resolveWarpMapName(pick);
+    const reservedPick = pickFromTier(candidates);
+    if (reservedPick) {
+      const warpName = resolveWarpMapName(reservedPick);
       applyClaim(warpName);
       return warpName;
     }
 
     const unlockedCandidates = preferUnblocked(unlockedMaps.filter(m => mapSize(m) === queueData.maxPlayers));
 
-    if (unlockedCandidates.length > 0) {
-      const pick = unlockedCandidates[Math.floor(Math.random() * unlockedCandidates.length)];
-      const warpName = resolveWarpMapName(pick);
+    const unlockedPick = pickFromTier(unlockedCandidates);
+    if (unlockedPick) {
+      const warpName = resolveWarpMapName(unlockedPick);
       applyClaim(warpName);
       return warpName;
     }
 
     const anyUnlocked = preferUnblocked(unlockedMaps);
-    if (anyUnlocked.length > 0) {
-      const pick = anyUnlocked[Math.floor(Math.random() * anyUnlocked.length)];
-      const warpName = resolveWarpMapName(pick);
+    const anyPick = pickFromTier(anyUnlocked);
+    if (anyPick) {
+      const warpName = resolveWarpMapName(anyPick);
       applyClaim(warpName);
       return warpName;
     }

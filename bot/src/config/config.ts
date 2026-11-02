@@ -116,6 +116,12 @@ interface Config {
     enabled: boolean;
     tiers: string;
   };
+  mapFrequency: {
+    enabled: boolean;
+    lookbackGames: number;
+    historySize: number;
+    globalWeight: number;
+  };
   
 }
 
@@ -228,6 +234,12 @@ const configuration: Config = {
   bounty: {
     enabled: clean(process.env.ELO_BOUNTY_ENABLED) !== 'false',
     tiers: clean(process.env.ELO_BOUNTIES) || '5:5,10:10,15:15,25:20',
+  },
+  mapFrequency: {
+    enabled: clean(process.env.MAP_FREQUENCY_ENABLED) !== 'false',
+    lookbackGames: parsedPositiveInt(process.env.MAP_FREQUENCY_LOOKBACK_GAMES, 5),
+    historySize: parsedPositiveInt(process.env.MAP_FREQUENCY_HISTORY_SIZE, 50),
+    globalWeight: parsedPositiveInt(process.env.MAP_FREQUENCY_GLOBAL_WEIGHT, 1),
   },
 };
 
