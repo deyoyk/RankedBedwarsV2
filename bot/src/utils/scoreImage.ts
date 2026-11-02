@@ -13,6 +13,7 @@ type PlayerLine = {
   oldElo?: number;
   newElo?: number;
   mvp: boolean;
+  bedbreaker?: boolean;
 };
 
 async function resolveAvatar(username: string): Promise<string> {
@@ -38,6 +39,7 @@ async function toTemplatePlayer(player: PlayerLine): Promise<ScoreTemplatePlayer
     oldElo: player.elo_before ?? player.oldElo ?? 0,
     newElo: player.elo_after ?? player.newElo ?? 0,
     mvp: player.mvp,
+    bedbreaker: player.bedbreaker ?? false,
     avatar,
   };
 }
@@ -59,6 +61,7 @@ export async function generateScoreImageBuffer(
       oldElo: 0,
       newElo: 0,
       mvp: false,
+      bedbreaker: false,
       avatar: staticImageDataUrl('fallbacks', 'steve.png'),
     });
     return [

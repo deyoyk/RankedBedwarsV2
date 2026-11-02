@@ -1,6 +1,5 @@
 import { h, VNode } from '../renderer';
 import {
-  accent,
   avatar,
   badge,
   COLORS,
@@ -167,7 +166,6 @@ function teamCard(
 
   return [
     panel(cardX, top, CARD_W, cardH, 20),
-    accent(cardX, top, 4, HEADER_H, color, 4),
 
     text(cardX + 28, top + 13, 320, 26, title, 16, color, MEDIUM, 'left', 1.8),
     text(

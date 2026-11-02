@@ -1,6 +1,5 @@
 import { h, VNode } from '../renderer';
 import {
-  accent,
   avatar,
   badge,
   COLORS,
@@ -21,6 +20,7 @@ export type ScoreTemplatePlayer = {
   oldElo?: number;
   newElo?: number;
   mvp: boolean;
+  bedbreaker?: boolean;
   avatar: string;
 };
 
@@ -46,11 +46,13 @@ const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
 
 // Column offsets inside a card.
 const NAME_X = 86;
-const NAME_W = 300;
-const MVP_X = 394;
-const MVP_W = 54;
-const DELTA_X = 450;
-const DELTA_W = 140;
+const NAME_W = 250;
+const MVP_X = 344;
+const MVP_W = 52;
+const BED_X = 402;
+const BED_W = 52;
+const DELTA_X = 470;
+const DELTA_W = 120;
 const BEFORE_X = 610;
 const BEFORE_W = 80;
 const ARROW_X = 696;
@@ -109,7 +111,7 @@ function playerRow(
   const avatarSize = Math.max(24, Math.min(48, rowH - 18));
   const nameSize = Math.max(
     15,
-    Math.min(34, rowH - 16, Math.floor(520 / Math.max(6, p.username.length))),
+    Math.min(34, rowH - 16, Math.floor(430 / Math.max(6, p.username.length))),
   );
   const eloSize = Math.max(12, Math.min(22, rowH - 24));
   const deltaSize = Math.max(13, Math.min(26, rowH - 20));
@@ -144,6 +146,17 @@ function playerRow(
           color: COLORS.gold,
           background: 'rgba(251,191,36,0.12)',
           border: 'rgba(251,191,36,0.36)',
+          height: mvpH,
+          size: mvpSize,
+          letterSpacing: 0.8,
+        })
+      : null,
+
+    p.bedbreaker
+      ? badge(cardX + BED_X, rowTop + (rowH - mvpH) / 2, BED_W, 'BED', {
+          color: COLORS.cyan,
+          background: 'rgba(77,225,242,0.10)',
+          border: 'rgba(77,225,242,0.32)',
           height: mvpH,
           size: mvpSize,
           letterSpacing: 0.8,
@@ -213,7 +226,6 @@ function teamCard(
 
   return [
     panel(cardX, top, CARD_W, cardH, 20),
-    accent(cardX, top, 4, HEADER_H, color, 4),
 
     text(cardX + 28, top + 13, 300, 26, title, 15, color, MEDIUM, 'left', 1.8),
     text(cardX + 28, top + 37, 320, 18, subtitle, 10, COLORS.muted, MEDIUM, 'left', 1.6),

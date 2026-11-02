@@ -33,8 +33,8 @@ function countText(node: any, text: string): number {
 
 const avatar = staticImageDataUrl('fallbacks', 'steve.png');
 
-function player(username: string, mvp = false) {
-  return { discordId: username, username, team: 'winning' as const, elo_before: 1000, elo_after: 1030, mvp };
+function player(username: string, mvp = false, bedbreaker = false) {
+  return { discordId: username, username, team: 'winning' as const, elo_before: 1000, elo_after: 1030, mvp, bedbreaker };
 }
 
 function enrichedPlayer() {
@@ -84,7 +84,7 @@ describe('score template', () => {
   it('keeps user input as text and marks only the mvp', () => {
     const tpl = scoreTemplate({
       gameId: 7,
-      winners: [{ ...player('<Bob>', true), avatar }],
+      winners: [{ ...player('<Bob>', true, true), avatar }],
       losers: [{ ...player('Eve'), avatar }],
       serverName: 'Test',
       inviteLink: 'discord.gg/test',
@@ -93,6 +93,7 @@ describe('score template', () => {
     expect(all).toContain('GAME #7');
     expect(all).toContain('<Bob>');
     expect(countText(tpl.root, 'MVP')).toBe(1);
+    expect(countText(tpl.root, 'BED')).toBe(1);
   });
 });
 

@@ -1793,7 +1793,8 @@ export class GameManager {
           elo_after: p.elo_after,
           oldElo: p.elo_before,
           newElo: p.elo_after,
-          mvp: p.isMvp
+          mvp: p.isMvp,
+          bedbreaker: p.isBedBreaker
         }));
 
       const losers = playerScoreData
@@ -1806,7 +1807,8 @@ export class GameManager {
           elo_after: p.elo_after,
           oldElo: p.elo_before,
           newElo: p.elo_after,
-          mvp: p.isMvp
+          mvp: p.isMvp,
+          bedbreaker: p.isBedBreaker
         }));
 
       let imageBuffer: Buffer | null = null;

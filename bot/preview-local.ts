@@ -44,10 +44,10 @@ async function renderScore(): Promise<void> {
   const score = await generateScoreImageBuffer(42,
     [
       { discordId: '1', username: 'Alice', team: 'winning', elo_before: 1200, elo_after: 1230, oldElo: 1200, newElo: 1230, mvp: true },
-      { discordId: '2', username: 'Bob', team: 'winning', elo_before: 1100, elo_after: 1130, oldElo: 1100, newElo: 1130, mvp: false },
+      { discordId: '2', username: 'Bob', team: 'winning', elo_before: 1100, elo_after: 1130, oldElo: 1100, newElo: 1130, mvp: false, bedbreaker: true },
     ],
     [
-      { discordId: '3', username: 'Cara', team: 'losing', elo_before: 1300, elo_after: 1280, oldElo: 1300, newElo: 1280, mvp: false },
+      { discordId: '3', username: 'Cara', team: 'losing', elo_before: 1300, elo_after: 1280, oldElo: 1300, newElo: 1280, mvp: false, bedbreaker: true },
       { discordId: '4', username: 'Dan', team: 'losing', elo_before: 1250, elo_after: 1225, oldElo: 1250, newElo: 1225, mvp: false },
     ]);
   fs.writeFileSync('preview-score.png', score);
