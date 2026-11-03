@@ -19,6 +19,7 @@ import { updateDailyElo } from '../utils/userStats';
 import type { IRecentGame } from '../models/gameBase';
 import type { ICombatEntry } from '../models/gameTypes';
 import { parseTiers, streakBonusFor, bountyForOpponentStreak, type ProgressionTier } from '../utils/eloProgression';
+import { limitMvps } from '../utils/mvp';
 
 interface PlayerScoreData {
   player: IUser;
@@ -1151,7 +1152,10 @@ export class GameManager {
         throw new Error('Winning team must be 1 or 2');
       }
 
-      const mvpsIds = (gameResult.mvps || []).map(ign => ignToId[String(ign).toLowerCase()]).filter(Boolean);
+      const mvpIds = (gameResult.mvps || [])
+        .map(ign => ignToId[String(ign).toLowerCase()])
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      const mvpsIds = limitMvps(Array.from(new Set(mvpIds)));
       const bedbreaksIds = (gameResult.bedbreaks || []).map(ign => ignToId[String(ign).toLowerCase()]).filter(Boolean);
 
       const playerData: Record<string, PlayerData> = {};

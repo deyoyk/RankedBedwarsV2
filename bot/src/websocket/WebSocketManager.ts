@@ -11,6 +11,7 @@ import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
 import { PlayerData, GameResult } from '../types/GameTypes';
+import { limitMvps } from '../utils/mvp';
 import * as http from 'http';
 import express from 'express';
 import { Client, Collection, GuildMember } from 'discord.js';
@@ -780,7 +781,7 @@ export class WebSocketManager {
   }
 
   private calculateMvpsFromStats(players: Record<string, RawPlayerStats> | undefined, msgMvps?: string[]): string[] {
-    if (msgMvps && msgMvps.length > 0) return msgMvps;
+    if (msgMvps && msgMvps.length > 0) return limitMvps(msgMvps);
     let maxKills = -1;
     let mvps: string[] = [];
     for (const [ign, stats] of Object.entries(players || {})) {
@@ -792,7 +793,7 @@ export class WebSocketManager {
         mvps.push(ign);
       }
     }
-    return mvps;
+    return limitMvps(mvps);
   }
 
   private buildPlayerData(players: Record<string, RawPlayerStats> | undefined, bedbreaks: string[]): Record<string, BuiltPlayerData> {

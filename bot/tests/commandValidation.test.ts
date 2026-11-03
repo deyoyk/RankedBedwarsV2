@@ -10,6 +10,7 @@ import { lose } from '../src/commands/scoring/lose';
 import { executeModerationAction } from '../src/utils/modCommands';
 import { CommandHandler } from '../src/handlers/CommandHandler';
 import { parseDiscordId, isValidIgn } from '../src/utils/inputValidation';
+import config from '../src/config/config';
 
 jest.mock('../src/models/User', () => ({
   __esModule: true,
@@ -180,6 +181,20 @@ describe('score and void prefix validation', () => {
     await voidGame(interaction, ['NaN']);
     expect(GameModel.findOne).not.toHaveBeenCalled();
     expect(interaction.reply).toHaveBeenCalled();
+  });
+
+  it('rejects more MVPs than the configured limit', async () => {
+    const originalLimit = config.maxMvpsPerGame;
+    config.maxMvpsPerGame = 1;
+    try {
+      const interaction = message();
+      await score(interaction, ['42', '1', 'Steve,Alex']);
+      expect(GameModel.findOne).not.toHaveBeenCalled();
+      expect(interaction.reply).toHaveBeenCalled();
+      expect(JSON.stringify(interaction.reply.mock.calls)).toContain('at most 1 MVP');
+    } finally {
+      config.maxMvpsPerGame = originalLimit;
+    }
   });
 });
 

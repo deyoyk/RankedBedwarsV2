@@ -1,4 +1,5 @@
 import { GameManager } from '../src/Matchmaking/GameManager';
+import config from '../src/config/config';
 
 function makeGameDoc(state = 'pending') {
   return {
@@ -144,6 +145,29 @@ describe('scoring persistence', () => {
     setupGame(players, gameDoc);
     const result = await makeManager().scoreGame({ gameId: 1, winningTeam: 2, mvps: [], bedbreaks: [] });
     expect(result.winningTeam).toBe(2);
+  });
+
+  it('awards multiple MVPs and caps them to MAX_MVPS_PER_GAME', async () => {
+    const gameDoc = makeGameDoc();
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    const originalLimit = config.maxMvpsPerGame;
+    config.maxMvpsPerGame = 2;
+
+    try {
+      await makeManager().scoreGame({
+        gameId: 1,
+        winningTeam: 1,
+        mvps: ['A', 'B', 'C'],
+        bedbreaks: [],
+      });
+
+      expect(players[0].mvps).toBe(1);
+      expect(players[1].mvps).toBe(1);
+      expect(players[2].mvps).toBe(0);
+    } finally {
+      config.maxMvpsPerGame = originalLimit;
+    }
   });
 
   it('getNextGameId fallback reserves the counter atomically', async () => {

@@ -11,6 +11,7 @@ import { forcerename } from '../commands/account/forcerename';
 import { party } from '../commands/queue/party';
 import { score } from '../commands/scoring/score';
 import { voidGame } from '../commands/scoring/void';
+import { getMaxMvpsPerGame } from '../utils/mvp';
 import { retry } from '../commands/queue/retry';
 import { recentgames } from '../commands/stats/recentgames';
 import { maps } from '../commands/general/maps';
@@ -279,7 +280,7 @@ export class CommandManager {
     this.reg('score', 'Report game score', score, [
       { name: 'game_id', description: 'Game ID', type: 4, required: true },
       { name: 'winning_team', description: 'Winning Team (1 or 2)', type: 4, required: true },
-      { name: 'mvps', description: 'MVP players (comma-separated user IGNs)', type: 3, required: false },
+      { name: 'mvps', description: `MVP players (max ${getMaxMvpsPerGame()}, comma-separated IGNs)`, type: 3, required: false },
       { name: 'bedbreaks', description: 'Players who broke beds (comma-separated user IGNs)', type: 3, required: false },
       { name: 'reason', description: 'Reason for the game result', type: 3, required: false }
     ]);

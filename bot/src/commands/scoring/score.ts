@@ -6,6 +6,7 @@ import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
+import { getMaxMvpsPerGame, mvpLimitMessage, uniqueMvps } from '../../utils/mvp';
 
 interface ScoreParams {
   gameId: number;
@@ -15,7 +16,7 @@ interface ScoreParams {
   reason: string;
 }
 
-function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): ScoreParams | null {
+function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args?: string[], _wsManager?: WebSocketManager): ScoreParams | null {
   if (interaction instanceof ChatInputCommandInteraction) {
     const gameId = interaction.options.getInteger('game_id');
     const winningTeam = interaction.options.getInteger('winning_team') ?? interaction.options.getInteger('winningteam');
@@ -53,7 +54,13 @@ export async function score(interaction: Message | ChatInputCommandInteraction, 
     return;
   }
 
-  const { gameId, winningTeam, mvps, bedbreaks, reason } = params;
+  const { gameId, winningTeam, bedbreaks, reason } = params;
+  const mvps = uniqueMvps(params.mvps);
+  const maxMvps = getMaxMvpsPerGame();
+  if (mvps.length > maxMvps) {
+    await safeReply(interaction, errorEmbed(mvpLimitMessage(maxMvps), 'Score Command Error'));
+    return;
+  }
 
   const isDiscordIdOrMention = (val: string) => /^\d{17,20}$/.test(val) || /^<@!?\d{17,20}>$/.test(val);
   if (mvps.find(isDiscordIdOrMention) || bedbreaks.find(isDiscordIdOrMention)) {
