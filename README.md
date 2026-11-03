@@ -5,6 +5,36 @@
 
 **Note:** I only accept paid setup requests. I do not work for free.
 
+## Previews
+
+### Player Stats
+
+![Player stats card](images/default.png)
+
+### Match Results
+
+![Match results card](images/score.png)
+
+### Match Start
+
+![Match start card](images/start.png)
+
+## Features
+
+- Ranked BedWars queues with ELO-based team balancing
+- Random and captain-pick queue modes
+- Party queues, queue controls, and automatic queue cleanup
+- Automatic game text/voice channel creation, player movement, and cleanup
+- Player stat cards with ELO, levels, win rates, rankings, and combat stats
+- Match start and result cards with MVP and bed-breaker highlights
+- Seasons, leaderboards, recent games, and ELO decay
+- Discord scoring, void, and edit workflows
+- Player progression with XP, levels, win streaks, and bounty bonuses
+- Moderation tools for bans, mutes, strikes, and timed punishments
+- Worker bot support for high-volume Discord operations
+- Minecraft plugin integration over WebSocket for in-game queue and map data
+- Web dashboard for player stats and leaderboards
+
 ## Parts
 
 - `bot/` - Discord bot. Start with `bot/README.md`.
