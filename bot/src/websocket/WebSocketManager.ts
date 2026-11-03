@@ -95,6 +95,7 @@ interface GameManagerLike {
   }): Promise<{ gameId: number }>;
   initiateGameWarp(gameId: number): Promise<void>;
   abortGame(gameId: number, reason: string): Promise<void>;
+  resumePendingWarps?(): Promise<void>;
 }
  
 
@@ -286,6 +287,11 @@ interface ScoringSuccessPayload {
   players: string[];
 }
 
+interface ScoringSettledPayload {
+  type: 'scoringsettled';
+  game_id: number;
+}
+
 interface GameVoidedPayload {
   type: 'gamevoided';
   game_id: number;
@@ -357,6 +363,7 @@ type IncomingPayload =
   | BotUnbanPayload
   | BotUnmutePayload
   | ScoringSuccessPayload
+  | ScoringSettledPayload
   | GameVoidedPayload
   | GameStartPayload
   | MapsInfoPayload
@@ -531,6 +538,7 @@ export class WebSocketManager {
             PresenceService.setConnected(true);
             console.log('[WebSocketManager] Client authenticated successfully');
             ws.send(JSON.stringify({ type: 'auth_success', message: 'Authentication successful' }));
+            void this.gameManager?.resumePendingWarps?.();
           } else {
             console.error('[WebSocketManager] Authentication failed for new connection');
             ws.send(JSON.stringify({ type: 'auth_failure', message: 'Invalid authentication key' }));
@@ -607,6 +615,7 @@ export class WebSocketManager {
       if (process.env.AUTH_KEY && authMsg.auth_key === process.env.AUTH_KEY) {
         this.send({ type: 'auth_success', message: 'Authentication successful' });
         console.log('[WebSocketManager] Authentication successful');
+        void this.gameManager?.resumePendingWarps?.();
       } else {
         this.send({ type: 'auth_failure', message: 'Invalid authentication key' });
         console.error('[WebSocketManager] Authentication failed');
@@ -724,6 +733,10 @@ export class WebSocketManager {
         const Game = (await import('../models/Game')).default;
         const game = await Game.findOne({ gameId: parseInt(String(gameId)) }).select('gameId channels.text').lean();
         if (!game) return;
+        await Game.updateOne(
+          { gameId: parseInt(String(gameId)), state: 'pending' },
+          { $set: { state: 'active' } },
+        ).catch(() => undefined);
         const guild = this.discordClient?.guilds.cache.first();
         if (!guild) return;
 
@@ -920,6 +933,10 @@ export class WebSocketManager {
         console.log(`[WebSocketManager] Successfully scored game ${gameid} via GameManager`);
       } catch (error) {
         console.error(`[WebSocketManager] Error scoring game ${gameid} via GameManager:`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        if (/already settled/i.test(message)) {
+          this.send({ type: 'scoringsettled', game_id: gameIdNum } as ScoringSettledPayload);
+        }
       }
     })();
   }
@@ -937,6 +954,15 @@ export class WebSocketManager {
         console.log(`[WebSocketManager] Successfully voided game ${gameid} via GameManager`);
       } catch (error) {
         console.error(`[WebSocketManager] Error voiding game ${gameid} via GameManager:`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        if (/already settled/i.test(message)) {
+          this.send({
+            type: 'gamevoided',
+            game_id: parseInt(String(gameid), 10),
+            reason: reason || 'Already settled',
+            players: [],
+          } as GameVoidedPayload);
+        }
       }
     })();
   }

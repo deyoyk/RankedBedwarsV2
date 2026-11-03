@@ -773,14 +773,9 @@ public class BedWars1058Listener implements Listener {
         }
         
         
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            JsonObject json = new JsonObject();
-            json.addProperty("type", "voiding");
-            json.addProperty("game_id", gameId);
-            json.addProperty("reason", "[system] voided because player: " + playerName + " left before arena starts");
-            plugin.getWebSocketManager().sendMessage(json.toString());
-            plugin.debug("Sent void notification for game #" + gameId + " due to player " + playerName + " leaving");
-        });
+        String reason = "[system] voided because player: " + playerName + " left before arena starts";
+        plugin.getWebSocketManager().sendGameVoiding(gameId, reason);
+        plugin.debug("Sent void notification for game #" + gameId + " due to player " + playerName + " leaving");
     }
     
     private void sendGameStartNotification(String gameId, String arenaName) {

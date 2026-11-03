@@ -87,7 +87,7 @@ describe('periodic task hygiene', () => {
     const task = new ChannelsCleanupTask({} as any);
     task.start();
     task.start();
-    expect(jest.getTimerCount()).toBe(1);
+    expect(jest.getTimerCount()).toBe(2);
     task.stop();
     expect(jest.getTimerCount()).toBe(0);
   });

@@ -1,6 +1,7 @@
 ﻿import { Client, TextChannel, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import type { MessageCreateOptions } from 'discord.js';
 import Game, { IGame } from '../models/Game';
+import GameSettlement from '../models/GameSettlement';
 import User, { IUser } from '../models/User';
 import EloRank, { IEloRank } from '../models/EloRank';
 import { getNextSequence, Counter } from '../models/Counter';
@@ -196,6 +197,8 @@ export class GameManager {
   private readonly MANUAL_RETRY_COOLDOWN = 15000;
   private readonly MANUAL_RETRY_WINDOW = 10 * 60 * 1000;
   private readonly MAX_MANUAL_RETRIES = 3;
+  private readonly PENDING_GAME_MAX_AGE = 30 * 60 * 1000;
+  private readonly ACTIVE_GAME_MAX_AGE = 3 * 60 * 60 * 1000;
 
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
@@ -410,7 +413,244 @@ export class GameManager {
     }
   }
 
-  public async scoreGame(gameResult: GameResult): Promise<{
+  private async beginSettlement(
+    gameId: number,
+    type: 'score' | 'void',
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    try {
+      await GameSettlement.updateOne(
+        { gameId },
+        {
+          $setOnInsert: {
+            gameId,
+            type,
+            status: 'started',
+            payload,
+            startedAt: new Date(),
+          },
+        },
+        { upsert: true },
+      );
+    } catch (error) {
+      console.error(`[GameManager] Failed to journal ${type} settlement for game ${gameId}:`, error);
+      const wrapped = new Error(`Could not journal ${type} settlement for game ${gameId}`);
+      (wrapped as Error & { cause?: unknown }).cause = error;
+      throw wrapped;
+    }
+  }
+
+  private async markSettlementStatus(gameId: number, status: 'stats_applied' | 'completed'): Promise<void> {
+    try {
+      const update = status === 'completed'
+        ? { $set: { status }, $unset: { payload: '' } }
+        : { $set: { status } };
+      await GameSettlement.updateOne({ gameId }, update);
+    } catch (error) {
+      console.error(`[GameManager] Failed to mark settlement ${gameId} as ${status}:`, error);
+    }
+  }
+
+  private playerHasScoredGame(player: IUser, gameId: number): boolean {
+    return (player.recentGames || []).some(game => game.gameId === gameId && game.state === 'scored');
+  }
+
+  private resourcesFromGame(game: IGame): GameResources {
+    return {
+      gameId: game.gameId,
+      gameChannel: { id: game.channels.text },
+      team1Voice: { id: game.channels.team1Voice },
+      team2Voice: { id: game.channels.team2Voice },
+      pickingChannel: game.channels.picking ? { id: game.channels.picking } : undefined,
+      game,
+    };
+  }
+
+  public async recoverActiveGames(): Promise<{ recovered: number; warped: number; voided: number }> {
+    let recovered = 0;
+    let warped = 0;
+    let voided = 0;
+    try {
+      const games = await Game.find({ state: { $in: [GameState.PENDING, GameState.ACTIVE, GameState.SCORING] } });
+      const pendingSettlementIds = new Set<number>();
+      try {
+        const settlements = await GameSettlement.find({ status: { $ne: 'completed' } }).select('gameId').lean();
+        for (const settlement of settlements) pendingSettlementIds.add(settlement.gameId);
+      } catch (error) {
+        console.error('[GameManager] Could not load pending settlements during recovery:', error);
+      }
+
+      for (const game of games) {
+        if (!game.channels?.text || !game.channels.team1Voice || !game.channels.team2Voice) {
+          console.warn(`[GameManager] Skipping recovery for game ${game.gameId}: channel data is incomplete`);
+          continue;
+        }
+        this.activeGames.set(game.gameId, this.resourcesFromGame(game));
+        recovered += 1;
+
+        if (pendingSettlementIds.has(game.gameId)) {
+          continue;
+        }
+
+        if (game.state === GameState.SCORING) {
+          await this.recoverInterruptedSettlement(game.gameId);
+          voided += 1;
+          continue;
+        }
+
+        const age = game.startTime ? Date.now() - new Date(game.startTime).getTime() : 0;
+        if (game.state === GameState.PENDING) {
+          if (age > this.PENDING_GAME_MAX_AGE) {
+            await this.voidGame(game.gameId, 'Recovered stale pending game after restart');
+            voided += 1;
+            continue;
+          }
+          try {
+            await this.initiateGameWarp(game.gameId);
+            warped += 1;
+          } catch (error) {
+            console.error(`[GameManager] Could not resume warp for pending game ${game.gameId}:`, error);
+          }
+        } else if (game.state === GameState.ACTIVE && age > this.ACTIVE_GAME_MAX_AGE) {
+          await this.voidGame(game.gameId, 'Recovered stale active game after restart');
+          voided += 1;
+        }
+      }
+
+      console.log(`[GameManager] Restart recovery: ${recovered} game(s) rehydrated, ${warped} warp(s) resumed, ${voided} stale game(s) voided`);
+      return { recovered, warped, voided };
+    } catch (error) {
+      console.error('[GameManager] Error recovering active games:', error);
+      return { recovered, warped, voided };
+    }
+  }
+
+  public async recoverPendingSettlements(): Promise<{ recovered: number; failed: number }> {
+    let recovered = 0;
+    let failed = 0;
+    try {
+      const settlements = await GameSettlement.find({ status: { $ne: 'completed' } }).lean();
+      for (const settlement of settlements) {
+        try {
+          const game = await Game.findOne({ gameId: settlement.gameId });
+          if (!game) {
+            await this.markSettlementStatus(settlement.gameId, 'completed');
+            continue;
+          }
+          if (!this.activeGames.has(game.gameId)) {
+            this.activeGames.set(game.gameId, this.resourcesFromGame(game));
+          }
+
+          const pendingPlayers = await this.playersNeedingSettlement(game, settlement.type);
+
+          if (pendingPlayers.length === 0) {
+            await this.finalizeRecoveredSettlement(game, settlement.type, String(settlement.payload?.reason || ''));
+            await this.markSettlementStatus(game.gameId, 'completed');
+            recovered += 1;
+            continue;
+          }
+
+          if ([GameState.SCORING, GameState.SCORED, GameState.VOIDED].includes(game.state as GameState)) {
+            await Game.updateOne(
+              { gameId: game.gameId, state: game.state },
+              { $set: { state: GameState.ACTIVE } },
+            );
+          }
+
+          if (settlement.type === 'score') {
+            await this.scoreGame(settlement.payload as unknown as GameResult, true);
+          } else {
+            await this.voidGame(
+              game.gameId,
+              String(settlement.payload?.reason || 'Recovered void after restart'),
+              true,
+            );
+          }
+          await this.markSettlementStatus(game.gameId, 'completed');
+          recovered += 1;
+        } catch (error) {
+          failed += 1;
+          console.error(`[GameManager] Could not recover settlement ${settlement.gameId}:`, error);
+        }
+      }
+      if (recovered > 0 || failed > 0) {
+        console.log(`[GameManager] Settlement recovery: ${recovered} recovered, ${failed} failed`);
+      }
+      return { recovered, failed };
+    } catch (error) {
+      console.error('[GameManager] Error recovering pending settlements:', error);
+      return { recovered, failed };
+    }
+  }
+
+  private async playersNeedingSettlement(game: IGame, type: 'score' | 'void'): Promise<string[]> {
+    const playerIds = [...(game.team1 || []), ...(game.team2 || [])];
+    if (playerIds.length === 0) return [];
+    const users = await User.find({ discordId: { $in: playerIds } })
+      .select('discordId recentGames')
+      .lean() as Array<{ discordId: string; recentGames?: Array<{ gameId: number; state?: string }> }>;
+    const expected = type === 'score' ? 'scored' : 'voided';
+    return users
+      .filter(user => {
+        const entry = (user.recentGames || []).find(record => record.gameId === game.gameId);
+        return !entry || entry.state !== expected;
+      })
+      .map(user => user.discordId);
+  }
+
+  private async finalizeRecoveredSettlement(game: IGame, type: 'score' | 'void', reason: string): Promise<void> {
+    if (type === 'score' && game.state !== GameState.SCORED) {
+      await Game.updateOne({ gameId: game.gameId }, { $set: { state: GameState.SCORED, endTime: game.endTime || new Date() } });
+      game.state = GameState.SCORED;
+    } else if (type === 'void' && game.state !== GameState.VOIDED) {
+      await Game.updateOne(
+        { gameId: game.gameId },
+        { $set: { state: GameState.VOIDED, reason: reason || 'Recovered void after restart', endTime: game.endTime || new Date() } },
+      );
+      game.state = GameState.VOIDED;
+    }
+    await this.scheduleGameChannelCleanup(game, game.gameId);
+    await this.cleanupGame(game.gameId);
+  }
+
+  private async recoverInterruptedSettlement(gameId: number): Promise<void> {
+    try {
+      await Game.updateOne({ gameId, state: GameState.SCORING }, { $set: { state: GameState.ACTIVE } });
+      await this.voidGame(gameId, 'Recovered interrupted settlement after restart', true);
+    } catch (error) {
+      console.error(`[GameManager] Could not recover interrupted settlement for game ${gameId}:`, error);
+    }
+  }
+
+  public async resumePendingWarps(): Promise<void> {
+    try {
+      const pending = await Game.find({ state: GameState.PENDING });
+      for (const game of pending) {
+        if (!game.channels?.text || !game.channels.team1Voice || !game.channels.team2Voice) continue;
+        const age = game.startTime ? Date.now() - new Date(game.startTime).getTime() : 0;
+        if (age > this.PENDING_GAME_MAX_AGE) continue;
+        if (!this.activeGames.has(game.gameId)) {
+          this.activeGames.set(game.gameId, this.resourcesFromGame(game));
+        }
+        const key = String(game.gameId);
+        const existingWarp = this.warpRequests.get(key);
+        if (existingWarp) {
+          clearTimeout(existingWarp.timeout);
+          this.warpRequests.delete(key);
+        }
+        try {
+          await this.initiateGameWarp(game.gameId);
+          console.log(`[GameManager] Resumed pending warp for game ${game.gameId} after reconnect`);
+        } catch (error) {
+          console.error(`[GameManager] Could not resume pending warp for game ${game.gameId}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('[GameManager] Error resuming pending warps:', error);
+    }
+  }
+
+  public async scoreGame(gameResult: GameResult, recovery: boolean = false): Promise<{
     gameId: number;
     winningTeam: number;
     mvps: string[];
@@ -425,11 +665,16 @@ export class GameManager {
       }
 
       const context = await this.loadGameContext(gameResult);
+      if (recovery) {
+        context.players = context.players.filter(player => !this.playerHasScoredGame(player, gameResult.gameId));
+      }
 
       if (context.winningTeam !== 1 && context.winningTeam !== 2) {
         throw new Error('Winning team must be 1 or 2');
       }
       await this.validateGameForScoring(context.game);
+
+      await this.beginSettlement(gameResult.gameId, 'score', gameResult as unknown as Record<string, unknown>);
 
       const combatEntries = this.buildCombatEntries(context);
 
@@ -449,6 +694,7 @@ export class GameManager {
       const playerScoreData = await this.processAllPlayers(context);
 
       await this.updatePlayerStats(playerScoreData, context.game);
+      await this.markSettlementStatus(gameResult.gameId, 'stats_applied');
 
       await this.sendScoreNotifications(context, playerScoreData);
 
@@ -471,6 +717,7 @@ export class GameManager {
       }
       await this.scheduleGameChannelCleanup(context.game, gameResult.gameId);
       await this.cleanupGame(gameResult.gameId);
+      await this.markSettlementStatus(gameResult.gameId, 'completed');
       console.log(`[GameManager] Successfully scored game ${gameResult.gameId}`);
       return {
         gameId: gameResult.gameId,
@@ -485,12 +732,20 @@ export class GameManager {
   }
 
   
-  public async voidGame(gameId: number, reason: string): Promise<VoidResult> {
+  public async voidGame(gameId: number, reason: string, recovery: boolean = false): Promise<VoidResult> {
     console.log(`[GameManager] Starting to void game ${gameId}: ${reason}`);
     try {
       if (!gameId || !reason) throw new Error('Invalid void parameters');
       const context = await this.loadGameVoidContext(gameId, reason);
+      if (recovery) {
+        context.players = context.players.filter(player => {
+          const entry = (player.recentGames || []).find(game => game.gameId === gameId);
+          return !entry || entry.state !== 'voided';
+        });
+      }
       await this.validateGameForVoiding(context.game);
+
+      await this.beginSettlement(gameId, 'void', { reason });
 
       const playerVoidData = await this.processAllPlayersForVoiding(context);
 
@@ -506,6 +761,7 @@ export class GameManager {
       context.game = claimedGame;
 
       await this.revertPlayerStats(playerVoidData, gameId);
+      await this.markSettlementStatus(gameId, 'stats_applied');
       await this.updatePlayerRolesForVoid(playerVoidData);
       await this.sendVoidNotifications(context, playerVoidData);
       try {
@@ -523,6 +779,7 @@ export class GameManager {
       }
       await this.scheduleGameChannelCleanup(context.game, gameId);
       await this.cleanupGame(gameId);
+      await this.markSettlementStatus(gameId, 'completed');
       console.log(`[GameManager] Successfully voided game ${gameId}`);
       return {
         gameId,
@@ -1077,8 +1334,8 @@ export class GameManager {
       this.manualWarpRetries.delete(Number(gameId));
 
       const game = await Game.findOne({ gameId: Number(gameId) });
-      if (game) {
-        game.state = GameState.PENDING;
+      if (game && (game.state === GameState.PENDING || game.state === GameState.ACTIVE)) {
+        game.state = GameState.ACTIVE;
         await game.save();
       }
 
@@ -1457,7 +1714,7 @@ export class GameManager {
    */
   private async claimGameForSettling(gameId: number, mutate: (game: IGame) => void): Promise<IGame> {
     const claimed = await Game.findOneAndUpdate(
-      { gameId, state: GameState.PENDING },
+      { gameId, state: { $in: [GameState.PENDING, GameState.ACTIVE] } },
       { $set: { endTime: new Date(), state: GameState.SCORING } },
       { new: true }
     );
@@ -1847,6 +2104,7 @@ export class GameManager {
 
   private async updatePlayerStats(playerScoreData: PlayerScoreData[], game: IGame): Promise<void> {
     try {
+      if (playerScoreData.length === 0) return;
       const gameDurationSeconds = this.computeGameDurationSeconds(game);
       const entries = new Map<string, IRecentGame>();
       for (const scoreData of playerScoreData) {

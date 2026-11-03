@@ -1,5 +1,6 @@
 export enum GameState {
   PENDING = 'pending',
+  ACTIVE = 'active',
   SCORING = 'scoring',
   SCORED = 'scored',
   VOIDED = 'voided'

@@ -68,6 +68,7 @@ export class QueueListener {
   private queueChannelCache: Map<string, { exists: boolean; ts: number }> = new Map();
   private rescanKeys: Map<string, { key: string; ts: number }> = new Map();
   private playerLocks: Map<string, Promise<void>> = new Map();
+  private initialized = false;
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
   private readonly CHANNEL_CACHE_TTL = 30000;
@@ -78,9 +79,95 @@ export class QueueListener {
     this.wsManager = wsManager;
     this.workersManager = WorkersManager.getInstance();
     this.matchmaker = new CentralizedMatchmaker(client, wsManager, gameManager);
+  }
+
+  public async initialize(): Promise<void> {
+    if (this.initialized) return;
+    this.initialized = true;
+    await this.matchmaker.recoverPickingSessions();
+    await this.hydrateQueueStates();
     this.startCacheCleanup();
     this.startQueueMonitor();
     this.startPresenceSweep();
+  }
+
+  private async hydrateQueueStates(): Promise<void> {
+    try {
+      const queues = await resolveQuery<QueueLike[]>(
+        Queue.find({ isActive: true }),
+        'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
+      );
+      const guild = this.client.guilds.cache.first();
+      if (!guild) {
+        console.warn('[QueueListener] No guild available during queue recovery');
+        return;
+      }
+
+      let recovered = 0;
+      for (const queue of queues) {
+        const voiceChannel = guild.channels.cache?.get(queue.channelId)
+          ?? await guild.channels.fetch(queue.channelId).catch(() => null);
+        if (!voiceChannel || !voiceChannel.isVoiceBased()) continue;
+
+        const memberIds = [...voiceChannel.members.keys()];
+        if (memberIds.length === 0) {
+          this.queueStates.set(queue.channelId, {
+            players: [],
+            parties: new Map(),
+            lastUpdate: Date.now(),
+            processing: false,
+          });
+          queuePlayers.set(queue.channelId, []);
+          continue;
+        }
+
+        const users = await User.find({ discordId: { $in: memberIds } })
+          .select('discordId ign partyId isBanned isFrozen')
+          .lean() as Array<{
+            discordId: string;
+            ign?: string;
+            partyId?: string | null;
+            isBanned?: boolean;
+            isFrozen?: boolean;
+          }>;
+        const eligible = users.filter(user => user.ign && !user.isBanned && !user.isFrozen);
+        const eligibleIds = new Set(eligible.map(user => user.discordId));
+
+        const partyIds = [...new Set(eligible.map(user => user.partyId).filter((id): id is string => Boolean(id)))];
+        const partyDocs = partyIds.length > 0
+          ? await Party.find({ partyId: { $in: partyIds } }).select('partyId members').lean()
+          : [];
+        const partyById = new Map(partyDocs.map(party => [party.partyId, party.members as string[]]));
+
+        const parties = new Map<string, string[]>();
+        for (const partyId of partyIds) {
+          const roster = partyById.get(partyId);
+          if (!roster) continue;
+          if (roster.every(id => eligibleIds.has(id))) {
+            parties.set(partyId, roster);
+          }
+        }
+
+        const inRecoveredParty = new Set([...parties.values()].flat());
+        const soloPlayers = eligible
+          .filter(user => !user.partyId || !partyById.has(user.partyId))
+          .map(user => user.discordId);
+        const players = [...new Set([...soloPlayers, ...inRecoveredParty])];
+
+        this.queueStates.set(queue.channelId, {
+          players,
+          parties,
+          lastUpdate: Date.now(),
+          processing: false,
+        });
+        queuePlayers.set(queue.channelId, players);
+        recovered += players.length;
+      }
+
+      console.log(`[QueueListener] Recovered ${recovered} queued player(s) across ${queues.length} queue(s)`);
+    } catch (error) {
+      console.error('[QueueListener] Error recovering queue state:', error);
+    }
   }
 
   private startCacheCleanup(): void {

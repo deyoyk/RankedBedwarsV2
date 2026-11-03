@@ -98,6 +98,33 @@ public class GameDataManagerTest {
     }
 
     @Test
+    public void pendingScoringPayloadsArePersistedAndClearedOnAck() throws Exception {
+        JsonObject payload = new JsonObject();
+        payload.addProperty("type", "scoring");
+        payload.addProperty("game_id", 42);
+
+        manager.savePendingScoringPayload("42", payload);
+        JsonObject voidPayload = new JsonObject();
+        voidPayload.addProperty("type", "voiding");
+        voidPayload.addProperty("game_id", 42);
+        manager.savePendingVoidingPayload("42", voidPayload);
+
+        long deadline = System.currentTimeMillis() + 10000;
+        while (manager.getPendingScoringPayloads().size() < 2 && System.currentTimeMillis() < deadline) {
+            Thread.sleep(25);
+        }
+        assertEquals(2, manager.getPendingScoringPayloads().size());
+        assertEquals(42, manager.getPendingScoringPayloads().get(0).get("game_id").getAsInt());
+
+        manager.markScoringDelivered("42");
+        deadline = System.currentTimeMillis() + 10000;
+        while (!manager.getPendingScoringPayloads().isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(25);
+        }
+        assertTrue(manager.getPendingScoringPayloads().isEmpty());
+    }
+
+    @Test
     public void corruptWarpFileIsBackedUpInsteadOfDiscarded() throws Exception {
         File file = warpFile("7");
         assertTrue(file.getParentFile().mkdirs());

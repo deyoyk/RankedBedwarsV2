@@ -110,7 +110,6 @@ client.once('ready', async () => {
     partyCleanupTask = new PartyCleanupTask(client);
     partyCleanupTask.start();
     channelsCleanupTask = new ChannelsCleanupTask(client);
-    channelsCleanupTask.start();
     statusRotationTask = new StatusRotationTask(client);
     statusRotationTask.start();
     screenshareCleanupTask = new ScreenshareCleanupTask(client);
@@ -126,7 +125,12 @@ client.once('ready', async () => {
     
     wsManager.setGameManager(gameManager);
 
-    new (await import('./handlers/QueueListener')).QueueListener(client, wsManager, gameManager);
+    await gameManager.recoverActiveGames();
+    await gameManager.recoverPendingSettlements();
+
+    const queueListener = new (await import('./handlers/QueueListener')).QueueListener(client, wsManager, gameManager);
+    await queueListener.initialize();
+    channelsCleanupTask.start();
 
     new GuildJoinListener(client);
 

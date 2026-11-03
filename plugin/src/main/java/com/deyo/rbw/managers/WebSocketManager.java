@@ -9,6 +9,7 @@ import com.google.gson.JsonParser;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.scheduler.BukkitTask;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
@@ -34,6 +35,7 @@ public class WebSocketManager {
     private int reconnectDelay;
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
+    private BukkitTask pendingScoringTask;
 
     public WebSocketManager(RankedBedwars plugin) {
         this.plugin = plugin;
@@ -69,6 +71,14 @@ public class WebSocketManager {
         testConnectivity();
         
         connect();
+        if (pendingScoringTask == null) {
+            pendingScoringTask = plugin.getServer().getScheduler().runTaskTimerAsynchronously(
+                plugin,
+                this::sendPendingScoringPayloads,
+                30 * 20L,
+                30 * 20L
+            );
+        }
     }
 
     static String[] parseTarget(String botUrl) {
@@ -304,6 +314,9 @@ public class WebSocketManager {
                         break;
                     case "privatefromingame_fail":
                         handlePrivateFailure(json);
+                        break;
+                    case "scoringsettled":
+                        handleScoringSettled(json);
                         break;
                     case "queuestatus":
                         handleQueueStatus(json);
@@ -597,6 +610,9 @@ public class WebSocketManager {
                 plugin.getLogger().warning("Not sending winning team for game " + game.getGameId() + ": winner not tracked");
             }
             
+            if (plugin.getGameDataManager() != null) {
+                plugin.getGameDataManager().savePendingScoringPayload(String.valueOf(game.getGameId()), json);
+            }
             sendMessage(json.toString());
 
             if (plugin.getMapManager() != null) {
@@ -606,6 +622,19 @@ public class WebSocketManager {
             }
         });
     }
+    public void sendGameVoiding(String gameId, String reason) {
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            JsonObject json = new JsonObject();
+            json.addProperty("type", "voiding");
+            json.addProperty("game_id", gameId);
+            json.addProperty("reason", reason);
+            if (plugin.getGameDataManager() != null) {
+                plugin.getGameDataManager().savePendingVoidingPayload(gameId, json);
+            }
+            sendMessage(json.toString());
+        });
+    }
+
     private JsonArray toJsonArray(java.util.Collection<String> values) {
         JsonArray array = new JsonArray();
         for (String value : values) {
@@ -626,11 +655,25 @@ public class WebSocketManager {
                 sendPermissionData();
 
                 sendMapDataIfReady(0);
+                sendPendingScoringPayloads();
                 plugin.debug("Initial data sending process started");
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING, "Error sending initial data to WebSocket", e);
             }
         });
+    }
+
+    private void sendPendingScoringPayloads() {
+        if (!isConnected() || plugin.getGameDataManager() == null) {
+            return;
+        }
+        for (JsonObject payload : plugin.getGameDataManager().getPendingScoringPayloads()) {
+            try {
+                sendMessage(payload.toString());
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING, "Failed to resend pending scoring payload", e);
+            }
+        }
     }
     private void sendMapDataIfReady(int attempt) {
         if (!isConnected()) {
@@ -956,12 +999,27 @@ public class WebSocketManager {
     }
 
 	private void handleScoringSuccess(JsonObject json) {
-		notifyGamePlayers(json, "§6§l[RBW] §aGame §e#" + parseGameId(json) + " §ahas been scored.", "scoringsuccess missing players array");
+		int scoredGameId = parseGameId(json);
+		if (scoredGameId > 0 && plugin.getGameDataManager() != null) {
+			plugin.getGameDataManager().markScoringDelivered(String.valueOf(scoredGameId));
+		}
+		notifyGamePlayers(json, "§6§l[RBW] §aGame §e#" + scoredGameId + " §ahas been scored.", "scoringsuccess missing players array");
+	}
+
+	private void handleScoringSettled(JsonObject json) {
+		int settledGameId = parseGameId(json);
+		if (settledGameId > 0 && plugin.getGameDataManager() != null) {
+			plugin.getGameDataManager().markScoringDelivered(String.valueOf(settledGameId));
+		}
 	}
 
 	private void handleGameVoided(JsonObject json) {
+		int voidedGameId = parseGameId(json);
+		if (voidedGameId > 0 && plugin.getGameDataManager() != null) {
+			plugin.getGameDataManager().markScoringDelivered(String.valueOf(voidedGameId));
+		}
 		String reason = json.has("reason") && !json.get("reason").isJsonNull() ? json.get("reason").getAsString() : "unspecified";
-		notifyGamePlayers(json, "§6§l[RBW] §cGame §e#" + parseGameId(json) + " §chas been voided. §7Reason: §f" + reason, "gamevoided missing players array");
+		notifyGamePlayers(json, "§6§l[RBW] §cGame §e#" + voidedGameId + " §chas been voided. §7Reason: §f" + reason, "gamevoided missing players array");
 	}
 
     private void notifyGamePlayers(JsonObject json, String message, String missingPlayersWarning) {

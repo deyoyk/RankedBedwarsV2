@@ -12,11 +12,13 @@ import {
 } from 'discord.js';
 import User from '../models/User';
 import Party from '../models/Party';
+import Game from '../models/Game';
 import config from '../config/config';
 import { PickingSession, GameResources, QueueProcessingResult } from '../types/GameTypes';
 import { GameManager } from './GameManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
+import PickingSessionState from '../models/PickingSessionState';
 import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
 
@@ -50,6 +52,56 @@ export class PickingQueueManager {
     this.wsManager = wsManager;
     this.mapService = new MapService(wsManager);
     this.workersManager = WorkersManager.getInstance();
+  }
+
+  private async persistPickingSession(
+    session: PickingSession,
+    queueData: QueueLike,
+    selectedMap: string,
+  ): Promise<void> {
+    if (!session.pickingResources?.gameChannel?.id || !session.pickingResources?.pickingChannel?.id) return;
+    try {
+      await PickingSessionState.updateOne(
+        { gameId: session.gameId },
+        {
+          $set: {
+            gameId: session.gameId,
+            queueData: queueData as unknown as Record<string, unknown>,
+            selectedMap,
+            players: [...session.team1, ...session.team2, ...session.remainingPlayers],
+            captains: session.captains,
+            team1: session.team1,
+            team2: session.team2,
+            remainingPlayers: session.remainingPlayers,
+            currentPicker: session.currentPicker,
+            pickCount: session.pickCount,
+            pickOrder: session.pickOrder || [],
+            partyInfo: Object.fromEntries(session.partyInfo || new Map()),
+            partyPlayers: [...(session.partyPlayers || new Set())],
+            channels: {
+              game: session.pickingResources.gameChannel.id,
+              picking: session.pickingResources.pickingChannel.id,
+            },
+          },
+        },
+        { upsert: true },
+      );
+    } catch (error) {
+      console.error(`[PickingQueue] Failed to persist picking session ${session.gameId}:`, error);
+    }
+  }
+
+  private clearPersistedPickingSession(gameId: number): void {
+    try {
+      const result = PickingSessionState.deleteOne({ gameId });
+      if (result && typeof result.catch === 'function') {
+        result.catch((error) => {
+          console.error(`[PickingQueue] Failed to clear persisted picking session ${gameId}:`, error);
+        });
+      }
+    } catch (error) {
+      console.error(`[PickingQueue] Failed to clear persisted picking session ${gameId}:`, error);
+    }
   }
 
   private async getPlayerParties(players: string[], userDocs?: Array<{ discordId: string; partyId?: string | null }>): Promise<Map<string, string[]>> {
@@ -364,6 +416,7 @@ export class PickingQueueManager {
       console.log(`[PickingQueue] Game ${gameId} - Remaining players: ${remainingPlayers.join(', ')}`);
 
       this.activeSessions.set(gameId, session);
+      await this.persistPickingSession(session, queueData, selectedMap);
 
       
       await this.moveAllToPickingVC(guild, players, resources!.pickingChannel.id);
@@ -372,92 +425,14 @@ export class PickingQueueManager {
       await this.sendPickingEmbed(resources!.gameChannel, session, selectedMap, queueData);
 
 
-      const finalTeams = await this.executePicking(resources!.gameChannel, session);
+      const finalTeams = await this.executePicking(resources!.gameChannel, session, queueData, selectedMap);
 
       if (!finalTeams) {
         throw new Error('Picking process failed or was cancelled');
       }
 
-      const verifiedFinalTeams = await this.revalidateFinalTeams(finalTeams, resources!.pickingChannel, queueData);
-      if (!verifiedFinalTeams) {
-        throw new Error('Final team revalidation failed (players left, changed status, or entered a game during picking)');
-      }
-
-      await this.gameManager.createGame(
-        gameId,
-        queueData,
-        verifiedFinalTeams.team1,
-        verifiedFinalTeams.team2,
-        selectedMap
-      );
-
-      
-      await this.gameManager.updateGameMap(gameId, selectedMap);
-      await this.gameManager.initiateGameWarp(gameId);
-
-      
-      const ignMap = await this.getPlayerIGNs([...finalTeams.team1, ...finalTeams.team2]);
-      const team1Avg = await this.calculateTeamAverageElo(finalTeams.team1);
-      const team2Avg = await this.calculateTeamAverageElo(finalTeams.team2);
-      const gameStartEmbed = await this.buildGameStartEmbed(
-        finalTeams.team1,
-        finalTeams.team2,
-        session.captains,
-        team1Avg,
-        team2Avg,
-        ignMap,
-        'Ongoing',
-        gameId
-      );
-
-      let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
-      try {
-        const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
-        const roster = await fetchGameStartRoster([...finalTeams.team1, ...finalTeams.team2]);
-        const captains = session.captains;
-        const toTeam = (ids: string[]) => ids.map(id => {
-          const entry = roster.get(id);
-          return {
-            discordId: id,
-            username: entry?.username ?? ignMap.get(id) ?? id,
-            elo: entry?.elo ?? 0,
-            isCaptain: captains.includes(id),
-          };
-        });
-        if (roster.size > 0) {
-          const buffer = await generateGameStartImageBuffer(gameId, toTeam(finalTeams.team1), toTeam(finalTeams.team2), {
-            mapName: selectedMap,
-            modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
-          });
-          startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
-        }
-      } catch (imageError) {
-        console.error(`[PickingQueue] Failed to generate game start image for game ${gameId}:`, imageError);
-      }
-
-      if (config.channels.gamesChannel) {
-        await this.workersManager.sendMessage(
-          config.channels.gamesChannel,
-          { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
-          8
-        );
-      }
-
-
-      if (resources.gameChannel) {
-        await this.workersManager.sendMessage(
-          resources.gameChannel.id,
-          { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
-          8
-        );
-      }
-
-      
-      await this.cleanupPickingChannels(resources);
-      this.cleanupPickingSession(gameId);
-
-      console.log(`[PickingQueue] Successfully completed picking for game ${gameId}`);
-      return { success: true };
+      await this.persistPickingSession(session, queueData, selectedMap);
+      return await this.completePicking(session, finalTeams, resources!, queueData, selectedMap);
 
     } catch (error) {
       console.error(`[PickingQueue] Error in captain picking for game ${gameId}:`, error);
@@ -472,6 +447,92 @@ export class PickingQueueManager {
 
       return { success: false };
     }
+  }
+
+  private async completePicking(
+    session: PickingSession,
+    finalTeams: { team1: string[]; team2: string[] },
+    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+    queueData: QueueLike,
+    selectedMap: string,
+  ): Promise<{ success: boolean }> {
+    const gameId = session.gameId;
+    const verifiedFinalTeams = await this.revalidateFinalTeams(finalTeams, resources.pickingChannel, queueData);
+    if (!verifiedFinalTeams) {
+      throw new Error('Final team revalidation failed (players left, changed status, or entered a game during picking)');
+    }
+
+    await this.gameManager.createGame(
+      gameId,
+      queueData,
+      verifiedFinalTeams.team1,
+      verifiedFinalTeams.team2,
+      selectedMap
+    );
+
+    await this.gameManager.updateGameMap(gameId, selectedMap);
+    await this.gameManager.initiateGameWarp(gameId);
+
+    const ignMap = await this.getPlayerIGNs([...finalTeams.team1, ...finalTeams.team2]);
+    const team1Avg = await this.calculateTeamAverageElo(finalTeams.team1);
+    const team2Avg = await this.calculateTeamAverageElo(finalTeams.team2);
+    const gameStartEmbed = await this.buildGameStartEmbed(
+      finalTeams.team1,
+      finalTeams.team2,
+      session.captains,
+      team1Avg,
+      team2Avg,
+      ignMap,
+      'Ongoing',
+      gameId
+    );
+
+    let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
+    try {
+      const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
+      const roster = await fetchGameStartRoster([...finalTeams.team1, ...finalTeams.team2]);
+      const captains = session.captains;
+      const toTeam = (ids: string[]) => ids.map(id => {
+        const entry = roster.get(id);
+        return {
+          discordId: id,
+          username: entry?.username ?? ignMap.get(id) ?? id,
+          elo: entry?.elo ?? 0,
+          isCaptain: captains.includes(id),
+        };
+      });
+      if (roster.size > 0) {
+        const buffer = await generateGameStartImageBuffer(gameId, toTeam(finalTeams.team1), toTeam(finalTeams.team2), {
+          mapName: selectedMap,
+          modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
+        });
+        startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
+      }
+    } catch (imageError) {
+      console.error(`[PickingQueue] Failed to generate game start image for game ${gameId}:`, imageError);
+    }
+
+    if (config.channels.gamesChannel) {
+      await this.workersManager.sendMessage(
+        config.channels.gamesChannel,
+        { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+        8
+      );
+    }
+
+    if (resources.gameChannel) {
+      await this.workersManager.sendMessage(
+        resources.gameChannel.id,
+        { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+        8
+      );
+    }
+
+    await this.cleanupPickingChannels(resources);
+    this.cleanupPickingSession(gameId);
+
+    console.log(`[PickingQueue] Successfully completed picking for game ${gameId}`);
+    return { success: true };
   }
 
   private async createPickingResources(
@@ -782,7 +843,9 @@ export class PickingQueueManager {
 
   private async executePicking(
     channel: TextChannel,
-    session: PickingSession
+    session: PickingSession,
+    queueData: QueueLike,
+    selectedMap: string,
   ): Promise<{ team1: string[], team2: string[] } | null> {
     try {
       while (session.remainingPlayers.length > 0 && session.active) {
@@ -814,6 +877,7 @@ export class PickingQueueManager {
 
         
         session.currentPicker = this.getNextPickerWithParties(session);
+        await this.persistPickingSession(session, queueData, selectedMap);
 
         
         if (session.remainingPlayers.length > 0) {
@@ -823,6 +887,7 @@ export class PickingQueueManager {
 
       
       await this.distributeRemainingPlayers(session);
+      await this.persistPickingSession(session, queueData, selectedMap);
 
       
       const verifiedTeams = this.verifyAndCorrectTeams(session);
@@ -1050,6 +1115,7 @@ export class PickingQueueManager {
         session.active = false;
         this.activeSessions.delete(gameId);
       }
+      this.clearPersistedPickingSession(gameId);
     } catch (error) {
       console.error(`[PickingQueue] Error cleaning up picking session ${gameId}:`, error);
     }
@@ -1347,6 +1413,137 @@ export class PickingQueueManager {
     const isValid = issues.length === 0;
     console.log(`[PickingQueue] Game ${gameId} - Final team verification: Valid: ${isValid}, Issues: ${issues.length > 0 ? issues.join(', ') : 'None'}`);
     return { isValid, issues };
+  }
+
+  private async abortRecoveredPickingSession(
+    gameId: number,
+    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+  ): Promise<void> {
+    try {
+      const waitingVcId = config.voicechannels.waitingvc;
+      if (waitingVcId && resources.pickingChannel) {
+        const members = [...resources.pickingChannel.members.keys()];
+        if (members.length > 0) {
+          await this.workersManager.moveMembers(members, waitingVcId, 8);
+        }
+      }
+      await this.cleanupPickingChannels(resources);
+    } catch (error) {
+      console.error(`[PickingQueue] Error aborting recovered picking session ${gameId}:`, error);
+    } finally {
+      this.cleanupPickingSession(gameId);
+    }
+  }
+
+  private async resumeRecoveredPicking(
+    session: PickingSession,
+    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+    queueData: QueueLike,
+    selectedMap: string,
+  ): Promise<void> {
+    try {
+      const finalTeams = await this.executePicking(resources.gameChannel, session, queueData, selectedMap);
+      if (!finalTeams) {
+        throw new Error('Picking process failed or was cancelled');
+      }
+      await this.completePicking(session, finalTeams, resources, queueData, selectedMap);
+    } catch (error) {
+      console.error(`[PickingQueue] Error resuming picking session ${session.gameId}:`, error);
+      await this.abortRecoveredPickingSession(session.gameId, resources);
+    }
+  }
+
+  public async recoverPickingSessions(): Promise<number> {
+    let recovered = 0;
+    try {
+      const sessions = await PickingSessionState.find().lean() as unknown as Array<{
+        gameId: number;
+        queueData: QueueLike;
+        selectedMap: string;
+        players: string[];
+        captains: string[];
+        team1: string[];
+        team2: string[];
+        remainingPlayers: string[];
+        currentPicker: string;
+        pickCount: number;
+        pickOrder: string[];
+        partyInfo?: Record<string, string[]>;
+        partyPlayers?: string[];
+        channels: { game: string; picking: string };
+        updatedAt?: Date;
+      }>;
+      if (sessions.length === 0) return 0;
+
+      const guild = await this.getGuild();
+      if (!guild) return 0;
+
+      for (const state of sessions) {
+        try {
+          if (this.activeSessions.has(state.gameId)) continue;
+          const gameChannel = guild.channels.cache.get(state.channels.game)
+            ?? await guild.channels.fetch(state.channels.game).catch(() => null);
+          const pickingChannel = guild.channels.cache.get(state.channels.picking)
+            ?? await guild.channels.fetch(state.channels.picking).catch(() => null);
+          if (!gameChannel || !gameChannel.isTextBased() || !pickingChannel || !pickingChannel.isVoiceBased()) {
+            this.clearPersistedPickingSession(state.gameId);
+            continue;
+          }
+
+          const resources = {
+            gameId: state.gameId,
+            gameChannel: gameChannel as TextChannel,
+            pickingChannel: pickingChannel as VoiceChannel,
+          };
+          const age = state.updatedAt ? Date.now() - new Date(state.updatedAt).getTime() : 0;
+          if (age > 30 * 60 * 1000) {
+            console.warn(`[PickingQueue] Clearing stale picking session ${state.gameId}`);
+            await this.abortRecoveredPickingSession(state.gameId, resources);
+            continue;
+          }
+          const existingGame = await Game.findOne({ gameId: state.gameId }).select('gameId state').lean().catch(() => null);
+          if (existingGame) {
+            console.log(`[PickingQueue] Clearing stale picking session ${state.gameId}; game already exists`);
+            await this.abortRecoveredPickingSession(state.gameId, resources);
+            continue;
+          }
+          const present = new Set(pickingChannel.members.keys());
+          const missingPlayers = state.players.filter(id => !present.has(id));
+          if (missingPlayers.length > 0) {
+            console.warn(`[PickingQueue] Aborting picking ${state.gameId}; missing players: ${missingPlayers.join(', ')}`);
+            await this.abortRecoveredPickingSession(state.gameId, resources);
+            continue;
+          }
+
+          const session: PickingSession = {
+            gameId: state.gameId,
+            captains: state.captains,
+            remainingPlayers: [...state.remainingPlayers],
+            currentPicker: state.currentPicker,
+            pickCount: state.pickCount,
+            team1: [...state.team1],
+            team2: [...state.team2],
+            timeout: setTimeout(() => this.handlePickingTimeout(state.gameId), this.SESSION_TIMEOUT),
+            active: true,
+            partyInfo: new Map(Object.entries(state.partyInfo || {})),
+            partyPlayers: new Set(state.partyPlayers || []),
+            pickOrder: state.pickOrder || [],
+            pickingResources: resources,
+          };
+          this.activeSessions.set(state.gameId, session);
+
+          await this.sendPickingEmbed(resources.gameChannel, session, state.selectedMap, state.queueData);
+          void this.resumeRecoveredPicking(session, resources, state.queueData, state.selectedMap);
+          recovered += 1;
+          console.log(`[PickingQueue] Resumed picking session ${state.gameId} at pick ${state.pickCount}`);
+        } catch (error) {
+          console.error(`[PickingQueue] Error recovering picking session ${state.gameId}:`, error);
+        }
+      }
+    } catch (error) {
+      console.error('[PickingQueue] Error loading persisted picking sessions:', error);
+    }
+    return recovered;
   }
 
   public cleanup(): void {

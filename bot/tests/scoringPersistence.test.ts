@@ -159,6 +159,55 @@ describe('scoring persistence', () => {
     expect(players[2].elo).toBe(1200);
   });
 
+  it('recovery scoring skips players whose stats were already applied', async () => {
+    const gameDoc = makeGameDoc();
+    const alreadyScored = makeUser('a', 1050);
+    (alreadyScored as any).recentGames = [{ gameId: 1, state: 'scored' }];
+    const players = [
+      alreadyScored,
+      makeUser('b', 1100),
+      makeUser('c', 1200),
+      makeUser('d', 1300),
+    ];
+    setupGame(players, gameDoc);
+
+    await makeManager().scoreGame({ gameId: 1, winningTeam: 1, mvps: [], bedbreaks: [] }, true);
+
+    expect(players[0].elo).toBe(1050);
+    expect(players[0].wins).toBe(0);
+    expect(players[1].elo).not.toBe(1100);
+  });
+
+  it('accepts active games for scoring after a warp success', async () => {
+    const gameDoc = makeGameDoc('active');
+    const gameDocWithSave = {
+      ...gameDoc,
+      save: jest.fn().mockResolvedValue(undefined),
+    };
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    GameModel.findOne.mockResolvedValue(gameDocWithSave);
+
+    await makeManager().scoreGame({ gameId: 1, winningTeam: 1, mvps: [], bedbreaks: [] });
+
+    expect(GameModel.findOneAndUpdate).toHaveBeenCalledWith(
+      { gameId: 1, state: { $in: ['pending', 'active'] } },
+      { $set: { endTime: expect.any(Date), state: 'scoring' } },
+      { new: true },
+    );
+  });
+
+  it('marks the game active when the plugin confirms a warp', async () => {
+    const gameDoc = makeGameDoc('pending');
+    GameModel.findOne.mockResolvedValue(gameDoc);
+    const manager = makeManager();
+
+    await (manager as any).handleWarpSuccess({ gameId: '1' });
+
+    expect(gameDoc.state).toBe('active');
+    expect(gameDoc.save).toHaveBeenCalled();
+  });
+
   it('awards multiple MVPs and caps them to MAX_MVPS_PER_GAME', async () => {
     const gameDoc = makeGameDoc();
     const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];

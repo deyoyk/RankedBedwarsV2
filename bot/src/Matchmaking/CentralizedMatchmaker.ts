@@ -1032,6 +1032,10 @@ export class CentralizedMatchmaker {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
+  public async recoverPickingSessions(): Promise<number> {
+    return this.pickingQueueManager.recoverPickingSessions();
+  }
+
   public cleanup(): void {
     try {
       if (this.queueMonitorInterval) {

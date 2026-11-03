@@ -1,10 +1,13 @@
 import { Client, ChannelType, CategoryChannel, Guild, TextChannel, VoiceChannel } from 'discord.js';
 import Game from '../models/Game';
+import Queue from '../models/Queue';
+import PickingSessionState from '../models/PickingSessionState';
 import config from '../config/config';
 
 export class ChannelsCleanupTask {
   private client: Client;
   private cleanupInterval: NodeJS.Timeout | null = null;
+  private initialCleanupTimeout: NodeJS.Timeout | null = null;
   private readonly CLEANUP_INTERVAL = 3 * 60 * 60 * 1000; 
 
   constructor(client: Client) {
@@ -15,14 +18,23 @@ export class ChannelsCleanupTask {
     if (this.cleanupInterval) {
       return;
     }
+    this.initialCleanupTimeout = setTimeout(() => {
+      this.cleanupOrphanedChannels().catch((error) => {
+        console.error('[ChannelsCleanupTask] Startup cleanup failed:', error);
+      });
+    }, 10000);
     this.cleanupInterval = setInterval(async () => {
       await this.cleanupOrphanedChannels();
     }, this.CLEANUP_INTERVAL);
 
-    console.log('[ChannelsCleanupTask] Started channel cleanup task (runs every 3 hours)');
+    console.log('[ChannelsCleanupTask] Started channel cleanup task (startup + every 3 hours)');
   }
 
   public stop() {
+    if (this.initialCleanupTimeout) {
+      clearTimeout(this.initialCleanupTimeout);
+      this.initialCleanupTimeout = null;
+    }
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
@@ -42,18 +54,34 @@ export class ChannelsCleanupTask {
       await guild.channels.fetch().catch(() => null);
 
       
-      const activeGames = await Game.find({ state: { $in: ['pending', 'active'] } })
+      const activeGames = await Game.find({ state: { $in: ['pending', 'active', 'scoring'] } })
         .select('channels.text channels.picking channels.team1Voice channels.team2Voice')
         .lean();
 
       
       const validChannelIds = new Set<string>();
+      if (config.voicechannels.waitingvc) {
+        validChannelIds.add(config.voicechannels.waitingvc);
+      }
       
       for (const game of activeGames) {
         if (game.channels.text) validChannelIds.add(game.channels.text);
         if (game.channels.picking) validChannelIds.add(game.channels.picking);
         if (game.channels.team1Voice) validChannelIds.add(game.channels.team1Voice);
         if (game.channels.team2Voice) validChannelIds.add(game.channels.team2Voice);
+      }
+
+      const pickingSessions = await PickingSessionState.find()
+        .select('channels.game channels.picking')
+        .lean();
+      for (const session of pickingSessions) {
+        if (session.channels?.game) validChannelIds.add(session.channels.game);
+        if (session.channels?.picking) validChannelIds.add(session.channels.picking);
+      }
+
+      const queues = await Queue.find({ isActive: true }).select('channelId').lean();
+      for (const queue of queues) {
+        if (queue.channelId) validChannelIds.add(queue.channelId);
       }
 
       
@@ -92,6 +120,20 @@ export class ChannelsCleanupTask {
       }
 
       console.log(`[ChannelsCleanupTask] Found ${channelsToDelete.length} orphaned channels in ${categoryType} category`);
+
+      const waitingVcId = config.voicechannels.waitingvc;
+      if (waitingVcId) {
+        for (const channel of channelsToDelete) {
+          if (channel.type !== ChannelType.GuildVoice || channel.id === waitingVcId) continue;
+          const members = [...channel.members.values()];
+          for (let i = 0; i < members.length; i += 5) {
+            const batch = members.slice(i, i + 5);
+            await Promise.allSettled(batch.map(member =>
+              member.voice.setChannel(waitingVcId).catch(() => undefined)
+            ));
+          }
+        }
+      }
 
       let deletedCount = 0;
       const CONCURRENCY = 3;
