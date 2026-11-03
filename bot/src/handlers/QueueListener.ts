@@ -469,7 +469,7 @@ export class QueueListener {
       const partyDocs = await Party.find({ partyId: { $in: partyIds } }).select('partyId members').lean();
       const rosterById = new Map(partyDocs.map((p) => [p.partyId, p.members as string[]]));
       for (const [partyId, present] of presentByParty) {
-        const roster = this.partyCache.get(partyId)?.members ?? rosterById.get(partyId);
+        const roster = rosterById.get(partyId) ?? this.partyCache.get(partyId)?.members;
         if (!roster) continue;
         this.partyCache.set(partyId, { members: roster, timestamp: Date.now() });
         if (!roster.every(id => playersInVC.has(id))) continue;
@@ -757,23 +757,20 @@ export class QueueListener {
         return { success: false };
       }
 
-      let partyMembers = this.partyCache.get(partyId)?.members;
-
-      if (!partyMembers) {
-        const party = await resolveQuery<{ partyId: string; members?: string[] } | null>(
-          Party.findOne({ partyId }),
-          'partyId members'
-        );
-        if (!party || !party.members) {
-          await this.moveToWaiting(state, 'Invalid party');
-          return { success: false };
-        }
-
+      let partyMembers: string[];
+      const party = await resolveQuery<{ partyId: string; members?: string[] } | null>(
+        Party.findOne({ partyId }),
+        'partyId members'
+      );
+      if (party && party.members) {
         partyMembers = party.members;
         this.partyCache.set(partyId, {
           members: partyMembers,
           timestamp: Date.now()
         });
+      } else {
+        await this.moveToWaiting(state, 'Invalid party');
+        return { success: false };
       }
 
       const isValidPartySize = await this.validatePartySize(state, partyMembers, queue);

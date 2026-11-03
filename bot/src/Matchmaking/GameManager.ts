@@ -187,6 +187,7 @@ export class GameManager {
   
   private workersManager: WorkersManager;
   private activeGames: Map<number, GameResources> = new Map();
+  private creatingPlayers: Map<string, number> = new Map();
   private cleaningGames: Set<number> = new Set();
   private warpRequests: Map<string, WarpRequestData> = new Map();
   private manualWarpRetries: Map<number, { count: number; windowStartedAt: number; lastAt: number }> = new Map();
@@ -242,6 +243,7 @@ export class GameManager {
       if (queueData?.maxPlayers && teams.team1.length * 2 !== queueData.maxPlayers) throw new Error(`Teams must match queue size ${queueData.maxPlayers}`);
       if (this.activeGames.has(gameId)) throw new Error(`Game ${gameId} is already being created`);
       if (this.activeGames.size >= this.MAX_CONCURRENT_GAMES) throw new Error('Server is at max concurrent games');
+      this.reservePlayersForGame(gameId, [...teams.team1, ...teams.team2]);
       this.activeGames.set(gameId, {} as GameResources);
       reserved = true;
       team1 = teams.team1;
@@ -263,6 +265,30 @@ export class GameManager {
       }
       console.error(`[GameManager] Error creating game ${gameId}:`, error);
       throw error;
+    } finally {
+      this.releaseCreatingPlayers(gameId);
+    }
+  }
+
+  private reservePlayersForGame(gameId: number, playerIds: string[]): void {
+    const conflicts: string[] = [];
+    for (const playerId of new Set(playerIds)) {
+      const existing = this.creatingPlayers.get(playerId);
+      if (existing !== undefined && existing !== gameId) {
+        conflicts.push(`${playerId} (game ${existing})`);
+      }
+    }
+    if (conflicts.length > 0) {
+      throw new Error(`Players are already being placed into another game: ${conflicts.join(', ')}`);
+    }
+    for (const playerId of new Set(playerIds)) {
+      this.creatingPlayers.set(playerId, gameId);
+    }
+  }
+
+  private releaseCreatingPlayers(gameId: number): void {
+    for (const [playerId, owner] of this.creatingPlayers) {
+      if (owner === gameId) this.creatingPlayers.delete(playerId);
     }
   }
 
@@ -433,6 +459,9 @@ export class GameManager {
         { upsert: true },
       );
     } catch (error) {
+      if ((error as { code?: number })?.code === 11000) {
+        return;
+      }
       console.error(`[GameManager] Failed to journal ${type} settlement for game ${gameId}:`, error);
       const wrapped = new Error(`Could not journal ${type} settlement for game ${gameId}`);
       (wrapped as Error & { cause?: unknown }).cause = error;
@@ -830,6 +859,11 @@ export class GameManager {
 
   public async initiateGameWarp(gameId: number): Promise<void> {
     try {
+      const key = String(gameId);
+      if (this.warpRequests.has(key)) {
+        console.warn(`[GameManager] Warp already pending for game ${gameId}; duplicate request ignored`);
+        return;
+      }
       const resources = this.activeGames.get(gameId);
       if (!resources || !resources.game) {
         throw new Error(`Game ${gameId} not found in active games`);

@@ -470,9 +470,40 @@ export class PickingQueueManager {
       selectedMap
     );
 
-    await this.gameManager.updateGameMap(gameId, selectedMap);
-    await this.gameManager.initiateGameWarp(gameId);
+    try {
+      await this.gameManager.updateGameMap(gameId, selectedMap);
+    } catch (mapError) {
+      console.error(`[PickingQueue] Game ${gameId} created but map update failed:`, mapError);
+    }
 
+    try {
+      await this.gameManager.initiateGameWarp(gameId);
+    } catch (warpError) {
+      console.error(`[PickingQueue] Game ${gameId} created but warp start failed:`, warpError);
+      await this.gameManager.voidGame(gameId, 'Warp could not be started after picking').catch(() => undefined);
+    }
+
+    try {
+      await this.announcePickedGame(session, finalTeams, resources, queueData, selectedMap);
+    } catch (announceError) {
+      console.error(`[PickingQueue] Game ${gameId} created but start announcement failed:`, announceError);
+    }
+
+    await this.cleanupPickingChannels(resources);
+    this.cleanupPickingSession(gameId);
+
+    console.log(`[PickingQueue] Successfully completed picking for game ${gameId}`);
+    return { success: true };
+  }
+
+  private async announcePickedGame(
+    session: PickingSession,
+    finalTeams: { team1: string[]; team2: string[] },
+    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+    queueData: QueueLike,
+    selectedMap: string,
+  ): Promise<void> {
+    const gameId = session.gameId;
     const ignMap = await this.getPlayerIGNs([...finalTeams.team1, ...finalTeams.team2]);
     const team1Avg = await this.calculateTeamAverageElo(finalTeams.team1);
     const team2Avg = await this.calculateTeamAverageElo(finalTeams.team2);
@@ -527,12 +558,6 @@ export class PickingQueueManager {
         8
       );
     }
-
-    await this.cleanupPickingChannels(resources);
-    this.cleanupPickingSession(gameId);
-
-    console.log(`[PickingQueue] Successfully completed picking for game ${gameId}`);
-    return { success: true };
   }
 
   private async createPickingResources(
@@ -856,6 +881,10 @@ export class PickingQueueManager {
           return null;
         }
 
+        if (!session.active) {
+          return null;
+        }
+
         
         if (session.currentPicker === session.captains[0]) {
           session.team1.push(pickedPlayer);
@@ -883,6 +912,10 @@ export class PickingQueueManager {
         if (session.remainingPlayers.length > 0) {
           await this.sendPickingEmbed(channel, session, 'TBD', { isRanked: false });
         }
+      }
+
+      if (!session.active) {
+        return null;
       }
 
       
@@ -942,6 +975,10 @@ export class PickingQueueManager {
 
         collector.on('end', (collected) => {
           if (collected.size === 0) {
+            if (!session.active) {
+              resolve(null);
+              return;
+            }
             
             if (session.remainingPlayers.length > 0) {
               const randomPlayer = session.remainingPlayers[

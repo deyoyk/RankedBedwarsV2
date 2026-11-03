@@ -193,6 +193,47 @@ describe('GameManager private game lifecycle', () => {
       ['a', 'b'],
       ['c', 'd'],
     );
+    expect((manager as any).creatingPlayers.size).toBe(0);
+  });
+
+  it('rejects a second game while the same player is being placed', async () => {
+    const manager = makeManager();
+    (manager as any).reservePlayersForGame(99, ['a']);
+
+    await expect(manager.createGame(1, null, ['a', 'b'], ['c', 'd'], 'Quad'))
+      .rejects.toThrow('already being placed into another game');
+
+    (manager as any).releaseCreatingPlayers(99);
+  });
+
+  it('ignores duplicate warp requests while one is already pending', async () => {
+    const manager = makeManager();
+    const timeout = setTimeout(() => {}, 60000);
+    (manager as any).activeGames.set(1, {
+      ...resources(1),
+      game: {
+        gameId: 1,
+        map: 'Quad',
+        team1: ['a', 'b'],
+        team2: ['c', 'd'],
+        isRanked: false,
+      },
+    });
+    (manager as any).warpRequests.set('1', {
+      gameId: '1',
+      timeout,
+      attempts: 0,
+      team1IGNs: ['a', 'b'],
+      team2IGNs: ['c', 'd'],
+      map: 'Quad',
+      isRanked: false,
+      timestamp: Date.now(),
+    });
+
+    await manager.initiateGameWarp(1);
+    clearTimeout(timeout);
+
+    expect(wsMock.send).not.toHaveBeenCalled();
   });
 
   it('deletes partially created channels when database creation fails', async () => {

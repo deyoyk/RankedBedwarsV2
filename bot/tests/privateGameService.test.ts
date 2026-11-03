@@ -32,6 +32,7 @@ import Game from '../src/models/Game';
 import User from '../src/models/User';
 import { PrivateGameService } from '../src/services/PrivateGameService';
 import { queuePlayers } from '../src/types/queuePlayersMemory';
+import { claimPlayers, clearAllDraftClaims } from '../src/Matchmaking/draftClaims';
 
 const GameModel = Game as unknown as { findOne: jest.Mock };
 const UserModel = User as unknown as { find: jest.Mock };
@@ -116,6 +117,7 @@ const maps = [
 describe('PrivateGameService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearAllDraftClaims();
     queuePlayers.clear();
     validatePartyAccess.mockResolvedValue(party(['a', 'b', 'c', 'd']));
     evaluatePresence.mockReturnValue('online');
@@ -160,6 +162,21 @@ describe('PrivateGameService', () => {
     );
 
     expect(result).toEqual({ success: false, message: 'Party members already in a queue: A' });
+    expect(manager.createPrivateGame).not.toHaveBeenCalled();
+  });
+
+  it('rejects the party when matchmaking is already drafting a member', async () => {
+    claimPlayers(['a'], 'public-queue');
+    const manager = gameManager();
+
+    const result = await PrivateGameService.startPrivateGame(
+      'a',
+      guildFor(['a', 'b', 'c', 'd']),
+      wsFor(manager),
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.message).toMatch(/currently being processed by matchmaking/);
     expect(manager.createPrivateGame).not.toHaveBeenCalled();
   });
 

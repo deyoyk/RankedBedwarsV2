@@ -51,4 +51,30 @@ describe('PickingQueueManager channel cleanup', () => {
     expect(manager.activeSessions.has(7)).toBe(false);
     expect(deleteChannel).toHaveBeenCalledTimes(2);
   });
+
+  it('does not finalize a cancelled or timed-out picking session', async () => {
+    const manager = makeManager(jest.fn());
+    const session = {
+      gameId: 8,
+      captains: ['a', 'b'],
+      remainingPlayers: ['c', 'd'],
+      currentPicker: 'a',
+      pickCount: 0,
+      team1: ['a'],
+      team2: ['b'],
+      timeout: setTimeout(() => {}, 100000),
+      active: false,
+      pickingResources: resources(),
+    };
+
+    const result = await manager.executePicking(
+      { id: 'picking-text' } as any,
+      session,
+      { channelId: 'q', maxPlayers: 4, minElo: 0, maxElo: 9999, bypassRoles: [] },
+      'Aquarius',
+    );
+
+    expect(result).toBeNull();
+    clearTimeout(session.timeout);
+  });
 });

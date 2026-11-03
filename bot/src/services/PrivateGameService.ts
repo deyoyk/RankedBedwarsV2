@@ -7,6 +7,7 @@ import { claimMapPick, getRecentMapPicks } from '../Matchmaking/utils';
 import { PartyService } from './PartyService';
 import { PresenceService } from './PresenceService';
 import { queuePlayers } from '../types/queuePlayersMemory';
+import { claimPlayers, releasePlayers } from '../Matchmaking/draftClaims';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
 import type { MapInfo } from '../types/MapInfoMemory';
 
@@ -260,17 +261,28 @@ export class PrivateGameService {
     const { team1, team2 } = this.splitTeams(players);
 
     let gameId: number;
+    const claimOwner = `private:${partyId}`;
+    const claimed = claimPlayers(memberIds, claimOwner);
+    if (claimed.length !== memberIds.length) {
+      releasePlayers(memberIds, claimOwner);
+      return { success: false, message: 'A party member is currently being processed by matchmaking. Try again in a moment' };
+    }
+
     try {
-      const resources = await gameManager.createPrivateGame({
-        partyId,
-        map: mapResult.map,
-        team1,
-        team2,
-      });
-      gameId = resources.gameId;
-    } catch (error) {
-      console.error('[PrivateGameService] Error creating private game:', error);
-      return { success: false, message: 'Failed to create the private game' };
+      try {
+        const resources = await gameManager.createPrivateGame({
+          partyId,
+          map: mapResult.map,
+          team1,
+          team2,
+        });
+        gameId = resources.gameId;
+      } catch (error) {
+        console.error('[PrivateGameService] Error creating private game:', error);
+        return { success: false, message: 'Failed to create the private game' };
+      }
+    } finally {
+      releasePlayers(memberIds, claimOwner);
     }
 
     try {

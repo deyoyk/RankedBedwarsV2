@@ -89,8 +89,17 @@ export class RandomQueueManager {
               console.warn(`[RandomQueue] Invalid draft after revalidation, breaking`);
               break;
             }
-            console.warn(`[RandomQueue] ${missing.size} drafted player(s) left or entered a game, reselecting`);
-            availablePlayers = availablePlayers.filter(p => !missing.has(p));
+            const missingPartyIds = new Set(
+              [...missing]
+                .map(p => userDocsById.get(p)?.partyId)
+                .filter((id): id is string => Boolean(id))
+            );
+            console.warn(`[RandomQueue] ${missing.size} drafted player(s) left or entered a game, removing affected party group(s)`);
+            availablePlayers = availablePlayers.filter(p => {
+              if (missing.has(p)) return false;
+              const partyId = userDocsById.get(p)?.partyId;
+              return !partyId || !missingPartyIds.has(partyId);
+            });
             continue;
           }
 
@@ -107,6 +116,10 @@ export class RandomQueueManager {
             selectedMap
           );
 
+          availablePlayers = availablePlayers.filter(p => !teamResult.usedPlayers.has(p));
+          usedPlayers.push(...Array.from(teamResult.usedPlayers));
+          gamesCreated++;
+
           
           const guild = this.client.guilds.cache.first();
           let gameChannel: TextChannel | null = null;
@@ -122,12 +135,25 @@ export class RandomQueueManager {
 
           
           if (gameChannel) {
-            await this.gameManager.updateGameMap(gameId, selectedMap);
-            await this.gameManager.initiateGameWarp(gameId);
+            try {
+              await this.gameManager.updateGameMap(gameId, selectedMap);
+            } catch (mapError) {
+              console.error(`[RandomQueue] Game ${gameId} created but map update failed:`, mapError);
+            }
+            try {
+              await this.gameManager.initiateGameWarp(gameId);
+            } catch (warpError) {
+              console.error(`[RandomQueue] Game ${gameId} created but warp start failed:`, warpError);
+              await this.gameManager.voidGame(gameId, 'Warp could not be started after game creation').catch(() => undefined);
+            }
           } else {
             console.warn(`[RandomQueue] No game channel found for game ${gameId}, skipping voting and using default map`);
-            
-            await this.gameManager.initiateGameWarp(gameId);
+            try {
+              await this.gameManager.initiateGameWarp(gameId);
+            } catch (warpError) {
+              console.error(`[RandomQueue] Game ${gameId} created but warp start failed:`, warpError);
+              await this.gameManager.voidGame(gameId, 'Warp could not be started after game creation').catch(() => undefined);
+            }
           }
 
           
@@ -182,10 +208,6 @@ export class RandomQueueManager {
           }
 
           
-          availablePlayers = availablePlayers.filter(p => !teamResult.usedPlayers.has(p));
-          usedPlayers.push(...Array.from(teamResult.usedPlayers));
-          gamesCreated++;
-
           console.log(`[RandomQueue] Created game ${gameId}, ${availablePlayers.length} players remaining`);
 
         } catch (error) {
