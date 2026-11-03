@@ -92,6 +92,7 @@ interface Config {
   CommonPartySize: number;
   PartyQueueSize: number;
   maxMvpsPerGame: number;
+  maxBedBreakersPerGame: number;
 
   strikes: {
     [key: string]: string;
@@ -209,7 +210,8 @@ const configuration: Config = {
   websocketport: clean(process.env.WEBSOCKETPORT) || '25565',
   CommonPartySize: Number.isInteger(parsedCommonPartySize) && parsedCommonPartySize > 0 ? parsedCommonPartySize : 8,
   PartyQueueSize: Number.isInteger(parsedPartyQueueSize) && parsedPartyQueueSize > 0 ? parsedPartyQueueSize : 1,
-  maxMvpsPerGame: parsedPositiveInt(process.env.MAX_MVPS_PER_GAME, 2),
+  maxMvpsPerGame: parsedPositiveInt(process.env.MAX_MVPS_PER_GAME, 1),
+  maxBedBreakersPerGame: parsedPositiveInt(process.env.MAX_BED_BREAKERS_PER_GAME, 1),
   strikes: {
     1: 'warn',
     2: '10h',

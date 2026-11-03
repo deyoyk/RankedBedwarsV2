@@ -19,7 +19,7 @@ import { updateDailyElo } from '../utils/userStats';
 import type { IRecentGame } from '../models/gameBase';
 import type { ICombatEntry } from '../models/gameTypes';
 import { parseTiers, streakBonusFor, bountyForOpponentStreak, type ProgressionTier } from '../utils/eloProgression';
-import { limitMvps } from '../utils/mvp';
+import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 
 interface PlayerScoreData {
   player: IUser;
@@ -1156,7 +1156,10 @@ export class GameManager {
         .map(ign => ignToId[String(ign).toLowerCase()])
         .filter((id): id is string => typeof id === 'string' && id.length > 0);
       const mvpsIds = limitMvps(Array.from(new Set(mvpIds)));
-      const bedbreaksIds = (gameResult.bedbreaks || []).map(ign => ignToId[String(ign).toLowerCase()]).filter(Boolean);
+      const bedBreakerIds = (gameResult.bedbreaks || [])
+        .map(ign => ignToId[String(ign).toLowerCase()])
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
+      const bedbreaksIds = limitBedBreakers(Array.from(new Set(bedBreakerIds)));
 
       const playerData: Record<string, PlayerData> = {};
       for (const [ign, data] of Object.entries(gameResult.playerData || {})) {

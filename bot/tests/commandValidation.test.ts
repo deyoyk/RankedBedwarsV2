@@ -196,6 +196,20 @@ describe('score and void prefix validation', () => {
       config.maxMvpsPerGame = originalLimit;
     }
   });
+
+  it('rejects more bed breakers than the configured limit', async () => {
+    const originalLimit = config.maxBedBreakersPerGame;
+    config.maxBedBreakersPerGame = 1;
+    try {
+      const interaction = message();
+      await score(interaction, ['42', '1', 'Steve', 'Alex,Cara']);
+      expect(GameModel.findOne).not.toHaveBeenCalled();
+      expect(interaction.reply).toHaveBeenCalled();
+      expect(JSON.stringify(interaction.reply.mock.calls)).toContain('at most 1 bed breaker');
+    } finally {
+      config.maxBedBreakersPerGame = originalLimit;
+    }
+  });
 });
 
 describe('addqueue prefix validation', () => {

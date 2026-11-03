@@ -11,7 +11,7 @@ import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
 import { PlayerData, GameResult } from '../types/GameTypes';
-import { limitMvps } from '../utils/mvp';
+import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import * as http from 'http';
 import express from 'express';
 import { Client, Collection, GuildMember } from 'discord.js';
@@ -861,7 +861,7 @@ export class WebSocketManager {
 
     const winningTeam = this.determineWinningTeam(msg);
     const mvps = this.calculateMvpsFromStats(players, msgMvps);
-    const bedbreaks: string[] = Array.isArray(msgBedsbroken) ? msgBedsbroken : [];
+    const bedbreaks: string[] = limitBedBreakers(Array.isArray(msgBedsbroken) ? msgBedsbroken : []);
     const playerData = this.buildPlayerData(players, bedbreaks);
     const rawTimeline: unknown = msg.timeline;
     const timeline: TimelineEvent[] = (Array.isArray(rawTimeline) ? rawTimeline : [])

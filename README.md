@@ -28,6 +28,7 @@
 - Player stat cards with ELO, levels, win rates, rankings, and combat stats
 - Match start and result cards with MVP and bed-breaker highlights
 - Configurable multi-MVP support per scored game
+- Configurable multi-bed-breaker support per scored game
 - Seasons, leaderboards, recent games, and ELO decay
 - Discord scoring, void, and edit workflows
 - Player progression with XP, levels, win streaks, and bounty bonuses

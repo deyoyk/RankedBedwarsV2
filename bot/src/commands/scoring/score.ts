@@ -6,7 +6,7 @@ import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
-import { getMaxMvpsPerGame, mvpLimitMessage, uniqueMvps } from '../../utils/mvp';
+import { getMaxMvpsPerGame, getMaxBedBreakersPerGame, mvpLimitMessage, bedBreakerLimitMessage, uniquePlayers } from '../../utils/scoringLimits';
 
 interface ScoreParams {
   gameId: number;
@@ -54,11 +54,17 @@ export async function score(interaction: Message | ChatInputCommandInteraction, 
     return;
   }
 
-  const { gameId, winningTeam, bedbreaks, reason } = params;
-  const mvps = uniqueMvps(params.mvps);
+  const { gameId, winningTeam, reason } = params;
+  const mvps = uniquePlayers(params.mvps);
+  const bedbreaks = uniquePlayers(params.bedbreaks);
   const maxMvps = getMaxMvpsPerGame();
+  const maxBedBreakers = getMaxBedBreakersPerGame();
   if (mvps.length > maxMvps) {
     await safeReply(interaction, errorEmbed(mvpLimitMessage(maxMvps), 'Score Command Error'));
+    return;
+  }
+  if (bedbreaks.length > maxBedBreakers) {
+    await safeReply(interaction, errorEmbed(bedBreakerLimitMessage(maxBedBreakers), 'Score Command Error'));
     return;
   }
 

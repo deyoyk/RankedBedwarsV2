@@ -170,6 +170,29 @@ describe('scoring persistence', () => {
     }
   });
 
+  it('awards multiple bed breakers and caps them to MAX_BED_BREAKERS_PER_GAME', async () => {
+    const gameDoc = makeGameDoc();
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    const originalLimit = config.maxBedBreakersPerGame;
+    config.maxBedBreakersPerGame = 2;
+
+    try {
+      await makeManager().scoreGame({
+        gameId: 1,
+        winningTeam: 1,
+        mvps: [],
+        bedbreaks: ['A', 'B', 'C'],
+      });
+
+      expect(players[0].bedBroken).toBe(1);
+      expect(players[1].bedBroken).toBe(1);
+      expect(players[2].bedBroken).toBe(0);
+    } finally {
+      config.maxBedBreakersPerGame = originalLimit;
+    }
+  });
+
   it('getNextGameId fallback reserves the counter atomically', async () => {
     mockGetNextSequence.mockRejectedValueOnce(new Error('counter unavailable'));
     GameModel.findOne.mockReturnValueOnce({ sort: () => ({ select: async () => ({ gameId: 41 }) }) });
