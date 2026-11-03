@@ -46,20 +46,20 @@ const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
 
 const NAME_X = 86;
 const NAME_W = 490;
-const CPT_X = 590;
-const CPT_W = 56;
+const CPT_X = 584;
+const CPT_W = 68;
 const ELO_X = 666;
 const ELO_W = 110;
 
 function header(input: StartTemplateInput): VNode {
   return h('div', {},
-    badge((WIDTH - 174) / 2, 30, 174, `GAME #${input.gameId}`, {
+    badge((WIDTH - 200) / 2, 26, 200, `GAME #${input.gameId}`, {
       color: COLORS.text,
       background: 'rgba(21,31,45,0.9)',
       border: COLORS.line,
-      height: 34,
-      size: 13,
-      letterSpacing: 1.4,
+      height: 42,
+      size: 17,
+      letterSpacing: 1,
     }),
 
     text(0, 76, WIDTH, 82, 'MATCH START', 68, COLORS.text, MEDIUM, 'center', 2.4),
@@ -67,7 +67,7 @@ function header(input: StartTemplateInput): VNode {
     text(
       0, 164, WIDTH, 28,
       `${input.mapName} · ${input.modeLabel}`,
-      26, COLORS.cyan, MEDIUM, 'center', 1.2,
+      28, COLORS.cyan, MEDIUM, 'center', 1,
     ),
 
     divider((WIDTH - 120) / 2, 210, 120, COLORS.cyan, 2),
@@ -84,11 +84,11 @@ function playerRow(
   const avatarSize = Math.max(24, Math.min(48, rowH - 18));
   const nameSize = Math.max(
     15,
-    Math.min(34, rowH - 16, Math.floor(760 / Math.max(6, p.username.length))),
+    Math.min(44, rowH - 16, Math.floor(760 / Math.max(6, p.username.length))),
   );
-  const eloSize = Math.max(12, Math.min(26, rowH - 24));
-  const cptH = Math.max(18, Math.min(24, rowH - 18));
-  const cptSize = Math.max(9, Math.min(11, rowH - 24));
+  const eloSize = Math.max(14, Math.min(36, rowH - 24));
+  const cptH = Math.max(24, Math.min(34, rowH - 18));
+  const cptSize = Math.max(12, Math.min(17, rowH - 24));
   const rowY = rowTop + (rowH - avatarSize) / 2;
 
   return [
@@ -166,33 +166,33 @@ function teamCard(
   return [
     panel(cardX, top, CARD_W, cardH, 20),
 
-    text(cardX + 28, top + 13, 320, 26, title, 16, color, MEDIUM, 'left', 1.8),
+    text(cardX + 28, top + 13, 340, 26, title, 20, color, MEDIUM, 'left', 1.6),
     text(
-      cardX + 28, top + 37, 320, 18,
+      cardX + 28, top + 37, 340, 18,
       `${playerCount} ${playerCount === 1 ? 'PLAYER' : 'PLAYERS'}`,
-      10, COLORS.muted, MEDIUM, 'left', 1.6,
+      15, COLORS.muted, MEDIUM, 'left', 1.4,
     ),
     text(
-      cardX + CARD_W - 328, top + 20, 300, 26,
+      cardX + CARD_W - 328, top + 18, 300, 30,
       `AVG ${avg}`,
-      20, COLORS.text, MEDIUM, 'right', 0.8,
+      30, COLORS.text, MEDIUM, 'right', 0.4,
     ),
 
     divider(cardX + 24, top + HEADER_H, CARD_W - 48, COLORS.line, 1),
 
-    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 10, COLORS.faint, MEDIUM, 'left', 1.6),
-    text(cardX + ELO_X, top + HEADER_H, ELO_W, COLUMNS_H, 'ELO', 10, COLORS.faint, MEDIUM, 'right', 1.4),
+    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 13, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(cardX + ELO_X, top + HEADER_H, ELO_W, COLUMNS_H, 'ELO', 13, COLORS.muted, MEDIUM, 'right', 1.2),
 
     ...rows,
     empty,
 
     divider(cardX + 24, summaryTop, CARD_W - 48, COLORS.line, 1),
 
-    text(cardX + 28, summaryTop + 11, 300, 18, 'TOTAL ELO', 10, COLORS.muted, MEDIUM, 'left', 1.4),
-    text(cardX + 28, summaryTop + 29, 300, 24, String(totalElo), 20, COLORS.text, MEDIUM),
+    text(cardX + 28, summaryTop + 11, 300, 18, 'TOTAL ELO', 13, COLORS.muted, MEDIUM, 'left', 1.2),
+    text(cardX + 28, summaryTop + 28, 300, 32, String(totalElo), 30, COLORS.text, MEDIUM),
 
-    text(cardX + CARD_W - 288, summaryTop + 11, 260, 18, 'ELO SPREAD', 10, COLORS.muted, MEDIUM, 'right', 1.4),
-    text(cardX + CARD_W - 288, summaryTop + 29, 260, 24, String(spread), 20, COLORS.text, MEDIUM, 'right'),
+    text(cardX + CARD_W - 288, summaryTop + 11, 260, 18, 'ELO SPREAD', 13, COLORS.muted, MEDIUM, 'right', 1.2),
+    text(cardX + CARD_W - 288, summaryTop + 28, 260, 32, String(spread), 30, COLORS.text, MEDIUM, 'right'),
   ];
 }
 

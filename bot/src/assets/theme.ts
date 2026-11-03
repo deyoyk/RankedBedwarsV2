@@ -9,8 +9,8 @@ export const COLORS = {
   line: '#1e2a38',
   lineSoft: '#17212d',
   text: '#f2f6fb',
-  muted: '#7b899d',
-  faint: '#536173',
+  muted: '#95a3b5',
+  faint: '#6d7c90',
   cyan: '#4de1f2',
   green: '#4ade80',
   red: '#fb7185',
@@ -220,8 +220,8 @@ export function sectionLabel(
   accentColor: string = COLORS.cyan,
 ): VNode {
   return h('div', {},
-    accent(x, y + 4, 3, 12, accentColor, 2),
-    text(x + 11, y, 420, 20, title, 12, color, MEDIUM, 'left', 1.4),
+    accent(x, y + 3, 3, 14, accentColor, 2),
+    text(x + 12, y, 440, 20, title, 14, color, MEDIUM, 'left', 1.2),
   );
 }
 
@@ -311,17 +311,17 @@ export function gameFooter(
     divider(60, y, width - 120, COLORS.line, 1),
 
     serverName
-      ? text(60, y + 16, 600, 24, serverName, 17, COLORS.faint, MEDIUM, 'left', 0.6)
+      ? text(60, y + 14, 600, 26, serverName, 20, COLORS.muted, MEDIUM, 'left', 0.6)
       : null,
 
     text(
       width / 2 - 300, y + 18, 600, 22,
       'RANKED BEDWARS',
-      12, '#3f4b5a', MEDIUM, 'center', 2.4,
+      14, '#556477', MEDIUM, 'center', 2.4,
     ),
 
     inviteLink
-      ? text(width - 660, y + 16, 600, 24, inviteLink, 17, COLORS.faint, FONT, 'right')
+      ? text(width - 660, y + 14, 600, 26, inviteLink, 20, COLORS.muted, FONT, 'right')
       : null,
   );
 }

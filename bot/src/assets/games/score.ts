@@ -45,11 +45,11 @@ const SUMMARY_H = 64;
 const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
 
 const NAME_X = 86;
-const NAME_W = 250;
-const MVP_X = 344;
-const MVP_W = 52;
+const NAME_W = 240;
+const MVP_X = 334;
+const MVP_W = 62;
 const BED_X = 402;
-const BED_W = 52;
+const BED_W = 62;
 const DELTA_X = 470;
 const DELTA_W = 120;
 const BEFORE_X = 610;
@@ -79,13 +79,13 @@ function header(input: ScoreTemplateInput): VNode {
   const playerCount = input.winners.length + input.losers.length;
 
   return h('div', {},
-    badge((WIDTH - 174) / 2, 30, 174, `GAME #${input.gameId}`, {
+    badge((WIDTH - 200) / 2, 26, 200, `GAME #${input.gameId}`, {
       color: COLORS.text,
       background: 'rgba(21,31,45,0.9)',
       border: COLORS.line,
-      height: 34,
-      size: 13,
-      letterSpacing: 1.4,
+      height: 42,
+      size: 17,
+      letterSpacing: 1,
     }),
 
     text(0, 76, WIDTH, 82, 'MATCH RESULTS', 68, COLORS.text, MEDIUM, 'center', 2.4),
@@ -93,7 +93,7 @@ function header(input: ScoreTemplateInput): VNode {
     text(
       0, 164, WIDTH, 28,
       `${playerCount} PLAYERS · FINAL SCOREBOARD`,
-      14, COLORS.muted, MEDIUM, 'center', 2.4,
+      18, COLORS.muted, MEDIUM, 'center', 1.6,
     ),
 
     divider((WIDTH - 120) / 2, 210, 120, COLORS.cyan, 2),
@@ -110,12 +110,12 @@ function playerRow(
   const avatarSize = Math.max(24, Math.min(48, rowH - 18));
   const nameSize = Math.max(
     15,
-    Math.min(34, rowH - 16, Math.floor(430 / Math.max(6, p.username.length))),
+    Math.min(42, rowH - 16, Math.floor(410 / Math.max(6, p.username.length))),
   );
-  const eloSize = Math.max(12, Math.min(22, rowH - 24));
-  const deltaSize = Math.max(13, Math.min(26, rowH - 20));
-  const mvpH = Math.max(18, Math.min(24, rowH - 18));
-  const mvpSize = Math.max(9, Math.min(11, rowH - 24));
+  const eloSize = Math.max(14, Math.min(30, rowH - 24));
+  const deltaSize = Math.max(15, Math.min(36, rowH - 20));
+  const mvpH = Math.max(24, Math.min(34, rowH - 18));
+  const mvpSize = Math.max(12, Math.min(17, rowH - 24));
   const delta = eloDelta(p);
   const deltaColor = delta > 0 ? COLORS.green : delta < 0 ? COLORS.red : COLORS.muted;
   const rowY = rowTop + (rowH - avatarSize) / 2;
@@ -226,31 +226,31 @@ function teamCard(
   return [
     panel(cardX, top, CARD_W, cardH, 20),
 
-    text(cardX + 28, top + 13, 300, 26, title, 15, color, MEDIUM, 'left', 1.8),
-    text(cardX + 28, top + 37, 320, 18, subtitle, 10, COLORS.muted, MEDIUM, 'left', 1.6),
+    text(cardX + 28, top + 13, 340, 26, title, 19, color, MEDIUM, 'left', 1.6),
+    text(cardX + 28, top + 37, 340, 18, subtitle, 12, COLORS.muted, MEDIUM, 'left', 1.4),
     text(
       cardX + CARD_W - 228, top + 21, 200, 26,
       `${playerCount} ${playerCount === 1 ? 'PLAYER' : 'PLAYERS'}`,
-      12, COLORS.muted, MEDIUM, 'right', 1.2,
+      16, COLORS.muted, MEDIUM, 'right', 1,
     ),
 
     divider(cardX + 24, top + HEADER_H, CARD_W - 48, COLORS.line, 1),
 
-    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 10, COLORS.faint, MEDIUM, 'left', 1.6),
-    text(cardX + DELTA_X, top + HEADER_H, DELTA_W, COLUMNS_H, 'ELO CHANGE', 10, COLORS.faint, MEDIUM, 'center', 1.4),
-    text(cardX + BEFORE_X, top + HEADER_H, BEFORE_W, COLUMNS_H, 'BEFORE', 10, COLORS.faint, MEDIUM, 'right', 1.2),
-    text(cardX + AFTER_X, top + HEADER_H, AFTER_W, COLUMNS_H, 'AFTER', 10, COLORS.faint, MEDIUM, 'right', 1.2),
+    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 13, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(cardX + DELTA_X, top + HEADER_H, DELTA_W, COLUMNS_H, 'ELO CHANGE', 13, COLORS.muted, MEDIUM, 'center', 1.2),
+    text(cardX + BEFORE_X, top + HEADER_H, BEFORE_W, COLUMNS_H, 'BEFORE', 13, COLORS.muted, MEDIUM, 'right', 1),
+    text(cardX + AFTER_X, top + HEADER_H, AFTER_W, COLUMNS_H, 'AFTER', 13, COLORS.muted, MEDIUM, 'right', 1),
 
     ...rows,
     empty,
 
     divider(cardX + 24, summaryTop, CARD_W - 48, COLORS.line, 1),
 
-    text(cardX + 28, summaryTop + 12, 300, 18, 'TOTAL ELO CHANGE', 10, COLORS.muted, MEDIUM, 'left', 1.4),
-    text(cardX + 28, summaryTop + 30, 300, 24, `${signed(totalDelta)} RR`, 20, deltaColor, MEDIUM),
+    text(cardX + 28, summaryTop + 12, 300, 18, 'TOTAL ELO CHANGE', 13, COLORS.muted, MEDIUM, 'left', 1.2),
+    text(cardX + 28, summaryTop + 29, 300, 32, `${signed(totalDelta)} RR`, 30, deltaColor, MEDIUM),
 
-    text(cardX + CARD_W - 288, summaryTop + 12, 260, 18, 'AVERAGE ELO', 10, COLORS.muted, MEDIUM, 'right', 1.4),
-    text(cardX + CARD_W - 288, summaryTop + 30, 260, 24, String(avgAfter), 20, COLORS.text, MEDIUM, 'right'),
+    text(cardX + CARD_W - 288, summaryTop + 12, 260, 18, 'AVERAGE ELO', 13, COLORS.muted, MEDIUM, 'right', 1.2),
+    text(cardX + CARD_W - 288, summaryTop + 29, 260, 32, String(avgAfter), 30, COLORS.text, MEDIUM, 'right'),
   ];
 }
 

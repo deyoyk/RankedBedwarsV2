@@ -60,9 +60,9 @@ function header(): VNode {
         backgroundColor: COLORS.cyan,
       },
     }),
-    text(79, 16, 220, 24, 'RANKED BEDWARS', 14, COLORS.text, MEDIUM, 'left', 1.4),
-    text(242, 18, 260, 22, 'PLAYER STATISTICS', 11, COLORS.muted, MEDIUM, 'left', 2),
-    text(1040, 18, 300, 22, 'PROFILE CARD', 11, COLORS.faint, MEDIUM, 'right', 2),
+    text(79, 16, 240, 24, 'RANKED BEDWARS', 16, COLORS.text, MEDIUM, 'left', 1.2),
+    text(252, 18, 260, 22, 'PLAYER STATISTICS', 13, COLORS.muted, MEDIUM, 'left', 1.8),
+    text(1040, 18, 300, 22, 'PROFILE CARD', 13, COLORS.faint, MEDIUM, 'right', 1.8),
   );
 }
 
@@ -103,13 +103,13 @@ function hero(input: DefaultTemplateInput): VNode {
         : null,
     ),
 
-    badge(270, 78, 132, 'PLAYER PROFILE', {
+    badge(270, 76, 152, 'PLAYER PROFILE', {
       color: COLORS.cyan,
       background: 'rgba(77,225,242,0.08)',
       border: 'rgba(77,225,242,0.28)',
-      height: 28,
-      size: 12,
-      letterSpacing: 1.2,
+      height: 32,
+      size: 14,
+      letterSpacing: 1,
     }),
 
     text(
@@ -122,14 +122,14 @@ function hero(input: DefaultTemplateInput): VNode {
        0.4,
     ),
 
-    text(272, 180, 520, 24, input.joined, 15, COLORS.muted),
+    text(272, 180, 520, 24, input.joined, 17, COLORS.muted),
 
     sectionLabel(270, 212, 'LEVEL PROGRESS', COLORS.muted, COLORS.cyan),
-    text(270, 236, 180, 24, `LEVEL ${input.level}`, 16, COLORS.cyan, MEDIUM),
+    text(270, 234, 180, 28, `LEVEL ${input.level}`, 22, COLORS.cyan, MEDIUM),
     text(
-      660, 238, 190, 22,
+      640, 238, 210, 24,
       `${input.xpToNext.toLocaleString()} XP TO NEXT`,
-      12, COLORS.muted, FONT, 'right',
+      15, COLORS.muted, FONT, 'right',
     ),
 
     h('div', {
@@ -156,14 +156,14 @@ function hero(input: DefaultTemplateInput): VNode {
 
     divider(940, 86, 1, COLORS.line, 166),
 
-    text(990, 94, 280, 22, 'COMPETITIVE RATING', 12, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(990, 94, 280, 22, 'COMPETITIVE RATING', 14, COLORS.muted, MEDIUM, 'left', 1.2),
     text(
-      990, 122, 280, 70,
+      990, 116, 300, 78,
       `${input.elo.toLocaleString()} RR`,
-      58, COLORS.cyan, MEDIUM,
+      70, COLORS.cyan, MEDIUM,
     ),
-    text(990, 202, 280, 20, 'GLOBAL RANK', 11, COLORS.muted, MEDIUM, 'left', 1.4),
-    text(990, 222, 280, 32, `#${input.globalRank}`, 26, COLORS.text, MEDIUM),
+    text(990, 202, 280, 20, 'GLOBAL RANK', 13, COLORS.muted, MEDIUM, 'left', 1.2),
+    text(990, 218, 280, 40, `#${input.globalRank}`, 38, COLORS.text, MEDIUM),
   );
 }
 
@@ -174,23 +174,23 @@ function record(input: DefaultTemplateInput): VNode {
     panel(60, 310, 1280, 150, 18),
 
     sectionLabel(88, 330, 'RECORD', COLORS.muted, COLORS.cyan),
-    text(170, 330, 220, 20, 'LIFETIME', 11, COLORS.faint, MEDIUM, 'left', 1.6),
+    text(185, 330, 220, 20, 'LIFETIME', 13, COLORS.faint, MEDIUM, 'left', 1.4),
 
     divider(340, 354, 1, COLORS.line, 88),
     divider(1060, 354, 1, COLORS.line, 88),
 
-    text(88, 358, 230, 60, input.wins, 50, COLORS.green, MEDIUM),
-    text(88, 420, 180, 22, 'TOTAL WINS', 12, COLORS.muted, FONT, 'left', 1),
+    text(88, 352, 230, 66, input.wins, 64, COLORS.green, MEDIUM),
+    text(88, 422, 180, 22, 'TOTAL WINS', 14, COLORS.muted, FONT, 'left', 0.8),
 
-    text(1070, 358, 200, 60, input.losses, 50, COLORS.red, MEDIUM, 'right'),
-    text(1070, 420, 200, 22, 'TOTAL LOSSES', 12, COLORS.muted, FONT, 'right', 1),
+    text(1070, 352, 200, 66, input.losses, 64, COLORS.red, MEDIUM, 'right'),
+    text(1070, 422, 200, 22, 'TOTAL LOSSES', 14, COLORS.muted, FONT, 'right', 0.8),
 
     text(
-      360, 338, 680, 46,
+      360, 332, 680, 56,
       `${(winRate * 100).toFixed(1)}%`,
-      38, COLORS.text, MEDIUM, 'center',
+      52, COLORS.text, MEDIUM, 'center',
     ),
-    text(360, 386, 680, 22, 'WIN RATE', 12, COLORS.muted, MEDIUM, 'center', 1.4),
+    text(360, 390, 680, 22, 'WIN RATE', 15, COLORS.muted, MEDIUM, 'center', 1.2),
 
     h('div', {
       style: {
@@ -214,7 +214,7 @@ function record(input: DefaultTemplateInput): VNode {
       }),
     ),
 
-    text(390, 438, 620, 18, input.winCaption, 11, COLORS.muted, FONT, 'center'),
+    text(390, 438, 620, 20, input.winCaption, 13, COLORS.muted, FONT, 'center'),
   );
 }
 
@@ -224,20 +224,20 @@ function statTile(x: number, y: number, t: DefaultTile): VNode {
 
     accent(x + 18, y + 18, 3, 82, t.accent || COLORS.cyan),
 
-    text(x + 34, y + 14, 244, 54, t.value, 38, COLORS.text, MEDIUM),
+    text(x + 34, y + 10, 244, 60, t.value, 52, COLORS.text, MEDIUM),
 
     text(
-      x + 34, y + 74, 232, 22,
+      x + 34, y + 76, 232, 22,
       t.label,
-      12, COLORS.muted, FONT, 'left', 0.9,
+      14, COLORS.muted, FONT, 'left', 0.7,
     ),
 
-    badge(x + 216, y + 16, 66, t.rank || '-', {
+    badge(x + 198, y + 12, 86, t.rank || '-', {
       color: RANK_TEXT,
       background: RANK_BG,
       border: RANK_BORDER,
-      height: 26,
-      size: 12,
+      height: 34,
+      size: 17,
     }),
   );
 }
@@ -248,7 +248,7 @@ function stats(input: DefaultTemplateInput): VNode {
 
   return h('div', {},
     sectionLabel(60, 464, 'PERFORMANCE', COLORS.muted, COLORS.cyan),
-    text(1040, 466, 300, 20, 'SEASON TOTALS', 11, COLORS.faint, MEDIUM, 'right', 1.6),
+    text(1040, 466, 300, 20, 'SEASON TOTALS', 13, COLORS.faint, MEDIUM, 'right', 1.4),
 
     ...input.tiles.slice(0, 8).map((t, i) =>
       statTile(xs[i % 4], ys[Math.floor(i / 4)], t),
@@ -275,14 +275,14 @@ function combat(input: DefaultTemplateInput): VNode {
       return h('div', {},
         accent(x, 796, 3, 40, t.accent || COLORS.cyan),
 
-        text(x + 14, 794, 120, 44, t.value, 30, COLORS.text, MEDIUM),
-        text(x + 140, 802, 160, 28, t.label, 13, COLORS.muted),
-        badge(x + 292, 800, 65, t.rank || '-', {
+        text(x + 14, 792, 120, 48, t.value, 44, COLORS.text, MEDIUM),
+        text(x + 140, 802, 160, 28, t.label, 15, COLORS.muted),
+        badge(x + 290, 797, 86, t.rank || '-', {
           color: RANK_TEXT,
           background: RANK_BG,
           border: RANK_BORDER,
-          height: 26,
-          size: 12,
+          height: 34,
+          size: 17,
         }),
 
         i < 2 ? divider(x + 380, 796, 1, COLORS.line, 40) : null,
@@ -295,11 +295,11 @@ function footer(input: DefaultTemplateInput): VNode {
   return h('div', {},
     divider(60, 872, 1280, COLORS.line, 1),
 
-    text(60, 884, 600, 20, input.seasonLine1, 12, COLORS.muted, MEDIUM, 'left', 1.2),
-    text(60, 906, 760, 18, input.seasonLine2, 11, COLORS.faint),
+    text(60, 884, 600, 20, input.seasonLine1, 14, COLORS.muted, MEDIUM, 'left', 1),
+    text(60, 906, 760, 18, input.seasonLine2, 13, COLORS.faint),
 
     input.footerBrand
-      ? text(940, 886, 400, 22, input.footerBrand, 12, COLORS.faint, MEDIUM, 'right', 0.6)
+      ? text(940, 886, 400, 22, input.footerBrand, 14, COLORS.faint, MEDIUM, 'right', 0.4)
       : null,
   );
 }
