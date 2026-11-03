@@ -4,6 +4,14 @@ import { scoreTemplate, ScoreTemplatePlayer } from '../assets/games/score';
 import { startTemplate, StartTemplatePlayer } from '../assets/games/start';
 import User from '../models/User';
 
+const GAME_IMAGE_TIMEOUT_MS = Math.max(
+  1000,
+  Math.min(
+    30000,
+    Number.parseInt(process.env.IMAGE_GAME_TIMEOUT_MS ?? '', 10) || 8000,
+  ),
+);
+
 type PlayerLine = {
   discordId: string;
   username: string;
@@ -78,7 +86,10 @@ export async function generateScoreImageBuffer(
     serverName,
     inviteLink,
   });
-  return renderPng(tpl.root, tpl.width, tpl.height);
+  return renderPng(tpl.root, tpl.width, tpl.height, {
+    timeoutMs: GAME_IMAGE_TIMEOUT_MS,
+    priority: 'high',
+  });
 }
 
 export type GameStartPlayerInput = {
@@ -147,7 +158,10 @@ export async function generateGameStartImageBuffer(
     serverName,
     inviteLink,
   });
-  return renderPng(tpl.root, tpl.width, tpl.height);
+  return renderPng(tpl.root, tpl.width, tpl.height, {
+    timeoutMs: GAME_IMAGE_TIMEOUT_MS,
+    priority: 'high',
+  });
 }
 
 export type { PlayerLine };

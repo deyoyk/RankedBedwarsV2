@@ -1,4 +1,4 @@
-import { loadAvatarDataUrl, loadSkinDataUrl } from '../src/assets/assets';
+import { loadAvatarDataUrl, loadSkinDataUrl, staticImageDataUrl } from '../src/assets/assets';
 
 const fetchMock = jest.fn();
 
@@ -65,5 +65,21 @@ describe('avatar download cache', () => {
     const img = await loadSkinDataUrl('FallbackFinn');
     expect(img).toContain('data:image/png;base64,');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects oversized image responses and uses the fallback avatar', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      headers: {
+        get: (name: string) => (name === 'content-type' ? 'image/png' : null),
+      },
+      body: (async function* () {
+        yield Buffer.alloc(1024 * 1024);
+        yield Buffer.alloc(1024 * 1024);
+        yield Buffer.alloc(1024 * 1024);
+      })(),
+    });
+    const img = await loadAvatarDataUrl('HugeAvatar');
+    expect(img).toBe(staticImageDataUrl('fallbacks', 'steve.png'));
   });
 });

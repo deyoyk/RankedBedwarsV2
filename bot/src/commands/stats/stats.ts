@@ -10,7 +10,7 @@ import config from '../../config/config';
 
  
 
-export async function stats(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function stats(interaction: Message | ChatInputCommandInteraction, args?: string[], _wsManager?: WebSocketManager) {
   let targetUserId: string;
 
   if (interaction instanceof ChatInputCommandInteraction) {
@@ -169,10 +169,22 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
 
   const generator = resolveTheme('default');
 
-  const buffer = await generator(playerData, recentGames, {
-    calculatePosition,
-    calculateRating: (pd) => pd.elo,
-  });
+  let buffer: Buffer;
+  try {
+    buffer = await generator(playerData, recentGames, {
+      calculatePosition,
+      calculateRating: (pd) => pd.elo,
+    });
+  } catch (error) {
+    console.error('[Stats] Failed to generate stats image:', error);
+    const busyEmbed = betterEmbed(
+      'Stats image generation is under heavy load right now. Please try again in a few seconds.',
+      '#ffcc00',
+      'Stats Busy',
+    );
+    await safeReply(interaction, { embeds: [busyEmbed.builder] });
+    return;
+  }
 
   await safeReply(interaction, { files: [{ attachment: buffer, name: `${playerData.ign}_stats.png` }], content: '' });
 }

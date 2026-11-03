@@ -57,8 +57,31 @@ async function fetchImageDataUrl(url: string, timeoutMs: number): Promise<string
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    const contentType = res.headers.get('content-type') || 'image/png';
+    const contentType = (res.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (!IMAGE_ALLOWED_TYPES.has(contentType)) return null;
+    const contentLength = Number.parseInt(res.headers.get('content-length') || '0', 10);
+    if (Number.isFinite(contentLength) && contentLength > IMAGE_MAX_BYTES) return null;
+
+    const body = res.body as (NodeJS.ReadableStream & AsyncIterable<Uint8Array>) | null;
+    let buf: Buffer;
+    if (body && typeof body[Symbol.asyncIterator] === 'function') {
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of body) {
+        const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        total += part.length;
+        if (total > IMAGE_MAX_BYTES) {
+          controller.abort();
+          return null;
+        }
+        chunks.push(part);
+      }
+      buf = Buffer.concat(chunks);
+    } else {
+      buf = Buffer.from(await res.arrayBuffer());
+    }
+
+    if (buf.length === 0 || buf.length > IMAGE_MAX_BYTES) return null;
     return `data:${contentType};base64,${buf.toString('base64')}`;
   } catch {
     return null;
@@ -78,6 +101,8 @@ const IMAGE_NEGATIVE_TTL_MS = 60 * 1000;
 const IMAGE_MAX_ENTRIES = 5000;
 const IMAGE_MAX_CONCURRENT = 4;
 const IMAGE_ACQUIRE_TIMEOUT_MS = 5000;
+const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+const IMAGE_ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
 interface ImageWaiter {
   resolve: (acquired: boolean) => void;
