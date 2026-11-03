@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 
 
  
-public class GameInstance {
+public class GameInstance implements LiveGameStats {
     private final Game game;
     private final String arenaName;
     private final String displayName;
@@ -340,6 +340,111 @@ public class GameInstance {
 
     public Map<String, String> getBrokenBeds() {
         return Collections.unmodifiableMap(brokenBeds);
+    }
+
+    @Override
+    public String getGameId() {
+        return game.getGameId();
+    }
+
+    @Override
+    public String getMap() {
+        return game.getMap();
+    }
+
+    @Override
+    public boolean isRanked() {
+        return game.isRanked();
+    }
+
+    @Override
+    public long getStartTime() {
+        return game.getStartTime();
+    }
+
+    @Override
+    public String getTeam(String playerName) {
+        return playerTeams.get(playerName);
+    }
+
+    @Override
+    public String getFirstBlood() {
+        return game.getFirstBlood();
+    }
+
+    @Override
+    public Set<String> getPlayers() {
+        return Collections.unmodifiableSet(playerTeams.keySet());
+    }
+
+    @Override
+    public int getKills(String playerName) {
+        return game.getPlayerKills().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getDeaths(String playerName) {
+        return game.getPlayerDeaths().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getFinalKills(String playerName) {
+        return game.getPlayerFinalKills().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getBedsDestroyed(String playerName) {
+        return game.getPlayerBedsDestroyed().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getBlocksPlaced(String playerName) {
+        return game.getPlayerBlocksPlaced().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getDiamonds(String playerName) {
+        return game.getPlayerDiamondsCollected().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getIrons(String playerName) {
+        return game.getPlayerIronCollected().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getGold(String playerName) {
+        return game.getPlayerGoldCollected().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getEmeralds(String playerName) {
+        return game.getPlayerEmeraldsCollected().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public double getDamageDealt(String playerName) {
+        return game.getPlayerDamageDealt().getOrDefault(playerName, 0.0);
+    }
+
+    @Override
+    public double getDamageTaken(String playerName) {
+        return game.getPlayerDamageTaken().getOrDefault(playerName, 0.0);
+    }
+
+    @Override
+    public int getAssists(String playerName) {
+        return game.getPlayerAssists().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getBestStreak(String playerName) {
+        return game.getPlayerMaxStreak().getOrDefault(playerName, 0);
+    }
+
+    @Override
+    public int getCurrentStreak(String playerName) {
+        return playerCurrentStreak.getOrDefault(playerName, 0);
     }
 
     public enum ResourceType {

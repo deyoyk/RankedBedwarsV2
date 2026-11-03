@@ -4,6 +4,7 @@ import com.deyo.rbw.commands.AdminCommand;
 import com.deyo.rbw.commands.CallCmd;
 import com.deyo.rbw.commands.PrivateCmd;
 import com.deyo.rbw.commands.QueueCmd;
+import com.deyo.rbw.models.LiveGameStats;
 import com.deyo.rbw.listeners.PlayerListener;
 import com.deyo.rbw.managers.GameDataManager;
 import com.deyo.rbw.managers.MapManager;
@@ -196,6 +197,29 @@ public class RankedBedwars extends JavaPlugin {
     public boolean isMBedwars() {
         return com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable() && 
                com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getName().equals("MBedwars");
+    }
+
+    public LiveGameStats getLiveGameStats(org.bukkit.entity.Player player) {
+        if (player == null || !com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable()) {
+            return null;
+        }
+        try {
+            if (isMBedwars()) {
+                com.deyo.rbw.bedwars.mbedwars.MBedwarsImplementation impl =
+                        (com.deyo.rbw.bedwars.mbedwars.MBedwarsImplementation)
+                                com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation();
+                return impl.getListener() != null ? impl.getListener().getLiveGameStats(player) : null;
+            }
+            if (isBedWars1058()) {
+                com.deyo.rbw.bedwars.bedwars1058.BedWars1058Implementation impl =
+                        (com.deyo.rbw.bedwars.bedwars1058.BedWars1058Implementation)
+                                com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation();
+                return impl.getListener() != null ? impl.getListener().getLiveGameStats(player) : null;
+            }
+        } catch (Exception e) {
+            getLogger().warning("Could not read live game stats for " + player.getName() + ": " + e.getMessage());
+        }
+        return null;
     }
 
     private void savePermissionsFile() {

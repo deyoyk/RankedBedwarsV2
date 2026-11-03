@@ -46,3 +46,45 @@ Commands missing from this file are denied. After editing, run `/rbw reloadpermi
 ```bash
 mvn test
 ```
+
+## PlaceholderAPI
+
+General player placeholders use `%rbw_<stat>%`:
+
+```text
+elo, level, experience, peak_elo, playtime_seconds, playtime_minutes,
+playtime_hours, playtime_days, playtime_formatted, wins, losses, games, win_rate,
+kills, deaths, kdr, wlr, final_kills, final_deaths, final_kd,
+bed_broken, mvps, diamonds, irons, gold, emeralds, blocks_placed,
+damage_dealt, damage_taken, assists, best_streak, first_bloods,
+kills_per_game, deaths_per_game, final_kills_per_game,
+beds_per_game, mvps_per_game, assists_per_game,
+mvp_rate, bed_break_rate, first_blood_rate
+```
+
+Aliases such as `fk`, `fd`, `bb`, `ws`, `ls`, `kd`, `wl`, `dd`, `dt`,
+`exp`, `xp`, and both `snake_case`/`nounderscore` forms are supported.
+
+Live game placeholders use `%rbw_game_<stat>%` or `%rbw_ingame_<stat>%`:
+
+```text
+game_id, game_map, game_arena, game_ranked, game_mode,
+game_duration, game_duration_seconds, game_duration_minutes,
+game_duration_formatted, game_team, game_team_name, game_team_size,
+game_team_players, game_players, game_first_blood,
+game_has_first_blood, game_kills, game_deaths, game_final_kills,
+game_bed_breaks, game_blocks_placed, game_diamonds, game_irons,
+game_gold, game_emeralds, game_damage_dealt, game_damage_taken,
+game_assists, game_streak, game_best_streak, game_kdr,
+game_team_kills, game_team_deaths, game_team_final_kills,
+game_team_beds, game_team_blocks_placed, game_team_damage_dealt,
+game_team_damage_taken, game_team_assists, game_team_best_streak
+```
+
+Leaderboard placeholders support the same modes:
+
+```text
+%rbw_top_elo_1%              -> player name at #1
+%rbw_top_elo_1_value%        -> value at #1
+%rbw_top_final_kills_1%      -> aliases such as final_kills work too
+```

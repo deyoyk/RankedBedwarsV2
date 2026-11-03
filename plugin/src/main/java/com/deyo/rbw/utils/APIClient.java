@@ -158,6 +158,10 @@ public class APIClient {
         userData.setDiscordId("0");
         userData.setIgn("Unknown");
         userData.setElo(0);
+        userData.setLevel(1);
+        userData.setExperience(0);
+        userData.setPeakElo(0);
+        userData.setPlaytimeSeconds(0);
         userData.setWins(0);
         userData.setLosses(0);
         userData.setGames(0);
@@ -166,6 +170,7 @@ public class APIClient {
         userData.setDeaths(0);
         userData.setBedBroken(0);
         userData.setFinalKills(0);
+        userData.setFinalDeaths(0);
         userData.setDiamonds(0);
         userData.setIrons(0);
         userData.setGold(0);

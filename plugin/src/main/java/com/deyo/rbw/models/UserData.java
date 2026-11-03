@@ -9,6 +9,10 @@ public class UserData {
     private String discordId;
     private String ign;
     private int elo;
+    private int level;
+    private int experience;
+    private int peakElo;
+    private int playtimeSeconds;
     private int wins;
     private int losses;
     private int games;
@@ -17,6 +21,7 @@ public class UserData {
     private int deaths;
     private int bedBroken;
     private int finalKills;
+    private int finalDeaths;
     private int diamonds;
     private int irons;
     private int gold;

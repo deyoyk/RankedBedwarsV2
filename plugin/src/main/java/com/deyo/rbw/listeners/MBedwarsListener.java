@@ -70,6 +70,11 @@ public class MBedwarsListener implements Listener {
         }
     }
 
+    public com.deyo.rbw.models.LiveGameStats getLiveGameStats(Player player) {
+        if (player == null) return null;
+        return playerInstanceIndex.get(player.getName());
+    }
+
 
     @EventHandler
     public void onRoundStart(RoundStartEvent event) {

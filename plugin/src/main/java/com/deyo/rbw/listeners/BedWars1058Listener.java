@@ -11,6 +11,7 @@ import com.andrei1058.bedwars.api.events.player.PlayerKillEvent;
 import com.andrei1058.bedwars.api.events.player.PlayerLeaveArenaEvent;
 import com.deyo.rbw.RankedBedwars;
 import com.deyo.rbw.models.Game;
+import com.deyo.rbw.models.LiveGameStats;
 
 import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
@@ -45,6 +46,11 @@ public class BedWars1058Listener implements Listener {
     public BedWars1058Listener(RankedBedwars plugin) {
         this.plugin = plugin;
         plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, this::cleanupStaleData, 6000L, 6000L);
+    }
+
+    public LiveGameStats getLiveGameStats(Player player) {
+        if (player == null) return null;
+        return playerTrackerIndex.get(player.getName());
     }
 
     private void cleanupStaleData() {
@@ -121,7 +127,7 @@ public class BedWars1058Listener implements Listener {
         }
     }
     
-    private static class BW1058GameTracker {
+    private static class BW1058GameTracker implements LiveGameStats {
         private final String gameId;
         private final String arenaName;
         private final boolean isRanked;
@@ -190,6 +196,116 @@ public class BedWars1058Listener implements Listener {
             for (Player player : arena.getPlayers()) {
                 addTimelineEvent("player_join", player.getName(), null, null, null);
             }
+        }
+
+        @Override
+        public String getGameId() {
+            return gameId;
+        }
+
+        @Override
+        public String getMap() {
+            return arenaName;
+        }
+
+        @Override
+        public String getArenaName() {
+            return arenaName;
+        }
+
+        @Override
+        public boolean isRanked() {
+            return isRanked;
+        }
+
+        @Override
+        public long getStartTime() {
+            return startTime;
+        }
+
+        @Override
+        public String getTeam(String playerName) {
+            return playerTeams.get(playerName);
+        }
+
+        @Override
+        public String getFirstBlood() {
+            return firstBlood;
+        }
+
+        @Override
+        public Set<String> getPlayers() {
+            return Collections.unmodifiableSet(playerTeams.keySet());
+        }
+
+        @Override
+        public int getKills(String playerName) {
+            return playerKills.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getDeaths(String playerName) {
+            return playerDeaths.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getFinalKills(String playerName) {
+            return playerFinalKills.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getBedsDestroyed(String playerName) {
+            return playerBedsDestroyed.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getBlocksPlaced(String playerName) {
+            return playerBlocksPlaced.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getDiamonds(String playerName) {
+            return playerDiamondsCollected.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getIrons(String playerName) {
+            return playerIronCollected.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getGold(String playerName) {
+            return playerGoldCollected.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getEmeralds(String playerName) {
+            return playerEmeraldsCollected.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public double getDamageDealt(String playerName) {
+            return playerDamageDealt.getOrDefault(playerName, 0.0);
+        }
+
+        @Override
+        public double getDamageTaken(String playerName) {
+            return playerDamageTaken.getOrDefault(playerName, 0.0);
+        }
+
+        @Override
+        public int getAssists(String playerName) {
+            return playerAssists.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getBestStreak(String playerName) {
+            return playerMaxStreak.getOrDefault(playerName, 0);
+        }
+
+        @Override
+        public int getCurrentStreak(String playerName) {
+            return playerCurrentStreak.getOrDefault(playerName, 0);
         }
         
         private void addTimelineEvent(long timestamp, String type, String player, String target, Integer amount, String team) {
