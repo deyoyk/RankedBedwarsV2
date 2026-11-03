@@ -2,6 +2,7 @@ package com.deyo.rbw;
 
 import com.deyo.rbw.commands.AdminCommand;
 import com.deyo.rbw.commands.CallCmd;
+import com.deyo.rbw.commands.PrivateCmd;
 import com.deyo.rbw.commands.QueueCmd;
 import com.deyo.rbw.listeners.PlayerListener;
 import com.deyo.rbw.managers.GameDataManager;
@@ -23,6 +24,7 @@ public class RankedBedwars extends JavaPlugin {
     private AdminCommand adminCommand;
     private CallCmd callCommand;
     private QueueCmd queueCommand;
+    private PrivateCmd privateCommand;
     private RankedBedwarsExpansion placeholderExpansion;
     private com.deyo.rbw.utils.APIClient apiClient;
 
@@ -40,6 +42,10 @@ public class RankedBedwars extends JavaPlugin {
     
     public QueueCmd getQueueCommand() {
         return queueCommand;
+    }
+
+    public PrivateCmd getPrivateCommand() {
+        return privateCommand;
     }
 
     @Override
@@ -60,6 +66,9 @@ public class RankedBedwars extends JavaPlugin {
 
         queueCommand = new QueueCmd(this);
         getCommand("queue").setExecutor(queueCommand);
+
+        privateCommand = new PrivateCmd(this);
+        getCommand("private").setExecutor(privateCommand);
 
         com.deyo.rbw.commands.SsCmd ssCmd = new com.deyo.rbw.commands.SsCmd(this);
         getCommand("ss").setExecutor(ssCmd);

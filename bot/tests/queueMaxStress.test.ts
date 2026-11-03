@@ -204,13 +204,19 @@ describe('websocket queuefromingame flood', () => {
     UserModel.findOne.mockImplementation(() => ({
       collation: () => ({ select: () => ({ lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve' }) }) }),
     }));
-    QueueModel.find.mockImplementation(() => chainable([{ channelId: Q1 }]));
+    QueueModel.find.mockImplementation(() => chainable([
+      { channelId: Q1, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },
+    ]));
     GameModel.findOne.mockImplementation(() => ({ select: () => ({ lean: async () => null }), lean: async () => null }));
     const setChannel = jest.fn().mockResolvedValue(undefined);
     const guild: any = {
       id: 'guild1',
       members: {
-        cache: new Map([[UID, { id: UID, voice: { channel: { id: 'vc1' }, setChannel } }]]),
+        cache: new Map([[UID, {
+          id: UID,
+          voice: { channel: { id: 'vc1' }, setChannel },
+          roles: { cache: { has: () => false } },
+        }]]),
         fetch: jest.fn(),
       },
       channels: {

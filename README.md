@@ -23,7 +23,8 @@
 
 - Ranked BedWars queues with ELO-based team balancing
 - Random and captain-pick queue modes
-- Party queues, queue controls, and automatic queue cleanup
+- Party queues, private/invite-only parties, queue controls, and automatic queue cleanup
+- In-game party queueing from the Minecraft server
 - Automatic game text/voice channel creation, player movement, and cleanup
 - Player stat cards with ELO, levels, win rates, rankings, and combat stats
 - Match start and result cards with MVP and bed-breaker highlights

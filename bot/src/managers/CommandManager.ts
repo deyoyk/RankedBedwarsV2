@@ -252,7 +252,7 @@ export class CommandManager {
         { name: 'create', value: 'create' }, { name: 'invite', value: 'invite' }, { name: 'leave', value: 'leave' },
         { name: 'info', value: 'info' }, { name: 'disband', value: 'disband' }, { name: 'kick', value: 'kick' },
         { name: 'promote', value: 'promote' }, { name: 'settings', value: 'settings' }, { name: 'list', value: 'list' },
-        { name: 'join', value: 'join' }
+        { name: 'join', value: 'join' }, { name: 'private', value: 'private' }, { name: 'cancel', value: 'cancel' }
       ]},
       { name: 'user', description: 'User to invite, kick, or promote (only for relevant actions)', type: 6, required: false },
       { name: 'party_id', description: 'Party ID to join (only for join action)', type: 3, required: false },

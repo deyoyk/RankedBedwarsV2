@@ -43,6 +43,7 @@ jest.mock('../src/managers/WorkersManager', () => ({
 const QueueModel = require('../src/models/Queue').default;
 const UserModel = require('../src/models/User').default;
 const GameModel = require('../src/models/Game').default;
+const PartyModel = require('../src/models/Party').default;
 
 const wsManagerMock: any = {
   send: jest.fn(),
@@ -263,7 +264,9 @@ describe('WebSocket queuefromingame guards', () => {
     UserModel.findOne.mockImplementation(() => ({
       collation: () => ({ select: () => ({ lean: async () => ({ discordId: UID, elo, ign: 'Steve' }) }) }),
     }));
-    QueueModel.find.mockImplementation(() => chainable([{ channelId: Q1 }]));
+    QueueModel.find.mockImplementation(() => chainable([
+      { channelId: Q1, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },
+    ]));
     GameModel.findOne.mockImplementation(() => ({
       select: () => ({ lean: async () => activeGame }),
       lean: async () => activeGame,
@@ -296,5 +299,88 @@ describe('WebSocket queuefromingame guards', () => {
     await (ws as any).handleQueueFromInGame({ ign: 'Steve', uuid: 'u3' });
     expect(queuePlayers.get(Q2) || []).not.toContain(UID);
     expect(queuePlayers.get(Q1)).toContain(UID);
+  });
+
+  it('moves every member of an in-game party into the queue', async () => {
+    const UID2 = '123456789012345679';
+    const { ws, guild } = await makeWs();
+    const secondChannel = { id: 'vc2' };
+    guild.members.cache.set(UID2, {
+      id: UID2,
+      voice: { channel: secondChannel, setChannel: jest.fn().mockResolvedValue(undefined) },
+      roles: { cache: { has: () => false } },
+    });
+    guild.members.cache.get(UID).roles = { cache: { has: () => false } };
+
+    UserModel.findOne.mockReturnValue({
+      collation: () => ({
+        select: () => ({
+          lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve', partyId: 'P' }),
+        }),
+      }),
+    });
+    UserModel.find.mockReturnValue({
+      select: () => ({
+        lean: async () => [
+          { discordId: UID, ign: 'Steve', elo: 1000, isBanned: false, isFrozen: false },
+          { discordId: UID2, ign: 'Alex', elo: 1100, isBanned: false, isFrozen: false },
+        ],
+      }),
+    });
+    PartyModel.findOne.mockReturnValue({
+      select: () => ({ lean: async () => ({ partyId: 'P', members: [UID, UID2] }) }),
+    });
+    GameModel.findOne.mockReturnValue({ select: () => ({ lean: async () => null }) });
+    QueueModel.find.mockReturnValue(chainable([
+      { channelId: Q1, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },
+    ]));
+
+    await (ws as any).handleQueueFromInGame({ ign: 'Steve', uuid: 'party-1' });
+
+    expect(guild.members.cache.get(UID).voice.setChannel).toHaveBeenCalled();
+    expect(guild.members.cache.get(UID2).voice.setChannel).toHaveBeenCalled();
+    expect(queuePlayers.get(Q1)).toEqual(expect.arrayContaining([UID, UID2]));
+    const sent = (ws.send as jest.Mock).mock.calls.map(c => c[0]);
+    expect(sent.some((p: any) => p.type === 'queuefromingame_success')).toBe(true);
+  });
+
+  it('rejects an in-game party when a member is not in voice', async () => {
+    const UID2 = '123456789012345680';
+    const { ws, guild } = await makeWs();
+    guild.members.cache.set(UID2, {
+      id: UID2,
+      voice: { channel: null, setChannel: jest.fn() },
+      roles: { cache: { has: () => false } },
+    });
+    guild.members.cache.get(UID).roles = { cache: { has: () => false } };
+
+    UserModel.findOne.mockReturnValue({
+      collation: () => ({
+        select: () => ({
+          lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve', partyId: 'P' }),
+        }),
+      }),
+    });
+    UserModel.find.mockReturnValue({
+      select: () => ({
+        lean: async () => [
+          { discordId: UID, ign: 'Steve', elo: 1000, isBanned: false, isFrozen: false },
+          { discordId: UID2, ign: 'Alex', elo: 1100, isBanned: false, isFrozen: false },
+        ],
+      }),
+    });
+    PartyModel.findOne.mockReturnValue({
+      select: () => ({ lean: async () => ({ partyId: 'P', members: [UID, UID2] }) }),
+    });
+    GameModel.findOne.mockReturnValue({ select: () => ({ lean: async () => null }) });
+    QueueModel.find.mockReturnValue(chainable([
+      { channelId: Q1, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },
+    ]));
+
+    await (ws as any).handleQueueFromInGame({ ign: 'Steve', uuid: 'party-2' });
+
+    expect(guild.members.cache.get(UID).voice.setChannel).not.toHaveBeenCalled();
+    const sent = (ws.send as jest.Mock).mock.calls.map(c => c[0]);
+    expect(sent.some((p: any) => p.type === 'queuefromingame_fail' && /Alex/.test(p.reason))).toBe(true);
   });
 });

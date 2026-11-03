@@ -11,6 +11,7 @@ import { GameManager } from '../Matchmaking/GameManager';
 import { WorkersManager } from '../managers/WorkersManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { PresenceService } from '../services/PresenceService';
+import { maxPartySizeForQueue } from '../utils/partyQueue';
 
 async function updatePartyActivity(partyId: string) {
   try {
@@ -688,7 +689,7 @@ export class QueueListener {
         });
       }
 
-      const isValidPartySize = await this.validatePartySize(state, partyMembers);
+      const isValidPartySize = await this.validatePartySize(state, partyMembers, queue);
       if (!isValidPartySize) {
         return { success: false };
       }
@@ -904,7 +905,7 @@ export class QueueListener {
     }
   }
 
-  private async validatePartySize(state: VoiceState, partyMembers: string[]): Promise<boolean> {
+  private async validatePartySize(state: VoiceState, partyMembers: string[], queue: QueueLike): Promise<boolean> {
     try {
       const member = state.member;
       if (!member) return false;
@@ -916,12 +917,10 @@ export class QueueListener {
         [config.roles.partyof4Queue]: 4
       };
 
-      let highestAllowedSize = config.CommonPartySize || 1;
-      for (const [roleId, size] of Object.entries(roles)) {
-        if (member.roles.cache.has(roleId) && size > highestAllowedSize) {
-          highestAllowedSize = size;
-        }
-      }
+      const roleSizes = Object.entries(roles)
+        .filter(([roleId]) => member.roles.cache.has(roleId))
+        .map(([, size]) => size);
+      const highestAllowedSize = maxPartySizeForQueue(queue, roleSizes);
 
       if (partySize > highestAllowedSize) {
         await this.moveToWaiting(state, `Party too large (${partySize} > ${highestAllowedSize})`);

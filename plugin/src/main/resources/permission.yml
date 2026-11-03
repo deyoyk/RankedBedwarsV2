@@ -15,6 +15,9 @@ party:
 queue:
   - "everyone"
 
+private:
+  - "everyone"
+
 call:
   - "everyone"
 

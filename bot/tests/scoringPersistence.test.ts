@@ -147,6 +147,18 @@ describe('scoring persistence', () => {
     expect(result.winningTeam).toBe(2);
   });
 
+  it('does not award ELO or streak bonuses for private games', async () => {
+    const gameDoc = makeGameDoc();
+    (gameDoc as any).isPrivate = true;
+    const players = [makeUser('a', 1000), makeUser('b', 1100), makeUser('c', 1200), makeUser('d', 1300)];
+    setupGame(players, gameDoc);
+
+    await makeManager().scoreGame({ gameId: 1, winningTeam: 1, mvps: ['A'], bedbreaks: [] });
+
+    expect(players[0].elo).toBe(1000);
+    expect(players[2].elo).toBe(1200);
+  });
+
   it('awards multiple MVPs and caps them to MAX_MVPS_PER_GAME', async () => {
     const gameDoc = makeGameDoc();
     const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];

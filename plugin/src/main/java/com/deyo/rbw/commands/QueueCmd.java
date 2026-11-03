@@ -91,7 +91,15 @@ public class QueueCmd implements CommandExecutor {
         pendingByPlayer.put(playerKey, requestUuid);
         lastRequestAt.put(playerKey, now);
 
-        plugin.getWebSocketManager().sendMessage(json.toString());
+        try {
+            plugin.getWebSocketManager().sendMessage(json.toString());
+        } catch (Exception sendError) {
+            pendingQueues.remove(requestUuid);
+            pendingByPlayer.remove(playerKey, requestUuid);
+            player.sendMessage(ChatColor.RED + "Failed to send queue request. Please try again.");
+            plugin.getLogger().warning("Failed to send queue request for " + playerIgn + ": " + sendError);
+            return true;
+        }
 
         player.sendMessage(ChatColor.GREEN + "Queue request sent!");
         player.sendMessage(ChatColor.GRAY + "Waiting for response...");

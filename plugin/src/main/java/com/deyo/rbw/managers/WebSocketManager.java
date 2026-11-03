@@ -299,6 +299,12 @@ public class WebSocketManager {
                     case "queuefromingame_fail":
                         handleQueueFailure(json);
                         break;
+                    case "privatefromingame_success":
+                        handlePrivateSuccess(json);
+                        break;
+                    case "privatefromingame_fail":
+                        handlePrivateFailure(json);
+                        break;
                     case "queuestatus":
                         handleQueueStatus(json);
                         break;
@@ -814,6 +820,20 @@ public class WebSocketManager {
         if (json.has("uuid") && plugin.getQueueCommand() != null) {
             String reason = json.has("reason") ? json.get("reason").getAsString() : "Unknown error";
             plugin.getQueueCommand().handleQueueFailure(json.get("uuid").getAsString(), reason);
+        }
+    }
+
+    private void handlePrivateSuccess(JsonObject json) {
+        if (json.has("uuid") && plugin.getPrivateCommand() != null) {
+            String map = json.has("map") ? json.get("map").getAsString() : "";
+            plugin.getPrivateCommand().handlePrivateSuccess(json.get("uuid").getAsString(), map);
+        }
+    }
+
+    private void handlePrivateFailure(JsonObject json) {
+        if (json.has("uuid") && plugin.getPrivateCommand() != null) {
+            String reason = json.has("reason") ? json.get("reason").getAsString() : "Unknown error";
+            plugin.getPrivateCommand().handlePrivateFailure(json.get("uuid").getAsString(), reason);
         }
     }
     

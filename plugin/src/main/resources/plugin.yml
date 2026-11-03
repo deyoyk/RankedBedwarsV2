@@ -24,6 +24,10 @@ commands:
     description: Queue for a ranked game
     usage: /queue
     permission: rankedbedwars.queue
+  private:
+    description: Start a private game with your Discord party
+    usage: /private [map]
+    permission: rankedbedwars.private
   stats:
     description: Show your ranked bedwars stats
     usage: /stats
@@ -34,6 +38,9 @@ permissions:
     default: true
   rankedbedwars.queue:
     description: Allows use of the queue command
+    default: true
+  rankedbedwars.private:
+    description: Allows use of the private game command
     default: true
   rankedbedwars.state:
     description: Allows use of the state command

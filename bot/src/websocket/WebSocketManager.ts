@@ -15,6 +15,8 @@ import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import * as http from 'http';
 import express from 'express';
 import { Client, Collection, GuildMember } from 'discord.js';
+import config from '../config/config';
+import { maxPartySizeForQueue } from '../utils/partyQueue';
 
 type MapEntry = MapsJsonPayload['reserved'][number];
 
@@ -85,6 +87,14 @@ interface GameManagerLike {
   scoreGame(gameResult: GameResult): Promise<unknown>;
   voidGame(gameId: number, reason: string): Promise<unknown>;
   retryWarp(gameId: number): Promise<{ attempts: number; maxAttempts: number }>;
+  createPrivateGame(options: {
+    partyId: string;
+    map: string;
+    team1: string[];
+    team2: string[];
+  }): Promise<{ gameId: number }>;
+  initiateGameWarp(gameId: number): Promise<void>;
+  abortGame(gameId: number, reason: string): Promise<void>;
 }
  
 
@@ -213,6 +223,26 @@ interface QueueFromInGameFailurePayload {
   uuid: string;
 }
 
+interface PrivateFromInGamePayload {
+  type: 'privatefromingame';
+  ign: string;
+  uuid: string;
+  map?: string;
+}
+
+interface PrivateFromInGameSuccessPayload {
+  type: 'privatefromingame_success';
+  uuid: string;
+  game_id: number;
+  map: string;
+}
+
+interface PrivateFromInGameFailurePayload {
+  type: 'privatefromingame_fail';
+  reason: string;
+  uuid: string;
+}
+
 interface AutoSSSuccessPayload {
   type: 'autoss_success';
   uuid: string;
@@ -308,6 +338,7 @@ type IncomingPayload =
   | CallCommandPayload
   | QueueFromInGamePayload
   | QueueStatusPayload
+  | PrivateFromInGamePayload
   | AutoSSPayload
   | PlayerStatusUpdatePayload
   | ScreenShareDontLogPayload
@@ -317,6 +348,8 @@ type IncomingPayload =
   | CallFailurePayload
   | QueueFromInGameSuccessPayload
   | QueueFromInGameFailurePayload
+  | PrivateFromInGameSuccessPayload
+  | PrivateFromInGameFailurePayload
   | AutoSSSuccessPayload
   | AutoSSFailurePayload
   | BotBanPayload
@@ -615,6 +648,9 @@ export class WebSocketManager {
         break;
       case 'queuefromingame':
         this.handleQueueFromInGame(msg);
+        break;
+      case 'privatefromingame':
+        this.handlePrivateFromInGame(msg);
         break;
       case 'game_start':
         this.handleGameStart(msg);
@@ -1202,213 +1238,305 @@ export class WebSocketManager {
     }
   }
 
-  private async processQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
+  private async handlePrivateFromInGame(msg: PrivateFromInGamePayload): Promise<void> {
+    const { ign, uuid } = msg;
+    const fail = (reason: string) => {
+      this.send({ type: 'privatefromingame_fail', reason, uuid } as PrivateFromInGameFailurePayload);
+    };
+
     try {
-      console.log(`[WebSocketManager] Handling queue from in game: ${JSON.stringify(msg)}`);
-      const { ign, uuid } = msg;
-      
+      console.log(`[WebSocketManager] Handling private game request from in game: ${JSON.stringify(msg)}`);
       if (!ign) {
-        console.error('[WebSocketManager] Invalid queuefromingame payload - missing ign');
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'Missing IGN in payload',
-          uuid
-        } as QueueFromInGameFailurePayload);
+        fail('Missing IGN in payload');
+        return;
+      }
+      if (!uuid) {
+        fail('Missing request id in payload');
         return;
       }
 
-      
       const User = (await import('../models/User')).default;
-      const user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('discordId elo ign').lean();
+      const user = await User.findOne({ ign })
+        .collation({ locale: 'en', strength: 2 })
+        .select('discordId ign')
+        .lean();
       if (!user) {
-        console.error(`[WebSocketManager] User ${ign} not found in database`);
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'User not found in database',
-          uuid
-        } as QueueFromInGameFailurePayload);
+        fail('User not found in database');
         return;
       }
+
+      const guild = this.discordClient?.guilds.cache.first();
+      if (!guild) {
+        fail('Discord guild not available');
+        return;
+      }
+
+      const { PrivateGameService } = await import('../services/PrivateGameService');
+      const map = typeof msg.map === 'string' ? msg.map.trim() : '';
+      const result = await PrivateGameService.startPrivateGame(user.discordId, guild, this, {
+        ...(map ? { map } : {}),
+      });
+
+      if (!result.success) {
+        fail(result.message || 'Could not create the private game');
+        return;
+      }
+
+      this.send({
+        type: 'privatefromingame_success',
+        uuid,
+        game_id: result.gameId!,
+        map: result.map || '',
+      } as PrivateFromInGameSuccessPayload);
+    } catch (error) {
+      console.error('[WebSocketManager] Error handling private game request:', error);
+      fail('Internal server error');
+    }
+  }
+
+  private async resolveQueueMembers(user: {
+    discordId: string;
+    ign?: string;
+    elo?: number;
+    partyId?: string | null;
+  }): Promise<{ members: Array<{ discordId: string; ign: string; elo: number }>; error?: string }> {
+    const fallbackIgn = user.ign || user.discordId;
+    if (!user.partyId) {
+      return { members: [{ discordId: user.discordId, ign: fallbackIgn, elo: user.elo ?? 0 }] };
+    }
+
+    const Party = (await import('../models/Party')).default;
+    const party = await Party.findOne({ partyId: user.partyId }).select('partyId members').lean();
+    if (!party || !Array.isArray(party.members) || party.members.length === 0) {
+      return { members: [], error: 'Party not found' };
+    }
+
+    const memberIds = [...new Set(party.members)];
+    if (!memberIds.includes(user.discordId)) {
+      return { members: [], error: 'You are not a member of that party' };
+    }
+
+    const User = (await import('../models/User')).default;
+    const docs = await User.find({ discordId: { $in: memberIds } })
+      .select('discordId ign elo isBanned isFrozen')
+      .lean();
+
+    if (docs.length !== memberIds.length) {
+      return { members: [], error: 'Some party members are not registered' };
+    }
+
+    const members: Array<{ discordId: string; ign: string; elo: number }> = [];
+    for (const member of docs) {
+      if (!member.ign) {
+        return { members: [], error: 'Some party members do not have a valid IGN' };
+      }
+      if (member.isBanned || member.isFrozen) {
+        return { members: [], error: `${member.ign} is banned or frozen` };
+      }
+      members.push({
+        discordId: member.discordId,
+        ign: member.ign,
+        elo: typeof member.elo === 'number' ? member.elo : 0,
+      });
+    }
+
+    return { members };
+  }
+
+  private getPartyRoleSizes(members: GuildMember[]): number[] {
+    const roles: Record<string, number> = {
+      [config.roles.partyof2Queue]: 2,
+      [config.roles.partyof3Queue]: 3,
+      [config.roles.partyof4Queue]: 4,
+    };
+    const sizes: number[] = [];
+    for (const member of members) {
+      for (const [roleId, size] of Object.entries(roles)) {
+        if (roleId && member.roles.cache.has(roleId)) sizes.push(size);
+      }
+    }
+    return sizes;
+  }
+
+  private async processQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
+    const { ign, uuid } = msg;
+    const fail = (reason: string) => {
+      this.send({ type: 'queuefromingame_fail', reason, uuid } as QueueFromInGameFailurePayload);
+    };
+
+    try {
+      console.log(`[WebSocketManager] Handling queue from in game: ${JSON.stringify(msg)}`);
+      if (!ign) {
+        console.error('[WebSocketManager] Invalid queuefromingame payload - missing ign');
+        fail('Missing IGN in payload');
+        return;
+      }
+
+      const User = (await import('../models/User')).default;
+      const user = await User.findOne({ ign })
+        .collation({ locale: 'en', strength: 2 })
+        .select('discordId elo ign partyId')
+        .lean();
+      if (!user) {
+        console.error(`[WebSocketManager] User ${ign} not found in database`);
+        fail('User not found in database');
+        return;
+      }
+
+      const resolved = await this.resolveQueueMembers(user);
+      if (resolved.error) {
+        fail(resolved.error);
+        return;
+      }
+      const members = resolved.members;
+      const memberIds = members.map((member) => member.discordId);
 
       const Game = (await import('../models/Game')).default;
       let activeGame: { gameId: number } | null = null;
       try {
-        const activeQuery: unknown = Game.findOne({
-          $or: [{ team1: user.discordId }, { team2: user.discordId }],
+        activeGame = await Game.findOne({
+          $or: [
+            { team1: { $in: memberIds } },
+            { team2: { $in: memberIds } },
+          ],
           state: { $in: ['pending', 'active'] }
-        });
-        const aq = activeQuery as { select?: (fields: string) => { lean: () => Promise<{ gameId: number } | null> }; lean?: () => Promise<{ gameId: number } | null> };
-        activeGame = typeof aq.select === 'function'
-          ? await aq.select('gameId').lean()
-          : (typeof aq.lean === 'function' ? await aq.lean() : (await activeQuery as { gameId: number } | null));
+        }).select('gameId').lean();
       } catch (error) {
         console.error(`[WebSocketManager] Error checking active game for ${ign}:`, error);
       }
       if (activeGame) {
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: `You are already in game #${activeGame.gameId}`,
-          uuid
-        } as QueueFromInGameFailurePayload);
+        fail(`A party member is already in game #${activeGame.gameId}`);
         return;
       }
 
-      
       const guild = this.discordClient?.guilds.cache.first();
       if (!guild) {
         console.error('[WebSocketManager] Guild not found');
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'Discord guild not available',
-          uuid
-        } as QueueFromInGameFailurePayload);
+        fail('Discord guild not available');
         return;
       }
 
-      
-      let member;
-      try {
-        member = guild.members.cache.get(user.discordId) ?? await guild.members.fetch(user.discordId);
-      } catch (error) {
-        console.error(`[WebSocketManager] Could not fetch member: ${error}`);
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'User is not in the Discord server',
-          uuid
-        } as QueueFromInGameFailurePayload);
+      const guildMembers = await Promise.all(members.map(async (member) => {
+        const cached = guild.members.cache.get(member.discordId);
+        if (cached) return cached;
+        return guild.members.fetch(member.discordId).catch(() => null);
+      }));
+
+      const missingMembers = members
+        .filter((_, index) => !guildMembers[index])
+        .map((member) => member.ign);
+      if (missingMembers.length > 0) {
+        fail(`Not in the Discord server: ${missingMembers.join(', ')}`);
         return;
       }
 
-      
-      const voiceState = member.voice;
-      if (!voiceState?.channel) {
-        console.error(`[WebSocketManager] User ${ign} is not in a voice channel`);
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'User is not in a voice channel',
-          uuid
-        } as QueueFromInGameFailurePayload);
+      const presentMembers = guildMembers as GuildMember[];
+      const missingVoice = members
+        .filter((_, index) => !presentMembers[index]?.voice?.channel)
+        .map((member) => member.ign);
+      if (missingVoice.length > 0) {
+        fail(`Not in a voice channel: ${missingVoice.join(', ')}`);
         return;
       }
 
-      
-
-      
       const Queue = (await import('../models/Queue')).default;
-      const suitableQueues = await Queue.find({
-        isActive: true,
-        minElo: { $lte: user.elo },
-        maxElo: { $gte: user.elo }
-      }).select('channelId').lean();
+      const allQueues = await Queue.find({ isActive: true })
+        .select('channelId minElo maxElo maxPlayers isRanked isPicking')
+        .lean();
+      const roleSizes = this.getPartyRoleSizes(presentMembers);
+      const suitableQueues = allQueues.filter((queue) => {
+        if (members.length > Math.floor(queue.maxPlayers / 2)) return false;
+        if (members.length > maxPartySizeForQueue(queue, roleSizes)) return false;
+        return members.every((member) => member.elo >= queue.minElo && member.elo <= queue.maxElo);
+      });
 
       if (suitableQueues.length === 0) {
-        console.error(`[WebSocketManager] No suitable queues found for user ${ign} with ELO ${user.elo}`);
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: `No queues available for your ELO range (${user.elo})`,
-          uuid
-        } as QueueFromInGameFailurePayload);
+        console.error(`[WebSocketManager] No suitable queues found for ${ign} party (${members.length} players)`);
+        const eloEligible = allQueues.some((queue) =>
+          members.every((member) => member.elo >= queue.minElo && member.elo <= queue.maxElo),
+        );
+        fail(eloEligible
+          ? `No queue currently allows a party of ${members.length} players`
+          : 'No queues available for your party in your ELO range');
         return;
       }
 
-      
       const { queuePlayers } = await import('../types/queuePlayersMemory');
-
-      for (const queue of suitableQueues) {
-        if ((queuePlayers.get(queue.channelId) || []).includes(user.discordId)) {
-          console.log(`[WebSocketManager] User ${ign} is already queued, skipping move`);
-          this.send({
-            type: 'queuefromingame_success',
-            uuid
-          } as QueueFromInGameSuccessPayload);
-          return;
-        }
+      const alreadyQueued = suitableQueues.find((queue) =>
+        members.every((member) => (queuePlayers.get(queue.channelId) || []).includes(member.discordId)),
+      );
+      if (alreadyQueued) {
+        console.log(`[WebSocketManager] Party ${ign} is already queued, skipping move`);
+        this.send({ type: 'queuefromingame_success', uuid } as QueueFromInGameSuccessPayload);
+        return;
       }
 
       let targetQueue = suitableQueues[0];
-      let maxPlayers = 0;
-
+      let maxPlayers = -1;
       for (const queue of suitableQueues) {
-        const playersInQueue = queuePlayers.get(queue.channelId) || [];
-        if (playersInQueue.length > maxPlayers) {
-          maxPlayers = playersInQueue.length;
+        const playersInQueue = (queuePlayers.get(queue.channelId) || []).length;
+        if (playersInQueue > maxPlayers) {
+          maxPlayers = playersInQueue;
           targetQueue = queue;
         }
       }
-
-      
-      const queuesWithMaxPlayers = suitableQueues.filter(queue => {
-        const playersInQueue = queuePlayers.get(queue.channelId) || [];
-        return playersInQueue.length === maxPlayers;
-      });
-
+      const queuesWithMaxPlayers = suitableQueues.filter((queue) =>
+        (queuePlayers.get(queue.channelId) || []).length === maxPlayers,
+      );
       if (queuesWithMaxPlayers.length > 1) {
         targetQueue = queuesWithMaxPlayers[Math.floor(Math.random() * queuesWithMaxPlayers.length)];
       }
 
-      
       let queueVoiceChannel;
       try {
-        queueVoiceChannel = guild.channels.cache.get(targetQueue.channelId) ?? await guild.channels.fetch(targetQueue.channelId);
+        queueVoiceChannel = guild.channels.cache.get(targetQueue.channelId)
+          ?? await guild.channels.fetch(targetQueue.channelId);
       } catch (error) {
         console.error(`[WebSocketManager] Could not fetch queue voice channel: ${error}`);
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'Queue voice channel not found',
-          uuid
-        } as QueueFromInGameFailurePayload);
+        fail('Queue voice channel not found');
         return;
       }
-
       if (!queueVoiceChannel || !queueVoiceChannel.isVoiceBased()) {
         console.error(`[WebSocketManager] Queue channel ${targetQueue.channelId} is not a voice channel`);
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'Queue channel is not a voice channel',
-          uuid
-        } as QueueFromInGameFailurePayload);
+        fail('Queue channel is not a voice channel');
         return;
       }
 
+      const moved: Array<{ member: GuildMember; previousChannelId: string | null }> = [];
       try {
-        
-        await member.voice.setChannel(queueVoiceChannel);
-
-        for (const [channelId, listed] of queuePlayers) {
-          if (channelId !== targetQueue.channelId && listed.includes(user.discordId)) {
-            queuePlayers.set(channelId, listed.filter(id => id !== user.discordId));
+        for (const member of presentMembers) {
+          if (member.voice.channelId === queueVoiceChannel.id) continue;
+          const previousChannelId = member.voice.channelId ?? null;
+          await member.voice.setChannel(queueVoiceChannel);
+          moved.push({ member, previousChannelId });
+        }
+      } catch (moveError) {
+        console.error(`[WebSocketManager] Error moving party to queue: ${moveError}`);
+        for (const entry of moved.reverse()) {
+          if (entry.previousChannelId) {
+            await entry.member.voice.setChannel(entry.previousChannelId).catch(() => undefined);
           }
         }
-
-        const currentPlayers = queuePlayers.get(targetQueue.channelId) || [];
-        if (!currentPlayers.includes(user.discordId)) {
-          currentPlayers.push(user.discordId);
-          queuePlayers.set(targetQueue.channelId, currentPlayers);
-        }
-
-        console.log(`[WebSocketManager] Successfully moved ${ign} to queue ${queueVoiceChannel.name}`);
-        
-        this.send({
-          type: 'queuefromingame_success',
-          uuid
-        } as QueueFromInGameSuccessPayload);
-
-      } catch (moveError) {
-        console.error(`[WebSocketManager] Error moving user to queue: ${moveError}`);
-        this.send({
-          type: 'queuefromingame_fail',
-          reason: 'Failed to move user to queue voice channel',
-          uuid
-        } as QueueFromInGameFailurePayload);
+        fail('Failed to move the party to the queue voice channel');
+        return;
       }
 
+      for (const [channelId, listed] of queuePlayers) {
+        if (channelId === targetQueue.channelId) continue;
+        const filtered = listed.filter((id) => !memberIds.includes(id));
+        if (filtered.length !== listed.length) queuePlayers.set(channelId, filtered);
+      }
+      const currentPlayers = queuePlayers.get(targetQueue.channelId) || [];
+      for (const memberId of memberIds) {
+        if (!currentPlayers.includes(memberId)) currentPlayers.push(memberId);
+      }
+      queuePlayers.set(targetQueue.channelId, currentPlayers);
+
+      console.log(`[WebSocketManager] Successfully moved ${members.length} player(s) to queue ${queueVoiceChannel.name}`);
+      this.send({ type: 'queuefromingame_success', uuid } as QueueFromInGameSuccessPayload);
     } catch (error) {
       console.error('[WebSocketManager] Error handling queuefromingame:', error);
-      this.send({
-        type: 'queuefromingame_fail',
-        reason: 'Internal server error',
-        uuid: msg.uuid
-      } as QueueFromInGameFailurePayload);
+      fail('Internal server error');
     }
   }
 

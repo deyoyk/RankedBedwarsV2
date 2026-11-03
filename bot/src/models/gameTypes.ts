@@ -47,6 +47,8 @@ export interface IGameBase {
   };
   queueId: string;
   isRanked: boolean;
+  isPrivate?: boolean;
+  privatePartyId?: string;
   partiesInThisGame: string;
   reason: string;
   timeline?: ITimelineEvent[];

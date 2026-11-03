@@ -29,6 +29,7 @@ GameSchema.index({ 'channels.team1Voice': 1 });
 GameSchema.index({ 'channels.team2Voice': 1 });
 GameSchema.index({ 'channels.picking': 1 });
 GameSchema.index({ seasonNumber: 1, chapterNumber: 1 });
+GameSchema.index({ privatePartyId: 1, state: 1 });
 
 applyGetTeamOfPlayer(GameSchema);
 

@@ -125,6 +125,8 @@ export const gameBaseFields = {
   },
   queueId: { type: String, required: true },
   isRanked: { type: Boolean, default: false },
+  isPrivate: { type: Boolean, default: false },
+  privatePartyId: { type: String, default: '', index: true },
   partiesInThisGame: { type: String, default: '' },
   reason: { type: String, default: '' },
   timeline: { type: [timelineEventSubdoc], default: [] },

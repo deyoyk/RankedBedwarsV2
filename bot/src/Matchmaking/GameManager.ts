@@ -106,6 +106,8 @@ interface QueueLike {
   ispicking?: boolean;
   queueType?: string;
   bypassRoles: string[];
+  isPrivate?: boolean;
+  privatePartyId?: string;
 }
 
 interface WarpEventMessage {
@@ -225,6 +227,7 @@ export class GameManager {
     selectedMap: string
   ): Promise<GameResources> {
     let reserved = false;
+    let resources: GameResources | null = null;
     try {
       const raw1 = (team1 ?? []).map(id => (id ?? '').trim()).filter(Boolean);
       const raw2 = (team2 ?? []).map(id => (id ?? '').trim()).filter(Boolean);
@@ -240,19 +243,170 @@ export class GameManager {
       reserved = true;
       team1 = teams.team1;
       team2 = teams.team2;
+      const effectiveQueue = this.normalizeQueueData(queueData, team1, team2);
       console.log(`[GameManager] Creating game ${gameId} with map ${selectedMap}`);
       const guild = await this.getGuild();
       if (!guild) throw new Error('Guild not found');
-      const resources = await this.createGameResources(guild, gameId, selectedMap, [...team1, ...team2], queueData);
-      await this.createGameInDatabaseAndUpdateUsers(resources, queueData as QueueLike, selectedMap, team1, team2);
+      resources = await this.createGameResources(guild, gameId, selectedMap, [...team1, ...team2], effectiveQueue);
+      await this.createGameInDatabaseAndUpdateUsers(resources, effectiveQueue, selectedMap, team1, team2);
       await this.movePlayersToVoiceChannels(guild, team1, team2, resources);
       this.activeGames.set(gameId, resources);
       console.log(`[GameManager] Successfully created game ${gameId}`);
       return resources;
     } catch (error) {
       if (reserved) this.activeGames.delete(gameId);
+      if (resources) {
+        await this.cleanupFailedGameCreation(gameId, resources);
+      }
       console.error(`[GameManager] Error creating game ${gameId}:`, error);
       throw error;
+    }
+  }
+
+  public async createPrivateGame(options: {
+    partyId: string;
+    map: string;
+    team1: string[];
+    team2: string[];
+  }): Promise<GameResources> {
+    const partyId = (options.partyId ?? '').trim();
+    if (!partyId) throw new Error('Private game requires a party id');
+    const players = [...options.team1, ...options.team2];
+    if (players.length < 2 || players.length % 2 !== 0) {
+      throw new Error('Private game requires an even number of players');
+    }
+    const gameId = await this.getNextGameId();
+    return this.createGame(
+      gameId,
+      {
+        id: 0,
+        channelId: `private:${partyId}`,
+        maxPlayers: players.length,
+        minElo: 0,
+        maxElo: 0,
+        isRanked: false,
+        isPicking: false,
+        bypassRoles: [],
+        isPrivate: true,
+        privatePartyId: partyId,
+      },
+      options.team1,
+      options.team2,
+      options.map,
+    );
+  }
+
+  private normalizeQueueData(
+    queueData: Partial<QueueLike> | null,
+    team1: string[],
+    team2: string[],
+  ): QueueLike {
+    const maxPlayers = team1.length + team2.length;
+    return {
+      id: queueData?.id ?? 0,
+      channelId: queueData?.channelId ?? 'private',
+      maxPlayers: queueData?.maxPlayers ?? maxPlayers,
+      minElo: queueData?.minElo ?? 0,
+      maxElo: queueData?.maxElo ?? 0,
+      isRanked: queueData?.isRanked ?? false,
+      isPicking: queueData?.isPicking ?? false,
+      queueType: queueData?.queueType ?? (queueData?.isPrivate ? 'private' : undefined),
+      bypassRoles: queueData?.bypassRoles ?? [],
+      isPrivate: queueData?.isPrivate ?? Boolean(queueData?.privatePartyId),
+      privatePartyId: queueData?.privatePartyId,
+    };
+  }
+
+  public async abortGame(gameId: number, reason: string): Promise<void> {
+    try {
+      const resources = this.activeGames.get(gameId);
+      this.activeGames.delete(gameId);
+      this.cleaningGames.add(gameId);
+      this.warpRequests.delete(String(gameId));
+      this.manualWarpRetries.delete(gameId);
+
+      if (resources) {
+        const deletions = [
+          resources.gameChannel,
+          resources.pickingChannel,
+          resources.team1Voice,
+          resources.team2Voice,
+        ]
+          .filter((channel): channel is { id: string } => Boolean(channel?.id))
+          .map(channel => this.workersManager.deleteChannel(channel.id, 2).catch(() => undefined));
+        await Promise.allSettled(deletions);
+      }
+
+      const game = await Game.findOne({ gameId }).select('team1 team2 state').lean().catch(() => null);
+      if (game) {
+        try {
+          const players = [...(game.team1 ?? []), ...(game.team2 ?? [])];
+          if (players.length > 0) {
+            const affected = await User.find({
+              discordId: { $in: players },
+              'recentGames.gameId': gameId,
+            }).select('discordId').lean();
+            const affectedIds = affected.map(player => player.discordId);
+            if (affectedIds.length > 0) {
+              await User.updateMany(
+                { discordId: { $in: affectedIds } },
+                { $inc: { games: -1 }, $pull: { recentGames: { gameId } } },
+              ).catch(() => undefined);
+            }
+          }
+        } catch (error) {
+          console.error(`[GameManager] Error reverting player state for aborted game ${gameId}:`, error);
+        }
+        await Game.updateOne(
+          { gameId, state: { $in: [GameState.PENDING, 'active'] } },
+          { $set: { state: GameState.VOIDED, reason, endTime: new Date() } },
+        ).catch(() => undefined);
+      }
+
+      this.cleaningGames.delete(gameId);
+      console.log(`[GameManager] Aborted game ${gameId}: ${reason}`);
+    } catch (error) {
+      this.cleaningGames.delete(gameId);
+      console.error(`[GameManager] Error aborting game ${gameId}:`, error);
+    }
+  }
+
+  private async cleanupFailedGameCreation(gameId: number, resources: GameResources): Promise<void> {
+    try {
+      const deletions = [
+        resources.gameChannel,
+        resources.pickingChannel,
+        resources.team1Voice,
+        resources.team2Voice,
+      ]
+        .filter((channel): channel is { id: string } => Boolean(channel?.id))
+        .map(channel => this.workersManager.deleteChannel(channel.id, 0).catch(() => undefined));
+      await Promise.allSettled(deletions);
+
+      const game = await Game.findOne({ gameId }).select('team1 team2').lean().catch(() => null);
+      if (game) {
+        try {
+          const players = [...(game.team1 ?? []), ...(game.team2 ?? [])];
+          if (players.length > 0) {
+            const affected = await User.find({
+              discordId: { $in: players },
+              'recentGames.gameId': gameId,
+            }).select('discordId').lean();
+            const affectedIds = affected.map(player => player.discordId);
+            if (affectedIds.length > 0) {
+              await User.updateMany(
+                { discordId: { $in: affectedIds } },
+                { $inc: { games: -1 }, $pull: { recentGames: { gameId } } },
+              ).catch(() => undefined);
+            }
+          }
+        } catch (error) {
+          console.error(`[GameManager] Error reverting player state for failed game ${gameId}:`, error);
+        }
+      }
+      await Game.deleteOne({ gameId }).catch(() => undefined);
+    } catch (error) {
+      console.error(`[GameManager] Error cleaning up failed game ${gameId}:`, error);
     }
   }
 
@@ -530,76 +684,78 @@ export class GameManager {
     allPlayers: string[],
     _queue: Partial<QueueLike> | null
   ): Promise<GameResources> {
+    const created: Array<{ id: string }> = [];
     try {
       console.log(`[GameManager] Creating game resources for game ${gameId} using WorkersManager`);
 
-      const [gameChannel, team1Voice, team2Voice] = await Promise.all([
-        this.workersManager.createChannel({
-          name: `game-${gameId}`,
-          type: ChannelType.GuildText,
-          parent: config.categories.gameCategory,
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.ViewChannel]
-            },
-            ...allPlayers.map(playerId => ({
-              id: playerId,
-              allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory
-              ]
-            }))
-          ]
-        }, 9),  
+      const gameChannel = await this.workersManager.createChannel({
+        name: `game-${gameId}`,
+        type: ChannelType.GuildText,
+        parent: config.categories.gameCategory,
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel]
+          },
+          ...allPlayers.map(playerId => ({
+            id: playerId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.SendMessages,
+              PermissionFlagsBits.ReadMessageHistory
+            ]
+          }))
+        ]
+      }, 9);
+      created.push(gameChannel);
 
-        this.workersManager.createChannel({
-          name: `Team 1 - Game ${gameId}`,
-          type: ChannelType.GuildVoice,
-          parent: config.categories.voiceCategory,
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-              allow: [PermissionFlagsBits.Speak]
-            },
-            ...allPlayers.map(playerId => ({
-              id: playerId,
-              allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.Connect,
-                PermissionFlagsBits.Speak,
-                PermissionFlagsBits.UseVAD,
-                PermissionFlagsBits.Stream
-              ]
-            }))
-          ]
-        }, 8),  
+      const team1Voice = await this.workersManager.createChannel({
+        name: `Team 1 - Game ${gameId}`,
+        type: ChannelType.GuildVoice,
+        parent: config.categories.voiceCategory,
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
+            allow: [PermissionFlagsBits.Speak]
+          },
+          ...allPlayers.map(playerId => ({
+            id: playerId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.Speak,
+              PermissionFlagsBits.UseVAD,
+              PermissionFlagsBits.Stream
+            ]
+          }))
+        ]
+      }, 8);
+      created.push(team1Voice);
 
-        this.workersManager.createChannel({
-          name: `Team 2 - Game ${gameId}`,
-          type: ChannelType.GuildVoice,
-          parent: config.categories.voiceCategory,
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-              allow: [PermissionFlagsBits.Speak]
-            },
-            ...allPlayers.map(playerId => ({
-              id: playerId,
-              allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.Connect,
-                PermissionFlagsBits.Speak,
-                PermissionFlagsBits.UseVAD,
-                PermissionFlagsBits.Stream
-              ]
-            }))
-          ]
-        }, 8) 
-      ]);
+      const team2Voice = await this.workersManager.createChannel({
+        name: `Team 2 - Game ${gameId}`,
+        type: ChannelType.GuildVoice,
+        parent: config.categories.voiceCategory,
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
+            allow: [PermissionFlagsBits.Speak]
+          },
+          ...allPlayers.map(playerId => ({
+            id: playerId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.Speak,
+              PermissionFlagsBits.UseVAD,
+              PermissionFlagsBits.Stream
+            ]
+          }))
+        ]
+      }, 8);
+      created.push(team2Voice);
 
       console.log(`[GameManager] Successfully created all channels for game ${gameId}`);
 
@@ -612,6 +768,9 @@ export class GameManager {
       };
 
     } catch (error) {
+      await Promise.allSettled(
+        created.map(channel => this.workersManager.deleteChannel(channel.id, 0).catch(() => undefined)),
+      );
       console.error(`[GameManager] Error creating game resources for game ${gameId}:`, error);
       throw error;
     }
@@ -646,13 +805,18 @@ export class GameManager {
         },
         queueId: queue.channelId,
         isRanked: queue.isRanked || false,
+        isPrivate: Boolean(queue.isPrivate || queue.privatePartyId),
+        privatePartyId: queue.privatePartyId || '',
         partiesInThisGame: partiesInGame,
         reason: ''
         });
       await game.save();
       resources.game = game;
       const allPlayers = [...team1, ...team2];
-      const queueIdStr = String(typeof queue.id === 'number' ? queue.id : parseInt(String(queue.id), 10));
+      const numericQueueId = Number(queue.id);
+      const queueIdStr = Number.isInteger(numericQueueId) && numericQueueId > 0
+        ? String(numericQueueId)
+        : queue.channelId;
       const UserModel = User as unknown as {
         bulkWrite?: (ops: Record<string, unknown>[]) => Promise<unknown>;
       };
@@ -1121,7 +1285,9 @@ export class GameManager {
 
           const recentGame = {
             gameId,
-            queueId: String(typeof queueData.id === 'number' ? queueData.id : parseInt(String(queueData.id), 10)),
+            queueId: Number.isFinite(parseInt(String(queueData.id), 10))
+              ? String(queueData.id)
+              : queueData.channelId,
             map: selectedMap,
             eloGain: 0,
             kills: 0,
@@ -1401,21 +1567,24 @@ export class GameManager {
       const isBedBreaker = context.bedbreaksIds.includes(player.discordId);
 
       const rank = context.eloRanks.find(r => player.elo >= r.startElo && player.elo <= r.endElo);
+      const isPrivateGame = Boolean(context.game.isPrivate);
 
       let eloChange = 0;
-      if (rank) {
+      if (!isPrivateGame && rank) {
         eloChange = this.calculateScoreElo(player, rank, isWinner, isMvp, isBedBreaker);
       }
 
-      const newWinStreak = isWinner ? (player.winStreak || 0) + 1 : 0;
+      const newWinStreak = isPrivateGame
+        ? (player.winStreak || 0)
+        : (isWinner ? (player.winStreak || 0) + 1 : 0);
 
       let streakBonus = 0;
-      if (isWinner && config.winStreakBonus.enabled) {
+      if (!isPrivateGame && isWinner && config.winStreakBonus.enabled) {
         streakBonus = streakBonusFor(newWinStreak, getStreakTiers());
       }
 
       let bountyBonus = 0;
-      if (isWinner && config.bounty.enabled) {
+      if (!isPrivateGame && isWinner && config.bounty.enabled) {
         bountyBonus = bountyForOpponentStreak(maxLoserStreak, getBountyTiers());
       }
 
@@ -1550,7 +1719,7 @@ export class GameManager {
   private buildRecentGameEntry(scoreData: PlayerScoreData, game: IGame, now: Date): IRecentGame {
     return {
       gameId: game.gameId,
-      queueId: String(parseInt(game.queueId, 10)),
+      queueId: Number.isFinite(parseInt(game.queueId, 10)) ? String(parseInt(game.queueId, 10)) : game.queueId,
       map: game.map,
       eloGain: scoreData.eloChange,
       elo_before: scoreData.elo_before,
@@ -1775,7 +1944,7 @@ export class GameManager {
       const now = new Date();
       const entry: IRecentGame = {
         gameId: game.gameId,
-        queueId: String(parseInt(game.queueId, 10)),
+        queueId: Number.isFinite(parseInt(game.queueId, 10)) ? String(parseInt(game.queueId, 10)) : game.queueId,
         map: game.map,
         eloGain: scoreData.eloChange,
         elo_before: scoreData.elo_before,

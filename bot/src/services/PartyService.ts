@@ -21,7 +21,7 @@ export interface PartyInviteResult {
 }
 
 export class PartyService {
-  private static readonly INVITE_TIMEOUT = 5 * 60 * 1000;
+  public static readonly INVITE_TIMEOUT = 5 * 60 * 1000;
   private static readonly MAX_MEMBERS = 8;
   private static readonly MIN_MEMBERS = 2;
 
@@ -36,6 +36,16 @@ export class PartyService {
       if (!party) {
         await this.cleanupUserParty(userId);
         return { isValid: false, error: 'Party not found' };
+      }
+
+      if (!Array.isArray(party.members) || !party.members.includes(userId)) {
+        await this.cleanupUserParty(userId);
+        return { isValid: false, error: 'Not in a party' };
+      }
+
+      if (!party.members.includes(party.leader)) {
+        await this.cleanupUserParty(userId);
+        return { isValid: false, error: 'Party leader is missing' };
       }
 
       if (requireLeader && party.leader !== userId) {
@@ -192,10 +202,22 @@ export class PartyService {
       return { success: true, party };
     }
 
-    await UserModel.updateOne(
-      { discordId: userId },
-      { $unset: { partyId: "" } }
-    );
+    try {
+      await UserModel.updateOne(
+        { discordId: userId },
+        { $unset: { partyId: "" } }
+      );
+    } catch (error) {
+      try {
+        await Party.updateOne(
+          { partyId: party.partyId },
+          { $addToSet: { members: userId } }
+        );
+      } catch {
+      }
+      await this.updatePartyActivity(party.partyId);
+      throw error;
+    }
 
     await this.updatePartyRoles(guild, updated.members);
     await this.updatePartyActivity(updated.partyId);
@@ -298,7 +320,10 @@ export class PartyService {
 
       const party = validation.party!;
 
-      await Party.deleteOne({ partyId: party.partyId });
+      const deleted = await Party.deleteOne({ partyId: party.partyId, leader: userId });
+      if (deleted.deletedCount < 1) {
+        return { success: false, message: 'Party changed, try again' };
+      }
 
       await UserModel.updateMany(
         { partyId: party.partyId },
@@ -382,22 +407,36 @@ export class PartyService {
       let update: Record<string, unknown>;
       switch (setting.toLowerCase()) {
         case 'maxmembers': {
-          const maxMembers = parseInt(value);
-          if (isNaN(maxMembers) || maxMembers < this.MIN_MEMBERS || maxMembers > this.MAX_MEMBERS) {
-            return { success: false, message: `Max members must be between ${this.MIN_MEMBERS} and ${this.MAX_MEMBERS}` };
+          const trimmed = value.trim();
+          if (!/^\d+$/.test(trimmed)) {
+            return { success: false, message: 'Max members must be a whole number' };
+          }
+          const maxMembers = Number(trimmed);
+          const minAllowed = Math.max(this.MIN_MEMBERS, party.members.length);
+          if (maxMembers < minAllowed || maxMembers > this.MAX_MEMBERS) {
+            return { success: false, message: `Max members must be between ${minAllowed} and ${this.MAX_MEMBERS}` };
           }
           update = { maxMembers };
           break;
         }
-        case 'private':
-          update = { isPrivate: value.toLowerCase() === 'true' };
+        case 'private': {
+          const normalized = value.trim().toLowerCase();
+          const truthy = new Set(['true', '1', 'yes', 'on']);
+          const falsy = new Set(['false', '0', 'no', 'off']);
+          if (!truthy.has(normalized) && !falsy.has(normalized)) {
+            return { success: false, message: 'Private must be true or false' };
+          }
+          update = { isPrivate: truthy.has(normalized) };
           break;
-        case 'description':
-          if (value.length > 100) {
+        }
+        case 'description': {
+          const description = value.trim();
+          if (description.length > 100) {
             return { success: false, message: 'Description too long (max 100 characters)' };
           }
-          update = { description: value };
+          update = { description };
           break;
+        }
         default:
           return { success: false, message: 'Invalid setting' };
       }
@@ -455,7 +494,10 @@ export class PartyService {
 
   static async listPublicParties(): Promise<{ success: boolean; parties?: PartyDocument[]; message?: string }> {
     try {
-      const parties = await Party.find({ isPrivate: false }).sort({ lastActiveTime: -1 }).limit(50).lean();
+      const parties = await Party.find({
+        isPrivate: false,
+        $expr: { $lt: [{ $size: { $ifNull: ['$members', []] } }, '$maxMembers'] }
+      }).sort({ lastActiveTime: -1 }).limit(50).lean();
       return { success: true, parties: parties as unknown as PartyDocument[] };
     } catch (error) {
       console.error('[PartyService] Error listing parties:', error);
