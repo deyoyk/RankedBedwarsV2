@@ -1,10 +1,5 @@
 import { h, VNode } from './renderer';
 
-/**
- * Shared visual language for every generated image (player stats, match
- * scoreboard and match start). Keeping the palette and primitives in one place
- * means the three cards always feel like they belong to the same product.
- */
 export const COLORS = {
   bg: '#070a11',
   bgTop: '#0d141e',
@@ -230,10 +225,6 @@ export function sectionLabel(
   );
 }
 
-/**
- * Background atmosphere shared by all cards: subtle grid, two colour glows and
- * a thin gradient highlight along the top edge.
- */
 export function decor(width: number, height: number, prefix: string): VNode {
   const gridId = `${prefix}-grid`;
   const glowAId = `${prefix}-glow-a`;
@@ -310,10 +301,6 @@ export function decor(width: number, height: number, prefix: string): VNode {
   );
 }
 
-/**
- * Footer used by the two 1920x1080 game cards so server / invite information
- * always sits in the same place.
- */
 export function gameFooter(
   width: number,
   serverName: string,

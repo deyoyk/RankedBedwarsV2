@@ -44,7 +44,6 @@ const COLUMNS_H = 32;
 const SUMMARY_H = 64;
 const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
 
-// Column offsets inside a card.
 const NAME_X = 86;
 const NAME_W = 250;
 const MVP_X = 344;

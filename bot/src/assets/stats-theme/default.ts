@@ -74,7 +74,6 @@ function hero(input: DefaultTemplateInput): VNode {
 
     accent(60, 54, 4, 230, COLORS.cyan, 4),
 
-    // Skin frame
     h('div', {
       style: {
         position: 'absolute',
@@ -125,7 +124,6 @@ function hero(input: DefaultTemplateInput): VNode {
 
     text(272, 180, 520, 24, input.joined, 15, COLORS.muted),
 
-    // Level progress
     sectionLabel(270, 212, 'LEVEL PROGRESS', COLORS.muted, COLORS.cyan),
     text(270, 236, 180, 24, `LEVEL ${input.level}`, 16, COLORS.cyan, MEDIUM),
     text(
@@ -156,7 +154,6 @@ function hero(input: DefaultTemplateInput): VNode {
       }),
     ),
 
-    // Rating area
     divider(940, 86, 1, COLORS.line, 166),
 
     text(990, 94, 280, 22, 'COMPETITIVE RATING', 12, COLORS.muted, MEDIUM, 'left', 1.4),
@@ -182,15 +179,12 @@ function record(input: DefaultTemplateInput): VNode {
     divider(340, 354, 1, COLORS.line, 88),
     divider(1060, 354, 1, COLORS.line, 88),
 
-    // Wins
     text(88, 358, 230, 60, input.wins, 50, COLORS.green, MEDIUM),
     text(88, 420, 180, 22, 'TOTAL WINS', 12, COLORS.muted, FONT, 'left', 1),
 
-    // Losses
     text(1070, 358, 200, 60, input.losses, 50, COLORS.red, MEDIUM, 'right'),
     text(1070, 420, 200, 22, 'TOTAL LOSSES', 12, COLORS.muted, FONT, 'right', 1),
 
-    // Win rate
     text(
       360, 338, 680, 46,
       `${(winRate * 100).toFixed(1)}%`,
