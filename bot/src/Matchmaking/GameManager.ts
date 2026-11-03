@@ -186,10 +186,14 @@ export class GameManager {
   private activeGames: Map<number, GameResources> = new Map();
   private cleaningGames: Set<number> = new Set();
   private warpRequests: Map<string, WarpRequestData> = new Map();
+  private manualWarpRetries: Map<number, { count: number; windowStartedAt: number; lastAt: number }> = new Map();
   private readonly MAX_CONCURRENT_GAMES = 100;
   private readonly WARP_TIMEOUT = 60000;
   private readonly MAX_WARP_RETRIES = 3;
   private readonly WARP_RETRY_DELAY = 5000;
+  private readonly MANUAL_RETRY_COOLDOWN = 15000;
+  private readonly MANUAL_RETRY_WINDOW = 10 * 60 * 1000;
+  private readonly MAX_MANUAL_RETRIES = 3;
 
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
@@ -434,6 +438,88 @@ export class GameManager {
     } catch (error) {
       console.error(`[GameManager] Error initiating game warp for ${gameId}:`, error);
       throw error;
+    }
+  }
+
+  public async retryWarp(gameId: number): Promise<{ attempts: number; maxAttempts: number }> {
+    const key = String(gameId);
+    const warpData = this.warpRequests.get(key);
+    if (!warpData) {
+      throw new Error(`No active warp request for game ${gameId}.`);
+    }
+    if (warpData.retrying) {
+      throw new Error(`A warp retry is already in progress for game ${gameId}.`);
+    }
+    if (warpData.attempts >= this.MAX_WARP_RETRIES) {
+      throw new Error(`Game ${gameId} has reached the warp retry limit.`);
+    }
+
+    const game = await Game.findOne({ gameId }).select('state').lean();
+    if (!game) {
+      throw new Error(`Game ${gameId} not found.`);
+    }
+    if (game.state !== GameState.PENDING) {
+      throw new Error(`Game ${gameId} is ${game.state} and can no longer be retried.`);
+    }
+    if (this.warpRequests.get(key) !== warpData || warpData.retrying) {
+      throw new Error(`Warp state changed for game ${gameId}; retry was not sent.`);
+    }
+
+    this.assertManualRetryAllowed(gameId);
+    this.recordManualRetry(gameId);
+    this.resendWarp(key, warpData, true);
+
+    return { attempts: warpData.attempts, maxAttempts: this.MAX_WARP_RETRIES };
+  }
+
+  private assertManualRetryAllowed(gameId: number): void {
+    const now = Date.now();
+    const entry = this.manualWarpRetries.get(gameId);
+    if (!entry || now - entry.windowStartedAt >= this.MANUAL_RETRY_WINDOW) return;
+
+    const waitMs = this.MANUAL_RETRY_COOLDOWN - (now - entry.lastAt);
+    if (waitMs > 0) {
+      throw new Error(`Please wait ${Math.ceil(waitMs / 1000)}s before retrying game ${gameId}.`);
+    }
+    if (entry.count >= this.MAX_MANUAL_RETRIES) {
+      throw new Error(`Game ${gameId} has reached the manual retry limit.`);
+    }
+  }
+
+  private recordManualRetry(gameId: number): void {
+    const now = Date.now();
+    const entry = this.manualWarpRetries.get(gameId);
+    if (!entry || now - entry.windowStartedAt >= this.MANUAL_RETRY_WINDOW) {
+      this.manualWarpRetries.set(gameId, { count: 1, windowStartedAt: now, lastAt: now });
+      return;
+    }
+    entry.count += 1;
+    entry.lastAt = now;
+  }
+
+  private resendWarp(key: string, warpData: WarpRequestData, countAttempt: boolean): void {
+    if (countAttempt) warpData.attempts += 1;
+    warpData.retrying = true;
+    warpData.timestamp = Date.now();
+    clearTimeout(warpData.timeout);
+    warpData.timeout = setTimeout(() => this.handleWarpTimeout(key), this.WARP_TIMEOUT);
+
+    try {
+      this.wsManager.send({
+        type: 'warp_players',
+        game_id: key,
+        map: warpData.map,
+        is_ranked: warpData.isRanked,
+        team1: {
+          players: warpData.team1IGNs
+        },
+        team2: {
+          players: warpData.team2IGNs
+        }
+      });
+      console.log(`[GameManager] Sent warp request for game ${key}${countAttempt ? ' (manual retry)' : ' (plugin retry)'}`);
+    } finally {
+      warpData.retrying = false;
     }
   }
 
@@ -824,6 +910,7 @@ export class GameManager {
         clearTimeout(warpData.timeout);
         this.warpRequests.delete(gameId as string);
       }
+      this.manualWarpRetries.delete(Number(gameId));
 
       const game = await Game.findOne({ gameId: Number(gameId) });
       if (game) {
@@ -915,6 +1002,7 @@ export class GameManager {
 
         console.log(`[GameManager] Max warp retries reached for game ${gameId}, voiding game`);
         this.warpRequests.delete(gameId);
+        this.manualWarpRetries.delete(parseInt(gameId, 10));
         await this.voidGame(parseInt(gameId), `Warp failed: ${reason}`);
       }
 
@@ -926,25 +1014,24 @@ export class GameManager {
   private async handleRetryGame(msg: WarpEventMessage): Promise<void> {
     try {
       const { gameId } = msg;
+      if (!gameId || isNaN(Number(gameId))) {
+        console.error('[GameManager] handleRetryGame: Invalid or missing gameId in msg:', msg);
+        return;
+      }
       console.log(`[GameManager] Retry game request for game ${gameId}`);
 
-      const warpData = this.warpRequests.get(gameId as string);
-      if (warpData) {
-        this.wsManager.send({
-          type: 'warp_players',
-          game_id: gameId,
-          map: warpData.map,
-          is_ranked: warpData.isRanked,
-          team1: {
-            players: warpData.team1IGNs
-          },
-          team2: {
-            players: warpData.team2IGNs
-          }
-        });
-        console.log(`[GameManager] Sent warp request for game ${gameId} (retry)`);
+      const key = String(gameId);
+      const warpData = this.warpRequests.get(key);
+      if (!warpData) {
+        console.warn(`[GameManager] Retry game request ignored: no active warp for game ${gameId}`);
+        return;
+      }
+      if (warpData.retrying) {
+        console.log(`[GameManager] Retry game request ignored: warp retry already in progress for game ${gameId}`);
+        return;
       }
 
+      this.resendWarp(key, warpData, false);
     } catch (error) {
       console.error('[GameManager] Error handling retry game:', error);
     }
@@ -959,6 +1046,7 @@ export class GameManager {
       this.cleaningGames.add(gameId);
 
       this.warpRequests.delete(gameId.toString());
+      this.manualWarpRetries.delete(gameId);
 
       setTimeout(async () => {
         try {
@@ -1076,6 +1164,7 @@ export class GameManager {
         clearTimeout(warpData.timeout);
       }
       this.warpRequests.clear();
+      this.manualWarpRetries.clear();
 
       
 

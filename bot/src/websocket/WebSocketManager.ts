@@ -84,6 +84,7 @@ interface AuthIncomingPayload {
 interface GameManagerLike {
   scoreGame(gameResult: GameResult): Promise<unknown>;
   voidGame(gameId: number, reason: string): Promise<unknown>;
+  retryWarp(gameId: number): Promise<{ attempts: number; maxAttempts: number }>;
 }
  
 
@@ -1535,5 +1536,9 @@ export class WebSocketManager {
 
   public setGameManager(gameManager: GameManagerLike): void {
     this.gameManager = gameManager;
+  }
+
+  public getGameManager(): GameManagerLike | null {
+    return this.gameManager;
   }
 }

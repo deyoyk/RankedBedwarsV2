@@ -1,64 +1,45 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
-import { WebSocketManager } from '../../websocket/WebSocketManager';
+import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
- 
-
-const retryCounts = new Map<number, { count: number; at: number }>();
-const RETRY_RECORD_TTL_MS = 60 * 60 * 1000;
-const MAX_TRACKED_RETRIES = 5000;
-
 export async function retry(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+  void args;
   const Game = (await import('../../models/Game')).default;
   const channelId = interaction.channelId;
-  const game = await Game.findOne({ 'channels.text': channelId }).select('gameId state map isRanked team1 team2').lean();
+  const game = await Game.findOne({ 'channels.text': channelId })
+    .select('gameId state')
+    .lean();
+
   if (!game) {
-    await safeReply(interaction, errorEmbed('No game associated with this channel.', 'Error'));
+    await safeReply(interaction, errorEmbed('No game associated with this channel.', 'Retry Error'));
     return;
   }
-  const gameId = game.gameId;
   if (game.state !== 'pending') {
-    await safeReply(interaction, errorEmbed(`Game \`${gameId}\` is ${game.state} and can no longer be retried.`, 'Error'));
+    await safeReply(interaction, errorEmbed(`Game \`${game.gameId}\` is ${game.state} and can no longer be retried.`, 'Retry Error'));
     return;
   }
-  const now = Date.now();
-  const tracked = retryCounts.get(gameId);
-  const attempts = (tracked && now - tracked.at < RETRY_RECORD_TTL_MS ? tracked.count : 0) + 1;
-  retryCounts.set(gameId, { count: attempts, at: now });
-  if (retryCounts.size > MAX_TRACKED_RETRIES) {
-    for (const [id, entry] of retryCounts) {
-      if (now - entry.at >= RETRY_RECORD_TTL_MS) retryCounts.delete(id);
-      if (retryCounts.size <= MAX_TRACKED_RETRIES) break;
-    }
-    while (retryCounts.size > MAX_TRACKED_RETRIES) {
-      const oldest = retryCounts.keys().next();
-      if (oldest.done) break;
-      retryCounts.delete(oldest.value);
-    }
-  }
-  if (attempts > 2) {
-    await safeReply(interaction, errorEmbed(`Game \`${gameId}\` has already been retried twice.`, 'Error'));
+
+  const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
+  if (!resolvedWs) {
+    await safeReply(interaction, errorEmbed('WebSocket manager is not available.', 'Retry Error'));
     return;
   }
+
+  const gameManager = resolvedWs.getGameManager?.();
+  if (!gameManager || typeof gameManager.retryWarp !== 'function') {
+    await safeReply(interaction, errorEmbed('Game manager is not available.', 'Retry Error'));
+    return;
+  }
+
   try {
-    if (!wsManager) throw new Error('WebSocketManager instance required for retry.');
-    const User = (await import('../../models/User')).default;
-    const allIds = [...(game.team1 || []), ...(game.team2 || [])];
-    const users = await User.find({ discordId: { $in: allIds } }).select('discordId ign').lean();
-    const idToIgn = Object.fromEntries(users.map(u => [u.discordId, u.ign]));
-    const team1 = (game.team1 || []).map((id: string) => idToIgn[id] || id);
-    const team2 = (game.team2 || []).map((id: string) => idToIgn[id] || id);
-    wsManager.send({
-      type: 'warp_players',
-      game_id: String(game.gameId),
-      map: game.map,
-      is_ranked: !!game.isRanked,
-      team1: { players: team1 },
-      team2: { players: team2 }
-    });
-    await safeReply(interaction, successEmbed(`Retrying game \`${gameId}\``, 'Retry Initiated'));
-  } catch {
-    await safeReply(interaction, errorEmbed('An error occurred while retrying the game.', 'Error'));
+    const result = await gameManager.retryWarp(game.gameId);
+    await safeReply(interaction, successEmbed(
+      `Retry sent for game \`${game.gameId}\` (attempt ${result.attempts}/${result.maxAttempts}).`,
+      'Retry Initiated',
+    ));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'An error occurred while retrying the game.';
+    await safeReply(interaction, errorEmbed(message, 'Retry Error'));
   }
 }

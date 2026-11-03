@@ -201,3 +201,80 @@ describe('scoring persistence', () => {
     expect(mockCounterUpdateOne).toHaveBeenCalledWith({ _id: 'gameId' }, { $max: { seq: 42 } }, { upsert: true });
   });
 });
+
+describe('retryWarp safety', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  function pendingGame(state = 'pending') {
+    return {
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue({ gameId: 1, state }),
+    };
+  }
+
+  function activeWarp(manager: GameManager, overrides: Record<string, unknown> = {}) {
+    const data: any = {
+      gameId: '1',
+      timeout: setTimeout(() => undefined, 60000),
+      attempts: 0,
+      team1IGNs: ['A'],
+      team2IGNs: ['B'],
+      map: 'MapA',
+      isRanked: true,
+      timestamp: Date.now(),
+      ...overrides,
+    };
+    (manager as any).warpRequests.set('1', data);
+    return data;
+  }
+
+  it('sends an active warp retry and enforces the per-game cooldown', async () => {
+    const manager = makeManager();
+    activeWarp(manager);
+    GameModel.findOne.mockReturnValue(pendingGame());
+
+    try {
+      const result = await manager.retryWarp(1);
+      expect(result).toEqual({ attempts: 1, maxAttempts: 3 });
+      expect(wsManagerMock.send).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'warp_players',
+        game_id: '1',
+        map: 'MapA',
+      }));
+
+      await expect(manager.retryWarp(1)).rejects.toThrow(/Please wait \d+s/);
+    } finally {
+      manager.cleanup();
+    }
+  });
+
+  it('rejects retries without an active warp request', async () => {
+    const manager = makeManager();
+    await expect(manager.retryWarp(1)).rejects.toThrow('No active warp request');
+  });
+
+  it('rejects retries once the game is no longer pending', async () => {
+    const manager = makeManager();
+    activeWarp(manager);
+    GameModel.findOne.mockReturnValue(pendingGame('scored'));
+
+    try {
+      await expect(manager.retryWarp(1)).rejects.toThrow('can no longer be retried');
+    } finally {
+      manager.cleanup();
+    }
+  });
+
+  it('rejects overlapping retries', async () => {
+    const manager = makeManager();
+    activeWarp(manager, { retrying: true });
+
+    try {
+      await expect(manager.retryWarp(1)).rejects.toThrow('already in progress');
+    } finally {
+      manager.cleanup();
+    }
+  });
+});
