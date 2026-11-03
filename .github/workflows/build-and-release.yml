@@ -3,10 +3,6 @@ name: Build and Release
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Release tag (default: v<pom version>)'
-        required: false
-        default: ''
       create_release:
         description: 'Create GitHub release'
         required: false
@@ -14,7 +10,7 @@ on:
         type: boolean
 
 concurrency:
-  group: build-release-${{ github.ref }}
+  group: build-release
   cancel-in-progress: false
 
 jobs:
@@ -160,16 +156,26 @@ jobs:
         run: |
           VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Built version: $VERSION"
+          echo "Built plugin version: $VERSION"
 
-      - name: Get tag name
+      - name: Calculate next sequential release tag
         id: tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ -n "${{ inputs.tag }}" ]; then
-            TAG="${{ inputs.tag }}"
-          else
-            TAG="v${{ steps.version.outputs.version }}"
-          fi
+          LATEST=0
+          while IFS= read -r TAG; do
+            if [[ "$TAG" =~ ^v([0-9]+)$ ]]; then
+              NUM=${BASH_REMATCH[1]}
+              if (( NUM > LATEST )); then
+                LATEST=$NUM
+              fi
+            fi
+          done < <(
+            gh release list --limit 1000 --json tagName --jq '.[].tagName'
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/tags?per_page=100" --jq '.[].name'
+          )
+          TAG="v$((LATEST + 1))"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Release tag: $TAG"
 
@@ -178,11 +184,6 @@ jobs:
         with:
           pattern: '{rbw-bot,rbw-website,rbw-plugin}'
           path: release-assets
-
-      - name: Delete previous release with same tag
-        run: gh release delete "${{ steps.tag.outputs.tag }}" --yes --cleanup-tag || true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -194,7 +195,9 @@ jobs:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
           body: |
-            ## RankedBedwars ${{ steps.version.outputs.version }}
+            ## RankedBedwars ${{ steps.tag.outputs.tag }}
+
+            Plugin build version: `${{ steps.version.outputs.version }}`
 
             ### Changes
             - See commit history for details
