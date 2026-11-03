@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, User as DiscordUser, Guild, ComponentType } from 'discord.js';
+import { Message, ChatInputCommandInteraction, EmbedBuilder, User as DiscordUser, Guild, ComponentType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -388,37 +388,132 @@ async function handleStartPrivateGame(
     return;
   }
 
-  const map = args?.length ? args.join(' ').trim() : '';
-  const result = await PrivateGameService.startPrivateGame(userId, guild, wsManager, {
-    ...(map ? { map } : {}),
-  });
-
-  if (!result.success) {
-    await safeReply(interaction, errorEmbed(result.message || 'Could not create the private game.', 'Private Game Error'));
+  const validation = await PartyService.validatePartyAccess(userId, true);
+  if (!validation.isValid || !validation.party) {
+    await safeReply(interaction, errorEmbed(validation.error || 'Not in a party', 'Private Game Error'));
     return;
   }
 
-  const embedObj = successEmbed(
-    `Private game #${result.gameId} has been created and is starting now.`,
-    'Private Game Started',
+  const party = validation.party;
+  const map = args?.length ? args.join(' ').trim() : '';
+  const nonce = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  const confirmId = `private_confirm_${userId}_${nonce}`;
+  const cancelId = `private_cancel_${userId}_${nonce}`;
+
+  const confirmEmbed = betterEmbed('', '#00AAAA', 'Confirm Private Game');
+  confirmEmbed.builder.addFields(
+    { name: 'Party ID', value: party.partyId, inline: true },
+    { name: 'Leader', value: `<@${party.leader}>`, inline: true },
+    { name: 'Members', value: party.members.map((id: string) => `<@${id}>`).join('\n'), inline: false },
+    { name: 'Map', value: map || 'Random eligible map', inline: true },
+    { name: 'Mode', value: 'Unranked private game', inline: true },
+  ).setFooter({ text: 'Only the party leader can confirm this game.' }).setTimestamp();
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(confirmId)
+      .setLabel('Confirm')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(cancelId)
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Danger),
   );
-  embedObj.builder.addFields(
-    { name: 'Game ID', value: `#${result.gameId}`, inline: true },
-    { name: 'Map', value: result.map || 'Unknown', inline: true },
-    {
-      name: 'Team 1',
-      value: (result.team1 || []).map((id: string) => `<@${id}>`).join(', '),
-      inline: false,
-    },
-    {
-      name: 'Team 2',
-      value: (result.team2 || []).map((id: string) => `<@${id}>`).join(', '),
-      inline: false,
-    },
-  ).setTimestamp();
-  await safeReply(interaction, {
-    content: [...(result.team1 || []), ...(result.team2 || [])].map((id: string) => `<@${id}>`).join(' '),
-    embeds: [embedObj.builder],
+
+  const message = await safeReply(interaction, {
+    embeds: [confirmEmbed.builder],
+    components: [row],
+  });
+
+  let resolved = false;
+  const collector = message.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    time: 2 * 60 * 1000,
+  });
+
+  collector.on('collect', async (buttonInteraction) => {
+    if (buttonInteraction.user.id !== userId) {
+      await buttonInteraction.reply({
+        embeds: [errorEmbed('Only the party leader can confirm this game.', 'Private Game Error').builder],
+        ephemeral: true,
+      }).catch(() => undefined);
+      return;
+    }
+
+    if (resolved) return;
+
+    if (buttonInteraction.customId === cancelId) {
+      resolved = true;
+      collector.stop('cancelled');
+      await buttonInteraction.update({
+        embeds: [errorEmbed('Private game creation cancelled.', 'Private Game Cancelled').builder],
+        components: [],
+      }).catch(() => undefined);
+      return;
+    }
+
+    if (buttonInteraction.customId !== confirmId) return;
+    resolved = true;
+
+    const startingEmbed = betterEmbed('Validating your party and creating the game...', '#00AAAA', 'Starting Private Game');
+    startingEmbed.builder.setTimestamp();
+    await buttonInteraction.update({
+      embeds: [startingEmbed.builder],
+      components: [],
+    }).catch(() => undefined);
+
+    let result: Awaited<ReturnType<typeof PrivateGameService.startPrivateGame>>;
+    try {
+      result = await PrivateGameService.startPrivateGame(userId, guild, wsManager, {
+        ...(map ? { map } : {}),
+      });
+    } catch (error) {
+      console.error('Error starting private game:', error);
+      await buttonInteraction.editReply({
+        embeds: [errorEmbed('There was an error starting the private game.', 'Private Game Error').builder],
+      }).catch(() => undefined);
+      return;
+    }
+
+    if (!result.success) {
+      await buttonInteraction.editReply({
+        embeds: [errorEmbed(result.message || 'Could not create the private game.', 'Private Game Error').builder],
+      }).catch(() => undefined);
+      return;
+    }
+
+    const successEmbedObj = successEmbed(
+      `Private game #${result.gameId} has been created and is starting now.`,
+      'Private Game Started',
+    );
+    successEmbedObj.builder.addFields(
+      { name: 'Game ID', value: `#${result.gameId}`, inline: true },
+      { name: 'Map', value: result.map || 'Unknown', inline: true },
+      {
+        name: 'Team 1',
+        value: (result.team1 || []).map((id: string) => `<@${id}>`).join(', '),
+        inline: false,
+      },
+      {
+        name: 'Team 2',
+        value: (result.team2 || []).map((id: string) => `<@${id}>`).join(', '),
+        inline: false,
+      },
+    ).setTimestamp();
+
+    await buttonInteraction.editReply({
+      content: [...(result.team1 || []), ...(result.team2 || [])].map((id: string) => `<@${id}>`).join(' '),
+      embeds: [successEmbedObj.builder],
+    }).catch(() => undefined);
+    collector.stop('started');
+  });
+
+  collector.on('end', async (_collected, reason) => {
+    if (resolved || reason === 'cancelled' || reason === 'started') return;
+    await message.edit({
+      embeds: [errorEmbed('This private game confirmation has expired.', 'Confirmation Expired').builder],
+      components: [],
+    }).catch(() => undefined);
   });
 }
 

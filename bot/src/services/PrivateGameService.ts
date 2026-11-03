@@ -186,6 +186,14 @@ export class PrivateGameService {
       };
     }
 
+    const queuedIds = this.findQueuedMembers(memberIds);
+    if (queuedIds.length > 0) {
+      return {
+        success: false,
+        message: `Party members already in a queue: ${queuedIds.map(id => usersById.get(id)?.ign || id).join(', ')}`,
+      };
+    }
+
     let activeGame: { gameId: number; isPrivate?: boolean; privatePartyId?: string } | null;
     try {
       activeGame = await Game.findOne({
@@ -251,8 +259,6 @@ export class PrivateGameService {
     }));
     const { team1, team2 } = this.splitTeams(players);
 
-    this.removeFromPublicQueues(memberIds);
-
     let gameId: number;
     try {
       const resources = await gameManager.createPrivateGame({
@@ -316,14 +322,15 @@ export class PrivateGameService {
     return typeof map.maxplayers === 'number' ? map.maxplayers : undefined;
   }
 
-  private static removeFromPublicQueues(memberIds: string[]): void {
+  private static findQueuedMembers(memberIds: string[]): string[] {
     const members = new Set(memberIds);
-    for (const [channelId, players] of queuePlayers) {
-      const filtered = players.filter(id => !members.has(id));
-      if (filtered.length !== players.length) {
-        queuePlayers.set(channelId, filtered);
+    const queued = new Set<string>();
+    for (const players of queuePlayers.values()) {
+      for (const id of players) {
+        if (members.has(id)) queued.add(id);
       }
     }
+    return [...queued];
   }
 
   private static mapKey(map: MapInfo): string {

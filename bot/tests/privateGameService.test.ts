@@ -149,8 +149,8 @@ describe('PrivateGameService', () => {
     expect(manager.initiateGameWarp).toHaveBeenCalledWith(42);
   });
 
-  it('removes the party from public queue memory before creating the game', async () => {
-    queuePlayers.set('public-queue', ['a', 'b', 'stranger']);
+  it('rejects the party when a member is already in a public queue', async () => {
+    queuePlayers.set('public-queue', ['a', 'stranger']);
     const manager = gameManager();
 
     const result = await PrivateGameService.startPrivateGame(
@@ -159,8 +159,8 @@ describe('PrivateGameService', () => {
       wsFor(manager),
     );
 
-    expect(result.success).toBe(true);
-    expect(queuePlayers.get('public-queue')).toEqual(['stranger']);
+    expect(result).toEqual({ success: false, message: 'Party members already in a queue: A' });
+    expect(manager.createPrivateGame).not.toHaveBeenCalled();
   });
 
   it('honors an explicit map and claims it', async () => {

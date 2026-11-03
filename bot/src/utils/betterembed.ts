@@ -47,8 +47,10 @@ export function betterEmbed(
   }
   const builder = new EmbedBuilder()
     .setColor(safeColor)
-    .setTitle(finalTitle)
-    .setDescription(finalText);
+    .setTitle(finalTitle);
+  if (typeof finalText === 'string' && finalText.trim().length > 0) {
+    builder.setDescription(finalText);
+  }
   if (finalFooter) {
     if (finalIcon) builder.setFooter({ text: finalFooter, iconURL: finalIcon });
     else builder.setFooter({ text: finalFooter });
