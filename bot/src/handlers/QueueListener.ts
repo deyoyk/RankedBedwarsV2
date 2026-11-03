@@ -320,7 +320,7 @@ export class QueueListener {
         if (waitingVcId && moved.length > 0) {
           const toMove = moved.filter((m) => m.channelId !== waitingVcId).map((m) => m.id);
           if (toMove.length > 0) {
-            await this.workersManager.moveMembers(toMove, waitingVcId, 6);
+            await this.workersManager.moveMembers(toMove, waitingVcId, 8);
           }
         }
         if (config.channels.alertsChannel && moved.length > 0) {
@@ -884,7 +884,7 @@ export class QueueListener {
 
       const waitingVcId = config.voicechannels.waitingvc;
       if (waitingVcId && member.voice.channelId !== waitingVcId) {
-        await this.workersManager.moveMembers([member.id], waitingVcId, 6);
+        await this.workersManager.moveMembers([member.id], waitingVcId, 8);
       }
 
       const mention = `<@${member.id}>`;

@@ -675,11 +675,11 @@ export class GameManager {
     try {
       console.log(`[GameManager] Moving ${playerIds.length} players to voice channel ${voiceChannelId} using WorkersManager`);
 
-      const first = await this.workersManager.moveMembers(playerIds, voiceChannelId, 7);
+      const first = await this.workersManager.moveMembers(playerIds, voiceChannelId, 8);
       let failed = playerIds.filter((_, i) => first[i]?.status === 'rejected');
       if (failed.length > 0) {
         await sleep(2000);
-        const retry = await this.workersManager.moveMembers(failed, voiceChannelId, 7);
+        const retry = await this.workersManager.moveMembers(failed, voiceChannelId, 8);
         failed = failed.filter((_, i) => retry[i]?.status === 'rejected');
       }
 
