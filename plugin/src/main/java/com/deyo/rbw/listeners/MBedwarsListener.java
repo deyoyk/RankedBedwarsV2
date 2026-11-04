@@ -211,11 +211,13 @@ public class MBedwarsListener implements Listener {
         }
         Game game = gameInstance.toGame();
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-            if (plugin.getWebSocketManager() != null && plugin.getWebSocketManager().isConnected()) {
+            if (plugin.getWebSocketManager() != null) {
+                // Persists a pending payload before sending, so a disconnect
+                // at game end is retried on reconnect.
                 plugin.getWebSocketManager().sendGameScoring(game);
-                plugin.debug("Sent game scoring data via WebSocket for game #" + game.getGameId());
+                plugin.debug("Queued game scoring data for game #" + game.getGameId());
             } else {
-                plugin.getLogger().warning("WebSocket is unavailable, could not send game scoring data");
+                plugin.getLogger().warning("WebSocket manager is unavailable, could not queue game scoring data");
             }
             if (plugin.getGameDataManager() != null) {
                 plugin.getGameDataManager().saveGameResultData(game);
@@ -223,7 +225,7 @@ public class MBedwarsListener implements Listener {
             }
         });
         if (plugin.getMapManager() != null) {
-            plugin.getMapManager().unlockMap(arenaName);
+            plugin.getMapManager().releaseGame(arenaName);
         }
         unindexInstance(arenaName, gameInstance);
         preGamePlayers.remove(arenaName);
@@ -352,7 +354,7 @@ public class MBedwarsListener implements Listener {
     }
 
     private void sendVoidNotification(String gameId, String playerName) {
-        if (plugin.getWebSocketManager() == null || !plugin.getWebSocketManager().isConnected()) return;
+        if (plugin.getWebSocketManager() == null) return;
         
         String arenaName = null;
         
@@ -368,6 +370,9 @@ public class MBedwarsListener implements Listener {
                 unindexInstance(arenaName, removed);
             }
             preGamePlayers.remove(arenaName);
+            if (plugin.getMapManager() != null) {
+                plugin.getMapManager().releaseGame(arenaName);
+            }
         }
         String reason = "[system] voided because player: " + playerName + " left before arena starts";
         plugin.getWebSocketManager().sendGameVoiding(gameId, reason);
@@ -375,7 +380,7 @@ public class MBedwarsListener implements Listener {
     }
 
     private void attemptGameRetry(String gameId, String playerName, String arenaName, int maxRetries) {
-        if (plugin.getWebSocketManager() == null || !plugin.getWebSocketManager().isConnected()) return;
+        if (plugin.getWebSocketManager() == null) return;
         
         new BukkitRunnable() {
             private int retryCount = 0;

@@ -615,7 +615,12 @@ export class WebSocketManager {
       if (process.env.AUTH_KEY && authMsg.auth_key === process.env.AUTH_KEY) {
         this.send({ type: 'auth_success', message: 'Authentication successful' });
         console.log('[WebSocketManager] Authentication successful');
-        void this.gameManager?.resumePendingWarps?.();
+        // Give the plugin a moment to re-announce games that warped while
+        // the socket was down before retrying anything that is still pending.
+        const resumeTimer = setTimeout(() => {
+          void this.gameManager?.resumePendingWarps?.();
+        }, 3000);
+        resumeTimer.unref?.();
       } else {
         this.send({ type: 'auth_failure', message: 'Invalid authentication key' });
         console.error('[WebSocketManager] Authentication failed');

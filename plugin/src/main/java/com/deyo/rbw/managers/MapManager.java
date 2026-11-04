@@ -101,6 +101,8 @@ public class MapManager {
     
     
     private final Set<String> lockedArenaGroups = ConcurrentHashMap.newKeySet();
+    private final Map<String, Long> pendingWarpLocks = new ConcurrentHashMap<>();
+    private static final long PENDING_WARP_TIMEOUT_MS = 15 * 60 * 1000L;
     private final Set<String> disabledArenaGroups = ConcurrentHashMap.newKeySet();
     private final Set<String> allowedGroups = ConcurrentHashMap.newKeySet();
     private final Set<Class<?>> noGetPlayersClasses = ConcurrentHashMap.newKeySet();
@@ -413,7 +415,9 @@ public class MapManager {
             return;
         }
 
-        if (isMapLocked(physicalArenaToUse)) {
+        String existingOwner = physicalArenaToGameIdMap.get(physicalArenaToUse);
+        boolean sameGameRetry = gameId.equals(existingOwner);
+        if (isMapLocked(physicalArenaToUse) && !sameGameRetry) {
             plugin.getLogger().warning("Map is already locked: " + physicalArenaToUse);
             sendWarpFailedArenaNotFound(gameId, requestedMap);
             return;
@@ -424,6 +428,7 @@ public class MapManager {
         lockMap(physicalArenaToUse);
 
         gameIdToPhysicalArenaMap.put(gameId, physicalArenaToUse);
+        pendingWarpLocks.put(physicalArenaToUse, System.currentTimeMillis());
 
         if (plugin.getGameDataManager() != null) {
             plugin.getGameDataManager().saveGameWarpData(gameId, physicalArenaToUse, team1Json, team2Json, isRanked);
@@ -493,6 +498,10 @@ public class MapManager {
     
     
     public void sendWarpSuccess(String gameId) {
+        String mapName = gameIdToPhysicalArenaMap.get(gameId);
+        if (mapName != null) {
+            pendingWarpLocks.remove(mapName);
+        }
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
             response.addProperty("type", "warp_success");
@@ -503,7 +512,23 @@ public class MapManager {
         });
     }
 
+    /**
+     * A failed warp must release the map immediately. Otherwise a retry from
+     * the bot sees the map as permanently locked and every retry fails.
+     */
+    void clearWarpFailureState(String gameId) {
+        String mapName = gameIdToPhysicalArenaMap.remove(gameId);
+        if (mapName == null) {
+            return;
+        }
+        physicalArenaToGameIdMap.remove(mapName, gameId);
+        pendingWarpLocks.remove(mapName);
+        unlockMap(mapName);
+        plugin.debug("Released map " + mapName + " after failed warp for game #" + gameId);
+    }
+
     public void sendWarpFailedArenaNotFound(String gameId, String mapName) {
+        clearWarpFailureState(gameId);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
             response.addProperty("type", "warp_failed_arena_not_found");
@@ -516,6 +541,7 @@ public class MapManager {
     }
 
     public void sendWarpFailedOfflinePlayers(String gameId, List<String> offlinePlayers) {
+        clearWarpFailureState(gameId);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
             response.addProperty("type", "warp_failed_offline_players");
@@ -531,6 +557,7 @@ public class MapManager {
         });
     }
     public void sendWarpFailureUnknown(String gameId) {
+        clearWarpFailureState(gameId);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
             response.addProperty("type", "warp_failure_unknown");
@@ -542,6 +569,35 @@ public class MapManager {
     }
     public String getGameIdForArena(String arenaName) {
         return physicalArenaToGameIdMap.get(arenaName);
+    }
+
+    /**
+     * Releases all map bookkeeping for a finished or voided game, including
+     * the lock.
+     */
+    public void releaseGame(String arenaName) {
+        String gameId = physicalArenaToGameIdMap.remove(arenaName);
+        if (gameId != null) {
+            gameIdToPhysicalArenaMap.remove(gameId, arenaName);
+        }
+        pendingWarpLocks.remove(arenaName);
+        unlockMap(arenaName);
+    }
+
+    /**
+     * Re-announces games that already warped while the bot connection was
+     * down. Without this the bot's retry can see an active arena as
+     * unavailable and void a game that is actually running.
+     */
+    public void sendActiveGameStates() {
+        for (String gameId : new HashSet<>(gameIdToPhysicalArenaMap.keySet())) {
+            String arenaName = gameIdToPhysicalArenaMap.get(gameId);
+            if (arenaName == null) continue;
+            if (pendingWarpLocks.containsKey(arenaName)) continue;
+            if (isMapLocked(arenaName)) {
+                sendWarpSuccess(gameId);
+            }
+        }
     }
 
     /**
@@ -644,6 +700,13 @@ public class MapManager {
     }
     
     public boolean isMapLocked(String mapName) {
+        Long pendingSince = pendingWarpLocks.get(mapName);
+        if (pendingSince != null && System.currentTimeMillis() - pendingSince > PENDING_WARP_TIMEOUT_MS) {
+            pendingWarpLocks.remove(mapName);
+            unlockMap(mapName);
+            plugin.getLogger().warning("Released stale pending warp lock for map '" + mapName + "'");
+            return false;
+        }
         String groupId = physicalArenaToGroupMap.get(mapName);
         return groupId != null && isArenaGroupLocked(groupId);
     }

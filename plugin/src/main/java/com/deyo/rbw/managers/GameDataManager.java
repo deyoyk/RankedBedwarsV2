@@ -166,8 +166,12 @@ public class GameDataManager {
         File target = new File(pendingScoringFolder, "game_" + gameId + ".json");
         File voidTarget = new File(pendingScoringFolder, "game_" + gameId + "_void.json");
         try {
-            Files.deleteIfExists(target.toPath());
-            Files.deleteIfExists(voidTarget.toPath());
+            synchronized (lockFor(target)) {
+                Files.deleteIfExists(target.toPath());
+            }
+            synchronized (lockFor(voidTarget)) {
+                Files.deleteIfExists(voidTarget.toPath());
+            }
         } catch (Exception e) {
             plugin.getLogger().warning("Failed to delete delivered game message: " + target.getAbsolutePath());
         }
@@ -180,9 +184,13 @@ public class GameDataManager {
             return payloads;
         }
         for (File file : files) {
-            try (InputStreamReader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
-                JsonObject payload = JsonParser.parseReader(reader).getAsJsonObject();
-                payloads.add(payload);
+            try {
+                synchronized (lockFor(file)) {
+                    try (InputStreamReader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
+                        JsonObject payload = JsonParser.parseReader(reader).getAsJsonObject();
+                        payloads.add(payload);
+                    }
+                }
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING, "Failed to read pending scoring payload " + file.getName(), e);
             }

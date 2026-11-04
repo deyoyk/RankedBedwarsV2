@@ -621,18 +621,20 @@ public class BedWars1058Listener implements Listener {
             Game game = convertToGame(gameTracker);
             
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
-                if (plugin.getWebSocketManager() != null && plugin.getWebSocketManager().isConnected()) {
+                if (plugin.getWebSocketManager() != null) {
+                    // Persists a pending payload before sending, so a
+                    // disconnect at game end is retried on reconnect.
                     plugin.getWebSocketManager().sendGameScoring(game);
-                    plugin.debug("Sent game scoring data via WebSocket for game #" + game.getGameId());
+                    plugin.debug("Queued game scoring data for game #" + game.getGameId());
                 } else {
-                    plugin.getLogger().warning("WebSocket is unavailable, could not send game data");
+                    plugin.getLogger().warning("WebSocket manager is unavailable, could not queue game data");
                 }
                 
                 plugin.getGameDataManager().saveGameResultData(game);
             });
         }
         
-        plugin.getMapManager().unlockMap(arenaName);
+        plugin.getMapManager().releaseGame(arenaName);
         unindexTracker(arenaName, gameTracker);
         gameTrackers.remove(arenaName);
         preGamePlayers.remove(arenaName);
@@ -833,7 +835,7 @@ public class BedWars1058Listener implements Listener {
     }
     
     private void attemptGameRetry(String gameId, String playerName, String arenaName, int maxRetries) {
-        if (plugin.getWebSocketManager() == null || !plugin.getWebSocketManager().isConnected()) return;
+        if (plugin.getWebSocketManager() == null) return;
         
         new BukkitRunnable() {
             private int retryCount = 0;
@@ -868,7 +870,7 @@ public class BedWars1058Listener implements Listener {
     }
     
     private void sendVoidNotification(String gameId, String playerName) {
-        if (plugin.getWebSocketManager() == null || !plugin.getWebSocketManager().isConnected()) return;
+        if (plugin.getWebSocketManager() == null) return;
         
         
         String arenaName = null;
@@ -886,6 +888,7 @@ public class BedWars1058Listener implements Listener {
                 unindexTracker(arenaName, removed);
             }
             preGamePlayers.remove(arenaName);
+            plugin.getMapManager().releaseGame(arenaName);
         }
         
         

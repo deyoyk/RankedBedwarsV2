@@ -429,11 +429,9 @@ public class WebSocketManager {
         JsonObject team2Json = json.getAsJsonObject("team2");
         plugin.getLogger().info("Received warp request for game #" + gameId + " on map " + map);
 
-        if (plugin.getMapManager() != null) {
-            plugin.debug("Cleaning up existing game data before warping to prevent conflicts with game #" + gameId + " on map " + map);
-            plugin.getMapManager().cleanupExistingGameForMap(map);
-            plugin.debug("Cleanup completed, proceeding with warp request for game #" + gameId);
-        }
+        // Map cleanup and locking happen on the main thread inside
+        // MapManager.warpPlayersToGame; doing it here asynchronously raced the
+        // actual warp and could delete a game that had just been created.
 
         if (!com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable() || 
             !com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().arenaExists(map)) {
@@ -655,6 +653,9 @@ public class WebSocketManager {
                 sendPermissionData();
 
                 sendMapDataIfReady(0);
+                if (plugin.getMapManager() != null) {
+                    plugin.getMapManager().sendActiveGameStates();
+                }
                 sendPendingScoringPayloads();
                 plugin.debug("Initial data sending process started");
             } catch (Exception e) {
