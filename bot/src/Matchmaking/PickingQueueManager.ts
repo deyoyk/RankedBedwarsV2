@@ -301,7 +301,8 @@ export class PickingQueueManager {
   public async processQueue(
     players: string[], 
     queueData: QueueLike, 
-    maxGames: number = 5
+    maxGames: number = 5,
+    token?: { cancelled: boolean }
   ): Promise<QueueProcessingResult> {
     try {
       let gamesCreated = 0;
@@ -312,6 +313,10 @@ export class PickingQueueManager {
 
       while (availablePlayers.length >= queueData.maxPlayers && gamesCreated < maxGames) {
         try {
+          if (token?.cancelled) {
+            console.warn(`[PickingQueue] Processing cancelled after ${gamesCreated} game(s)`);
+            break;
+          }
           
           const selectedPlayers = availablePlayers.slice(0, queueData.maxPlayers);
           
@@ -324,7 +329,8 @@ export class PickingQueueManager {
             selectedPlayers,
             queueData,
             gameId,
-            selectedMap
+            selectedMap,
+            token
           );
 
           if (pickingResult.success) {
@@ -362,7 +368,8 @@ export class PickingQueueManager {
     players: string[],
     queueData: QueueLike,
     gameId: number,
-    selectedMap: string
+    selectedMap: string,
+    token?: { cancelled: boolean }
   ): Promise<{ success: boolean }> {
     let resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel } | null = null;
     let session: PickingSession | null = null;
@@ -425,7 +432,7 @@ export class PickingQueueManager {
       await this.sendPickingEmbed(resources!.gameChannel, session, selectedMap, queueData);
 
 
-      const finalTeams = await this.executePicking(resources!.gameChannel, session, queueData, selectedMap);
+      const finalTeams = await this.executePicking(resources!.gameChannel, session, queueData, selectedMap, token);
 
       if (!finalTeams) {
         throw new Error('Picking process failed or was cancelled');
@@ -457,12 +464,22 @@ export class PickingQueueManager {
     selectedMap: string,
   ): Promise<{ success: boolean }> {
     const gameId = session.gameId;
+    if (!session.active || this.activeSessions.get(gameId) !== session) {
+      console.warn(`[PickingQueue] Refusing to finalize inactive/timed-out picking session ${gameId}`);
+      return { success: false };
+    }
+
     const verifiedFinalTeams = await this.revalidateFinalTeams(finalTeams, resources.pickingChannel, queueData);
     if (!verifiedFinalTeams) {
       throw new Error('Final team revalidation failed (players left, changed status, or entered a game during picking)');
     }
 
-    await this.gameManager.createGame(
+    if (!session.active || this.activeSessions.get(gameId) !== session) {
+      console.warn(`[PickingQueue] Picking session ${gameId} ended during final revalidation`);
+      return { success: false };
+    }
+
+    const gameResources = await this.gameManager.createGame(
       gameId,
       queueData,
       verifiedFinalTeams.team1,
@@ -470,23 +487,27 @@ export class PickingQueueManager {
       selectedMap
     );
 
-    try {
-      await this.gameManager.updateGameMap(gameId, selectedMap);
-    } catch (mapError) {
-      console.error(`[PickingQueue] Game ${gameId} created but map update failed:`, mapError);
-    }
-
+    let warpStarted = true;
     try {
       await this.gameManager.initiateGameWarp(gameId);
     } catch (warpError) {
+      warpStarted = false;
       console.error(`[PickingQueue] Game ${gameId} created but warp start failed:`, warpError);
       await this.gameManager.voidGame(gameId, 'Warp could not be started after picking').catch(() => undefined);
     }
 
-    try {
-      await this.announcePickedGame(session, finalTeams, resources, queueData, selectedMap);
-    } catch (announceError) {
-      console.error(`[PickingQueue] Game ${gameId} created but start announcement failed:`, announceError);
+    if (warpStarted) {
+      try {
+        await this.announcePickedGame(
+          session,
+          finalTeams,
+          gameResources?.gameChannel?.id,
+          queueData,
+          selectedMap,
+        );
+      } catch (announceError) {
+        console.error(`[PickingQueue] Game ${gameId} created but start announcement failed:`, announceError);
+      }
     }
 
     await this.cleanupPickingChannels(resources);
@@ -499,7 +520,7 @@ export class PickingQueueManager {
   private async announcePickedGame(
     session: PickingSession,
     finalTeams: { team1: string[]; team2: string[] },
-    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+    startChannelId: string | undefined,
     queueData: QueueLike,
     selectedMap: string,
   ): Promise<void> {
@@ -551,9 +572,9 @@ export class PickingQueueManager {
       );
     }
 
-    if (resources.gameChannel) {
+    if (startChannelId) {
       await this.workersManager.sendMessage(
-        resources.gameChannel.id,
+        startChannelId,
         { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
         8
       );
@@ -871,9 +892,15 @@ export class PickingQueueManager {
     session: PickingSession,
     queueData: QueueLike,
     selectedMap: string,
+    token?: { cancelled: boolean },
   ): Promise<{ team1: string[], team2: string[] } | null> {
     try {
       while (session.remainingPlayers.length > 0 && session.active) {
+        if (token?.cancelled) {
+          console.warn(`[PickingQueue] Picking cancelled for game ${session.gameId}`);
+          return null;
+        }
+
         const pickedPlayer = await this.awaitPick(channel, session);
 
         if (!pickedPlayer) {
@@ -881,7 +908,7 @@ export class PickingQueueManager {
           return null;
         }
 
-        if (!session.active) {
+        if (!session.active || token?.cancelled) {
           return null;
         }
 
@@ -914,7 +941,7 @@ export class PickingQueueManager {
         }
       }
 
-      if (!session.active) {
+      if (!session.active || token?.cancelled) {
         return null;
       }
 

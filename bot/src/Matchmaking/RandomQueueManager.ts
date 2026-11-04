@@ -1,4 +1,4 @@
-import { Client, TextChannel } from 'discord.js';
+import { Client } from 'discord.js';
 import User from '../models/User';
 import { TeamBalanceResult, QueueProcessingResult } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
@@ -41,7 +41,8 @@ export class RandomQueueManager {
   public async processQueue(
     players: string[],
     queueData: QueueLike,
-    maxGames: number = 10
+    maxGames: number = 10,
+    token?: { cancelled: boolean }
   ): Promise<QueueProcessingResult> {
     try {
       let gamesCreated = 0;
@@ -69,6 +70,10 @@ export class RandomQueueManager {
 
       while (availablePlayers.length >= queueData.maxPlayers && gamesCreated < maxGames) {
         try {
+          if (token?.cancelled) {
+            console.warn(`[RandomQueue] Processing cancelled after ${gamesCreated} game(s)`);
+            break;
+          }
           
           const teamResult = await this.selectBalancedTeams(availablePlayers, queueData, preloaded);
 
@@ -103,12 +108,20 @@ export class RandomQueueManager {
             continue;
           }
 
+          if (token?.cancelled) {
+            console.warn(`[RandomQueue] Processing cancelled before game creation`);
+            break;
+          }
+
           const gameId = await this.gameManager.getNextGameId();
           const selectedMap = await this.selectRandomMap(queueData, [...teamResult.team1, ...teamResult.team2]);
-          
 
+          if (token?.cancelled) {
+            console.warn(`[RandomQueue] Processing cancelled during map selection`);
+            break;
+          }
           
-          await this.gameManager.createGame(
+          const resources = await this.gameManager.createGame(
             gameId,
             queueData,
             teamResult.team1,
@@ -120,91 +133,32 @@ export class RandomQueueManager {
           usedPlayers.push(...Array.from(teamResult.usedPlayers));
           gamesCreated++;
 
-          
-          const guild = this.client.guilds.cache.first();
-          let gameChannel: TextChannel | null = null;
-          if (guild) {
-            const game = await (await import('../models/Game')).default.findOne({ gameId });
-            if (game && game.channels && game.channels.text) {
-              const ch = guild.channels.cache.get(game.channels.text);
-              if (ch && ch.isTextBased() && ch instanceof TextChannel) {
-                gameChannel = ch;
-              }
-            }
+          const gameChannelId = resources?.gameChannel?.id;
+          let warpStarted = true;
+          try {
+            await this.gameManager.initiateGameWarp(gameId);
+          } catch (warpError) {
+            warpStarted = false;
+            console.error(`[RandomQueue] Game ${gameId} created but warp start failed:`, warpError);
+            await this.gameManager.voidGame(gameId, 'Warp could not be started after game creation').catch(() => undefined);
           }
 
-          
-          if (gameChannel) {
-            try {
-              await this.gameManager.updateGameMap(gameId, selectedMap);
-            } catch (mapError) {
-              console.error(`[RandomQueue] Game ${gameId} created but map update failed:`, mapError);
-            }
-            try {
-              await this.gameManager.initiateGameWarp(gameId);
-            } catch (warpError) {
-              console.error(`[RandomQueue] Game ${gameId} created but warp start failed:`, warpError);
-              await this.gameManager.voidGame(gameId, 'Warp could not be started after game creation').catch(() => undefined);
-            }
-          } else {
-            console.warn(`[RandomQueue] No game channel found for game ${gameId}, skipping voting and using default map`);
-            try {
-              await this.gameManager.initiateGameWarp(gameId);
-            } catch (warpError) {
-              console.error(`[RandomQueue] Game ${gameId} created but warp start failed:`, warpError);
-              await this.gameManager.voidGame(gameId, 'Warp could not be started after game creation').catch(() => undefined);
-            }
-          }
-
-          
-          const team1Avg = await this.calculateTeamAverageElo(teamResult.team1, eloById);
-          const team2Avg = await this.calculateTeamAverageElo(teamResult.team2, eloById);
-
-          const embedGameChannel: TextChannel | null = gameChannel;
-          if (embedGameChannel) {
-            const embed = await this.buildGameStartEmbed(
+          // Announcements include image rendering and Discord API calls.
+          // They must not block creating the next game from a large queue.
+          if (warpStarted && gameChannelId) {
+            void this.announceGameStart(
+              gameId,
               teamResult.team1,
               teamResult.team2,
-              team1Avg,
-              team2Avg,
-              'Ongoing',
-              gameId
-            );
-
-            let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
-            try {
-              const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
-              const roster = await fetchGameStartRoster([...teamResult.team1, ...teamResult.team2]);
-              const toTeam = (ids: string[]) => ids.map(id => {
-                const entry = roster.get(id);
-                return { discordId: id, username: entry?.username ?? id, elo: entry?.elo ?? 0, isCaptain: false };
-              });
-              if (roster.size > 0) {
-                const buffer = await generateGameStartImageBuffer(gameId, toTeam(teamResult.team1), toTeam(teamResult.team2), {
-                  mapName: selectedMap,
-                  modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
-                });
-                startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
-              }
-            } catch (imageError) {
-              console.error(`[RandomQueue] Failed to generate game start image for game ${gameId}:`, imageError);
-            }
-
-            if (config.channels.gamesChannel) {
-              await this.workersManager.sendMessage(
-                config.channels.gamesChannel,
-                { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
-                8
-              );
-            }
-
-            if (embedGameChannel) {
-              await this.workersManager.sendMessage(
-                embedGameChannel.id,
-                { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
-                8
-              );
-            }
+              gameChannelId,
+              selectedMap,
+              queueData,
+              eloById,
+            ).catch((announceError) => {
+              console.error(`[RandomQueue] Failed to announce game ${gameId}:`, announceError);
+            });
+          } else if (!gameChannelId) {
+            console.warn(`[RandomQueue] No game channel resource for game ${gameId}; start announcement skipped`);
           }
 
           
@@ -398,6 +352,64 @@ export class RandomQueueManager {
     } catch (error) {
       console.error('[RandomQueue] Error revalidating drafted players, failing closed:', error);
       return [];
+    }
+  }
+
+  private async announceGameStart(
+    gameId: number,
+    team1: string[],
+    team2: string[],
+    gameChannelId: string,
+    selectedMap: string,
+    queueData: QueueLike,
+    eloById: Map<string, number>,
+  ): Promise<void> {
+    try {
+      const team1Avg = await this.calculateTeamAverageElo(team1, eloById);
+      const team2Avg = await this.calculateTeamAverageElo(team2, eloById);
+      const embed = await this.buildGameStartEmbed(
+        team1,
+        team2,
+        team1Avg,
+        team2Avg,
+        'Ongoing',
+        gameId,
+      );
+
+      let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
+      try {
+        const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
+        const roster = await fetchGameStartRoster([...team1, ...team2]);
+        const toTeam = (ids: string[]) => ids.map(id => {
+          const entry = roster.get(id);
+          return { discordId: id, username: entry?.username ?? id, elo: entry?.elo ?? 0, isCaptain: false };
+        });
+        if (roster.size > 0) {
+          const buffer = await generateGameStartImageBuffer(gameId, toTeam(team1), toTeam(team2), {
+            mapName: selectedMap,
+            modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
+          });
+          startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
+        }
+      } catch (imageError) {
+        console.error(`[RandomQueue] Failed to generate game start image for game ${gameId}:`, imageError);
+      }
+
+      if (config.channels.gamesChannel) {
+        await this.workersManager.sendMessage(
+          config.channels.gamesChannel,
+          { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
+          8,
+        );
+      }
+
+      await this.workersManager.sendMessage(
+        gameChannelId,
+        { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
+        8,
+      );
+    } catch (error) {
+      console.error(`[RandomQueue] Error announcing start for game ${gameId}:`, error);
     }
   }
 

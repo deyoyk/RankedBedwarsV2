@@ -196,6 +196,26 @@ describe('GameManager private game lifecycle', () => {
     expect((manager as any).creatingPlayers.size).toBe(0);
   });
 
+  it('rejects a second game when a player is already in an active game', async () => {
+    const manager = makeManager();
+    jest.spyOn(manager as any, 'createGameResources').mockResolvedValue(resources(1));
+    jest.spyOn(manager as any, 'createGameInDatabaseAndUpdateUsers').mockResolvedValue(undefined);
+    jest.spyOn(manager as any, 'movePlayersToVoiceChannels').mockResolvedValue(undefined);
+    jest.spyOn(manager as any, 'getGuild').mockResolvedValue(clientMock.guilds.cache.first());
+
+    await manager.createGame(1, null, ['a', 'b'], ['c', 'd'], 'Quad');
+
+    expect(manager.getActiveGameIdForPlayer('a')).toBe(1);
+    expect(manager.getPlayersInActiveGames(['a', 'z'])).toEqual(new Set(['a']));
+
+    await expect(manager.createGame(2, null, ['a', 'b'], ['c', 'd'], 'Quad'))
+      .rejects.toThrow(/already in game 1/);
+
+    await manager.abortGame(1, 'test cleanup');
+    expect(manager.getActiveGameIdForPlayer('a')).toBeNull();
+    manager.cleanup();
+  });
+
   it('rejects a second game while the same player is being placed', async () => {
     const manager = makeManager();
     (manager as any).reservePlayersForGame(99, ['a']);
@@ -204,6 +224,32 @@ describe('GameManager private game lifecycle', () => {
       .rejects.toThrow('already being placed into another game');
 
     (manager as any).releaseCreatingPlayers(99);
+  });
+
+  it('sends only one warp when concurrent initiation races the IGN lookup', async () => {
+    const manager = makeManager();
+    (manager as any).activeGames.set(1, {
+      ...resources(1),
+      game: {
+        gameId: 1,
+        map: 'Quad',
+        team1: ['a', 'b'],
+        team2: ['c', 'd'],
+        isRanked: false,
+      },
+    });
+    jest.spyOn(manager as any, 'getTeamsIGNs').mockImplementation(async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      return [['A', 'B'], ['C', 'D']];
+    });
+
+    await Promise.all([
+      manager.initiateGameWarp(1),
+      manager.initiateGameWarp(1),
+    ]);
+
+    expect(wsMock.send).toHaveBeenCalledTimes(1);
+    manager.cleanup();
   });
 
   it('ignores duplicate warp requests while one is already pending', async () => {
@@ -329,6 +375,49 @@ describe('GameManager private game lifecycle', () => {
     expect(manager.getActiveGameCount()).toBe(1);
   });
 
+  it('voids a stale pending game that has no active warp', async () => {
+    const manager = makeManager();
+    const startTime = new Date(Date.now() - 6 * 60 * 1000);
+    GameModel.find.mockReturnValue(chain([{ gameId: 77, state: 'pending', startTime }]));
+    const voidGame = jest.spyOn(manager, 'voidGame').mockResolvedValue({} as any);
+
+    const count = await manager.recoverStaleGames();
+
+    expect(count).toBe(1);
+    expect(voidGame).toHaveBeenCalledWith(
+      77,
+      'Recovered stale pending game without an active warp',
+      true,
+    );
+  });
+
+  it('leaves a stale pending game alone while its warp is still active', async () => {
+    const manager = makeManager();
+    const startTime = new Date(Date.now() - 6 * 60 * 1000);
+    GameModel.find.mockReturnValue(chain([{ gameId: 78, state: 'pending', startTime }]));
+    const voidGame = jest.spyOn(manager, 'voidGame').mockResolvedValue({} as any);
+    const timeout = setTimeout(() => {}, 60000);
+    (manager as any).warpRequests.set('78', {
+      gameId: '78',
+      timeout,
+      attempts: 1,
+      team1IGNs: [],
+      team2IGNs: [],
+      map: 'Quad',
+      isRanked: false,
+      timestamp: Date.now(),
+    });
+
+    try {
+      const count = await manager.recoverStaleGames();
+      expect(count).toBe(0);
+      expect(voidGame).not.toHaveBeenCalled();
+    } finally {
+      clearTimeout(timeout);
+      manager.cleanup();
+    }
+  });
+
   it('does not warp games with an unfinished settlement journal', async () => {
     const manager = makeManager();
     GameModel.find.mockResolvedValue([gameDoc(1, 'pending')]);
@@ -381,7 +470,7 @@ describe('GameManager private game lifecycle', () => {
         payload: { reason: 'server crash' },
       }]),
     });
-    GameModel.findOne.mockReturnValue(chain(gameDoc(10, 'scored')));
+    GameModel.findOne.mockReturnValue(chain(gameDoc(10, 'voided')));
     const UserModel = require('../src/models/User').default;
     UserModel.find.mockReturnValue(chain([
       { discordId: 'a', recentGames: [{ gameId: 10, state: 'scored' }] },
@@ -394,11 +483,42 @@ describe('GameManager private game lifecycle', () => {
     const result = await manager.recoverPendingSettlements();
 
     expect(GameModel.updateOne).toHaveBeenCalledWith(
-      { gameId: 10, state: 'scored' },
+      { gameId: 10, state: 'voided' },
       { $set: { state: 'active' } },
     );
     expect(voidGame).toHaveBeenCalledWith(10, 'server crash', true);
     expect(result).toEqual({ recovered: 1, failed: 0 });
+  });
+
+  it('ignores a losing void journal for an already scored game', async () => {
+    const manager = makeManager();
+    SettlementModel.find.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([{
+        gameId: 11,
+        type: 'void',
+        status: 'started',
+        payload: { reason: 'duplicate void request' },
+      }]),
+    });
+    GameModel.findOne.mockReturnValue(chain(gameDoc(11, 'scored')));
+    const UserModel = require('../src/models/User').default;
+    UserModel.find.mockReturnValue(chain([
+      { discordId: 'a', recentGames: [{ gameId: 11, state: 'scored' }] },
+      { discordId: 'b', recentGames: [{ gameId: 11, state: 'scored' }] },
+      { discordId: 'c', recentGames: [{ gameId: 11, state: 'scored' }] },
+      { discordId: 'd', recentGames: [{ gameId: 11, state: 'scored' }] },
+    ]));
+    const voidGame = jest.spyOn(manager, 'voidGame').mockResolvedValue({} as any);
+
+    const result = await manager.recoverPendingSettlements();
+
+    expect(voidGame).not.toHaveBeenCalled();
+    expect(GameModel.updateOne).not.toHaveBeenCalledWith(
+      { gameId: 11, state: 'scored' },
+      { $set: { state: 'active' } },
+    );
+    expect(result).toEqual({ recovered: 0, failed: 0 });
   });
 
   it('finalizes an already-applied settlement and cleans its channels', async () => {

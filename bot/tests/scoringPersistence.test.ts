@@ -338,4 +338,36 @@ describe('retryWarp safety', () => {
       manager.cleanup();
     }
   });
+
+  it('consumes only one retry for duplicate failure events from the same attempt', async () => {
+    const manager = makeManager();
+    (manager as any).WARP_RETRY_DELAY = 10;
+    const warp = activeWarp(manager, { sentAttempt: 1, handledFailureAttempt: 0 });
+
+    try {
+      await (manager as any).handleWarpFailure('1', 'Arena not found');
+      await (manager as any).handleWarpFailure('1', 'Unknown warp failure');
+
+      expect(warp.attempts).toBe(1);
+      expect(wsManagerMock.send).not.toHaveBeenCalled();
+
+      await new Promise(resolve => setTimeout(resolve, 30));
+      expect(wsManagerMock.send).toHaveBeenCalledTimes(1);
+      expect(warp.sentAttempt).toBe(2);
+    } finally {
+      manager.cleanup();
+    }
+  });
+
+  it('does not send a scheduled retry after the game is cleaned up', async () => {
+    const manager = makeManager();
+    (manager as any).WARP_RETRY_DELAY = 20;
+    activeWarp(manager, { sentAttempt: 1, handledFailureAttempt: 0 });
+
+    await (manager as any).handleWarpFailure('1', 'Arena not found');
+    manager.cleanup();
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(wsManagerMock.send).not.toHaveBeenCalled();
+  });
 });

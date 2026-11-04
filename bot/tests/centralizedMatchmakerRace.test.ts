@@ -238,6 +238,82 @@ describe('CentralizedMatchmaker race conditions', () => {
     expect(remaining).toHaveLength(0);
   }, 30000);
 
+  it('keeps the processing lease after a timeout until the real run settles', async () => {
+    const queue = makeQueue('queue-timeout', 4);
+    const players = ['t1', 't2', 't3', 't4'];
+    resetState(players, queue);
+    const matchmaker = makeMatchmaker();
+    (matchmaker as any).RANDOM_PROCESSING_TIMEOUT = 30;
+
+    let releaseRun: (result: any) => void = () => {};
+    let signalStarted: () => void = () => {};
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    const deferred = new Promise<any>(resolve => { releaseRun = resolve; });
+    (matchmaker as any).randomQueueManager = {
+      processQueue: jest.fn(() => {
+        signalStarted();
+        return deferred;
+      }),
+    };
+
+    try {
+      const first = matchmaker.processQueue(queue.channelId);
+      await started;
+      const timedOut = await first;
+      expect(timedOut.success).toBe(false);
+      expect(timedOut.errors?.[0]).toMatch(/Processing timeout/);
+      expect((matchmaker as any).activeRuns.has(queue.channelId)).toBe(true);
+      expect((matchmaker as any).processingStates.get(queue.channelId).isProcessing).toBe(true);
+
+      const second = await matchmaker.processQueue(queue.channelId);
+      expect(second.errors?.[0]).toBe('Queue already being processed');
+      expect((matchmaker as any).randomQueueManager.processQueue).toHaveBeenCalledTimes(1);
+
+      releaseRun({ gamesCreated: 1, usedPlayers: [...players] });
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect((matchmaker as any).activeRuns.has(queue.channelId)).toBe(false);
+      expect((matchmaker as any).processingStates.get(queue.channelId).isProcessing).toBe(false);
+      expect(queuePlayers.get(queue.channelId) || []).toHaveLength(0);
+    } finally {
+      matchmaker.cleanup();
+    }
+  });
+
+  it('does not reset a live run from the queue monitor', async () => {
+    const queue = makeQueue('queue-live', 4);
+    const players = ['l1', 'l2', 'l3', 'l4'];
+    resetState(players, queue);
+    const matchmaker = makeMatchmaker();
+    (matchmaker as any).LOCK_TIMEOUT = 5;
+
+    let releaseRun: (result: any) => void = () => {};
+    let signalStarted: () => void = () => {};
+    const started = new Promise<void>(resolve => { signalStarted = resolve; });
+    const deferred = new Promise<any>(resolve => { releaseRun = resolve; });
+    (matchmaker as any).randomQueueManager = {
+      processQueue: jest.fn(() => {
+        signalStarted();
+        return deferred;
+      }),
+    };
+
+    try {
+      const processing = matchmaker.processQueue(queue.channelId);
+      await started;
+      await new Promise(resolve => setTimeout(resolve, 15));
+      await (matchmaker as any).monitorQueues();
+
+      expect((matchmaker as any).activeRuns.has(queue.channelId)).toBe(true);
+      expect((matchmaker as any).processingStates.get(queue.channelId).isProcessing).toBe(true);
+
+      releaseRun({ gamesCreated: 0, usedPlayers: [] });
+      await processing;
+    } finally {
+      matchmaker.cleanup();
+    }
+  });
+
   it('players who join while validation is running are not lost', async () => {
     const queue = makeQueue('queue-D');
     const players = ['a1', 'a2', 'a3', 'a4'];

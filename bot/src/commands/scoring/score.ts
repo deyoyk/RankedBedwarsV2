@@ -1,5 +1,5 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
-import { GameManager } from '../../Matchmaking/GameManager';
+import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
 import User from '../../models/User';
@@ -97,7 +97,7 @@ export async function score(interaction: Message | ChatInputCommandInteraction, 
       return;
     }
 
-    const gameManager = new GameManager(interaction.client, resolvedWs!);
+    const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
     await gameManager.scoreGame({ gameId, winningTeam, mvps, bedbreaks, reason });
 
     await safeReply(interaction, successEmbed(

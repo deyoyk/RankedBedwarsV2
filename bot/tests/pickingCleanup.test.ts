@@ -52,6 +52,41 @@ describe('PickingQueueManager channel cleanup', () => {
     expect(deleteChannel).toHaveBeenCalledTimes(2);
   });
 
+  it('does not create a game when the session ends during final revalidation', async () => {
+    const manager = makeManager(jest.fn());
+    const session: any = {
+      gameId: 9,
+      captains: ['a', 'b'],
+      remainingPlayers: [],
+      currentPicker: 'a',
+      pickCount: 2,
+      team1: ['a', 'c'],
+      team2: ['b', 'd'],
+      timeout: setTimeout(() => {}, 100000),
+      active: true,
+      pickingResources: resources(),
+    };
+    const createGame = jest.fn().mockResolvedValue({ gameId: 9, gameChannel: { id: 'new-text' } });
+    manager.gameManager = { createGame } as any;
+    manager.activeSessions.set(9, session);
+    jest.spyOn(manager, 'revalidateFinalTeams').mockImplementation(async () => {
+      session.active = false;
+      return { team1: ['a', 'c'], team2: ['b', 'd'] };
+    });
+
+    const result = await manager.completePicking(
+      session,
+      { team1: ['a', 'c'], team2: ['b', 'd'] },
+      resources(),
+      { channelId: 'q', maxPlayers: 4, minElo: 0, maxElo: 9999, bypassRoles: [] },
+      'Aquarius',
+    );
+
+    expect(result.success).toBe(false);
+    expect(createGame).not.toHaveBeenCalled();
+    clearTimeout(session.timeout);
+  });
+
   it('does not finalize a cancelled or timed-out picking session', async () => {
     const manager = makeManager(jest.fn());
     const session = {

@@ -188,9 +188,15 @@ export class GameManager {
   private workersManager: WorkersManager;
   private activeGames: Map<number, GameResources> = new Map();
   private creatingPlayers: Map<string, number> = new Map();
+  private playersInGames: Map<string, number> = new Map();
+  private settlingGames: Set<number> = new Set();
   private cleaningGames: Set<number> = new Set();
+  private cleanupTimers: Map<number, NodeJS.Timeout> = new Map();
   private warpRequests: Map<string, WarpRequestData> = new Map();
+  private warpStarting: Set<string> = new Set();
   private manualWarpRetries: Map<number, { count: number; windowStartedAt: number; lastAt: number }> = new Map();
+  private settlementRecoveryInterval: NodeJS.Timeout | null = null;
+  private settlementRecoveryRunning = false;
   private readonly MAX_CONCURRENT_GAMES = 100;
   private readonly WARP_TIMEOUT = 60000;
   private readonly MAX_WARP_RETRIES = 3;
@@ -254,12 +260,14 @@ export class GameManager {
       if (!guild) throw new Error('Guild not found');
       resources = await this.createGameResources(guild, gameId, selectedMap, [...team1, ...team2], effectiveQueue);
       await this.createGameInDatabaseAndUpdateUsers(resources, effectiveQueue, selectedMap, team1, team2);
+      this.registerPlayersInGame(gameId, [...team1, ...team2]);
       await this.movePlayersToVoiceChannels(guild, team1, team2, resources);
       this.activeGames.set(gameId, resources);
       console.log(`[GameManager] Successfully created game ${gameId}`);
       return resources;
     } catch (error) {
       if (reserved) this.activeGames.delete(gameId);
+      this.releasePlayersInGame(gameId);
       if (resources) {
         await this.cleanupFailedGameCreation(gameId, resources);
       }
@@ -273,9 +281,14 @@ export class GameManager {
   private reservePlayersForGame(gameId: number, playerIds: string[]): void {
     const conflicts: string[] = [];
     for (const playerId of new Set(playerIds)) {
-      const existing = this.creatingPlayers.get(playerId);
-      if (existing !== undefined && existing !== gameId) {
-        conflicts.push(`${playerId} (game ${existing})`);
+      const creating = this.creatingPlayers.get(playerId);
+      if (creating !== undefined && creating !== gameId) {
+        conflicts.push(`${playerId} (being placed in game ${creating})`);
+        continue;
+      }
+      const active = this.playersInGames.get(playerId);
+      if (active !== undefined && active !== gameId) {
+        conflicts.push(`${playerId} (already in game ${active})`);
       }
     }
     if (conflicts.length > 0) {
@@ -290,6 +303,36 @@ export class GameManager {
     for (const [playerId, owner] of this.creatingPlayers) {
       if (owner === gameId) this.creatingPlayers.delete(playerId);
     }
+  }
+
+  private registerPlayersInGame(gameId: number, playerIds: string[]): void {
+    for (const playerId of new Set(playerIds)) {
+      if (!playerId) continue;
+      this.playersInGames.set(playerId, gameId);
+    }
+  }
+
+  private releasePlayersInGame(gameId: number): void {
+    for (const [playerId, owner] of this.playersInGames) {
+      if (owner === gameId) this.playersInGames.delete(playerId);
+    }
+  }
+
+  /**
+   * Process-local fast path for queue admission. The database remains the
+   * source of truth for games created before this process started; recovery
+   * hydrates this registry for exactly that reason.
+   */
+  public getPlayersInActiveGames(playerIds: string[]): Set<string> {
+    const result = new Set<string>();
+    for (const playerId of playerIds) {
+      if (this.playersInGames.has(playerId)) result.add(playerId);
+    }
+    return result;
+  }
+
+  public getActiveGameIdForPlayer(playerId: string): number | null {
+    return this.playersInGames.get(playerId) ?? null;
   }
 
   public async createPrivateGame(options: {
@@ -350,8 +393,14 @@ export class GameManager {
     try {
       const resources = this.activeGames.get(gameId);
       this.activeGames.delete(gameId);
+      this.releasePlayersInGame(gameId);
       this.cleaningGames.add(gameId);
-      this.warpRequests.delete(String(gameId));
+      const scheduledCleanup = this.cleanupTimers.get(gameId);
+      if (scheduledCleanup) {
+        clearTimeout(scheduledCleanup);
+        this.cleanupTimers.delete(gameId);
+      }
+      this.clearWarpRequest(String(gameId));
       this.manualWarpRetries.delete(gameId);
 
       if (resources) {
@@ -445,6 +494,27 @@ export class GameManager {
     payload: Record<string, unknown>,
   ): Promise<void> {
     try {
+      // A stale unfinished journal from an older losing settlement must not
+      // keep the wrong type. The caller has already won the game claim, so
+      // its type is authoritative.
+      const existingQuery = GameSettlement.findOne({ gameId }) as unknown as {
+        select?: (fields: string) => { lean: () => Promise<unknown> };
+      } & Promise<unknown>;
+      const existing = (typeof existingQuery?.select === 'function'
+        ? await existingQuery.select('type status').lean()
+        : await existingQuery) as {
+          type?: string;
+          status?: string;
+        } | null;
+      if (existing && existing.status !== 'completed' && existing.type !== type) {
+        console.warn(`[GameManager] Repairing settlement journal type for game ${gameId}: ${existing.type} -> ${type}`);
+        await GameSettlement.updateOne(
+          { gameId },
+          { $set: { type, status: 'started', payload, startedAt: new Date() } },
+        );
+        return;
+      }
+
       await GameSettlement.updateOne(
         { gameId },
         {
@@ -515,6 +585,7 @@ export class GameManager {
           continue;
         }
         this.activeGames.set(game.gameId, this.resourcesFromGame(game));
+        this.registerPlayersInGame(game.gameId, [...(game.team1 || []), ...(game.team2 || [])]);
         recovered += 1;
 
         if (pendingSettlementIds.has(game.gameId)) {
@@ -555,12 +626,19 @@ export class GameManager {
   }
 
   public async recoverPendingSettlements(): Promise<{ recovered: number; failed: number }> {
+    if (this.settlementRecoveryRunning) {
+      return { recovered: 0, failed: 0 };
+    }
+    this.settlementRecoveryRunning = true;
     let recovered = 0;
     let failed = 0;
     try {
       const settlements = await GameSettlement.find({ status: { $ne: 'completed' } }).lean();
       for (const settlement of settlements) {
         try {
+          if (this.settlingGames.has(settlement.gameId)) {
+            continue;
+          }
           const game = await Game.findOne({ gameId: settlement.gameId });
           if (!game) {
             await this.markSettlementStatus(settlement.gameId, 'completed');
@@ -568,6 +646,18 @@ export class GameManager {
           }
           if (!this.activeGames.has(game.gameId)) {
             this.activeGames.set(game.gameId, this.resourcesFromGame(game));
+          }
+          this.registerPlayersInGame(game.gameId, [...(game.team1 || []), ...(game.team2 || [])]);
+
+          // A journal written by a losing concurrent settlement must never
+          // undo the settlement that actually won.
+          if (settlement.type === 'score' && game.state === GameState.VOIDED) {
+            await this.markSettlementStatus(game.gameId, 'completed');
+            continue;
+          }
+          if (settlement.type === 'void' && game.state === GameState.SCORED) {
+            await this.markSettlementStatus(game.gameId, 'completed');
+            continue;
           }
 
           const pendingPlayers = await this.playersNeedingSettlement(game, settlement.type);
@@ -609,6 +699,8 @@ export class GameManager {
     } catch (error) {
       console.error('[GameManager] Error recovering pending settlements:', error);
       return { recovered, failed };
+    } finally {
+      this.settlementRecoveryRunning = false;
     }
   }
 
@@ -651,6 +743,57 @@ export class GameManager {
     }
   }
 
+  /**
+   * Safety net for games whose warp failed in a way that also made the
+   * immediate void fail. Without this, players stay locked out of queues
+   * until the next process restart.
+   */
+  public async recoverStaleGames(): Promise<number> {
+    let voided = 0;
+    try {
+      const games = await Game.find({
+        state: { $in: [GameState.PENDING, GameState.ACTIVE] },
+      }).select('gameId state startTime').lean() as Array<{
+        gameId: number;
+        state: string;
+        startTime?: Date;
+      }>;
+
+      const stuckPendingMs = 5 * 60 * 1000;
+      const now = Date.now();
+      for (const game of games ?? []) {
+        if (this.settlingGames.has(game.gameId)) continue;
+        const key = String(game.gameId);
+        if (this.warpRequests.has(key) || this.warpStarting.has(key)) continue;
+
+        const age = game.startTime ? now - new Date(game.startTime).getTime() : 0;
+        const stalePending = game.state === GameState.PENDING && age > stuckPendingMs;
+        const staleActive = game.state === GameState.ACTIVE && age > this.ACTIVE_GAME_MAX_AGE;
+        if (!stalePending && !staleActive) continue;
+
+        try {
+          await this.voidGame(
+            game.gameId,
+            stalePending
+              ? 'Recovered stale pending game without an active warp'
+              : 'Recovered stale active game',
+            true,
+          );
+          voided += 1;
+        } catch (error) {
+          console.error(`[GameManager] Could not void stale game ${game.gameId}:`, error);
+        }
+      }
+      if (voided > 0) {
+        console.log(`[GameManager] Stale game watchdog voided ${voided} game(s)`);
+      }
+      return voided;
+    } catch (error) {
+      console.error('[GameManager] Error recovering stale games:', error);
+      return voided;
+    }
+  }
+
   public async resumePendingWarps(): Promise<void> {
     try {
       const pending = await Game.find({ state: GameState.PENDING });
@@ -662,11 +805,7 @@ export class GameManager {
           this.activeGames.set(game.gameId, this.resourcesFromGame(game));
         }
         const key = String(game.gameId);
-        const existingWarp = this.warpRequests.get(key);
-        if (existingWarp) {
-          clearTimeout(existingWarp.timeout);
-          this.warpRequests.delete(key);
-        }
+        this.clearWarpRequest(key);
         try {
           await this.initiateGameWarp(game.gameId);
           console.log(`[GameManager] Resumed pending warp for game ${game.gameId} after reconnect`);
@@ -685,6 +824,23 @@ export class GameManager {
     mvps: string[];
     updatedPlayers: Array<{ discordId: string; elo: number }>
   }> {
+    if (this.settlingGames.has(gameResult.gameId)) {
+      throw new Error(`Game ${gameResult.gameId} is already settled (settlement in progress)`);
+    }
+    this.settlingGames.add(gameResult.gameId);
+    try {
+      return await this.scoreGameInternal(gameResult, recovery);
+    } finally {
+      this.settlingGames.delete(gameResult.gameId);
+    }
+  }
+
+  private async scoreGameInternal(gameResult: GameResult, recovery: boolean = false): Promise<{
+    gameId: number;
+    winningTeam: number;
+    mvps: string[];
+    updatedPlayers: Array<{ discordId: string; elo: number }>
+  }> {
     console.log(`[GameManager] Starting to score game ${gameResult.gameId}`);
     try {
       if (!gameResult.gameId) throw new Error('Invalid game result data - missing gameId');
@@ -694,6 +850,9 @@ export class GameManager {
       }
 
       const context = await this.loadGameContext(gameResult);
+      if (!this.activeGames.has(gameResult.gameId) && context.game.channels?.text) {
+        this.activeGames.set(gameResult.gameId, this.resourcesFromGame(context.game));
+      }
       if (recovery) {
         context.players = context.players.filter(player => !this.playerHasScoredGame(player, gameResult.gameId));
       }
@@ -703,11 +862,18 @@ export class GameManager {
       }
       await this.validateGameForScoring(context.game);
 
-      await this.beginSettlement(gameResult.gameId, 'score', gameResult as unknown as Record<string, unknown>);
-
+      const previousState = context.game.state as GameState;
       const combatEntries = this.buildCombatEntries(context);
 
-      const claimedGame = await this.claimGameForSettling(context.game.gameId, (game) => {
+      const claimedGame = await this.claimGameForSettling(context.game.gameId);
+      try {
+        await this.beginSettlement(gameResult.gameId, 'score', gameResult as unknown as Record<string, unknown>);
+      } catch (error) {
+        await this.releaseFailedClaim(context.game.gameId, previousState);
+        throw error;
+      }
+
+      context.game = await this.applyClaimedSettlement(claimedGame, (game) => {
         game.state = GameState.SCORED;
         game.mvps = context.mvpsIds;
         game.bedbreaks = context.bedbreaksIds;
@@ -718,12 +884,14 @@ export class GameManager {
         game.combat = combatEntries;
         game.endTime = new Date();
       });
-      context.game = claimedGame;
 
       const playerScoreData = await this.processAllPlayers(context);
 
       await this.updatePlayerStats(playerScoreData, context.game);
       await this.markSettlementStatus(gameResult.gameId, 'stats_applied');
+      // Stats are durable now; free the players for new queues even if the
+      // notification/cleanup work below is slow.
+      this.releasePlayersInGame(gameResult.gameId);
 
       await this.sendScoreNotifications(context, playerScoreData);
 
@@ -762,10 +930,25 @@ export class GameManager {
 
   
   public async voidGame(gameId: number, reason: string, recovery: boolean = false): Promise<VoidResult> {
+    if (this.settlingGames.has(gameId)) {
+      throw new Error(`Game ${gameId} is already settled (settlement in progress)`);
+    }
+    this.settlingGames.add(gameId);
+    try {
+      return await this.voidGameInternal(gameId, reason, recovery);
+    } finally {
+      this.settlingGames.delete(gameId);
+    }
+  }
+
+  private async voidGameInternal(gameId: number, reason: string, recovery: boolean = false): Promise<VoidResult> {
     console.log(`[GameManager] Starting to void game ${gameId}: ${reason}`);
     try {
       if (!gameId || !reason) throw new Error('Invalid void parameters');
       const context = await this.loadGameVoidContext(gameId, reason);
+      if (!this.activeGames.has(gameId) && context.game.channels?.text) {
+        this.activeGames.set(gameId, this.resourcesFromGame(context.game));
+      }
       if (recovery) {
         context.players = context.players.filter(player => {
           const entry = (player.recentGames || []).find(game => game.gameId === gameId);
@@ -774,11 +957,18 @@ export class GameManager {
       }
       await this.validateGameForVoiding(context.game);
 
-      await this.beginSettlement(gameId, 'void', { reason });
+      const previousState = context.game.state as GameState;
+      const claimedGame = await this.claimGameForSettling(gameId);
+      try {
+        await this.beginSettlement(gameId, 'void', { reason });
+      } catch (error) {
+        await this.releaseFailedClaim(gameId, previousState);
+        throw error;
+      }
 
       const playerVoidData = await this.processAllPlayersForVoiding(context);
 
-      const claimedGame = await this.claimGameForSettling(gameId, (game) => {
+      context.game = await this.applyClaimedSettlement(claimedGame, (game) => {
         game.state = GameState.VOIDED;
         game.reason = reason;
         game.mvps = [];
@@ -787,10 +977,10 @@ export class GameManager {
         game.bedbreaks = [];
         game.endTime = new Date();
       });
-      context.game = claimedGame;
 
       await this.revertPlayerStats(playerVoidData, gameId);
       await this.markSettlementStatus(gameId, 'stats_applied');
+      this.releasePlayersInGame(gameId);
       await this.updatePlayerRolesForVoid(playerVoidData);
       await this.sendVoidNotifications(context, playerVoidData);
       try {
@@ -858,9 +1048,9 @@ export class GameManager {
   }
 
   public async initiateGameWarp(gameId: number): Promise<void> {
+    const key = String(gameId);
     try {
-      const key = String(gameId);
-      if (this.warpRequests.has(key)) {
+      if (this.warpRequests.has(key) || this.warpStarting.has(key)) {
         console.warn(`[GameManager] Warp already pending for game ${gameId}; duplicate request ignored`);
         return;
       }
@@ -869,20 +1059,31 @@ export class GameManager {
         throw new Error(`Game ${gameId} not found in active games`);
       }
 
+      // Reserve the warp slot before awaiting DB lookups so two concurrent
+      // callers cannot both send a warp_players message.
+      this.warpStarting.add(key);
       const game = resources.game;
       const [team1IGNs, team2IGNs] = await this.getTeamsIGNs(game.team1, game.team2);
+
+      if (!this.activeGames.has(gameId)) {
+        console.warn(`[GameManager] Game ${gameId} disappeared before warp could be sent`);
+        return;
+      }
+
       const expected = game.team1.length + game.team2.length;
       const actual = team1IGNs.length + team2IGNs.length;
       if (actual !== expected) {
         console.warn(`[GameManager] Game ${gameId} warping with ${actual}/${expected} players resolved (some IGNs missing, game will start short-handed)`);
       }
 
-      this.sendWarpRequest(gameId.toString(), game.map, game.isRanked || false, team1IGNs, team2IGNs);
+      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs);
 
       console.log(`[GameManager] Initiated warp request for game ${gameId} with map ${game.map}`);
     } catch (error) {
       console.error(`[GameManager] Error initiating game warp for ${gameId}:`, error);
       throw error;
+    } finally {
+      this.warpStarting.delete(key);
     }
   }
 
@@ -942,26 +1143,46 @@ export class GameManager {
     entry.lastAt = now;
   }
 
+  private clearWarpRequest(key: string): void {
+    const warpData = this.warpRequests.get(key);
+    if (!warpData) return;
+    clearTimeout(warpData.timeout);
+    if (warpData.retryTimer) clearTimeout(warpData.retryTimer);
+    this.warpRequests.delete(key);
+  }
+
+  private sendWarpPayload(key: string, warpData: WarpRequestData): void {
+    this.wsManager.send({
+      type: 'warp_players',
+      game_id: key,
+      map: warpData.map,
+      is_ranked: warpData.isRanked,
+      team1: {
+        players: warpData.team1IGNs
+      },
+      team2: {
+        players: warpData.team2IGNs
+      }
+    });
+  }
+
   private resendWarp(key: string, warpData: WarpRequestData, countAttempt: boolean): void {
     if (countAttempt) warpData.attempts += 1;
+    if (this.warpRequests.get(key) !== warpData) {
+      throw new Error(`Warp for game ${key} is no longer active`);
+    }
+    if (warpData.retryTimer) {
+      clearTimeout(warpData.retryTimer);
+      warpData.retryTimer = undefined;
+    }
     warpData.retrying = true;
     warpData.timestamp = Date.now();
+    warpData.sentAttempt = (warpData.sentAttempt ?? 0) + 1;
     clearTimeout(warpData.timeout);
     warpData.timeout = setTimeout(() => this.handleWarpTimeout(key), this.WARP_TIMEOUT);
 
     try {
-      this.wsManager.send({
-        type: 'warp_players',
-        game_id: key,
-        map: warpData.map,
-        is_ranked: warpData.isRanked,
-        team1: {
-          players: warpData.team1IGNs
-        },
-        team2: {
-          players: warpData.team2IGNs
-        }
-      });
+      this.sendWarpPayload(key, warpData);
       console.log(`[GameManager] Sent warp request for game ${key}${countAttempt ? ' (manual retry)' : ' (plugin retry)'}`);
     } finally {
       warpData.retrying = false;
@@ -1320,6 +1541,8 @@ export class GameManager {
         gameId,
         timeout: setTimeout(() => this.handleWarpTimeout(gameId), this.WARP_TIMEOUT),
         attempts: 0,
+        sentAttempt: 1,
+        handledFailureAttempt: 0,
         team1IGNs,
         team2IGNs,
         map,
@@ -1329,24 +1552,17 @@ export class GameManager {
 
       this.warpRequests.set(gameId, warpData);
 
-
-      this.wsManager.send({
-        type: 'warp_players',
-        game_id: gameId,
-        map,
-        is_ranked: isRanked,
-        team1: {
-          players: team1IGNs
-        },
-        team2: {
-          players: team2IGNs
-        }
-      });
-
-      console.log(`[GameManager] Sent warp request for game ${gameId}`);
+      try {
+        this.sendWarpPayload(gameId, warpData);
+        console.log(`[GameManager] Sent warp request for game ${gameId}`);
+      } catch (error) {
+        this.clearWarpRequest(gameId);
+        throw error;
+      }
 
     } catch (error) {
       console.error(`[GameManager] Error sending warp request for game ${gameId}:`, error);
+      throw error;
     }
   }
 
@@ -1360,11 +1576,7 @@ export class GameManager {
       }
       console.log(`[GameManager] Warp successful for game ${gameId}`);
 
-      const warpData = this.warpRequests.get(gameId as string);
-      if (warpData) {
-        clearTimeout(warpData.timeout);
-        this.warpRequests.delete(gameId as string);
-      }
+      this.clearWarpRequest(String(gameId));
       this.manualWarpRetries.delete(Number(gameId));
 
       const game = await Game.findOne({ gameId: Number(gameId) });
@@ -1422,6 +1634,16 @@ export class GameManager {
       const warpData = this.warpRequests.get(gameId);
       if (!warpData) return;
 
+      // The plugin can emit more than one failure event for a single warp
+      // attempt (for example arena-not-found followed by a generic failure).
+      // Only the first failure for an attempt may consume a retry.
+      const attempt = warpData.sentAttempt ?? 1;
+      if (warpData.handledFailureAttempt === attempt) {
+        console.log(`[GameManager] Duplicate warp failure for game ${gameId} attempt ${attempt}, ignoring`);
+        return;
+      }
+      warpData.handledFailureAttempt = attempt;
+
       if (warpData.retrying) {
         console.log(`[GameManager] Warp retry already in progress for game ${gameId}, ignoring duplicate failure`);
         return;
@@ -1433,30 +1655,29 @@ export class GameManager {
 
         warpData.attempts++;
         warpData.retrying = true;
-        warpData.timeout = setTimeout(() => this.handleWarpTimeout(gameId), this.WARP_TIMEOUT);
+        warpData.timeout = setTimeout(
+          () => this.handleWarpTimeout(gameId),
+          this.WARP_RETRY_DELAY + this.WARP_TIMEOUT,
+        );
         console.log(`[GameManager] Retrying warp for game ${gameId} (attempt ${warpData.attempts})`);
 
-        setTimeout(() => {
-          warpData.retrying = false;
-          this.wsManager.send({
-            type: 'warp_players',
-            game_id: gameId,
-            map: warpData.map,
-            is_ranked: warpData.isRanked,
-            team1: {
-              players: warpData.team1IGNs
-            },
-            team2: {
-              players: warpData.team2IGNs
-            }
-          });
-          console.log(`[GameManager] Sent warp request for game ${gameId} (retry)`);
+        warpData.retryTimer = setTimeout(() => {
+          warpData.retryTimer = undefined;
+          if (this.warpRequests.get(gameId) !== warpData) return;
+          try {
+            this.resendWarp(gameId, warpData, false);
+            console.log(`[GameManager] Sent warp request for game ${gameId} (retry)`);
+          } catch (error) {
+            console.error(`[GameManager] Failed to send warp retry for game ${gameId}:`, error);
+            void this.handleWarpFailure(gameId, 'Retry send failed');
+          }
         }, this.WARP_RETRY_DELAY);
+        warpData.retryTimer.unref?.();
 
       } else {
 
         console.log(`[GameManager] Max warp retries reached for game ${gameId}, voiding game`);
-        this.warpRequests.delete(gameId);
+        this.clearWarpRequest(gameId);
         this.manualWarpRetries.delete(parseInt(gameId, 10));
         await this.voidGame(parseInt(gameId), `Warp failed: ${reason}`);
       }
@@ -1495,15 +1716,19 @@ export class GameManager {
   private async cleanupGame(gameId: number): Promise<void> {
     try {
       const resources = this.activeGames.get(gameId);
-      if (!resources) return;
-
       this.activeGames.delete(gameId);
-      this.cleaningGames.add(gameId);
-
-      this.warpRequests.delete(gameId.toString());
+      this.releasePlayersInGame(gameId);
+      this.clearWarpRequest(String(gameId));
       this.manualWarpRetries.delete(gameId);
 
-      setTimeout(async () => {
+      if (!resources) return;
+      if (this.cleaningGames.has(gameId)) {
+        console.log(`[GameManager] Channel cleanup already scheduled for game ${gameId}`);
+        return;
+      }
+
+      this.cleaningGames.add(gameId);
+      const timer = setTimeout(async () => {
         try {
           const deletions: Array<Promise<unknown>> = [];
           if (resources.gameChannel) {
@@ -1523,13 +1748,17 @@ export class GameManager {
           console.error(`[GameManager] Error cleaning up channels for game ${gameId}:`, error);
         } finally {
           this.cleaningGames.delete(gameId);
+          this.cleanupTimers.delete(gameId);
         }
       }, 30000);
+      timer.unref?.();
+      this.cleanupTimers.set(gameId, timer);
 
       console.log(`[GameManager] Cleaned up game ${gameId}`);
 
     } catch (error) {
       console.error(`[GameManager] Error cleaning up game ${gameId}:`, error);
+      this.cleaningGames.delete(gameId);
     }
   }
 
@@ -1616,14 +1845,27 @@ export class GameManager {
 
   public cleanup(): void {
     try {
-
-      for (const warpData of this.warpRequests.values()) {
-        clearTimeout(warpData.timeout);
+      for (const [key] of this.warpRequests) {
+        this.clearWarpRequest(key);
       }
       this.warpRequests.clear();
       this.manualWarpRetries.clear();
 
-      
+      for (const timer of this.cleanupTimers.values()) {
+        clearTimeout(timer);
+      }
+      this.cleanupTimers.clear();
+      this.cleaningGames.clear();
+      this.activeGames.clear();
+      this.creatingPlayers.clear();
+      this.playersInGames.clear();
+      this.settlingGames.clear();
+      this.warpStarting.clear();
+
+      if (this.settlementRecoveryInterval) {
+        clearInterval(this.settlementRecoveryInterval);
+        this.settlementRecoveryInterval = null;
+      }
 
       console.log('[GameManager] Cleanup completed');
     } catch (error) {
@@ -1631,7 +1873,24 @@ export class GameManager {
     }
   }
 
-  private async loadGameWithPlayers(gameId: number) {
+  /**
+   * Periodically finishes settlements that were interrupted by a transient
+   * database/Discord failure without requiring a process restart.
+   */
+  public startSettlementRecoveryLoop(intervalMs: number = 120000): void {
+    if (this.settlementRecoveryInterval) return;
+    this.settlementRecoveryInterval = setInterval(() => {
+      void this.recoverPendingSettlements()
+        .then(() => this.recoverStaleGames())
+        .catch((error) => {
+          console.error('[GameManager] Periodic settlement recovery failed:', error);
+        });
+    }, intervalMs);
+    this.settlementRecoveryInterval.unref?.();
+    console.log(`[GameManager] Settlement recovery loop started (every ${Math.round(intervalMs / 1000)}s)`);
+  }
+
+  private async loadGameWithPlayers(gameId: number, allowMissingPlayers: boolean = false) {
     const game = await Game.findOne({ gameId });
     if (!game) {
       throw new Error(`Game ${gameId} not found`);
@@ -1640,8 +1899,13 @@ export class GameManager {
     const allPlayerIds = [...game.team1, ...game.team2];
     const players = await User.find({ discordId: { $in: allPlayerIds } });
 
-    if (players.length !== allPlayerIds.length) {
+    if (!allowMissingPlayers && players.length !== allPlayerIds.length) {
       throw new Error('Some players not found in database');
+    }
+    if (players.length !== allPlayerIds.length) {
+      const found = new Set(players.map(player => player.discordId));
+      const missing = allPlayerIds.filter(id => !found.has(id));
+      console.warn(`[GameManager] Game ${gameId} settlement continuing without missing user(s): ${missing.join(', ')}`);
     }
 
     return { game, players };
@@ -1649,7 +1913,9 @@ export class GameManager {
 
   private async loadGameContext(gameResult: GameResult): Promise<GameScoreContext> {
     try {
-      const { game, players } = await this.loadGameWithPlayers(gameResult.gameId);
+      // A deleted account must not strand an otherwise finished game. The
+      // remaining players still receive their result.
+      const { game, players } = await this.loadGameWithPlayers(gameResult.gameId, true);
 
 
       const eloRanks = await getCachedEloRanks();
@@ -1744,9 +2010,10 @@ export class GameManager {
    * Atomically claims a game for scoring/voiding so that concurrent callers
    * can never settle the same game twice. The transition itself is performed
    * with a conditional findOneAndUpdate; exactly one caller wins, the rest get
-   * an error. Returns the claimed (pre-transition) game document.
+   * an error. The game is left in `scoring` until the settlement journal is
+   * written, then the caller applies the final state.
    */
-  private async claimGameForSettling(gameId: number, mutate: (game: IGame) => void): Promise<IGame> {
+  private async claimGameForSettling(gameId: number): Promise<IGame> {
     const claimed = await Game.findOneAndUpdate(
       { gameId, state: { $in: [GameState.PENDING, GameState.ACTIVE] } },
       { $set: { endTime: new Date(), state: GameState.SCORING } },
@@ -1755,9 +2022,24 @@ export class GameManager {
     if (!claimed) {
       throw new Error(`Game ${gameId} is already settled (scored or voided)`);
     }
-    mutate(claimed);
-    await claimed.save();
     return claimed;
+  }
+
+  private async applyClaimedSettlement(game: IGame, mutate: (game: IGame) => void): Promise<IGame> {
+    mutate(game);
+    await game.save();
+    return game;
+  }
+
+  private async releaseFailedClaim(gameId: number, previousState: GameState): Promise<void> {
+    try {
+      await Game.updateOne(
+        { gameId, state: GameState.SCORING },
+        { $set: { state: previousState === GameState.ACTIVE ? GameState.ACTIVE : GameState.PENDING } },
+      );
+    } catch (error) {
+      console.error(`[GameManager] Could not release failed settlement claim for game ${gameId}:`, error);
+    }
   }
 
   private buildCombatEntries(context: GameScoreContext): ICombatEntry[] {
@@ -2457,7 +2739,10 @@ export class GameManager {
   
   private async loadGameVoidContext(gameId: number, reason: string): Promise<GameVoidContext> {
     try {
-      const { game, players } = await this.loadGameWithPlayers(gameId);
+      // A deleted/unregistered account must never make an active game
+      // impossible to void. Existing players are reverted; missing ones are
+      // skipped.
+      const { game, players } = await this.loadGameWithPlayers(gameId, true);
 
       return {
         game,
@@ -2989,23 +3274,6 @@ export class GameManager {
           5 
         ).catch(() => { });
       }
-
-      setTimeout(async () => {
-        try {
-          if (game.channels?.text) {
-            await this.workersManager.deleteChannel(game.channels.text, 2);
-            console.log(`[GameManager] Deleted text channel for game ${gameId}`);
-          }
-
-          const pickingId = game.channels.picking;
-          if (pickingId) {
-            await this.workersManager.deleteChannel(pickingId, 2);
-            console.log(`[GameManager] Deleted picking channel for game ${gameId}`);
-          }
-        } catch (error) {
-          console.error(`[GameManager] Error cleaning up channels for game ${gameId}:`, error);
-        }
-      }, 30000);
     } catch (error) {
       console.error(`[GameManager] Error scheduling game channel cleanup for game ${gameId}:`, error);
     }

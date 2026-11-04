@@ -1,6 +1,6 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import Game from '../../models/Game';
-import { GameManager } from '../../Matchmaking/GameManager';
+import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -39,7 +39,7 @@ export async function forcevoid(interaction: Message | ChatInputCommandInteracti
       return;
     }
     
-    const gameManager = new GameManager(interaction.client, resolvedWs!);
+    const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
     await gameManager.voidGame(game.gameId, reason);
     
     if (interaction instanceof ChatInputCommandInteraction) {

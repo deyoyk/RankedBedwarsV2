@@ -25,8 +25,11 @@ export interface GameResources {
 export interface WarpRequestData {
   gameId: string;
   timeout: NodeJS.Timeout;
+  retryTimer?: NodeJS.Timeout;
   attempts: number;
   retrying?: boolean;
+  sentAttempt?: number;
+  handledFailureAttempt?: number;
   team1IGNs: string[];
   team2IGNs: string[];
   map: string;

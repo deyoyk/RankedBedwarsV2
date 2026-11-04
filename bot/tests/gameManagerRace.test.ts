@@ -217,6 +217,46 @@ describe('GameManager race conditions', () => {
     }
   });
 
+  it('journals only the settlement type that actually won the claim', async () => {
+    const gameDoc = makeGameDoc();
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    const SettlementModel = require('../src/models/GameSettlement').default as { updateOne: jest.Mock };
+    const manager = makeManager();
+
+    const results = await settleWithDelay([
+      manager.scoreGame({ gameId: 1, winningTeam: 1, mvps: ['A'] }),
+      manager.voidGame(1, 'voided instead'),
+    ]);
+
+    expect(results.filter(r => r.ok)).toHaveLength(1);
+    const journalWrites = SettlementModel.updateOne.mock.calls
+      .map(call => call[1] as { $setOnInsert?: { type: string } })
+      .filter(update => update.$setOnInsert);
+    expect(journalWrites).toHaveLength(1);
+    const scoreWon = results[0].ok;
+    expect(journalWrites[0].$setOnInsert!.type).toBe(scoreWon ? 'score' : 'void');
+  });
+
+  it('repairs a stale journal type when the winning settlement is a score', async () => {
+    const gameDoc = makeGameDoc();
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    const SettlementModel = require('../src/models/GameSettlement').default as {
+      findOne: jest.Mock;
+      updateOne: jest.Mock;
+    };
+    SettlementModel.findOne.mockResolvedValueOnce({ type: 'void', status: 'started' });
+    const manager = makeManager();
+
+    await manager.scoreGame({ gameId: 1, winningTeam: 1, mvps: ['A'] });
+
+    expect(SettlementModel.updateOne).toHaveBeenCalledWith(
+      { gameId: 1 },
+      expect.objectContaining({ $set: expect.objectContaining({ type: 'score', status: 'started' }) }),
+    );
+  });
+
   it('scoring a game that is already settled in the DB is rejected', async () => {
     const gameDoc = makeGameDoc('scored');
     const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
@@ -226,6 +266,32 @@ describe('GameManager race conditions', () => {
 
     await expect(manager.scoreGame({ gameId: 1, winningTeam: 1, mvps: ['A'] }))
       .rejects.toThrow(/already settled/);
+  });
+
+  it('scores the remaining players when one user no longer exists in the database', async () => {
+    const players = [makeUser('a'), makeUser('b'), makeUser('c')];
+    const gameDoc = makeGameDoc();
+    setupGame(players, gameDoc);
+    const manager = makeManager();
+
+    const result = await manager.scoreGame({ gameId: 1, winningTeam: 1, mvps: ['A'] });
+
+    expect(result.updatedPlayers.map(p => p.discordId).sort()).toEqual(['a', 'b', 'c']);
+    expect(gameDoc.state).toBe('scored');
+  });
+
+  it('voids a game even when a player no longer exists in the database', async () => {
+    const players = [makeUser('a'), makeUser('b'), makeUser('c')];
+    const gameDoc = makeGameDoc('pending');
+    setupGame(players, gameDoc);
+    const manager = makeManager();
+
+    const result = await manager.voidGame(1, 'player account removed');
+
+    expect(result.gameId).toBe(1);
+    expect(result.revertedPlayers.map(p => p.discordId).sort()).toEqual(['a', 'b', 'c']);
+    expect(gameDoc.state).toBe('voided');
+    expect(mockSave).toHaveBeenCalled();
   });
 
   it('voiding a never-scored game still decrements games exactly once', async () => {

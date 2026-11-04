@@ -1,6 +1,6 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import Game from '../../models/Game';
-import { GameManager } from '../../Matchmaking/GameManager';
+import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -48,7 +48,7 @@ export async function voidGame(interaction: Message | ChatInputCommandInteractio
       return;
     }
     
-    const gameManager = new GameManager(interaction.client, resolvedWs!);
+    const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
     await gameManager.voidGame(gameId, reason);
     
     await safeReply(interaction, successEmbed(`Game ${gameId} has been voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game channels will be deleted in 30 seconds.`, 'Game Voided'));

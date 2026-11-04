@@ -127,6 +127,7 @@ client.once('ready', async () => {
 
     await gameManager.recoverActiveGames();
     await gameManager.recoverPendingSettlements();
+    gameManager.startSettlementRecoveryLoop();
 
     const queueListener = new (await import('./handlers/QueueListener')).QueueListener(client, wsManager, gameManager);
     await queueListener.initialize();

@@ -154,6 +154,66 @@ describe('QueueListener admission guards', () => {
     await listener.handleVoiceStateUpdate(voiceState(null), voiceState(Q1));
     expect(queuePlayers.get(Q1) || []).not.toContain(UID);
   });
+
+  it('removes the whole party even when the leaver changed party id', async () => {
+    const partyId = 'P1';
+    UserModel.findOne.mockImplementation(() => chainable({
+      discordId: UID, ign: 'Steve', partyId: 'P2', elo: 1000, isBanned: false, isFrozen: false,
+    }));
+    PartyModel.updateOne = jest.fn().mockResolvedValue({});
+    listener.queueStates.set(Q1, {
+      players: [UID, 'b'],
+      parties: new Map([[partyId, [UID, 'b']]]),
+      lastUpdate: Date.now(),
+      processing: false,
+    });
+    queuePlayers.set(Q1, [UID, 'b']);
+
+    await listener.handleQueueLeave(voiceState(Q1));
+
+    const state = listener.queueStates.get(Q1);
+    expect(state.players).toEqual([]);
+    expect(state.parties.size).toBe(0);
+    expect(queuePlayers.get(Q1)).toEqual([]);
+  });
+
+  it('re-adds a solo member present in the voice channel but missing from memory', async () => {
+    QueueModel.findOne.mockImplementation((filter: any) => chainable(queueDoc(filter.channelId)));
+    UserModel.find.mockImplementation(() => chainable([
+      { discordId: UID, ign: 'Steve', partyId: null, isBanned: false, isFrozen: false },
+    ]));
+    GameModel.find.mockResolvedValue([]);
+
+    const voiceChannel = {
+      id: Q1,
+      isVoiceBased: () => true,
+      members: new Map([[UID, {}]]),
+    };
+    const guild = {
+      channels: {
+        cache: new Map([[Q1, voiceChannel]]),
+        fetch: jest.fn().mockResolvedValue(null),
+      },
+    };
+    const client = { guilds: { cache: { first: () => guild } } };
+    const { QueueListener } = await import('../src/handlers/QueueListener');
+    const custom: any = new QueueListener(client as any, wsManagerMock, {} as any);
+    custom.queueStates.set(Q1, {
+      players: [],
+      parties: new Map(),
+      lastUpdate: Date.now(),
+      processing: false,
+    });
+
+    try {
+      await custom.validateQueueState(Q1, queueDoc(Q1));
+      const state = custom.queueStates.get(Q1);
+      expect(state.players).toContain(UID);
+      expect(queuePlayers.get(Q1)).toContain(UID);
+    } finally {
+      custom.cleanup();
+    }
+  });
 });
 
 describe('CentralizedMatchmaker draft guards', () => {

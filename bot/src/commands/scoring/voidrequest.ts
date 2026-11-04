@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
 import Game, { type IGame } from '../../models/Game';
 import configuration from '../../config/config';
-import { GameManager } from '../../Matchmaking/GameManager';
+import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed, claimVoteRequest, releaseVoteRequest } from '../../utils/voteRequest';
@@ -156,7 +156,7 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
         if (!resolvedWs) {
           resultEmbed.setDescription(`❌ Void request failed due to WebSocket manager not being available.`);
         } else {
-          const gameManager = new GameManager(message.client, resolvedWs!);
+          const gameManager = getSharedGameManager(message.client, resolvedWs!);
           await gameManager.voidGame(parseInt(data.gameId), data.reason);
           resultEmbed.setDescription(`✅ Void approved and applied to Game ID: ${data.gameId}.`);
         }
