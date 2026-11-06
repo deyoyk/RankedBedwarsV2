@@ -82,6 +82,30 @@ describe('QueueListener restart recovery', () => {
     listener.cleanup();
   });
 
+  it('leaves queues empty when the Minecraft link is offline during recovery', async () => {
+    QueueModel.find.mockReturnValue(chain([
+      { channelId: 'q1', maxPlayers: 8, minElo: 0, maxElo: 9999, isActive: true },
+    ]));
+    const voiceChannel = {
+      id: 'q1',
+      isVoiceBased: () => true,
+      members: new Map([['solo', {}]]),
+    };
+    const guild = { channels: { cache: new Map([['q1', voiceChannel]]), fetch: jest.fn() } };
+    const client = { guilds: { cache: { first: () => guild } } };
+
+    const listener = new QueueListener(
+      client as any,
+      { checkPlayerOnline: jest.fn(), isConnected: () => false } as any,
+      {} as any
+    ) as any;
+    await listener.initialize();
+
+    expect(listener.queueStates.get('q1').players).toEqual([]);
+    expect(queuePlayers.get('q1')).toEqual([]);
+    listener.cleanup();
+  });
+
   it('updates queue voice channel status only when the count changes', async () => {
     QueueModel.find.mockReturnValue(chain([{ channelId: 'q1', maxPlayers: 8 }]));
     queuePlayers.set('q1', ['a', 'b', 'c']);

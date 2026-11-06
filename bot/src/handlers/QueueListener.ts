@@ -83,6 +83,7 @@ export class QueueListener {
   private readonly playerIgnMisses = new Set<string>();
   private initialized = false;
   private shuttingDown = false;
+  private linkOfflineNotified = false;
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
   private readonly QUEUE_STATUS_INTERVAL = 3000;
@@ -148,17 +149,22 @@ export class QueueListener {
 
     for (const queue of queues) {
       const state = this.queueStates.get(queue.channelId);
+      const linkOnline = this.isMinecraftLinkOnline();
       const queuedPlayers = [...new Set(queuePlayers.get(queue.channelId) ?? state?.players ?? [])];
-      await this.ensurePlayerIgns(queuedPlayers);
+      if (linkOnline) {
+        await this.ensurePlayerIgns(queuedPlayers);
+      }
       const verified = state?.verified ?? new Set<string>();
-      for (const id of queuedPlayers) {
-        const ign = this.playerIgnById.get(id);
-        if (ign && PresenceService.evaluate(ign) === 'online') {
-          verified.add(id);
+      if (linkOnline) {
+        for (const id of queuedPlayers) {
+          const ign = this.playerIgnById.get(id);
+          if (ign && PresenceService.evaluate(ign) === 'online') {
+            verified.add(id);
+          }
         }
       }
-      const current = queuedPlayers.filter(id => verified.has(id)).length;
-      const parties = state
+      const current = linkOnline ? queuedPlayers.filter(id => verified.has(id)).length : 0;
+      const parties = linkOnline && state
         ? [...state.parties.values()].filter(members => members.some(id => verified.has(id))).length
         : 0;
       const partyLabel = `${parties} ${parties === 1 ? 'party' : 'parties'}`;
@@ -195,6 +201,21 @@ export class QueueListener {
       const guild = this.client.guilds.cache.first();
       if (!guild) {
         console.warn('[QueueListener] No guild available during queue recovery');
+        return;
+      }
+
+      if (!this.isMinecraftLinkOnline()) {
+        for (const queue of queues) {
+          this.queueStates.set(queue.channelId, {
+            players: [],
+            parties: new Map(),
+            lastUpdate: Date.now(),
+            processing: false,
+            verified: new Set(),
+          });
+          queuePlayers.set(queue.channelId, []);
+        }
+        console.warn(`[QueueListener] Queue recovery skipped: Minecraft link is offline (${queues.length} queue(s) left empty)`);
         return;
       }
 
@@ -347,11 +368,7 @@ export class QueueListener {
   }
 
   private async sweepUnknownPresence(): Promise<void> {
-    if (!PresenceService.isConnected()) return;
-    const wsConnected = typeof this.wsManager.isConnected === 'function'
-      ? this.wsManager.isConnected()
-      : true;
-    if (!wsConnected) {
+    if (!this.isMinecraftLinkOnline()) {
       console.log('[QueueListener] Presence sweep skipped: Minecraft link is offline');
       return;
     }
@@ -409,6 +426,7 @@ export class QueueListener {
 
   private async checkAllQueues(): Promise<void> {
     try {
+      if (this.pauseQueueWorkIfLinkOffline('Queue monitor')) return;
       const queues = await resolveQuery<QueueLike[]>(
         Queue.find({ isActive: true }),
         'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
@@ -432,6 +450,7 @@ export class QueueListener {
   }
 
   private async validateQueueStateUnlocked(queueId: string, preloadedQueue?: QueueLike): Promise<void> {
+    if (this.pauseQueueWorkIfLinkOffline(`Queue check ${queueId}`)) return;
     try {
       let queue: QueueLike | null = preloadedQueue ?? null;
       if (!queue) {
@@ -946,6 +965,22 @@ export class QueueListener {
     return exists;
   }
 
+  private isMinecraftLinkOnline(): boolean {
+    return typeof this.wsManager.isConnected === 'function' ? this.wsManager.isConnected() : true;
+  }
+
+  private pauseQueueWorkIfLinkOffline(context: string): boolean {
+    if (this.isMinecraftLinkOnline()) {
+      this.linkOfflineNotified = false;
+      return false;
+    }
+    if (!this.linkOfflineNotified) {
+      console.warn(`[QueueListener] ${context}: Minecraft link is offline, pausing queue checks and processing`);
+      this.linkOfflineNotified = true;
+    }
+    return true;
+  }
+
   private queueLabel(state: VoiceState): string {
     const name = state.channel?.name;
     return name ? `${name} (${state.channelId})` : `${state.channelId}`;
@@ -1057,10 +1092,7 @@ export class QueueListener {
 
       let presenceVerified = presence === 'online';
       if (presence === 'unknown') {
-        const wsConnected = typeof this.wsManager.isConnected === 'function'
-          ? this.wsManager.isConnected()
-          : true;
-        if (!PresenceService.isConnected() || !wsConnected) {
+        if (!this.isMinecraftLinkOnline()) {
           console.log(`[QueueListener] Join rejected for ${user.ign}: cannot verify presence while the Minecraft link is offline`);
           await this.moveToWaiting(state, 'Could not verify your Minecraft presence because the server link is offline. Please try again shortly.');
           return;
@@ -1386,6 +1418,7 @@ export class QueueListener {
 
   private async scheduleQueueProcessing(queueId: string): Promise<void> {
     try {
+      if (this.pauseQueueWorkIfLinkOffline(`Processing ${queueId}`)) return;
 
       this.cancelQueueProcessing(queueId);
 

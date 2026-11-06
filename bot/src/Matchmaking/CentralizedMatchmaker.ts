@@ -350,6 +350,11 @@ export class CentralizedMatchmaker {
   }
 
   public async processQueue(queueId: string): Promise<MatchmakingResult> {
+    const linkOnline = typeof this.wsManager.isConnected === 'function' ? this.wsManager.isConnected() : true;
+    if (!linkOnline) {
+      console.warn(`[CentralizedMatchmaker] Queue ${queueId}: Minecraft link is offline, skipping processing`);
+      return { success: false, gamesCreated: 0, errors: ['Minecraft link offline'] };
+    }
     const startTime = Date.now();
     const state = this.getOrCreateProcessingState(queueId);
     const metrics = this.getOrCreateMetrics(queueId);
