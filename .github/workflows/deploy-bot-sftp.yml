@@ -9,9 +9,9 @@ on:
         default: ''
         type: string
       remote_dir:
-        description: 'Path inside the SFTP root (use / for Pterodactyl; their SFTP is already chrooted to /home/container)'
+        description: 'Remote directory (default /home/container; chrooted SFTP is mapped automatically)'
         required: true
-        default: '/'
+        default: '/home/container'
         type: string
       port:
         description: 'SFTP port (ignored when SFTP_HOST already contains a port)'
@@ -163,6 +163,21 @@ jobs:
           sftp = paramiko.SFTPClient.from_transport(transport)
           sftp.get_channel().settimeout(60)
           try:
+              def normalize_remote(requested):
+                  value = "/" + requested.strip("/") if requested.strip("/") else "/"
+                  sftp_home = sftp.normalize(".")
+                  root_names = {entry.filename for entry in sftp.listdir_attr("/")}
+                  markers = {".env", "package.json", "pterodactyl-start.sh", "src", "dist"}
+                  chrooted = sftp_home in ("/", ".") or bool(root_names & markers)
+                  if chrooted and (value == "/home/container" or value.startswith("/home/container/")):
+                      mapped = value[len("/home/container"):] or "/"
+                      print(f"SFTP root is chrooted; mapping {value} -> {mapped}", flush=True)
+                      return mapped
+                  return value
+
+              remote_dir = normalize_remote(remote_dir)
+              print(f"SFTP home: {sftp.normalize('.')}; deploying to: {remote_dir}", flush=True)
+
               def ensure_dir(path):
                   current = ""
                   for part in path.strip("/").split("/"):
