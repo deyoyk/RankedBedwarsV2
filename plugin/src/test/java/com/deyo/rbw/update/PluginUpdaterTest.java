@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -289,20 +290,21 @@ public class PluginUpdaterTest {
         PluginUpdater updater = updater(Instant.parse("2020-01-01T00:00:00Z"));
         assertEquals(PluginUpdater.Status.STAGED, updater.checkForUpdates().status);
 
+        if (!isWindows()) {
+            // checkForUpdates already replaced the jar immediately on Linux.
+            assertArrayEquals(newJar, Files.readAllBytes(currentJar));
+            assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));
+            assertTrue(Files.exists(dataDir.resolve("updates/last-update.json")));
+            return;
+        }
+
         AtomicReference<List<String>> command = new AtomicReference<>();
         updater.setProcessStarter((cmd, log) -> {
             command.set(cmd);
             return mock(Process.class);
         });
 
-        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
         assertTrue(updater.applyStagedUpdate());
-        if (!windows) {
-            assertArrayEquals(newJar, Files.readAllBytes(currentJar));
-            assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));
-            assertTrue(Files.exists(dataDir.resolve("updates/last-update.json")));
-            return;
-        }
         assertNotNull(command.get());
         assertFalse(command.get().isEmpty());
         assertTrue(Files.exists(dataDir.resolve("updates/pending-update.json")));
@@ -319,6 +321,7 @@ public class PluginUpdaterTest {
 
     @Test
     public void generatedScriptReplacesJarAndCleansPendingState() throws Exception {
+        Assumptions.assumeTrue(isWindows(), "shutdown script is only used when the jar cannot be replaced directly");
         releaseWith("v6", newJar, sha256(newJar), "2026-01-01T00:00:00Z");
         PluginUpdater updater = updater(Instant.parse("2020-01-01T00:00:00Z"));
         assertEquals(PluginUpdater.Status.STAGED, updater.checkForUpdates().status);
@@ -327,25 +330,22 @@ public class PluginUpdaterTest {
 
         assertTrue(updater.applyStagedUpdate());
 
-        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
-        if (windows) {
-            Path script = Files.list(dataDir.resolve("updates"))
-                    .filter(path -> path.getFileName().toString().startsWith("apply-update-"))
-                    .findFirst()
-                    .orElse(null);
-            assertNotNull(script);
+        Path script = Files.list(dataDir.resolve("updates"))
+                .filter(path -> path.getFileName().toString().startsWith("apply-update-"))
+                .findFirst()
+                .orElse(null);
+        assertNotNull(script);
 
-            ProcessBuilder builder = new ProcessBuilder(
-                    "powershell.exe",
-                    "-NoProfile",
-                    "-ExecutionPolicy", "Bypass",
-                    "-File", script.toString()
-            );
-            builder.redirectErrorStream(true);
-            Process process = builder.start();
-            assertTrue(process.waitFor(60, TimeUnit.SECONDS), "update script did not finish");
-            assertEquals(0, process.exitValue());
-        }
+        ProcessBuilder builder = new ProcessBuilder(
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", script.toString()
+        );
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        assertTrue(process.waitFor(60, TimeUnit.SECONDS), "update script did not finish");
+        assertEquals(0, process.exitValue());
 
         assertArrayEquals(newJar, Files.readAllBytes(currentJar));
         assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));
