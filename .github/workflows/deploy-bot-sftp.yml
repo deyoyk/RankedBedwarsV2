@@ -14,7 +14,7 @@ on:
         default: '/home/container'
         type: string
       port:
-        description: 'SSH/SFTP port'
+        description: 'SFTP port (ignored when SFTP_HOST already contains a port)'
         required: true
         default: '22'
         type: string
@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Upload and extract bot zip
+    name: Upload and extract bot files
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -70,18 +70,19 @@ jobs:
           test -s deploy/rbw-bot.zip
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - name: Verify archive
+      - name: Verify and extract archive
         run: |
           set -euo pipefail
           unzip -l deploy/rbw-bot.zip | head -40
           unzip -l deploy/rbw-bot.zip | grep -qE ' package\.json$'
+          mkdir -p deploy/payload
+          unzip -oq deploy/rbw-bot.zip -d deploy/payload
+          test -f deploy/payload/package.json
 
-      - name: Install sshpass
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq sshpass
+      - name: Install SFTP client
+        run: python3 -m pip install --quiet paramiko==3.5.1
 
-      - name: Clean, upload, and extract
+      - name: Clear remote directory and upload files
         env:
           SFTP_HOST: ${{ secrets.SFTP_HOST || vars.SFTP_HOST }}
           SFTP_USERNAME: ${{ secrets.SFTP_USERNAME || vars.SFTP_USERNAME }}
@@ -90,68 +91,100 @@ jobs:
           PORT: ${{ inputs.port }}
           TAG: ${{ steps.release.outputs.tag }}
         run: |
-          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import posixpath
+          import stat
+          import sys
+          from urllib.parse import urlparse
 
-          HOST="${SFTP_HOST#sftp://}"
-          HOST="${HOST#ssh://}"
-          HOST="${HOST%/}"
+          import paramiko
 
-          if [[ "$HOST" == *:* ]]; then
-            EMBEDDED_PORT="${HOST##*:}"
-            if [[ "$EMBEDDED_PORT" =~ ^[0-9]+$ ]] && (( EMBEDDED_PORT >= 1 && EMBEDDED_PORT <= 65535 )); then
-              PORT="$EMBEDDED_PORT"
-              HOST="${HOST%:*}"
-            fi
-          fi
+          raw_host = (os.environ.get("SFTP_HOST") or "").strip()
+          username = os.environ.get("SFTP_USERNAME") or ""
+          password = os.environ.get("SFTP_PASSWORD") or ""
+          remote_dir = (os.environ.get("REMOTE_DIR") or "/home/container").rstrip("/") or "/"
+          port = int(os.environ.get("PORT") or "22")
+          payload = os.path.abspath("deploy/payload")
 
-          if [[ -z "$HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
-            echo "Missing SFTP_HOST, SFTP_USERNAME, or SFTP_PASSWORD repository secret" >&2
-            exit 1
-          fi
-          if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
-            echo "Resolved port must be between 1 and 65535" >&2
-            exit 1
-          fi
+          if raw_host.startswith("sftp://") or raw_host.startswith("ssh://"):
+              parsed = urlparse(raw_host)
+              host = parsed.hostname or ""
+              if parsed.port:
+                  port = parsed.port
+          else:
+              host = raw_host.rstrip("/")
+              if host.count(":") == 1:
+                  maybe_host, maybe_port = host.rsplit(":", 1)
+                  if maybe_port.isdigit():
+                      host = maybe_host
+                      port = int(maybe_port)
 
-          export SSHPASS="$SFTP_PASSWORD"
-          REMOTE_Q="$(printf '%q' "$REMOTE_DIR")"
-          SSH_OPTS=(
-            -o StrictHostKeyChecking=accept-new
-            -o ConnectTimeout=20
-            -o ServerAliveInterval=15
-            -o ServerAliveCountMax=3
-          )
+          if not host or not username or not password:
+              print("Missing SFTP_HOST, SFTP_USERNAME, or SFTP_PASSWORD", file=sys.stderr)
+              sys.exit(1)
+          if not os.path.isdir(payload):
+              print(f"Missing extracted payload: {payload}", file=sys.stderr)
+              sys.exit(1)
 
-          echo "Cleaning $REMOTE_DIR on $HOST (keeping .env)..."
-          sshpass -e ssh -p "$PORT" "${SSH_OPTS[@]}" "$SFTP_USERNAME@$HOST" \
-            "mkdir -p $REMOTE_Q && cd $REMOTE_Q && find . -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +"
+          transport = paramiko.Transport((host, port))
+          transport.banner_timeout = 30
+          transport.auth_timeout = 30
+          transport.connect(username=username, password=password)
+          sftp = paramiko.SFTPClient.from_transport(transport)
+          try:
+              def ensure_dir(path):
+                  current = ""
+                  for part in path.strip("/").split("/"):
+                      if not part:
+                          continue
+                      current += "/" + part
+                      try:
+                          sftp.stat(current)
+                      except IOError:
+                          sftp.mkdir(current)
 
-          echo "Uploading rbw-bot.zip..."
-          sshpass -e sftp -P "$PORT" \
-            -o StrictHostKeyChecking=accept-new \
-            -o ConnectTimeout=20 \
-            -b - "$SFTP_USERNAME@$HOST" <<SFTP
-          put deploy/rbw-bot.zip $REMOTE_DIR/rbw-bot.zip
-          bye
-          SFTP
+              def remove_path(path, entry):
+                  if stat.S_ISDIR(entry.st_mode):
+                      for child in sftp.listdir_attr(path):
+                          remove_path(posixpath.join(path, child.filename), child)
+                      sftp.rmdir(path)
+                  else:
+                      sftp.remove(path)
 
-          echo "Extracting rbw-bot.zip..."
-          sshpass -e ssh -p "$PORT" "${SSH_OPTS[@]}" "$SFTP_USERNAME@$HOST" \
-            "cd $REMOTE_Q && \
-             if command -v unzip >/dev/null 2>&1; then unzip -oq rbw-bot.zip; \
-             elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e rbw-bot.zip .; \
-             else echo 'Neither unzip nor python3 is available on the server' >&2; exit 1; fi && \
-             rm -f rbw-bot.zip && \
-             test -f package.json && \
-             if [ -f pterodactyl-start.sh ]; then chmod +x pterodactyl-start.sh; fi && \
-             if [ ! -f .env ]; then echo 'WARNING: .env was not present; create it before starting the bot' >&2; fi"
+              ensure_dir(remote_dir)
+              for entry in sftp.listdir_attr(remote_dir):
+                  if entry.filename == ".env":
+                      continue
+                  remove_path(posixpath.join(remote_dir, entry.filename), entry)
 
-          echo "Deployed $TAG to $SFTP_USERNAME@$HOST:$REMOTE_DIR"
+              for root, dirs, files in os.walk(payload):
+                  relative = os.path.relpath(root, payload)
+                  remote_root = remote_dir if relative == "." else posixpath.join(remote_dir, relative.replace(os.sep, "/"))
+                  ensure_dir(remote_root)
+                  for directory in dirs:
+                      ensure_dir(posixpath.join(remote_root, directory))
+                  for filename in files:
+                      local_path = os.path.join(root, filename)
+                      remote_path = posixpath.join(remote_root, filename)
+                      sftp.put(local_path, remote_path)
+                      if filename.endswith(".sh"):
+                          try:
+                              sftp.chmod(remote_path, 0o755)
+                          except IOError:
+                              pass
+              print(f"Uploaded {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir}")
+              print(f"Preserved: {posixpath.join(remote_dir, '.env')}")
+          finally:
+              sftp.close()
+              transport.close()
+          PY
+
           {
             echo "### Bot deployment"
             echo ""
             echo "- Release: \`$TAG\`"
-            echo "- Server: \`$HOST\`"
+            echo "- Server: \`$SFTP_HOST\`"
             echo "- Directory: \`$REMOTE_DIR\`"
             echo "- Preserved: \`.env\`"
           } >> "$GITHUB_STEP_SUMMARY"
