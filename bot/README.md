@@ -52,41 +52,6 @@ npm run setup
 docker compose up -d --build
 ```
 
-## Deploy via GitHub Actions (SFTP)
-
-There is a separate manual workflow:
-`.github/workflows/deploy-bot-sftp.yml`.
-
-Add these as **repository secrets** (Settings → Secrets and variables →
-Actions → Secrets → New repository secret):
-
-| Secret | Value |
-|---|---|
-| `SFTP_HOST` | SFTP/SSH hostname |
-| `SFTP_USERNAME` | SFTP username |
-| `SFTP_PASSWORD` | SFTP password |
-
-Repository variables with the same names also work, but use secrets for the
-password. If you created **environment** secrets instead, the job must declare
-that environment; move them to repository secrets or tell me the environment
-name so it can be added to the workflow.
-
-Then open **Actions → Deploy bot to SFTP → Run workflow**.
-
-The workflow:
-
-1. Downloads `rbw-bot.zip` from the latest published GitHub release, or a
-   specific `release_tag` you provide.
-2. Preserves the remote `.env`, deletes everything else in the target
-   directory, uploads the zip, extracts it, and removes the zip.
-3. Defaults to `/home/container` and port `22`; both are workflow inputs.
-
-The remote host must also allow SSH command execution because SFTP alone
-cannot unzip files. If the server does not have `unzip`, the workflow falls
-back to `python3 -m zipfile`.
-
-Publish a release first if the Actions workflow says no release was found.
-
 ## Pterodactyl
 
 `npm build` is not a valid npm command. Use one of these as the server's
