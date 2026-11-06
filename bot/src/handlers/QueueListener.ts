@@ -411,13 +411,11 @@ export class QueueListener {
         'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
       );
       const queuedPlayers = [...this.queueStates.values()].reduce((total, state) => total + state.players.length, 0);
-      console.log(`[QueueListener] Queue check started: ${queues.length} active queue(s), ${queuedPlayers} queued player(s)`);
 
       for (let i = 0; i < queues.length; i += QueueListener.QUEUE_TICK_CONCURRENCY) {
         const chunk = queues.slice(i, i + QueueListener.QUEUE_TICK_CONCURRENCY);
         await Promise.allSettled(chunk.map((queue) => this.validateQueueState(queue.channelId, queue)));
       }
-      console.log('[QueueListener] Queue check completed');
     } catch (error) {
       console.error('[QueueListener] Error in queue monitor:', error);
     }

@@ -1,6 +1,7 @@
 
 import { Client, VoiceState } from 'discord.js';
 import Game from '../models/Game';
+import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 
 export function registerVcLeaveCleanupListener(client: Client) {
   client.on('voiceStateUpdate', async (oldState: VoiceState, newState: VoiceState) => {
@@ -20,8 +21,16 @@ export function registerVcLeaveCleanupListener(client: Client) {
       if (!game) return;
       if (game.state !== 'scored' && game.state !== 'voided') return;
 
-      await channel.delete('Team VC is empty after user left and game is scored/voided');
-      console.log(`[VcLeaveCleanupListener] Deleted empty team VC: ${channel.name} (${oldState.channelId})`);
+      const result = await deleteChannelIfEmpty(
+        oldState.guild,
+        oldState.channelId,
+        'Team VC is empty after user left and game is scored/voided'
+      );
+      if (result === 'deleted') {
+        console.log(`[VcLeaveCleanupListener] Deleted empty team VC: ${channel.name} (${oldState.channelId})`);
+      } else if (result === 'occupied') {
+        console.log(`[VcLeaveCleanupListener] Team VC ${channel.name} (${oldState.channelId}) is still occupied; keeping it`);
+      }
     } catch (error) {
       const code = (error as { code?: number | string }).code;
       if (code === 10003 || code === '10003') {

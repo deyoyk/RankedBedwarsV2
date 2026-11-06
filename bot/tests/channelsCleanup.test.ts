@@ -93,9 +93,15 @@ describe('ChannelsCleanupTask', () => {
       [gameCategory.id, gameCategory],
       [voiceCategory.id, voiceCategory]
     ]);
+    const cache = new Map<string, unknown>([
+      ...categories,
+      ...gameCategory.children.cache,
+      ...voiceCategory.children.cache
+    ]);
     const guild = {
       channels: {
-        fetch: jest.fn(async (id?: string) => id ? categories.get(id) : categories)
+        cache,
+        fetch: jest.fn(async (id?: string) => id ? cache.get(id) : cache)
       }
     };
 
@@ -114,6 +120,26 @@ describe('ChannelsCleanupTask', () => {
     expect(userVoice.delete).not.toHaveBeenCalled();
   });
 
+  it('keeps orphaned voice channels while someone is still connected', async () => {
+    const occupiedVoice = voiceChannel('occupied-voice', 'Team 1 - Game 999');
+    occupiedVoice.members.set('member-1', {} as any);
+    const voiceCategory = category('cat-voice', [occupiedVoice]);
+    const categories = new Map<string, unknown>([[voiceCategory.id, voiceCategory]]);
+    const cache = new Map<string, unknown>([...categories, ...voiceCategory.children.cache]);
+    const guild = {
+      channels: {
+        cache,
+        fetch: jest.fn(async (id?: string) => id ? cache.get(id) : cache)
+      },
+      voiceStates: { cache: { some: () => false } }
+    };
+
+    const task = new ChannelsCleanupTask({ guilds: { cache: { first: () => guild } } } as any);
+    await (task as any).cleanupOrphanedChannels();
+
+    expect(occupiedVoice.delete).not.toHaveBeenCalled();
+  });
+
   it('keeps channels referenced by active queues and picking sessions', async () => {
     const queueChannel = textChannel('queue-1', 'game-123');
     const pickingGame = textChannel('pick-game', 'game-456');
@@ -124,9 +150,15 @@ describe('ChannelsCleanupTask', () => {
       [gameCategory.id, gameCategory],
       [voiceCategory.id, voiceCategory]
     ]);
+    const cache = new Map<string, unknown>([
+      ...categories,
+      ...gameCategory.children.cache,
+      ...voiceCategory.children.cache
+    ]);
     const guild = {
       channels: {
-        fetch: jest.fn(async (id?: string) => id ? categories.get(id) : categories)
+        cache,
+        fetch: jest.fn(async (id?: string) => id ? cache.get(id) : cache)
       }
     };
 

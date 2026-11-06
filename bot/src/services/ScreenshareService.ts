@@ -4,6 +4,7 @@ import User from '../models/User';
 import config from '../config/config';
 import { v4 as uuidv4 } from 'uuid';
 import { themedEmbed } from '../utils/betterembed';
+import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 import { 
   ScreenshareSessionResult, 
   ScreenshareFreezeResult, 
@@ -574,10 +575,15 @@ export class ScreenshareService {
         cleanupTasks.push(
           (async () => {
             try {
-              const channel = guild.channels.cache.get(session.channelId!) ?? await guild.channels.fetch(session.channelId!).catch(() => null);
-              if (channel) {
-                await channel.delete(`Screenshare session ${session.sessionId} ended`);
+              const result = await deleteChannelIfEmpty(
+                guild,
+                session.channelId!,
+                `Screenshare session ${session.sessionId} ended`
+              );
+              if (result === 'deleted') {
                 console.log(`[ScreenshareService] Deleted channel for session ${session.sessionId}`);
+              } else if (result === 'occupied') {
+                console.log(`[ScreenshareService] Channel for session ${session.sessionId} is still occupied; keeping it`);
               }
             } catch (error) {
               console.warn(`[ScreenshareService] Failed to delete channel for session ${session.sessionId}:`, error);

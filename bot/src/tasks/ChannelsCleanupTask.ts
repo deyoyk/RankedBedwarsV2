@@ -3,6 +3,7 @@ import Game from '../models/Game';
 import Queue from '../models/Queue';
 import PickingSessionState from '../models/PickingSessionState';
 import config from '../config/config';
+import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 
 export class ChannelsCleanupTask {
   private client: Client;
@@ -134,33 +135,25 @@ export class ChannelsCleanupTask {
 
       console.log(`[ChannelsCleanupTask] Found ${channelsToDelete.length} orphaned channels in ${categoryType} category`);
 
-      const waitingVcId = config.voicechannels.waitingvc;
-      if (waitingVcId) {
-        for (const channel of channelsToDelete) {
-          if (channel.type !== ChannelType.GuildVoice || channel.id === waitingVcId) continue;
-          const members = [...channel.members.values()];
-          for (let i = 0; i < members.length; i += 5) {
-            const batch = members.slice(i, i + 5);
-            await Promise.allSettled(batch.map(member =>
-              member.voice.setChannel(waitingVcId).catch(() => undefined)
-            ));
-          }
-        }
-      }
-
       let deletedCount = 0;
       const CONCURRENCY = 3;
       for (let i = 0; i < channelsToDelete.length; i += CONCURRENCY) {
         const batch = channelsToDelete.slice(i, i + CONCURRENCY);
         const results = await Promise.allSettled(batch.map((channel) =>
-          channel.delete(`Orphaned channel cleanup - not associated with any pending/active game`)
+          deleteChannelIfEmpty(
+            guild,
+            channel.id,
+            'Orphaned channel cleanup - not associated with any pending/active game'
+          )
         ));
         for (let j = 0; j < results.length; j++) {
           const result = results[j];
-          if (result.status === 'fulfilled') {
+          if (result.status === 'fulfilled' && result.value === 'deleted') {
             console.log(`[ChannelsCleanupTask] Deleted orphaned ${batch[j].type === ChannelType.GuildText ? 'text' : 'voice'} channel: ${batch[j].name} (${batch[j].id})`);
             deletedCount++;
-          } else {
+          } else if (result.status === 'fulfilled' && result.value === 'occupied') {
+            console.log(`[ChannelsCleanupTask] Skipped occupied voice channel ${batch[j].name} (${batch[j].id})`);
+          } else if (result.status === 'rejected') {
             const detail = result.reason instanceof Error ? result.reason.message : result.reason;
             console.error(`[ChannelsCleanupTask] Failed to delete channel ${batch[j].name} (${batch[j].id}):`, detail);
           }

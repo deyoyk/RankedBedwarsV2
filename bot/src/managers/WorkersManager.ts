@@ -1,5 +1,6 @@
 import { Client, TextChannel, type GuildChannelCreateOptions, type MessageCreateOptions } from 'discord.js';
 import config from '../config/config';
+import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 
 type WorkerTaskData = Record<string, unknown>;
 type WorkerTaskType = 'channel_create' | 'channel_delete' | 'channel_status' | 'member_move' | 'member_nickname' | 'member_roles' | 'message_send';
@@ -738,8 +739,25 @@ export class WorkersManager {
   private async executeChannelDelete(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
-    const channel = guild.channels.cache.get(data.channelId as string);
-    if (channel) await channel.delete();
+    const channelId = data.channelId as string;
+    if (!channelId) return;
+
+    const result = await deleteChannelIfEmpty(guild, channelId, 'Game channel cleanup');
+    if (result !== 'occupied') return;
+
+    const attempts = Number(data.__deleteAttempts ?? 0);
+    if (attempts >= 40) {
+      console.warn(`[WorkersManager] Channel ${channelId} is still occupied; leaving it in place`);
+      return;
+    }
+    data.__deleteAttempts = attempts + 1;
+    const retry = setTimeout(() => {
+      void this.addTask<void>('channel_delete', { ...data }, 2).catch((error) => {
+        console.warn(`[WorkersManager] Channel ${channelId} cleanup retry failed:`, error);
+      });
+    }, 30_000);
+    retry.unref?.();
+    console.log(`[WorkersManager] Channel ${channelId} still has members; retrying cleanup in 30s (${attempts + 1}/40)`);
   }
 
   private async executeChannelStatus(client: Client, data: WorkerTaskData): Promise<void> {
