@@ -40,6 +40,7 @@ public class WebSocketManager {
     private BukkitTask actionBarTask;
     private final java.util.Map<String, String> actionBars = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<java.util.UUID> actionBarFallbackShown = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.Map<String, java.util.function.Consumer<JsonObject>> leaderboardCallbacks = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile java.lang.reflect.Method paperActionBarMethod;
     private volatile boolean paperActionBarResolved;
 
@@ -345,6 +346,9 @@ public class WebSocketManager {
                         break;
                     case "queuestatus":
                         handleQueueStatus(json);
+                        break;
+                    case "leaderboard_data":
+                        handleLeaderboardData(json);
                         break;
                     case "screensharedontlog":
                         Bukkit.getScheduler().runTask(plugin, () -> handleScreenshareDontLog(json));
@@ -817,6 +821,7 @@ public class WebSocketManager {
         
         reconnectScheduled.set(false);
         stopActionBarTask();
+        leaderboardCallbacks.clear();
 
         if (client != null && client.isOpen()) {
             client.close(1000, "Plugin disabling");
@@ -830,6 +835,44 @@ public class WebSocketManager {
         pong.addProperty("ping_id", pingId);
         pong.addProperty("timestamp", System.currentTimeMillis());
         sendMessage(pong.toString());
+    }
+
+    public void requestLeaderboard(String mode, int page, java.util.function.Consumer<JsonObject> callback) {
+        if (client == null || !client.isOpen()) {
+            callback.accept(emptyLeaderboardResponse());
+            return;
+        }
+        String requestId = "lb_" + System.currentTimeMillis() + "_" + ThreadLocalRandom.current().nextInt(100000);
+        leaderboardCallbacks.put(requestId, callback);
+
+        JsonObject request = new JsonObject();
+        request.addProperty("type", "leaderboard_request");
+        request.addProperty("request_id", requestId);
+        request.addProperty("mode", mode);
+        request.addProperty("page", page);
+        sendMessage(request.toString());
+
+        Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+            java.util.function.Consumer<JsonObject> pending = leaderboardCallbacks.remove(requestId);
+            if (pending != null) {
+                pending.accept(emptyLeaderboardResponse());
+            }
+        }, 100L);
+    }
+
+    private void handleLeaderboardData(JsonObject json) {
+        if (!json.has("request_id")) return;
+        java.util.function.Consumer<JsonObject> callback =
+                leaderboardCallbacks.remove(json.get("request_id").getAsString());
+        if (callback != null) {
+            callback.accept(json);
+        }
+    }
+
+    private JsonObject emptyLeaderboardResponse() {
+        JsonObject response = new JsonObject();
+        response.add("entries", new JsonObject());
+        return response;
     }
 
     private void sendPermissionData() {

@@ -88,6 +88,35 @@ describe('10k-player consolidation paths', () => {
     expect(statuses.get('player1')).toEqual({ online: true, inGame: false });
   });
 
+  it('serves leaderboard requests over the existing websocket', async () => {
+    const manager: any = Object.create(WebSocketManager.prototype);
+    manager.send = jest.fn();
+    UserModel.find.mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        skip: jest.fn().mockReturnValue({
+          limit: jest.fn().mockReturnValue({
+            select: jest.fn().mockReturnValue({
+              lean: jest.fn().mockResolvedValue([{ ign: 'Steve', elo: 890 }])
+            })
+          })
+        })
+      })
+    });
+
+    await manager.handleLeaderboardRequest({
+      type: 'leaderboard_request',
+      request_id: 'lb-1',
+      mode: 'elo',
+      page: 1
+    });
+
+    expect(manager.send).toHaveBeenCalledWith({
+      type: 'leaderboard_data',
+      request_id: 'lb-1',
+      entries: { '1': { ign: 'Steve', value: 890 } }
+    });
+  });
+
   it('returns no bulk statuses when the Minecraft link is down', async () => {
     const manager: any = Object.create(WebSocketManager.prototype);
     manager.isConnected = () => false;

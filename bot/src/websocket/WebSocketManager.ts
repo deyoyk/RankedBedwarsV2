@@ -331,6 +331,13 @@ interface BedwarsPlayersStatusPayload {
   online?: Record<string, boolean>;
 }
 
+interface LeaderboardRequestPayload {
+  type: 'leaderboard_request';
+  request_id?: string;
+  mode?: string;
+  page?: number;
+}
+
 interface PermissionPayload {
   type: 'permission';
   [command: string]: string[] | 'permission';
@@ -378,6 +385,7 @@ type IncomingPayload =
   | MapsInfoPayload
   | PlayerStatusPayload
   | BedwarsPlayersStatusPayload
+  | LeaderboardRequestPayload
   | PermissionPayload
   | VoidingPayload
   | AuthIncomingPayload;
@@ -694,6 +702,9 @@ export class WebSocketManager {
       case 'bedwars_players_status':
         this.handleBedwarsPlayersStatus(msg);
         break;
+      case 'leaderboard_request':
+        await this.handleLeaderboardRequest(msg);
+        break;
       case 'permission':
         this.handlePermission(msg);
         break;
@@ -842,6 +853,42 @@ export class WebSocketManager {
       msg.players && typeof msg.players === 'object' ? msg.players : {},
       msg.online && typeof msg.online === 'object' ? msg.online : {}
     );
+  }
+
+  private async handleLeaderboardRequest(msg: LeaderboardRequestPayload) {
+    const requestId = typeof msg.request_id === 'string' ? msg.request_id : '';
+    if (!requestId) return;
+    const mode = typeof msg.mode === 'string' ? msg.mode : 'elo';
+    const validModes = new Set([
+      'elo', 'kills', 'deaths', 'wins', 'losses', 'games', 'winStreak', 'loseStreak',
+      'kdr', 'wlr', 'finalKills', 'finalDeaths', 'bedBroken', 'mvps', 'diamonds', 'irons',
+      'gold', 'emeralds', 'blocksPlaced', 'level', 'experience', 'playtimeSeconds',
+      'peakElo', 'damageDealt', 'damageTaken', 'assists', 'bestStreak', 'firstBloods'
+    ]);
+    const entries: Record<string, { ign: string; value: number | string }> = {};
+    if (validModes.has(mode)) {
+      const page = Math.max(1, Math.min(100, Number(msg.page) || 1));
+      const skip = (page - 1) * 10;
+      try {
+        const User = (await import('../models/User')).default;
+        const users = await User.find()
+          .sort({ [mode]: -1 })
+          .skip(skip)
+          .limit(10)
+          .select(`ign ${mode}`)
+          .lean();
+        users.forEach((user, index) => {
+          const rawValue = (user as Record<string, unknown>)[mode];
+          entries[String(skip + index + 1)] = {
+            ign: typeof user.ign === 'string' ? user.ign : '',
+            value: typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0
+          };
+        });
+      } catch (error) {
+        console.error('[WebSocketManager] Leaderboard request failed:', error);
+      }
+    }
+    this.send({ type: 'leaderboard_data', request_id: requestId, entries });
   }
 
   private handlePermission(msg: PermissionPayload) {

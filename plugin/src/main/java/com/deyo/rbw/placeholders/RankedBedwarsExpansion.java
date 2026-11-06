@@ -6,6 +6,8 @@ import com.deyo.rbw.models.LeaderboardEntry;
 import com.deyo.rbw.models.LiveGameStats;
 import com.deyo.rbw.models.UserData;
 import com.deyo.rbw.utils.APIClient;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import me.clip.placeholderapi.expansion.PlaceholderExpansion;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.entity.Player;
@@ -846,6 +848,19 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         if (!pendingLeaderboardFetches.add(cacheKey)) {
             return;
         }
+
+        WebSocketManager webSocketManager = plugin.getWebSocketManager();
+        if (webSocketManager != null && webSocketManager.isConnected()) {
+            webSocketManager.requestLeaderboard(mode, page, response -> {
+                pendingLeaderboardFetches.remove(cacheKey);
+                Map<Integer, LeaderboardEntry> leaderboard = parseLeaderboard(response);
+                leaderboardCache.put(cacheKey, new CachedLeaderboard(leaderboard));
+                plugin.debug("Cached leaderboard over WebSocket for " + mode + " page " + page
+                        + " (" + leaderboard.size() + " entries)");
+            });
+            return;
+        }
+
         CompletableFuture<Map<Integer, LeaderboardEntry>> future = apiClient.getLeaderboard(mode, page);
         future.thenAccept(leaderboard -> {
             pendingLeaderboardFetches.remove(cacheKey);
@@ -858,6 +873,26 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             plugin.getLogger().warning("Failed to fetch leaderboard for " + mode + " page " + page + ": " + throwable.getMessage());
             return null;
         });
+    }
+
+    private Map<Integer, LeaderboardEntry> parseLeaderboard(JsonObject response) {
+        Map<Integer, LeaderboardEntry> leaderboard = new HashMap<>();
+        if (response == null || !response.has("entries") || !response.get("entries").isJsonObject()) {
+            return leaderboard;
+        }
+        JsonObject entries = response.getAsJsonObject("entries");
+        for (String key : entries.keySet()) {
+            try {
+                JsonElement element = entries.get(key);
+                if (element == null || !element.isJsonObject()) continue;
+                JsonObject entry = element.getAsJsonObject();
+                String ign = entry.has("ign") ? entry.get("ign").getAsString() : "";
+                double value = entry.has("value") ? entry.get("value").getAsDouble() : 0;
+                leaderboard.put(Integer.parseInt(key), new LeaderboardEntry(ign, value));
+            } catch (Exception ignored) {
+            }
+        }
+        return leaderboard;
     }
     
     private void cleanupExpiredCache() {
