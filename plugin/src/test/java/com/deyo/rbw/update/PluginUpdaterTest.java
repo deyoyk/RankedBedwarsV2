@@ -252,6 +252,19 @@ public class PluginUpdaterTest {
     }
 
     @Test
+    public void downgradeCheckDiscardsAnOlderStagedUpdate() throws Exception {
+        releaseWith("v6", newJar, sha256(newJar), "2026-01-01T00:00:00Z");
+        assertEquals(PluginUpdater.Status.STAGED, updater(Instant.parse("2020-01-01T00:00:00Z"))
+                .checkForUpdates().status);
+        assertTrue(Files.exists(dataDir.resolve("updates/pending-update.json")));
+
+        PluginUpdater.Result result = updater(Instant.parse("2027-01-01T00:00:00Z")).checkForUpdates();
+
+        assertEquals(PluginUpdater.Status.DOWNGRADE_PREVENTED, result.status);
+        assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));
+    }
+
+    @Test
     public void appliesStagedUpdateThroughDetachedStarter() throws Exception {
         releaseWith("v6", newJar, sha256(newJar), "2026-01-01T00:00:00Z");
         PluginUpdater updater = updater(Instant.parse("2020-01-01T00:00:00Z"));
@@ -263,7 +276,14 @@ public class PluginUpdaterTest {
             return mock(Process.class);
         });
 
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
         assertTrue(updater.applyStagedUpdate());
+        if (!windows) {
+            assertArrayEquals(newJar, Files.readAllBytes(currentJar));
+            assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));
+            assertTrue(Files.exists(dataDir.resolve("updates/last-update.json")));
+            return;
+        }
         assertNotNull(command.get());
         assertFalse(command.get().isEmpty());
         assertTrue(Files.exists(dataDir.resolve("updates/pending-update.json")));
@@ -288,27 +308,25 @@ public class PluginUpdaterTest {
 
         assertTrue(updater.applyStagedUpdate());
 
-        Path script = Files.list(dataDir.resolve("updates"))
-                .filter(path -> path.getFileName().toString().startsWith("apply-update-"))
-                .findFirst()
-                .orElse(null);
-        assertNotNull(script);
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("win");
+        if (windows) {
+            Path script = Files.list(dataDir.resolve("updates"))
+                    .filter(path -> path.getFileName().toString().startsWith("apply-update-"))
+                    .findFirst()
+                    .orElse(null);
+            assertNotNull(script);
 
-        ProcessBuilder builder;
-        if (System.getProperty("os.name", "").toLowerCase().contains("win")) {
-            builder = new ProcessBuilder(
+            ProcessBuilder builder = new ProcessBuilder(
                     "powershell.exe",
                     "-NoProfile",
                     "-ExecutionPolicy", "Bypass",
                     "-File", script.toString()
             );
-        } else {
-            builder = new ProcessBuilder("/bin/sh", script.toString());
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+            assertTrue(process.waitFor(60, TimeUnit.SECONDS), "update script did not finish");
+            assertEquals(0, process.exitValue());
         }
-        builder.redirectErrorStream(true);
-        Process process = builder.start();
-        assertTrue(process.waitFor(60, TimeUnit.SECONDS), "update script did not finish");
-        assertEquals(0, process.exitValue());
 
         assertArrayEquals(newJar, Files.readAllBytes(currentJar));
         assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));

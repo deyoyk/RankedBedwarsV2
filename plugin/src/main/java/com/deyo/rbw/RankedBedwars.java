@@ -15,6 +15,8 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.nio.file.Path;
 import java.util.logging.Level;
 
 
@@ -56,6 +58,7 @@ public class RankedBedwars extends JavaPlugin {
     public void onEnable() {
         
         saveDefaultConfig();
+        migrateConfig();
 
         // Check for a newer release in the background. The jar itself is
         // swapped after this process exits, so the next restart runs it.
@@ -120,6 +123,18 @@ public class RankedBedwars extends JavaPlugin {
         getLogger().info("rankedbedwars has been disabled!");
     }
 
+    private void migrateConfig() {
+        Path configPath = new File(getDataFolder(), "config.yml").toPath();
+        try {
+            if (com.deyo.rbw.utils.ConfigMigration.removeLegacyApiSection(configPath)) {
+                reloadConfig();
+                getLogger().info("Removed legacy api config section; bot_url now covers both WebSocket and HTTP API.");
+            }
+        } catch (Exception error) {
+            getLogger().log(Level.WARNING, "Could not remove legacy api config section", error);
+        }
+    }
+
     private void registerUpdateShutdownHook() {
         if (updateShutdownHookRegistered) {
             return;
@@ -171,9 +186,9 @@ public class RankedBedwars extends JavaPlugin {
 
     public void reload() {
         reloadConfig();
+        migrateConfig();
 
         pluginUpdater = new PluginUpdater(this);
-        pluginUpdater.checkForUpdatesAsync();
 
         savePermissionsFile();
         

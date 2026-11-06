@@ -149,7 +149,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                         : ChatColor.GREEN;
                 sender.sendMessage(color + "Auto-update: " + result.message);
                 if (result.isStaged()) {
-                    sender.sendMessage(ChatColor.GRAY + "The jar will be replaced when the server stops.");
+                    sender.sendMessage(ChatColor.GRAY + "The jar will be replaced when the server stops. /reload does not replace a running jar.");
                 }
             });
         });

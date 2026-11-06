@@ -293,7 +293,7 @@ public class PluginUpdater {
 
             String currentHash = sha256(currentJar);
             if (asset.digest != null && asset.digest.equalsIgnoreCase(currentHash)) {
-                cleanupPendingIfSafe();
+                discardPendingUpdate();
                 return new Result(Status.UP_TO_DATE, "Already on latest release " + release.tag, release.tag, currentHash);
             }
 
@@ -303,6 +303,7 @@ public class PluginUpdater {
                     && remoteTime != null
                     && localBuildTime != null
                     && localBuildTime.isAfter(remoteTime.plusSeconds(CLOCK_SKEW_TOLERANCE_SECONDS))) {
+                discardPendingUpdate();
                 return new Result(
                         Status.DOWNGRADE_PREVENTED,
                         "Local build (" + localBuildTime + ") is newer than latest release " + release.tag,
@@ -344,7 +345,7 @@ public class PluginUpdater {
                     );
                 }
                 if (asset.digest == null && download.sha256.equalsIgnoreCase(currentHash)) {
-                    cleanupPendingIfSafe();
+                    discardPendingUpdate();
                     return new Result(Status.UP_TO_DATE, "Downloaded jar matches current jar", release.tag, currentHash);
                 }
                 if (!looksLikeJar(downloaded)) {
@@ -423,6 +424,16 @@ public class PluginUpdater {
             }
 
             Files.createDirectories(updatesDir);
+            if (!isWindows()) {
+                try {
+                    installDirect(pending, staged);
+                    return true;
+                } catch (Exception directError) {
+                    plugin.getLogger().warning(
+                            "Auto-update: direct replacement failed, falling back to shutdown script: " + directError.getMessage()
+                    );
+                }
+            }
             Path script = createApplyScript(pending);
             List<String> command = buildScriptCommand(script);
             Process process = processStarter.start(command, logFile);
@@ -438,6 +449,46 @@ public class PluginUpdater {
             plugin.getLogger().log(Level.WARNING, "Auto-update: failed to stage replacement script", error);
             return false;
         }
+    }
+
+    private void installDirect(PendingUpdate pending, Path staged) throws Exception {
+        Path backup = options.backup
+                ? updatesDir.resolve("backups").resolve(
+                        currentJar.getFileName().toString() + "." + System.currentTimeMillis() + ".bak"
+                )
+                : updatesDir.resolve("old-" + System.currentTimeMillis() + ".jar");
+        Files.createDirectories(backup.getParent());
+
+        Files.move(currentJar, backup, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            Files.move(staged, currentJar, StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception error) {
+            Files.move(backup, currentJar, StandardCopyOption.REPLACE_EXISTING);
+            throw error;
+        }
+        if (!options.backup) {
+            Files.deleteIfExists(backup);
+        }
+
+        writeAppliedState(pending);
+        Files.deleteIfExists(pendingFile);
+        plugin.getLogger().info("Auto-update: installed " + pending.tag + "; restart to load it");
+    }
+
+    private void writeAppliedState(PendingUpdate pending) throws IOException {
+        JsonObject applied = new JsonObject();
+        applied.addProperty("tag", pending.tag);
+        applied.addProperty("asset", pending.asset);
+        applied.addProperty("sha256", pending.sha256);
+        applied.addProperty("appliedAt", Instant.now().toString());
+        applied.addProperty("target", pending.target);
+        Files.write(
+                lastUpdateFile,
+                applied.toString().getBytes(StandardCharsets.UTF_8),
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING,
+                StandardOpenOption.WRITE
+        );
     }
 
     private ReleaseInfo fetchLatestRelease() throws IOException {
@@ -804,16 +855,10 @@ public class PluginUpdater {
         }
     }
 
-    private void cleanupPendingIfSafe() {
+    private void discardPendingUpdate() {
         PendingUpdate pending = readPending();
-        if (pending != null && samePath(Paths.get(pending.target), currentJar)) {
-            try {
-                if (pending.sha256 != null && pending.sha256.equalsIgnoreCase(sha256(currentJar))) {
-                    cleanupPending(pending);
-                }
-            } catch (Exception error) {
-                plugin.getLogger().warning("Auto-update: could not clean up applied update: " + error.getMessage());
-            }
+        if (pending != null && (pending.target == null || samePath(Paths.get(pending.target), currentJar))) {
+            cleanupPending(pending);
         }
     }
 
