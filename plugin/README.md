@@ -122,6 +122,7 @@ Leaderboard placeholders support the same modes:
 %rbw_top_1_elo%              -> position-first form is accepted too
 %rbw_leaderboard_elo_1%      -> leaderboard_<mode>_<pos>
 %rbw_lb_elo_1%               -> lb_<mode>_<pos>
+%rbw_version%                -> installed plugin version (verify the loaded jar)
 ```
 
 Unknown leaderboard modes return `Invalid Mode` and unknown leaderboard placeholders return `N/A`

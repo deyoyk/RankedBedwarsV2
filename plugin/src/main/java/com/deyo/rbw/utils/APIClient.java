@@ -25,6 +25,7 @@ import java.util.logging.Logger;
 
 public class APIClient {
     private final String baseUrl;
+    private final String authKey;
     private final Gson gson;
     private final Logger logger;
     private final HttpClient httpClient;
@@ -33,6 +34,7 @@ public class APIClient {
     public APIClient(Gson gson, Logger logger, FileConfiguration config) {
         this.gson = gson;
         this.logger = logger;
+        this.authKey = config.getString("auth_key", "");
         int poolSize = Math.max(2, Math.min(16, Runtime.getRuntime().availableProcessors() * 2));
         this.executor = Executors.newFixedThreadPool(poolSize, r -> {
             Thread t = new Thread(r, "RBW-APIClient");
@@ -101,11 +103,14 @@ public class APIClient {
         Exception lastFailure = null;
         for (int attempt = 0; attempt < 3; attempt++) {
             try {
-                HttpRequest request = HttpRequest.newBuilder()
+                HttpRequest.Builder builder = HttpRequest.newBuilder()
                         .uri(URI.create(urlString))
                         .timeout(Duration.ofSeconds(5))
-                        .GET()
-                        .build();
+                        .GET();
+                if (authKey != null && !authKey.trim().isEmpty()) {
+                    builder.header("x-api-key", authKey.trim());
+                }
+                HttpRequest request = builder.build();
 
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 

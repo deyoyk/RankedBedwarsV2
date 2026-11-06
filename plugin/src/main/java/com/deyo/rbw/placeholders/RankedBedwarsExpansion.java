@@ -144,6 +144,10 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             }
         }
 
+        if (normalizedParams.equals("version") || normalizedParams.equals("build")) {
+            return plugin.getDescription().getVersion();
+        }
+
         if (player == null) {
             return handleLeaderboardSafe(normalizedParams);
         }

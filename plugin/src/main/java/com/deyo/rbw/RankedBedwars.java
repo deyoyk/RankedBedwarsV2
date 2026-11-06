@@ -115,8 +115,27 @@ public class RankedBedwars extends JavaPlugin {
         
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
             placeholderExpansion = new RankedBedwarsExpansion(this);
+            try {
+                me.clip.placeholderapi.expansion.PlaceholderExpansion existing =
+                        me.clip.placeholderapi.PlaceholderAPIPlugin.getInstance()
+                                .getLocalExpansionManager().getExpansion("rbw");
+                if (existing != null && existing != placeholderExpansion) {
+                    existing.unregister();
+                    getLogger().info("Replaced stale rbw placeholder expansion: "
+                            + existing.getClass().getName());
+                }
+            } catch (Throwable ignored) {
+            }
             if (placeholderExpansion.register()) {
-                getLogger().info("PlaceholderAPI integration enabled!");
+                getLogger().info("PlaceholderAPI integration enabled! (%rbw_version% = "
+                        + getDescription().getVersion() + ")");
+                try {
+                    String selfTest = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(
+                            (org.bukkit.OfflinePlayer) null, "%rbw_top_elo_1%");
+                    getLogger().info("Placeholder self-test %rbw_top_elo_1% -> " + selfTest);
+                } catch (Throwable selfTestError) {
+                    getLogger().warning("Placeholder self-test failed: " + selfTestError.getMessage());
+                }
             } else {
                 getLogger().warning("PlaceholderAPI expansion could not be registered!");
             }

@@ -229,6 +229,14 @@ public class PlaceholderExpansionTest {
     }
 
     @Test
+    public void exposesPluginVersionForJarDiagnostics() {
+        when(plugin.getDescription().getVersion()).thenReturn("1.2.4");
+
+        assertEquals("1.2.4", expansion.onRequest(null, "version"));
+        assertEquals("1.2.4", expansion.onRequest(null, "build"));
+    }
+
+    @Test
     public void leaderboardPlayerFallsBackWhenStoredIgnIsMissing() throws Exception {
         WebSocketManager manager = mock(WebSocketManager.class);
         when(manager.isConnected()).thenReturn(true);
