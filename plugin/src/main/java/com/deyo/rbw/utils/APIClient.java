@@ -42,6 +42,7 @@ public class APIClient {
             return t;
         });
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .executor(executor)
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();

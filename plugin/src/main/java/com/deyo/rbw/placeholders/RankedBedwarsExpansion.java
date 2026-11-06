@@ -826,11 +826,13 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
                         if (userData != null) {
                             userDataCache.put(cacheKey, new CachedUserData(userData));
                             plugin.debug("Cached user data over WebSocket for " + playerName);
+                            return;
                         }
                     } catch (Exception error) {
                         plugin.getLogger().warning("Failed to parse user data for " + playerName + ": " + error.getMessage());
                     }
                 }
+                fetchUserDataHttp(playerName, cacheKey);
             });
             return;
         }
@@ -865,6 +867,7 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
                 pendingLeaderboardFetches.remove(cacheKey);
                 Map<Integer, LeaderboardEntry> leaderboard = parseLeaderboard(response);
                 if (leaderboard.isEmpty()) {
+                    fetchLeaderboardHttp(mode, page, cacheKey);
                     return;
                 }
                 leaderboardCache.put(cacheKey, new CachedLeaderboard(leaderboard));
