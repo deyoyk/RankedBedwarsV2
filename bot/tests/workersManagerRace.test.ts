@@ -46,6 +46,23 @@ describe('WorkersManager race conditions', () => {
       .rejects.toThrow('Guild not found');
   });
 
+  it('sets voice channel status through the REST API', async () => {
+    const client: any = {
+      guilds: { cache: { first: () => ({}) } },
+      rest: { put: jest.fn().mockResolvedValue(undefined) }
+    };
+    const manager = new (WorkersManager as any)(client) as WorkersManager;
+    managers.push(manager);
+    (manager as any).isEnabled = false;
+
+    await manager.setChannelStatus('channel-1', '3/8');
+
+    expect(client.rest.put).toHaveBeenCalledWith(
+      '/channels/channel-1/voice-status',
+      expect.objectContaining({ body: { status: '3/8' } })
+    );
+  });
+
   it('concurrent addTask calls each get a unique task id', async () => {
     const manager = makeManager();
     (manager as any).isEnabled = true;

@@ -45,8 +45,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("rankedbedwars.admin")) {
-            sender.sendMessage(ChatColor.GOLD + "Ranked Bedwars System" + ChatColor.GRAY + " By Deyo & Zercode");
-            sender.sendMessage(ChatColor.GRAY + " You want this plugin? Contact Deyo on Zerocode https://discord.com/invite/23hPVuuam3");
+            sender.sendMessage(ChatColor.GOLD + "Ranked Bedwars System" + ChatColor.GRAY + " By Deyo");
             return true;
         }
 
@@ -119,7 +118,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     }
 
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(ChatColor.GOLD + "Ranked Bedwars Admin" + ChatColor.GRAY + " By Deyo & Zercode LLC");
+        sender.sendMessage(ChatColor.GOLD + "Ranked Bedwars Admin" + ChatColor.GRAY + " By Deyo");
         sender.sendMessage(ChatColor.GOLD + "/rbw reload " + ChatColor.GRAY + "- Reload the plugin");
         sender.sendMessage(ChatColor.GOLD + "/rbw status " + ChatColor.GRAY + "- Check plugin status");
         sender.sendMessage(ChatColor.GOLD + "/rbw maps " + ChatColor.GRAY + "- List available maps");

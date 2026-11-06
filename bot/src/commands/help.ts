@@ -62,15 +62,15 @@ function buildCategorySelectMenu(commandCategories: Record<string, string[]>): S
 }
 
 function getCommandRoles(cmd: string): string {
-  
+
   let roles: string[] = [];
-  
+
   if (global._wsManager && typeof global._wsManager.getPermission === 'function') {
     roles = global._wsManager.getPermission(cmd);
   }
-  
 
-  
+
+
   if (roles.length) {
     if (roles.includes('everyone')) {
       return '@everyone';
@@ -88,10 +88,10 @@ export async function help(interaction: Message | ChatInputCommandInteraction, a
   try {
     const commandCategories = await getCommandCategories();
     console.log('[Help] Command categories:', Object.keys(commandCategories));
-    
+
     const embed = themedEmbed()
       .setTitle(`Ranked Bedwars System v${pkg.version}`)
-      .setDescription('Made by <@919498122940547072> `Deyo` and Managed by [Zerocode](https://discord.com/invite/23hPVuuam3) \n\n:star2: Select a category to view commands and their required roles.')
+      .setDescription('Made by <@1526597163885527121> `Deyo`\n\n:star2: Select a category to view commands and their required roles.')
       .setColor('#00AAAA')
 
     const selectMenu = buildCategorySelectMenu(commandCategories);
@@ -106,7 +106,7 @@ export async function help(interaction: Message | ChatInputCommandInteraction, a
     await safeReply(interaction, { embeds: [embed], components: [row] });
   } catch (error) {
     console.error('Error in help command:', error);
-    
+
     try {
       await safeReply(interaction, { content: 'There was an error loading the help menu. Please try again.' });
     } catch (followUpError) {
@@ -120,7 +120,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
     if (!interaction.deferred && typeof interaction.deferUpdate === 'function') {
       await interaction.deferUpdate().catch(() => {});
     }
-    
+
     const commandCategories = await getCommandCategories();
     let category: string | undefined;
     let page = 0;
@@ -153,7 +153,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
       .setColor('#00AAAA');
 
     embed.setFooter({ text: 'Commands use dynamic permissions from the plugin. Same commands applicable for prefix/message commands.' });
-    
+
     const selectMenu = buildCategorySelectMenu(commandCategories);
     const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
     const components: Array<ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>> = [selectRow];
@@ -173,7 +173,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
       );
       components.push(row);
     }
-    
+
     await interaction.editReply({ embeds: [embed], components }).catch(async (error) => {
       console.error('Failed to update help menu, trying update instead:', error);
       await interaction.update({ embeds: [embed], components }).catch(e => {
@@ -183,9 +183,9 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
   } catch (error) {
     console.error('Error in handleHelpMenu:', error);
     try {
-      await interaction.editReply({ 
-        content: 'There was an error displaying the help menu. Please try again.', 
-        components: [] 
+      await interaction.editReply({
+        content: 'There was an error displaying the help menu. Please try again.',
+        components: []
       }).catch(() => {});
     } catch (replyError) {
       console.error('Failed to send error message:', replyError);
@@ -198,21 +198,21 @@ export async function handleHelpPagination(interaction: ButtonInteraction) {
     if (!interaction.deferred && typeof interaction.deferUpdate === 'function') {
       await interaction.deferUpdate().catch(() => {});
     }
-    
+
     const [action, category, pageStr] = interaction.customId.replace('help_', '').split(':');
     const page = parseInt(pageStr, 10) || 0;
     let newPage = page;
     if (action === 'prev') newPage = Math.max(0, page - 1);
     if (action === 'next') newPage = page + 1;
-    
+
     interaction.customId = `help_category:${category}:${newPage}`;
     await handleHelpMenu(interaction);
   } catch (error) {
     console.error('Error in handleHelpPagination:', error);
     try {
-      await interaction.update({ 
-        content: 'There was an error navigating the help pages. Please try again.', 
-        components: [] 
+      await interaction.update({
+        content: 'There was an error navigating the help pages. Please try again.',
+        components: []
       }).catch(() => {});
     } catch (replyError) {
       console.error('Failed to send pagination error message:', replyError);

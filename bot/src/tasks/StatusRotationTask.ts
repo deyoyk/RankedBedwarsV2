@@ -13,7 +13,7 @@ export class StatusRotationTask {
       type: ActivityType.Playing
     },
     {
-      name: 'By @loqkey',
+      name: 'By @deyodyalan',
       type: ActivityType.Playing
     }
   ];

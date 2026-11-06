@@ -159,7 +159,6 @@ public class WebSocketManager {
         org.bukkit.command.ConsoleCommandSender console = Bukkit.getConsoleSender();
         console.sendMessage("");
         console.sendMessage("§6WebSocket §aConnection §2ESTABLISHED");
-        console.sendMessage("§6ZeroCode Studios §f- §cRankedBedwars Bot");
         console.sendMessage("");
         
         plugin.getLogger().info("WebSocket connection established - automatically sending initial data");

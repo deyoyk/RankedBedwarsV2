@@ -30,12 +30,7 @@ export class CommandHandler {
     this.commands.set(commandName, handler);
   }
 
-  /**
-   * Registers an alias for an existing command.
-   *
-   * The alias uses the original command's handler
-   * and permission configuration.
-   */
+
   public registerAlias(alias: string, commandName: string): void {
     const normalizedAlias = alias.toLowerCase();
     const normalizedCommand = commandName.toLowerCase();
@@ -61,9 +56,6 @@ export class CommandHandler {
     this.aliases.set(normalizedAlias, normalizedCommand);
   }
 
-  /**
-   * Resolves aliases to their original command names.
-   */
   private resolveCommandName(name: string): string {
     const normalizedName = name.toLowerCase();
 
@@ -132,8 +124,7 @@ export class CommandHandler {
       return;
     }
 
-    // Resolve aliases BEFORE looking up the command
-    // and checking permissions.
+
     const commandName = this.resolveCommandName(inputName);
     const command = this.commands.get(commandName);
 
@@ -150,7 +141,6 @@ export class CommandHandler {
     }
 
     try {
-      // Always check the ORIGINAL command's permissions.
       if (!(await checkPermission(message, commandName))) {
         await this.sendPermissionDenied(message, commandName);
         return;

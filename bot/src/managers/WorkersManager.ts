@@ -2,7 +2,7 @@ import { Client, TextChannel, type GuildChannelCreateOptions, type MessageCreate
 import config from '../config/config';
 
 type WorkerTaskData = Record<string, unknown>;
-type WorkerTaskType = 'channel_create' | 'channel_delete' | 'member_move' | 'member_nickname' | 'member_roles' | 'message_send';
+type WorkerTaskType = 'channel_create' | 'channel_delete' | 'channel_status' | 'member_move' | 'member_nickname' | 'member_roles' | 'message_send';
 type WorkerTaskState = 'queued' | 'running' | 'done';
 
 interface WorkerTask {
@@ -263,7 +263,7 @@ export class WorkersManager {
     if (task.type === 'message_send') {
       return `message:${String(task.data.channelId ?? 'unknown')}`;
     }
-    if (task.type === 'channel_create' || task.type === 'channel_delete') {
+    if (task.type === 'channel_create' || task.type === 'channel_delete' || task.type === 'channel_status') {
       return 'channel:guild';
     }
     return 'member:guild';
@@ -281,7 +281,7 @@ export class WorkersManager {
 
   private routeInterval(task: WorkerTask): number {
     if (task.type === 'message_send') return MESSAGE_ROUTE_INTERVAL_MS;
-    if (task.type === 'channel_create' || task.type === 'channel_delete') {
+    if (task.type === 'channel_create' || task.type === 'channel_delete' || task.type === 'channel_status') {
       return CHANNEL_ROUTE_INTERVAL_MS;
     }
     return MEMBER_ROUTE_INTERVAL_MS;
@@ -544,6 +544,9 @@ export class WorkersManager {
         case 'channel_delete':
           result = await this.executeChannelDelete(worker.client, task.data);
           break;
+        case 'channel_status':
+          result = await this.executeChannelStatus(worker.client, task.data);
+          break;
         case 'member_move':
           result = await this.executeMemberMove(worker.client, task.data);
           break;
@@ -739,6 +742,15 @@ export class WorkersManager {
     if (channel) await channel.delete();
   }
 
+  private async executeChannelStatus(client: Client, data: WorkerTaskData): Promise<void> {
+    const channelId = data.channelId as string;
+    if (!channelId) throw new Error('Channel id is required');
+    await client.rest.put(`/channels/${channelId}/voice-status`, {
+      body: { status: data.status as string | null },
+      reason: 'Queue channel status update',
+    });
+  }
+
   private async executeMemberMove(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
@@ -860,6 +872,10 @@ export class WorkersManager {
     await this.addTask<void>('channel_delete', { channelId }, priority);
   }
 
+  public async setChannelStatus(channelId: string, status: string | null, priority: number = 3): Promise<void> {
+    await this.addTask<void>('channel_status', { channelId, status }, priority);
+  }
+
   public async moveMembers(
     memberIds: string[],
     channelId: string,
@@ -965,6 +981,8 @@ export class WorkersManager {
           return await this.executeChannelCreate(this.mainClient, data);
         case 'channel_delete':
           return await this.executeChannelDelete(this.mainClient, data);
+        case 'channel_status':
+          return await this.executeChannelStatus(this.mainClient, data);
         case 'member_move':
           return await this.executeMemberMove(this.mainClient, data);
         case 'member_nickname':

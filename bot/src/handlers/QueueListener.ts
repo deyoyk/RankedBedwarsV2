@@ -75,10 +75,13 @@ export class QueueListener {
   private cacheCleanupInterval: NodeJS.Timeout | null = null;
   private queueMonitorInterval: NodeJS.Timeout | null = null;
   private presenceSweepInterval: NodeJS.Timeout | null = null;
+  private queueStatusInterval: NodeJS.Timeout | null = null;
+  private readonly queueStatusCache = new Map<string, string>();
   private initialized = false;
   private shuttingDown = false;
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
+  private readonly QUEUE_STATUS_INTERVAL = 4000;
   private readonly CHANNEL_CACHE_TTL = 30000;
   private readonly PRESENCE_SWEEP_INTERVAL = 30000;
 
@@ -99,6 +102,55 @@ export class QueueListener {
     this.startCacheCleanup();
     this.startQueueMonitor();
     this.startPresenceSweep();
+    this.startQueueStatusUpdates();
+  }
+
+  private startQueueStatusUpdates(): void {
+    if (this.queueStatusInterval) return;
+    this.queueStatusInterval = setInterval(() => {
+      void this.updateQueueStatuses().catch((error) => {
+        console.error('[QueueListener] Error updating queue channel statuses:', error);
+      });
+    }, this.QUEUE_STATUS_INTERVAL);
+    this.queueStatusInterval.unref?.();
+    console.log('[QueueListener] Queue channel status updates started (every 4s)');
+  }
+
+  private async updateQueueStatuses(): Promise<void> {
+    if (this.shuttingDown) return;
+    const workers = this.workersManager as WorkersManager | undefined;
+    if (!workers || typeof workers.setChannelStatus !== 'function') return;
+
+    const queues = await resolveQuery<Array<{ channelId: string; maxPlayers: number }>>(
+      Queue.find({ isActive: true }).select('channelId maxPlayers'),
+      'channelId maxPlayers'
+    );
+    const activeIds = new Set(queues.map(queue => queue.channelId));
+
+    for (const queue of queues) {
+      const current = queuePlayers.get(queue.channelId)?.length
+        ?? this.queueStates.get(queue.channelId)?.players.length
+        ?? 0;
+      const status = `${current}/${queue.maxPlayers}`;
+      if (this.queueStatusCache.get(queue.channelId) === status) continue;
+
+      try {
+        await workers.setChannelStatus(queue.channelId, status);
+        this.queueStatusCache.set(queue.channelId, status);
+      } catch (error) {
+        console.warn(`[QueueListener] Could not set status for queue ${this.queueLabelById(queue.channelId)}: ${error}`);
+      }
+    }
+
+    for (const channelId of [...this.queueStatusCache.keys()]) {
+      if (activeIds.has(channelId)) continue;
+      try {
+        await workers.setChannelStatus(channelId, null);
+      } catch {
+        // Queue channel may already be gone.
+      }
+      this.queueStatusCache.delete(channelId);
+    }
   }
 
   private async hydrateQueueStates(): Promise<void> {
@@ -172,6 +224,15 @@ export class QueueListener {
         });
         queuePlayers.set(queue.channelId, players);
         recovered += players.length;
+
+        if (players.length > 0) {
+          const names = eligible
+            .filter(user => players.includes(user.discordId))
+            .map(user => user.ign)
+            .filter(Boolean)
+            .join(', ');
+          console.log(`[QueueListener] Recovered ${players.length} player(s) into queue ${voiceChannel.name} (${queue.channelId})${names ? `: ${names}` : ''}`);
+        }
       }
 
       console.log(`[QueueListener] Recovered ${recovered} queued player(s) across ${queues.length} queue(s)`);
@@ -255,7 +316,7 @@ export class QueueListener {
       }
     }
     if (unknown.length > 0) {
-      console.log(`[QueueListener] Presence sweep re-checking ${unknown.length} player(s) in queue ${queueId}`);
+      console.log(`[QueueListener] Presence sweep re-checking ${unknown.length} player(s) in queue ${this.queueLabelById(queueId)}`);
     }
     for (let j = 0; j < unknown.length; j += 5) {
       const batch = unknown.slice(j, j + 5);
@@ -318,12 +379,21 @@ export class QueueListener {
       const playersInVC = new Set(voiceChannel.members.keys());
       const validPlayers: string[] = [];
       const validParties = new Map<string, string[]>();
+      const queueLabel = `${voiceChannel.name} (${queueId})`;
+      const missingPlayers: string[] = [];
 
       for (const playerId of state.players) {
         if (playersInVC.has(playerId)) {
           validPlayers.push(playerId);
         } else {
-          console.log(`[QueueListener] Player ${playerId} no longer in queue ${queueId}, removing`);
+          missingPlayers.push(playerId);
+        }
+      }
+
+      if (missingPlayers.length > 0) {
+        const labels = await this.playerIgnMap(missingPlayers);
+        for (const playerId of missingPlayers) {
+          console.log(`[QueueListener] ${labels.get(playerId) ?? playerId} no longer in queue ${queueLabel}, removing`);
         }
       }
 
@@ -332,14 +402,17 @@ export class QueueListener {
         if (validMembers.length === members.length) {
           validParties.set(partyId, validMembers);
         } else {
-          console.log(`[QueueListener] Party ${partyId} has members not in queue ${queueId}, removing party`);
+          const labels = await this.playerIgnMap(members);
+          const memberNames = members.map(memberId => labels.get(memberId) ?? memberId).join(', ');
+          console.log(`[QueueListener] Party ${partyId} (${memberNames}) has members not in queue ${queueLabel}, removing party`);
         }
       }
 
       const inGameIds = await this.findInGamePlayers(state.players);
       if (inGameIds.size > 0) {
+        const labels = await this.playerIgnMap([...inGameIds]);
         for (const playerId of inGameIds) {
-          console.log(`[QueueListener] Player ${playerId} is in an active game, removing from queue ${queueId}`);
+          console.log(`[QueueListener] ${labels.get(playerId) ?? playerId} is in an active game, removing from queue ${queueLabel}`);
           playersInVC.delete(playerId);
         }
         for (const [partyId, members] of validParties) {
@@ -402,11 +475,13 @@ export class QueueListener {
       const wasQueueFull = state.players.length >= queue.maxPlayers;
       const offlineSet = new Set(offline);
       const evicted = new Set<string>(offline);
+      const queueLabel = voiceChannel?.name ? `${voiceChannel.name} (${queueId})` : queueId;
       for (const [partyId, members] of state.parties) {
         if (members.some((m) => offlineSet.has(m))) {
           members.forEach((m) => evicted.add(m));
           state.parties.delete(partyId);
-          console.log(`[QueueListener] Party ${partyId} removed from queue ${queueId}: member offline in Minecraft`);
+          const memberNames = members.map(memberId => ignById.get(memberId) ?? memberId).join(', ');
+          console.log(`[QueueListener] Party ${partyId} (${memberNames}) removed from queue ${queueLabel}: member offline in Minecraft`);
         }
       }
       state.players = state.players.filter((p) => !evicted.has(p));
@@ -452,14 +527,14 @@ export class QueueListener {
           );
         }
         for (const m of moved) {
-          console.warn(`[QueueListener] User ${m.username} moved to waiting due to: ${reason}`);
+          console.warn(`[QueueListener] ${ignById.get(m.id) ?? m.username} moved to waiting due to: ${reason}`);
         }
       } catch (error) {
         console.error(`[QueueListener] Error moving offline players to waiting:`, error);
       }
 
       if (wasQueueFull && state.players.length < queue.maxPlayers) {
-        console.log(`[QueueListener] Queue ${queueId} dropped below full after offline eviction, stopping processing`);
+        console.log(`[QueueListener] Queue ${queueLabel} dropped below full after offline eviction, stopping processing`);
         this.cancelQueueProcessing(queueId);
       }
       return evicted;
@@ -506,6 +581,7 @@ export class QueueListener {
       const soloIds: string[] = [];
       for (const user of users) {
         if (!user || !uncoveredSet.has(user.discordId) || user.isBanned || user.isFrozen) continue;
+        if (user.ign) ignById.set(user.discordId, user.ign);
         if (!user.partyId) {
           if (user.ign) {
             const presence = PresenceService.evaluate(user.ign);
@@ -514,7 +590,6 @@ export class QueueListener {
           continue;
         }
         if (queueState.parties.has(user.partyId)) continue;
-        if (user.ign) ignById.set(user.discordId, user.ign);
         const present = presentByParty.get(user.partyId) ?? [];
         present.push(user.discordId);
         presentByParty.set(user.partyId, present);
@@ -524,7 +599,7 @@ export class QueueListener {
         if (!queueState.players.includes(id)) {
           queueState.players.push(id);
           queuePlayers.set(queueId, [...queueState.players]);
-          console.log(`[QueueListener] Recovered solo queue member ${id} in ${queueId}`);
+          console.log(`[QueueListener] Recovered solo queue member ${ignById.get(id) ?? id} in queue ${this.queueLabelById(queueId)}`);
         }
       }
 
@@ -543,7 +618,7 @@ export class QueueListener {
         })) continue;
         const member = voiceChannel.members.get(present[0]);
         if (!member) continue;
-        await this.handlePartyJoin({ member } as VoiceState, { partyId }, queueState, queue);
+        await this.handlePartyJoin({ member } as VoiceState, { partyId, ign: ignById.get(present[0]) }, queueState, queue);
       }
     } catch (error) {
       console.error(`[QueueListener] Error rescanning parties for queue ${queueId}:`, error);
@@ -635,7 +710,7 @@ export class QueueListener {
       }
       state.lastUpdate = Date.now();
       queuePlayers.set(channelId, [...state.players]);
-      console.log(`[QueueListener] Removed ${before - state.players.length} stale entrant(s) from queue ${channelId} (now in ${exceptChannelId})`);
+      console.log(`[QueueListener] Removed ${before - state.players.length} stale entrant(s) from queue ${this.queueLabelById(channelId)} (now in ${this.queueLabelById(exceptChannelId)})`);
     }
   }
 
@@ -643,8 +718,9 @@ export class QueueListener {
     if (queueState.players.length === 0) return;
     const inGame = await this.findInGamePlayers(queueState.players);
     if (inGame.size === 0) return;
+    const labels = await this.playerIgnMap([...inGame]);
     for (const playerId of inGame) {
-      console.log(`[QueueListener] Player ${playerId} is in an active game, removing from queue ${channelId}`);
+      console.log(`[QueueListener] ${labels.get(playerId) ?? playerId} is in an active game, removing from queue ${this.queueLabelById(channelId)}`);
     }
     queueState.players = queueState.players.filter(p => !inGame.has(p));
     for (const [partyId, members] of queueState.parties) {
@@ -728,6 +804,29 @@ export class QueueListener {
     const exists = !!queue;
     this.queueChannelCache.set(channelId, { exists, ts: Date.now() });
     return exists;
+  }
+
+  private queueLabel(state: VoiceState): string {
+    const name = state.channel?.name;
+    return name ? `${name} (${state.channelId})` : `${state.channelId}`;
+  }
+
+  private queueLabelById(queueId: string): string {
+    const guild = this.client.guilds.cache.first();
+    const channel = guild?.channels.cache?.get(queueId) as { name?: string } | undefined;
+    return channel?.name ? `${channel.name} (${queueId})` : queueId;
+  }
+
+  private async playerIgnMap(ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    try {
+      const users = await User.find({ discordId: { $in: ids } })
+        .select('discordId ign')
+        .lean() as Array<{ discordId: string; ign?: string }>;
+      return new Map(users.filter(user => user.ign).map(user => [user.discordId, user.ign as string]));
+    } catch {
+      return new Map();
+    }
   }
 
   private async handleQueueJoin(state: VoiceState): Promise<void> {
@@ -839,6 +938,7 @@ export class QueueListener {
       await this.evictInGamePlayers(queueState, queue.channelId);
 
       const wasQueueFull = queueState.players.length >= queue.maxPlayers;
+      const wasQueued = queueState.players.includes(userId);
 
       if (user.partyId) {
         const partyResult = await this.handlePartyJoin(state, user, queueState, queue);
@@ -854,10 +954,14 @@ export class QueueListener {
       queueState.lastUpdate = Date.now();
       queuePlayers.set(queue.channelId, [...queueState.players]);
 
+      if (!user.partyId && !wasQueued) {
+        console.log(`[QueueListener] ${user.ign} joined queue ${this.queueLabel(state)} (${queueState.players.length}/${queue.maxPlayers})`);
+      }
+
       const isQueueFull = queueState.players.length >= queue.maxPlayers;
 
       if (isQueueFull && !wasQueueFull) {
-        console.log(`[QueueListener] Queue ${queue.channelId} just became full, scheduling processing`);
+        console.log(`[QueueListener] Queue ${this.queueLabel(state)} just became full, scheduling processing`);
         await this.scheduleQueueProcessing(queue.channelId);
       }
 
@@ -869,7 +973,7 @@ export class QueueListener {
 
   private async handlePartyJoin(
     state: VoiceState,
-    user: { partyId?: string | null },
+    user: { partyId?: string | null; ign?: string },
     queueState: QueueState,
     queue: QueueLike
   ): Promise<{ success: boolean }> {
@@ -950,7 +1054,7 @@ export class QueueListener {
       const membersInVC = partyMembers.filter(memberId => playersInVC.has(memberId));
 
       if (membersInVC.length !== partyMembers.length) {
-        console.log(`[QueueListener] Party ${partyId}: waiting for ${partyMembers.length - membersInVC.length} member(s) to join queue ${queue.channelId}`);
+        console.log(`[QueueListener] Party ${partyId}: waiting for ${partyMembers.length - membersInVC.length} member(s) to join queue ${this.queueLabel(state)}`);
         return { success: false };
       }
 
@@ -963,7 +1067,7 @@ export class QueueListener {
         }
       }
 
-      console.log(`[QueueListener] Party ${partyId} (${partyMembers.length} members) joined queue ${queue.channelId}`);
+      console.log(`[QueueListener] ${user.ign ?? state.member?.id ?? 'Player'} joined queue ${this.queueLabel(state)} with party ${partyId} (${partyMembers.length} members, ${queueState.players.length}/${queue.maxPlayers})`);
 
       return { success: true };
 
@@ -993,9 +1097,9 @@ export class QueueListener {
       const userId = state.member?.id;
       if (!userId) return;
 
-      const user = await resolveQuery<Pick<IUser, 'discordId' | 'partyId'> | null>(
+      const user = await resolveQuery<Pick<IUser, 'discordId' | 'partyId' | 'ign'> | null>(
         User.findOne({ discordId: userId }),
-        'discordId partyId'
+        'discordId partyId ign'
       );
       if (!user) return;
 
@@ -1003,6 +1107,8 @@ export class QueueListener {
       if (!queueState) return;
 
       const wasQueueFull = queueState.players.length >= queue.maxPlayers;
+      const playerLabel = user.ign ?? userId;
+      const queueLabel = this.queueLabel(state);
 
       let partyId = user.partyId ?? null;
       let partyMembers = partyId ? queueState.parties.get(partyId) : undefined;
@@ -1025,11 +1131,11 @@ export class QueueListener {
 
         queueState.players = queueState.players.filter(p => !partyMembers!.includes(p));
         queueState.parties.delete(partyId);
-        console.log(`[QueueListener] Party ${partyId} removed from queue ${queue.channelId} after member ${userId} left`);
+        console.log(`[QueueListener] Party ${partyId} (${partyMembers.length} members) left queue ${queueLabel} after ${playerLabel} left (${queueState.players.length}/${queue.maxPlayers})`);
       } else {
 
         queueState.players = queueState.players.filter(p => p !== userId);
-        console.log(`[QueueListener] Player ${userId} left queue ${queue.channelId}`);
+        console.log(`[QueueListener] ${playerLabel} left queue ${queueLabel} (${queueState.players.length}/${queue.maxPlayers})`);
       }
 
       queueState.lastUpdate = Date.now();
@@ -1037,11 +1143,11 @@ export class QueueListener {
 
       const isQueueFull = queueState.players.length >= queue.maxPlayers;
 
-      console.log(`[QueueListener] Queue ${queue.channelId}: ${queueState.players.length}/${queue.maxPlayers} players remaining`);
+      console.log(`[QueueListener] Queue ${queueLabel}: ${queueState.players.length}/${queue.maxPlayers} players remaining`);
 
 
       if (wasQueueFull && !isQueueFull) {
-        console.log(`[QueueListener] Queue ${queue.channelId} is no longer full, stopping processing`);
+        console.log(`[QueueListener] Queue ${queueLabel} is no longer full, stopping processing`);
         this.cancelQueueProcessing(queue.channelId);
       }
 
@@ -1204,12 +1310,17 @@ export class QueueListener {
         clearInterval(this.presenceSweepInterval);
         this.presenceSweepInterval = null;
       }
+      if (this.queueStatusInterval) {
+        clearInterval(this.queueStatusInterval);
+        this.queueStatusInterval = null;
+      }
 
 
       this.queueStates.clear();
       this.partyCache.clear();
       this.playerLocks.clear();
       this.queueLocks.clear();
+      this.queueStatusCache.clear();
       this.queueMonitorRunning = false;
       this.presenceSweepRunning = false;
 
