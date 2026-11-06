@@ -51,7 +51,7 @@ bot_url: "YOUR-BOT-IP:25565"
 auth_key: "same-secret-as-bot-AUTH_KEY"
 ```
 
-`bot_url` is your bot address with port. The port defaults to 25565 when omitted. `auth_key` must match the bot `AUTH_KEY` exactly. Then run `/rbw reload` in game.
+`bot_url` is your bot address with port. The port defaults to 25565 when omitted. It is used for both the WebSocket and the in-game stats/PlaceholderAPI HTTP calls, because the bot serves both on the same port. `auth_key` must match the bot `AUTH_KEY` exactly. Then run `/rbw reload` in game.
 
 Check it worked:
 

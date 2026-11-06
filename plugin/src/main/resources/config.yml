@@ -1,9 +1,8 @@
+# Host:port of the Discord bot. Used for both the WebSocket and the HTTP API
+# (the bot serves both on this same port). A missing port defaults to 25565.
+# Use ws:// or wss:// if you need an explicit scheme.
 bot_url: "127.0.0.1:25565"
 auth_key: "change_me_in_production"
-
-api:
-  host: "websocket.deyo.lol"
-  port: 25506
 
 # enabled: whether data storage is enabled or not (tho the game data will be saved from discord bot in mongodb this storage can be used for debugging purposes)
 

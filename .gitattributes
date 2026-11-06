@@ -1,0 +1,2 @@
+# Keep shell scripts LF so they run on Pterodactyl/Linux containers.
+*.sh text eol=lf

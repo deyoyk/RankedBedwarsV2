@@ -1,0 +1,147 @@
+name: Deploy bot to SFTP
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to deploy (leave blank for the latest published release)'
+        required: false
+        default: ''
+        type: string
+      remote_dir:
+        description: 'Absolute remote directory to deploy into'
+        required: true
+        default: '/home/container'
+        type: string
+      port:
+        description: 'SSH/SFTP port'
+        required: true
+        default: '22'
+        type: string
+
+concurrency:
+  group: deploy-bot-sftp
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Upload and extract bot zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Validate inputs
+        env:
+          REMOTE_DIR: ${{ inputs.remote_dir }}
+          PORT: ${{ inputs.port }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REMOTE_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] || [[ "$REMOTE_DIR" == *..* ]]; then
+            echo "remote_dir must be an absolute path without '..' or shell metacharacters" >&2
+            exit 1
+          fi
+          if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
+            echo "port must be a number between 1 and 65535" >&2
+            exit 1
+          fi
+
+      - name: Download latest published bot zip
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p deploy
+          if [[ -n "${RELEASE_TAG// /}" ]]; then
+            TAG="$RELEASE_TAG"
+          else
+            TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName)"
+          fi
+          echo "Deploying release: $TAG"
+          gh release download "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "rbw-bot.zip" \
+            --dir deploy \
+            --clobber
+          test -s deploy/rbw-bot.zip
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify archive
+        run: |
+          set -euo pipefail
+          unzip -l deploy/rbw-bot.zip | head -40
+          unzip -l deploy/rbw-bot.zip | grep -qE ' package\.json$'
+
+      - name: Install sshpass
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+
+      - name: Clean, upload, and extract
+        env:
+          # Repository secrets are recommended. Repository variables also work
+          # for host/username/password, but a password in a variable is visible
+          # to anyone who can view repository settings.
+          SFTP_HOST: ${{ secrets.SFTP_HOST || vars.SFTP_HOST }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME || vars.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD || vars.SFTP_PASSWORD }}
+          REMOTE_DIR: ${{ inputs.remote_dir }}
+          PORT: ${{ inputs.port }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          HOST="${SFTP_HOST#sftp://}"
+          HOST="${HOST#ssh://}"
+          HOST="${HOST%/}"
+          if [[ -z "$HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
+            echo "Missing SFTP_HOST, SFTP_USERNAME, or SFTP_PASSWORD repository secret" >&2
+            exit 1
+          fi
+
+          export SSHPASS="$SFTP_PASSWORD"
+          REMOTE_Q="$(printf '%q' "$REMOTE_DIR")"
+          SSH_OPTS=(
+            -o StrictHostKeyChecking=accept-new
+            -o ConnectTimeout=20
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=3
+          )
+
+          echo "Cleaning $REMOTE_DIR on $HOST (keeping .env)..."
+          sshpass -e ssh -p "$PORT" "${SSH_OPTS[@]}" "$SFTP_USERNAME@$HOST" \
+            "mkdir -p $REMOTE_Q && cd $REMOTE_Q && find . -mindepth 1 -maxdepth 1 ! -name '.env' -exec rm -rf {} +"
+
+          echo "Uploading rbw-bot.zip..."
+          sshpass -e sftp -P "$PORT" \
+            -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=20 \
+            -b - "$SFTP_USERNAME@$HOST" <<SFTP
+          put deploy/rbw-bot.zip $REMOTE_DIR/rbw-bot.zip
+          bye
+          SFTP
+
+          echo "Extracting rbw-bot.zip..."
+          sshpass -e ssh -p "$PORT" "${SSH_OPTS[@]}" "$SFTP_USERNAME@$HOST" \
+            "cd $REMOTE_Q && \
+             if command -v unzip >/dev/null 2>&1; then unzip -oq rbw-bot.zip; \
+             elif command -v python3 >/dev/null 2>&1; then python3 -m zipfile -e rbw-bot.zip .; \
+             else echo 'Neither unzip nor python3 is available on the server' >&2; exit 1; fi && \
+             rm -f rbw-bot.zip && \
+             test -f package.json && \
+             if [ -f pterodactyl-start.sh ]; then chmod +x pterodactyl-start.sh; fi && \
+             if [ ! -f .env ]; then echo 'WARNING: .env was not present; create it before starting the bot' >&2; fi"
+
+          echo "Deployed $TAG to $SFTP_USERNAME@$HOST:$REMOTE_DIR"
+          {
+            echo "### Bot deployment"
+            echo ""
+            echo "- Release: \`$TAG\`"
+            echo "- Server: \`$HOST\`"
+            echo "- Directory: \`$REMOTE_DIR\`"
+            echo "- Preserved: \`.env\`"
+          } >> "$GITHUB_STEP_SUMMARY"

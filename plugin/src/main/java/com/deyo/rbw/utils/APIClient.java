@@ -1,5 +1,6 @@
 package com.deyo.rbw.utils;
 
+import com.deyo.rbw.managers.WebSocketManager;
 import com.deyo.rbw.models.LeaderboardEntry;
 import com.deyo.rbw.models.UserData;
 import com.google.gson.Gson;
@@ -43,11 +44,9 @@ public class APIClient {
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
 
-        String host = config.getString("api.host", "websocket.deyo.lol");
-        int port = config.getInt("api.port", 25506);
-        String endpoint = "/rbw/api";
-
-        this.baseUrl = "http://" + host + ":" + port + endpoint;
+        // The bot exposes the HTTP API and the WebSocket on the same address.
+        String botUrl = config.getString("bot_url", "127.0.0.1:25565");
+        this.baseUrl = WebSocketManager.buildApiBaseUrl(botUrl);
         logger.info("API Client initialized with base URL: " + this.baseUrl);
     }
 

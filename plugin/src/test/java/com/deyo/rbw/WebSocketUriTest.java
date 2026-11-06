@@ -46,4 +46,22 @@ public class WebSocketUriTest {
     public void theDefaultConfigValueWorks() {
         assertEquals("ws://127.0.0.1:25565/rbw/websocket", WebSocketManager.buildWebSocketUri("127.0.0.1:25565"));
     }
+
+    @Test
+    public void apiUsesTheSameHostAndPortAsTheBotUrl() {
+        assertEquals("http://127.0.0.1:25565/rbw/api", WebSocketManager.buildApiBaseUrl("127.0.0.1:25565"));
+        assertEquals("http://localhost:8080/rbw/api", WebSocketManager.buildApiBaseUrl("localhost:8080"));
+        assertEquals("http://rbw.deyo.lol:25565/rbw/api", WebSocketManager.buildApiBaseUrl("rbw.deyo.lol"));
+    }
+
+    @Test
+    public void apiUsesHttpsForSecureBotUrl() {
+        assertEquals("https://rbw.deyo.lol:25565/rbw/api", WebSocketManager.buildApiBaseUrl("wss://rbw.deyo.lol"));
+        assertEquals("https://bot.example.com:8443/rbw/api", WebSocketManager.buildApiBaseUrl("https://bot.example.com:8443"));
+    }
+
+    @Test
+    public void apiHandlesHttpScheme() {
+        assertEquals("http://localhost:8080/rbw/api", WebSocketManager.buildApiBaseUrl("http://localhost:8080"));
+    }
 }

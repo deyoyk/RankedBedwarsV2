@@ -87,8 +87,13 @@ public class WebSocketManager {
         if (raw.regionMatches(true, 0, "wss://", 0, 6)) {
             parsedScheme = "wss";
             raw = raw.substring(6);
+        } else if (raw.regionMatches(true, 0, "https://", 0, 8)) {
+            parsedScheme = "wss";
+            raw = raw.substring(8);
         } else if (raw.regionMatches(true, 0, "ws://", 0, 5)) {
             raw = raw.substring(5);
+        } else if (raw.regionMatches(true, 0, "http://", 0, 7)) {
+            raw = raw.substring(7);
         }
         while (raw.endsWith("/")) {
             raw = raw.substring(0, raw.length() - 1);
@@ -118,6 +123,16 @@ public class WebSocketManager {
     public static String buildWebSocketUri(String botUrl) {
         String[] target = parseTarget(botUrl);
         return target[0] + "://" + target[1] + ":" + target[2] + "/rbw/websocket";
+    }
+
+    /**
+     * The bot serves the HTTP API and the WebSocket on the same host and port.
+     * Deriving the API URL from bot_url keeps both endpoints in sync.
+     */
+    public static String buildApiBaseUrl(String botUrl) {
+        String[] target = parseTarget(botUrl);
+        String scheme = "wss".equals(target[0]) ? "https" : "http";
+        return scheme + "://" + target[1] + ":" + target[2] + "/rbw/api";
     }
 
     private String buildWebSocketUri() {
