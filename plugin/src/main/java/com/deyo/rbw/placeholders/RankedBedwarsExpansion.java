@@ -29,8 +29,11 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     private final Map<String, CachedLeaderboard> leaderboardCache = new ConcurrentHashMap<>();
     private final Set<String> pendingUserFetches = ConcurrentHashMap.newKeySet();
     private final Set<String> pendingLeaderboardFetches = ConcurrentHashMap.newKeySet();
+    private final Map<String, Long> userRetryAfter = new ConcurrentHashMap<>();
+    private final Map<String, Long> leaderboardRetryAfter = new ConcurrentHashMap<>();
     
-    
+    private static final long USER_RETRY_MS = TimeUnit.SECONDS.toMillis(30);
+    private static final long LEADERBOARD_RETRY_MS = TimeUnit.SECONDS.toMillis(60);
     private static final long USER_CACHE_TTL = TimeUnit.MINUTES.toMillis(5); 
     private static final long LEADERBOARD_CACHE_TTL = TimeUnit.MINUTES.toMillis(2); 
     
@@ -811,6 +814,10 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     
     private void fetchUserDataAsync(String playerName) {
         String cacheKey = playerName.toLowerCase();
+        Long retryAt = userRetryAfter.get(cacheKey);
+        if (retryAt != null && retryAt > System.currentTimeMillis()) {
+            return;
+        }
         if (!pendingUserFetches.add(cacheKey)) {
             return;
         }
@@ -825,6 +832,7 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
                         UserData userData = plugin.getGson().fromJson(data, UserData.class);
                         if (userData != null) {
                             userDataCache.put(cacheKey, new CachedUserData(userData));
+                            userRetryAfter.remove(cacheKey);
                             plugin.debug("Cached user data over WebSocket for " + playerName);
                             return;
                         }
@@ -832,7 +840,7 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
                         plugin.getLogger().warning("Failed to parse user data for " + playerName + ": " + error.getMessage());
                     }
                 }
-                fetchUserDataHttp(playerName, cacheKey);
+                userRetryAfter.put(cacheKey, System.currentTimeMillis() + USER_RETRY_MS);
             });
             return;
         }
@@ -846,10 +854,14 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             pendingUserFetches.remove(cacheKey);
             if (userData != null) {
                 userDataCache.put(cacheKey, new CachedUserData(userData));
+                userRetryAfter.remove(cacheKey);
                 plugin.debug("Cached user data for " + playerName);
+            } else {
+                userRetryAfter.put(cacheKey, System.currentTimeMillis() + USER_RETRY_MS);
             }
         }).exceptionally(throwable -> {
             pendingUserFetches.remove(cacheKey);
+            userRetryAfter.put(cacheKey, System.currentTimeMillis() + USER_RETRY_MS);
             plugin.getLogger().warning("Failed to fetch user data for " + playerName + ": " + throwable.getMessage());
             return null;
         });
@@ -857,6 +869,10 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     
     private void fetchLeaderboardAsync(String mode, int page) {
         String cacheKey = mode + "_" + page;
+        Long retryAt = leaderboardRetryAfter.get(cacheKey);
+        if (retryAt != null && retryAt > System.currentTimeMillis()) {
+            return;
+        }
         if (!pendingLeaderboardFetches.add(cacheKey)) {
             return;
         }
@@ -867,10 +883,11 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
                 pendingLeaderboardFetches.remove(cacheKey);
                 Map<Integer, LeaderboardEntry> leaderboard = parseLeaderboard(response);
                 if (leaderboard.isEmpty()) {
-                    fetchLeaderboardHttp(mode, page, cacheKey);
+                    leaderboardRetryAfter.put(cacheKey, System.currentTimeMillis() + LEADERBOARD_RETRY_MS);
                     return;
                 }
                 leaderboardCache.put(cacheKey, new CachedLeaderboard(leaderboard));
+                leaderboardRetryAfter.remove(cacheKey);
                 plugin.debug("Cached leaderboard over WebSocket for " + mode + " page " + page
                         + " (" + leaderboard.size() + " entries)");
             });
@@ -886,10 +903,14 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             pendingLeaderboardFetches.remove(cacheKey);
             if (leaderboard != null && !leaderboard.isEmpty()) {
                 leaderboardCache.put(cacheKey, new CachedLeaderboard(leaderboard));
+                leaderboardRetryAfter.remove(cacheKey);
                 plugin.debug("Cached leaderboard data for " + mode + " page " + page);
+            } else {
+                leaderboardRetryAfter.put(cacheKey, System.currentTimeMillis() + LEADERBOARD_RETRY_MS);
             }
         }).exceptionally(throwable -> {
             pendingLeaderboardFetches.remove(cacheKey);
+            leaderboardRetryAfter.put(cacheKey, System.currentTimeMillis() + LEADERBOARD_RETRY_MS);
             plugin.getLogger().warning("Failed to fetch leaderboard for " + mode + " page " + page + ": " + throwable.getMessage());
             return null;
         });
@@ -930,6 +951,8 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     public void clearCache() {
         userDataCache.clear();
         leaderboardCache.clear();
+        userRetryAfter.clear();
+        leaderboardRetryAfter.clear();
         plugin.getLogger().info("Cleared all placeholder caches");
     }
     

@@ -72,7 +72,7 @@ export class ApiManager {
 
   private strictLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    limit: parseInt(process.env.RBW_RATE_LIMIT_STRICT_MAX || '30', 10),
+    limit: parseInt(process.env.RBW_RATE_LIMIT_STRICT_MAX || '120', 10),
     standardHeaders: true,
     legacyHeaders: false,
     validate: { xForwardedForHeader: false, forwardedHeader: false },

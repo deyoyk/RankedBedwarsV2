@@ -66,7 +66,7 @@ public class APIClient {
             } catch (Exception e) {
                 logger.warning("Failed to fetch user data for " + ign + ": " + e.getMessage());
             }
-            return createDefaultUserData();
+            return null;
         }, executor);
     }
 
