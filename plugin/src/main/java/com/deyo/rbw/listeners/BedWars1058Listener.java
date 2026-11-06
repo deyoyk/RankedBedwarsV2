@@ -103,6 +103,7 @@ public class BedWars1058Listener implements Listener {
             plugin.debug("Game started in arena: " + arenaName);
             String gameId = plugin.getMapManager().getGameIdForArena(arenaName);
             if (gameId == null) {
+                plugin.getLogger().warning("Game started in arena '" + arenaName + "' without a mapped game ID; scoring will be skipped");
                 return;
             }
             
@@ -604,7 +605,10 @@ public class BedWars1058Listener implements Listener {
         plugin.debug("Game ended in arena: " + arenaName);
         
         BW1058GameTracker gameTracker = gameTrackers.get(arenaName);
-        if (gameTracker == null) return;
+        if (gameTracker == null) {
+            plugin.getLogger().warning("Game ended in arena '" + arenaName + "' without a tracked game; scoring was not sent");
+            return;
+        }
         
         ITeam winningTeam = null;
         try {

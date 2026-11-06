@@ -32,6 +32,7 @@ import org.bukkit.scheduler.BukkitRunnable;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 
@@ -83,6 +84,7 @@ public class MBedwarsListener implements Listener {
         plugin.debug("Round started in arena: " + arenaName);
         String gameId = plugin.getMapManager().getGameIdForArena(arenaName);
         if (gameId == null) {
+            plugin.getLogger().warning("Round started in arena '" + arenaName + "' without a mapped game ID; scoring will be skipped");
             return;
         }
         GameInstance gameInstance = new GameInstance(gameId, arena, true);
@@ -98,6 +100,7 @@ public class MBedwarsListener implements Listener {
         }
         preGamePlayers.put(arenaName, players);
 
+        plugin.getLogger().info("Tracking game #" + gameId + " in arena '" + arenaName + "'");
         sendGameStartNotification(gameId, arenaName);
     }
 
@@ -198,18 +201,31 @@ public class MBedwarsListener implements Listener {
         String arenaName = arena.getName();
         plugin.debug("Round ended in arena: " + arenaName);
         GameInstance gameInstance = gameInstances.get(arenaName);
-        if (gameInstance == null) return;
-        Team winningTeam = null;
-        for (Team team : arena.getEnabledTeams()) {
-            if (!arena.isBedDestroyed(team) || arena.getPlayersInTeam(team).size() > 0) {
-                winningTeam = team;
-                break;
+        if (gameInstance == null) {
+            plugin.getLogger().warning("Round ended in arena '" + arenaName + "' without a tracked game; scoring was not sent");
+            return;
+        }
+        Team winningTeam = event.getWinnerTeam();
+        if (winningTeam == null) {
+            List<Team> aliveTeams = arena.getAliveTeams();
+            if (aliveTeams.size() == 1) {
+                winningTeam = aliveTeams.get(0);
+            }
+        }
+        if (winningTeam == null) {
+            List<Team> remainingTeams = arena.getRemainingTeams();
+            if (remainingTeams.size() == 1) {
+                winningTeam = remainingTeams.get(0);
             }
         }
         if (winningTeam != null) {
             gameInstance.recordGameEnd(winningTeam);
+        } else {
+            plugin.getLogger().warning("Round ended in arena '" + arenaName + "' but no winning team could be determined");
         }
         Game game = gameInstance.toGame();
+        plugin.getLogger().info("Game #" + game.getGameId() + " ended in arena '" + arenaName
+                + "' (winner: " + (winningTeam != null ? winningTeam.getDisplayName() : "unknown") + "), queueing scoring");
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             if (plugin.getWebSocketManager() != null) {
                 // Persists a pending payload before sending, so a disconnect

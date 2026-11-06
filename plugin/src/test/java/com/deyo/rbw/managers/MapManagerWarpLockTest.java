@@ -1,6 +1,9 @@
 package com.deyo.rbw.managers;
 
 import com.deyo.rbw.RankedBedwars;
+import com.deyo.rbw.bedwars.BedwarsAPI;
+import com.deyo.rbw.bedwars.BedwarsAPIManager;
+import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
 import org.bukkit.scheduler.BukkitScheduler;
 import org.bukkit.scheduler.BukkitTask;
@@ -16,6 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -93,6 +97,19 @@ public class MapManagerWarpLockTest {
     private void putGameMapping(String gameId, String arena) throws Exception {
         putStringMap("gameIdToPhysicalArenaMap", gameId, arena);
         putStringMap("physicalArenaToGameIdMap", arena, gameId);
+    }
+
+    @Test
+    public void warpRegistersArenaToGameMappingForScoring() throws Exception {
+        BedwarsAPI implementation = mock(BedwarsAPI.class);
+        try (org.mockito.MockedStatic<BedwarsAPIManager> api = mockStatic(BedwarsAPIManager.class)) {
+            api.when(BedwarsAPIManager::isAvailable).thenReturn(true);
+            api.when(BedwarsAPIManager::getImplementation).thenReturn(implementation);
+
+            manager.warpPlayersToGame("123", "arena", new JsonObject(), new JsonObject(), true);
+        }
+
+        assertEquals("123", manager.getGameIdForArena("arena"));
     }
 
     @Test

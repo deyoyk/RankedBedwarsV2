@@ -454,6 +454,8 @@ public class MapManager {
         lockMap(physicalArenaToUse);
 
         gameIdToPhysicalArenaMap.put(gameId, physicalArenaToUse);
+        physicalArenaToGameIdMap.put(physicalArenaToUse, gameId);
+        plugin.debug("Mapped arena '" + physicalArenaToUse + "' to game #" + gameId);
         pendingWarpLocks.put(physicalArenaToUse, System.currentTimeMillis());
 
         if (plugin.getGameDataManager() != null) {
@@ -466,6 +468,7 @@ public class MapManager {
             } catch (Exception e) {
                 unlockMap(physicalArenaToUse);
                 gameIdToPhysicalArenaMap.remove(gameId);
+                physicalArenaToGameIdMap.remove(physicalArenaToUse, gameId);
                 sendWarpFailureUnknown(gameId);
                 plugin.getLogger().warning("Warp threw for game #" + gameId + ", map unlocked: " + e.getMessage());
             }
