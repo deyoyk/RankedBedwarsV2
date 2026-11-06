@@ -190,6 +190,17 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
     private void sendStatus(CommandSender sender) {
         sender.sendMessage(ChatColor.GRAY + "----- " + ChatColor.GOLD + "rankedbedwars Status" + ChatColor.GRAY + " -----");
 
+        sender.sendMessage(ChatColor.GOLD + "Version: " + ChatColor.GREEN + plugin.getDescription().getVersion());
+
+        boolean placeholderRegistered = false;
+        try {
+            placeholderRegistered = plugin.getPlaceholderExpansion() != null
+                    && plugin.getPlaceholderExpansion().isRegistered();
+        } catch (Throwable ignored) {
+        }
+        sender.sendMessage(ChatColor.GOLD + "PlaceholderAPI: " +
+                (placeholderRegistered ? ChatColor.GREEN + "Registered" : ChatColor.RED + "Not registered"));
+
         boolean websocketConnected = plugin.getWebSocketManager() != null && plugin.getWebSocketManager().isConnected();
 
         sender.sendMessage(ChatColor.GOLD + "WebSocket: " +
