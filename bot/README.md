@@ -33,9 +33,12 @@ Then check the config and run:
 
 ```bash
 npm run validate
-npm run build
 npm start
 ```
+
+`npm start` builds `dist/index.js` and then starts it. Use
+`npm run start:built` if you want to start an existing build without
+rebuilding.
 
 Keep it running with pm2:
 
@@ -58,7 +61,7 @@ docker compose up -d --build
 startup command:
 
 ```text
-npm install --include=dev && npm run build && npm start
+npm install --include=dev && npm start
 ```
 
 or upload the bot and use the included script:
@@ -67,9 +70,9 @@ or upload the bot and use the included script:
 bash pterodactyl-start.sh
 ```
 
-The script installs dev dependencies (Pterodactyl often sets
-`NODE_ENV=production`, but `tsup`/`typescript` are needed to build), builds
-the bot, and starts it.
+`npm start` builds the bot and then starts the built output. The script also
+installs dev dependencies first because Pterodactyl often sets
+`NODE_ENV=production`, while `tsup`/`typescript` are needed for the build.
 
 ## Commands
 

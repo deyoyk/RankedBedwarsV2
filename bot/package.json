@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsup src/index.ts --out-dir dist --minify",
-    "start": "node dist/index.js",
+    "start": "npm run build && node dist/index.js",
+    "start:built": "node dist/index.js",
     "prestart": "node scripts/validate-config.cjs",
     "dev": "ts-node src/index.ts",
     "setup": "node scripts/setup.cjs && node scripts/validate-config.cjs",
