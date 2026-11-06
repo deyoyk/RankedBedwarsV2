@@ -585,6 +585,7 @@ export class WebSocketManager {
         this.stopQueueStatusBroadcast();
       }
     }, 30000);
+    this.heartbeatInterval.unref?.();
   }
   
   private startServer(port: number, path?: string): void {
@@ -1582,7 +1583,8 @@ export class WebSocketManager {
       } catch (error) {
         console.error('[WebSocketManager] Error broadcasting queue status:', error);
       }
-    }, 10000); 
+    }, 10000);
+    this.queueStatusInterval.unref?.();
 
     console.log('[WebSocketManager] Queue status broadcast started');
   }
@@ -1690,6 +1692,31 @@ export class WebSocketManager {
       clearInterval(this.queueStatusInterval);
       this.queueStatusInterval = null;
       console.log('[WebSocketManager] Queue status broadcast stopped');
+    }
+  }
+
+  public shutdown(): void {
+    this.stopQueueStatusBroadcast();
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    try {
+      this.wss?.close();
+    } catch {
+    }
+    try {
+      this.server?.close();
+    } catch {
+    }
+    try {
+      this.client?.close();
+    } catch {
+    }
+    this.client = null;
+    PresenceService.setConnected(false);
+    if ((global as unknown as { _wsManager?: WebSocketManager })._wsManager === this) {
+      (global as unknown as { _wsManager?: WebSocketManager })._wsManager = undefined;
     }
   }
 

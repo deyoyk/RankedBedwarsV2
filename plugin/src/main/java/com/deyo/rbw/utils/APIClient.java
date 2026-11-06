@@ -44,7 +44,6 @@ public class APIClient {
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
 
-        // The bot exposes the HTTP API and the WebSocket on the same address.
         String botUrl = config.getString("bot_url", "127.0.0.1:25565");
         this.baseUrl = WebSocketManager.buildApiBaseUrl(botUrl);
         logger.info("API Client initialized with base URL: " + this.baseUrl);

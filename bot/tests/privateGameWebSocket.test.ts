@@ -16,6 +16,7 @@ import { WebSocketManager } from '../src/websocket/WebSocketManager';
 
 const UserModel = User as unknown as { findOne: jest.Mock };
 const servers: Array<{ close: (cb?: () => void) => void }> = [];
+const managers: any[] = [];
 
 function userChain(user: any) {
   return {
@@ -32,6 +33,7 @@ async function makeWs() {
   const discordClient: any = { guilds: { cache: { first: () => guild } } };
   const ws = new WebSocketManager(0, discordClient);
   (ws as any).send = jest.fn();
+  managers.push(ws);
   const server = (ws as any).server;
   if (server && typeof server.close === 'function') servers.push(server);
   return { ws: ws as any, guild };
@@ -45,6 +47,9 @@ describe('private game websocket bridge', () => {
   beforeEach(() => jest.clearAllMocks());
 
   afterAll(() => {
+    for (const manager of managers) {
+      try { manager.shutdown?.(); } catch { /* test cleanup */ }
+    }
     for (const server of servers) {
       try { server.close(); } catch { /* test cleanup */ }
     }

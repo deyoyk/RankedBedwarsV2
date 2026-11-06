@@ -84,11 +84,14 @@ function setupVoice(ids: string[]) {
   };
 }
 
+const listeners: any[] = [];
+
 function makeListener(guild: any) {
   const client: any = { guilds: { cache: { first: () => guild } } };
   const listener = new QueueListener(client, { checkPlayerOnline: jest.fn() } as any, {} as any) as any;
   clearInterval(listener.matchmaker.queueMonitorInterval);
   clearInterval(listener.matchmaker.cacheCleanupInterval);
+  listeners.push(listener);
   return listener;
 }
 
@@ -100,6 +103,12 @@ function seedQueue(listener: any, players: string[], parties?: Map<string, strin
     processing: false,
   });
 }
+
+afterEach(() => {
+  for (const listener of listeners.splice(0)) {
+    try { listener.cleanup(); } catch { }
+  }
+});
 
 beforeEach(() => {
   jest.clearAllMocks();

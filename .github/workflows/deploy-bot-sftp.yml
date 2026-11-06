@@ -83,9 +83,6 @@ jobs:
 
       - name: Clean, upload, and extract
         env:
-          # Repository secrets are recommended. Repository variables also work
-          # for host/username/password, but a password in a variable is visible
-          # to anyone who can view repository settings.
           SFTP_HOST: ${{ secrets.SFTP_HOST || vars.SFTP_HOST }}
           SFTP_USERNAME: ${{ secrets.SFTP_USERNAME || vars.SFTP_USERNAME }}
           SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD || vars.SFTP_PASSWORD }}
@@ -98,8 +95,21 @@ jobs:
           HOST="${SFTP_HOST#sftp://}"
           HOST="${HOST#ssh://}"
           HOST="${HOST%/}"
+
+          if [[ "$HOST" == *:* ]]; then
+            EMBEDDED_PORT="${HOST##*:}"
+            if [[ "$EMBEDDED_PORT" =~ ^[0-9]+$ ]] && (( EMBEDDED_PORT >= 1 && EMBEDDED_PORT <= 65535 )); then
+              PORT="$EMBEDDED_PORT"
+              HOST="${HOST%:*}"
+            fi
+          fi
+
           if [[ -z "$HOST" || -z "$SFTP_USERNAME" || -z "$SFTP_PASSWORD" ]]; then
             echo "Missing SFTP_HOST, SFTP_USERNAME, or SFTP_PASSWORD repository secret" >&2
+            exit 1
+          fi
+          if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
+            echo "Resolved port must be between 1 and 65535" >&2
             exit 1
           fi
 

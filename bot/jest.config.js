@@ -7,6 +7,5 @@ module.exports = {
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.test.json' }]
   },
-  clearMocks: true,
-  forceExit: true
+  clearMocks: true
 };

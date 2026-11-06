@@ -239,6 +239,7 @@ describe('websocket queuefromingame flood', () => {
       expect(sent.filter((p: any) => p.type === 'queuefromingame_success')).toHaveLength(15);
       expect(sent.some((p: any) => p.type === 'queuefromingame_fail')).toBe(false);
     } finally {
+      try { (ws as any).shutdown?.(); } catch { /* ignore */ }
       for (const s of servers) { try { s.close(); } catch { /* ignore */ } }
     }
   });
@@ -555,7 +556,7 @@ describe('full lifecycle live simulation', () => {
 
   afterEach(() => {
     try { mm?.cleanup?.(); } catch { /* ignore */ }
-    try { (listener as any)?.matchmaker?.cleanup?.(); } catch { /* ignore */ }
+    try { listener?.cleanup?.(); } catch { /* ignore */ }
   });
 
   async function join(u: string) {

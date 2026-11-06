@@ -125,10 +125,6 @@ public class WebSocketManager {
         return target[0] + "://" + target[1] + ":" + target[2] + "/rbw/websocket";
     }
 
-    /**
-     * The bot serves the HTTP API and the WebSocket on the same host and port.
-     * Deriving the API URL from bot_url keeps both endpoints in sync.
-     */
     public static String buildApiBaseUrl(String botUrl) {
         String[] target = parseTarget(botUrl);
         String scheme = "wss".equals(target[0]) ? "https" : "http";

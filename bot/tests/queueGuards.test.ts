@@ -124,7 +124,7 @@ describe('QueueListener admission guards', () => {
 
   afterEach(() => {
     try {
-      (listener?.matchmaker as any)?.cleanup?.();
+      listener?.cleanup?.();
     } catch { /* ignore */ }
   });
 
@@ -276,6 +276,7 @@ describe('CentralizedMatchmaker draft guards', () => {
 
 describe('WebSocket queuefromingame guards', () => {
   const servers: Array<{ close: (cb?: () => void) => void }> = [];
+  const managers: any[] = [];
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -283,6 +284,11 @@ describe('WebSocket queuefromingame guards', () => {
   });
 
   afterEach(() => {
+    for (const manager of managers.splice(0)) {
+      try {
+        manager.shutdown?.();
+      } catch { /* ignore */ }
+    }
     for (const server of servers.splice(0)) {
       try {
         server.close();
@@ -313,6 +319,7 @@ describe('WebSocket queuefromingame guards', () => {
     const discordClient: any = { guilds: { cache: { first: () => guild } } };
     const ws = new WebSocketManager(0, discordClient);
     (ws as any).send = jest.fn();
+    managers.push(ws);
     const httpServer = (ws as any).server;
     if (httpServer && typeof httpServer.close === 'function') {
       servers.push(httpServer);

@@ -5,11 +5,21 @@ const mainClientMock: any = {
   channels: { cache: { get: () => undefined } }
 };
 
+const managers: WorkersManager[] = [];
+
 function makeManager(): WorkersManager {
-  return new (WorkersManager as any)(mainClientMock);
+  const manager = new (WorkersManager as any)(mainClientMock) as WorkersManager;
+  managers.push(manager);
+  return manager;
 }
 
 describe('WorkersManager race conditions', () => {
+  afterEach(() => {
+    for (const manager of managers.splice(0)) {
+      manager.shutdown();
+    }
+  });
+
   it('a task that stays queued (no workers) times out and is removed, never executed later', async () => {
     jest.useFakeTimers();
     const manager = makeManager();

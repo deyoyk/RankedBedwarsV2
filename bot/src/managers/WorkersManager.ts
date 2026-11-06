@@ -928,6 +928,31 @@ export class WorkersManager {
     });
   }
 
+  public shutdown(): void {
+    if (this.processingInterval) {
+      clearInterval(this.processingInterval);
+      this.processingInterval = null;
+    }
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+    for (const queue of this.taskQueue.values()) {
+      for (const task of queue) {
+        if (task.timeout) clearTimeout(task.timeout);
+        task.timeout = undefined;
+        task.state = 'done';
+      }
+      queue.length = 0;
+    }
+    for (const task of this.processingTasks.values()) {
+      if (task.timeout) clearTimeout(task.timeout);
+      task.timeout = undefined;
+    }
+    this.processingTasks.clear();
+    this.queuedTaskCount = 0;
+  }
+
   private async executeTaskOnMainClient(
     type: WorkerTaskType,
     data: WorkerTaskData,

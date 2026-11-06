@@ -13,9 +13,7 @@ describe('WebSocketManager race conditions', () => {
   });
 
   afterEach(() => {
-    (manager as any).stopQueueStatusBroadcast();
-    (manager as any).heartbeatInterval && clearInterval((manager as any).heartbeatInterval);
-    (manager as any).server.close();
+    manager.shutdown();
   });
 
   it('concurrent checks for the same IGN share one probe and each resolve', async () => {
