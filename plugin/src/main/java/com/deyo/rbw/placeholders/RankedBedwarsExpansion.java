@@ -145,12 +145,12 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         }
 
         if (player == null) {
-            return handleLeaderboardPlaceholder(normalizedParams);
+            return handleLeaderboardSafe(normalizedParams);
         }
 
         String playerName = player.getName();
         if (playerName == null) {
-            return handleLeaderboardPlaceholder(normalizedParams);
+            return handleLeaderboardSafe(normalizedParams);
         }
 
         switch (normalizedParams) {
@@ -321,9 +321,23 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             case "first_blood_rate":
                 return getCachedUserStat(playerName, "first_blood_rate");
             default:
-                
-                return handleLeaderboardPlaceholder(normalizedParams);
+                return handleLeaderboardSafe(normalizedParams);
         }
+    }
+
+    /**
+     * Older PlaceholderAPI consumers call the legacy player hook directly.
+     * Delegate it so global/leaderboard placeholders keep working there too.
+     */
+    @Override
+    @Deprecated
+    public String onPlaceholderRequest(Player player, @NotNull String params) {
+        return onRequest(player, params);
+    }
+
+    private String handleLeaderboardSafe(String params) {
+        String result = handleLeaderboardPlaceholder(params);
+        return result == null ? "N/A" : result;
     }
 
     private String handleGamePlaceholder(String params, OfflinePlayer player) {
@@ -753,7 +767,9 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         
         if (cached != null && !cached.isExpired()) {
             LeaderboardEntry entry = cached.getData().get(position);
-            return entry != null ? entry.getIgn() : "N/A";
+            if (entry == null) return "N/A";
+            String ign = entry.getIgn();
+            return ign == null || ign.trim().isEmpty() ? "N/A" : ign;
         }
         
         

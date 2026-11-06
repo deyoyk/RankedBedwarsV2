@@ -229,6 +229,29 @@ public class PlaceholderExpansionTest {
     }
 
     @Test
+    public void leaderboardPlayerFallsBackWhenStoredIgnIsMissing() throws Exception {
+        WebSocketManager manager = mock(WebSocketManager.class);
+        when(manager.isConnected()).thenReturn(true);
+        when(plugin.getWebSocketManager()).thenReturn(manager);
+        cacheLeaderboard("wins_1", Map.of(1, new LeaderboardEntry(null, 42)));
+
+        assertEquals("N/A", expansion.onRequest(null, "top_wins_1"));
+    }
+
+    @Test
+    public void legacyPlaceholderHookDelegatesToOnRequest() throws Exception {
+        WebSocketManager manager = mock(WebSocketManager.class);
+        when(manager.isConnected()).thenReturn(true);
+        when(plugin.getWebSocketManager()).thenReturn(manager);
+        cacheLeaderboard("wins_1", Map.of(1, new LeaderboardEntry("Steve", 42)));
+
+        Player player = mock(Player.class);
+        when(player.getName()).thenReturn("Alex");
+
+        assertEquals("Steve", expansion.onPlaceholderRequest(player, "top_wins_1"));
+    }
+
+    @Test
     public void playerPlaceholdersUseFallbacksWhenApiIsDisconnected() {
         OfflinePlayer offline = mock(OfflinePlayer.class);
         when(offline.getName()).thenReturn("Steve");
