@@ -92,16 +92,22 @@ describe('QueueListener restart recovery', () => {
       {} as any
     ) as any;
     listener.workersManager = { setChannelStatus: jest.fn().mockResolvedValue(undefined) };
+    listener.queueStates.set('q1', {
+      players: ['a', 'b', 'c'],
+      parties: new Map([['p1', ['a', 'b']], ['p2', ['c']]]),
+      lastUpdate: Date.now(),
+      processing: false
+    });
 
     await listener.updateQueueStatuses();
-    expect(listener.workersManager.setChannelStatus).toHaveBeenCalledWith('q1', '3/8');
+    expect(listener.workersManager.setChannelStatus).toHaveBeenCalledWith('q1', 'In queue 3/8 • 2 parties');
 
     await listener.updateQueueStatuses();
     expect(listener.workersManager.setChannelStatus).toHaveBeenCalledTimes(1);
 
     queuePlayers.set('q1', ['a']);
     await listener.updateQueueStatuses();
-    expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', '1/8');
+    expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', 'In queue 1/8 • 2 parties');
 
     listener.cleanup();
   });

@@ -1001,14 +1001,24 @@ export class WebSocketManager {
       }
     }
   }
-  public async checkPlayerOnline(ign: string): Promise<{ online: boolean; original_ign_case?: string }> {
+  public isConnected(): boolean {
+    return !!this.client && this.client.readyState === this.client.OPEN;
+  }
+
+  public async checkPlayerOnline(
+    ign: string,
+    timeoutMs: number = 3000
+  ): Promise<{ online: boolean | null; original_ign_case?: string }> {
+    if (!this.isConnected()) {
+      return { online: null };
+    }
     return new Promise((resolve) => {
       const normalizedIgn = ign.toLowerCase();
       let callbacks = this.checkPlayerCallbacks.get(normalizedIgn);
       const isNew = !callbacks;
       if (!callbacks) {
         if (this.checkPlayerCallbacks.size >= 2000) {
-          resolve({ online: false });
+          resolve({ online: null });
           return;
         }
         callbacks = new Set();
@@ -1029,8 +1039,8 @@ export class WebSocketManager {
         if (callbacks.size === 0) {
           this.checkPlayerCallbacks.delete(normalizedIgn);
         }
-        resolve({ online: false });
-      }, 10000);
+        resolve({ online: null });
+      }, timeoutMs);
 
       callbacks.add(cb);
       if (isNew) {

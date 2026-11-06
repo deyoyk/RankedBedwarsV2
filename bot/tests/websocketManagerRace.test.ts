@@ -9,6 +9,7 @@ describe('WebSocketManager race conditions', () => {
   beforeEach(() => {
     sent = [];
     manager = new WebSocketManager(0, undefined as any, '/test');
+    (manager as any).client = { readyState: 1, OPEN: 1, close: jest.fn() };
     jest.spyOn(manager as any, 'send').mockImplementation((payload: any) => { sent.push(payload); });
   });
 
@@ -66,7 +67,7 @@ describe('WebSocketManager race conditions', () => {
     const p1 = manager.checkPlayerOnline('Steve');
 
     jest.advanceTimersByTime(10000);
-    await expect(p1).resolves.toMatchObject({ online: false });
+    await expect(p1).resolves.toMatchObject({ online: null });
     expect((manager as any).checkPlayerCallbacks.get('steve')).toBeUndefined();
 
     const p2 = manager.checkPlayerOnline('Steve');
@@ -75,5 +76,11 @@ describe('WebSocketManager race conditions', () => {
     (manager as any).handlePlayerStatus({ ign: 'steve', online: true });
     await expect(p2).resolves.toMatchObject({ online: true });
     jest.useRealTimers();
+  });
+
+  it('returns an unknown result without sending when the socket is down', async () => {
+    (manager as any).client = null;
+    await expect(manager.checkPlayerOnline('Steve')).resolves.toEqual({ online: null });
+    expect(sent.filter(m => m.type === 'check_player')).toHaveLength(0);
   });
 });

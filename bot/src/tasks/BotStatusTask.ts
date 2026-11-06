@@ -7,6 +7,8 @@ import path from 'path';
 import botPackage from '../../package.json';
 import { themedEmbed } from '../utils/betterembed';
 
+export const STATUS_EMBED_TITLE = 'Bot Environment Status ✌️';
+
 export class BotStatusTask {
   private client: Client;
   private wsManager: WebSocketManager;
@@ -91,7 +93,7 @@ export class BotStatusTask {
       if (!ownId) return null;
       const messages = await channel.messages.fetch({ limit: 10 });
       for (const message of messages.values()) {
-        if (message.author?.id === ownId && message.embeds?.length) {
+        if (message.author?.id === ownId && message.embeds?.some(embed => embed.title === STATUS_EMBED_TITLE)) {
           return message;
         }
       }
@@ -139,7 +141,7 @@ export class BotStatusTask {
 
   private async createStatusEmbed(): Promise<EmbedBuilder> {
     const embed = themedEmbed()
-      .setTitle('Bot Environment Status ✌️')
+      .setTitle(STATUS_EMBED_TITLE)
       .setColor(0x00AAAA)
       .setImage(this.statusImageCdnUrl || 'attachment://rbw.gif');
 

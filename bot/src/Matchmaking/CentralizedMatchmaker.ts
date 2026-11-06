@@ -985,8 +985,10 @@ export class CentralizedMatchmaker {
         3000,
         'Online check'
       );
-      PresenceService.ingest(ign, onlineCheck.online === true);
-      if (!onlineCheck.online) {
+      if (typeof onlineCheck.online === 'boolean') {
+        PresenceService.ingest(ign, onlineCheck.online);
+      }
+      if (onlineCheck.online === false) {
         console.warn(`[CentralizedMatchmaker] User ${ign} is not online`);
         return false;
       }
@@ -1058,8 +1060,10 @@ export class CentralizedMatchmaker {
             3000,
             'Online check'
           );
-          PresenceService.ingest(user.ign, onlineCheck.online === true);
-          if (!onlineCheck.online) {
+          if (typeof onlineCheck.online === 'boolean') {
+            PresenceService.ingest(user.ign, onlineCheck.online);
+          }
+          if (onlineCheck.online === false) {
             console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
             return false;
           }

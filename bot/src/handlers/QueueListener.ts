@@ -81,7 +81,7 @@ export class QueueListener {
   private shuttingDown = false;
   private readonly CACHE_TTL = 30000;
   private readonly QUEUE_CHECK_INTERVAL = 5000;
-  private readonly QUEUE_STATUS_INTERVAL = 4000;
+  private readonly QUEUE_STATUS_INTERVAL = 3000;
   private readonly CHANNEL_CACHE_TTL = 30000;
   private readonly PRESENCE_SWEEP_INTERVAL = 30000;
 
@@ -113,7 +113,7 @@ export class QueueListener {
       });
     }, this.QUEUE_STATUS_INTERVAL);
     this.queueStatusInterval.unref?.();
-    console.log('[QueueListener] Queue channel status updates started (every 4s)');
+    console.log('[QueueListener] Queue channel status updates started (every 3s)');
   }
 
   private async updateQueueStatuses(): Promise<void> {
@@ -128,10 +128,12 @@ export class QueueListener {
     const activeIds = new Set(queues.map(queue => queue.channelId));
 
     for (const queue of queues) {
-      const current = queuePlayers.get(queue.channelId)?.length
-        ?? this.queueStates.get(queue.channelId)?.players.length
-        ?? 0;
-      const status = `${current}/${queue.maxPlayers}`;
+      const state = this.queueStates.get(queue.channelId);
+      const queuedPlayers = queuePlayers.get(queue.channelId) ?? state?.players ?? [];
+      const current = new Set(queuedPlayers).size;
+      const parties = state?.parties.size ?? 0;
+      const partyLabel = `${parties} ${parties === 1 ? 'party' : 'parties'}`;
+      const status = `In queue ${current}/${queue.maxPlayers} • ${partyLabel}`;
       if (this.queueStatusCache.get(queue.channelId) === status) continue;
 
       try {
@@ -322,8 +324,8 @@ export class QueueListener {
       const batch = unknown.slice(j, j + 5);
       const results = await Promise.allSettled(batch.map((ign) => this.wsManager.checkPlayerOnline(ign)));
       results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          PresenceService.ingest(batch[index], result.value.online === true);
+        if (result.status === 'fulfilled' && typeof result.value.online === 'boolean') {
+          PresenceService.ingest(batch[index], result.value.online);
         }
       });
     }
@@ -888,24 +890,22 @@ export class QueueListener {
       }
 
       if (presence === 'unknown') {
-        try {
-          const onlineCheck = await Promise.race([
-            this.wsManager.checkPlayerOnline(user.ign),
-            new Promise<{ online: boolean }>((_, reject) =>
-              setTimeout(() => reject(new Error('Timeout')), 5000)
-            )
-          ]).catch(() => null);
-
-          if (onlineCheck === null) {
-            console.warn(`[QueueListener] Online check timed out for ${user.ign}, allowing queue join`);
-          } else if (!onlineCheck.online) {
-            await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
-            return;
+        const wsConnected = typeof this.wsManager.isConnected === 'function'
+          ? this.wsManager.isConnected()
+          : true;
+        if (PresenceService.isConnected() && wsConnected) {
+          try {
+            const onlineCheck = await this.wsManager.checkPlayerOnline(user.ign, 2000);
+            if (onlineCheck.online === false) {
+              await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+              return;
+            }
+            if (onlineCheck.online === null) {
+              console.warn(`[QueueListener] Online check for ${user.ign} was inconclusive, allowing queue join`);
+            }
+          } catch (error) {
+            console.warn(`[QueueListener] Could not check online status for ${user.ign}, allowing queue join: ${error}`);
           }
-        } catch (error) {
-          console.warn(`[QueueListener] Could not check online status for ${user.ign}: ${error}`);
-          await this.moveToWaiting(state, 'Could not verify online status, Hm? Wierd this shouldn\'t be happening!');
-          return;
         }
       }
 

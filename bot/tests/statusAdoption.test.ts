@@ -1,4 +1,4 @@
-import { BotStatusTask } from '../src/tasks/BotStatusTask';
+import { BotStatusTask, STATUS_EMBED_TITLE } from '../src/tasks/BotStatusTask';
 
 jest.mock('../src/models/Queue', () => ({
   __esModule: true,
@@ -13,7 +13,7 @@ function channelMock(messages: any[] = []) {
       const msg: any = {
         id: `msg-${store.size + 1}`,
         author: { id: 'bot1' },
-        embeds: [{}],
+        embeds: [{ title: STATUS_EMBED_TITLE }],
         edit: jest.fn().mockResolvedValue(undefined),
         attachments: { first: () => null }
       };
@@ -54,6 +54,25 @@ describe('BotStatusTask message adoption', () => {
     task.stop();
   });
 
+  it('does not adopt a command reply embed', async () => {
+    const reply: any = {
+      id: 'cmd-reply',
+      author: { id: 'bot1' },
+      embeds: [{ title: 'Win Given' }],
+      edit: jest.fn().mockResolvedValue(undefined),
+      attachments: { first: () => null }
+    };
+    const channel = channelMock([reply]);
+    const task = taskWith(channel);
+
+    await task.start();
+
+    expect(reply.edit).not.toHaveBeenCalled();
+    expect(channel.send).toHaveBeenCalledTimes(1);
+    expect(channel.store.size).toBe(2);
+    task.stop();
+  });
+
   it('edits the previous message instead of posting on restart', async () => {
     const channel = channelMock();
     const first = taskWith(channel);
@@ -73,7 +92,7 @@ describe('BotStatusTask message adoption', () => {
     const dead: any = {
       id: 'msg-old',
       author: { id: 'bot1' },
-      embeds: [{}],
+      embeds: [{ title: STATUS_EMBED_TITLE }],
       edit: jest.fn().mockRejectedValue(new Error('Unknown Message'))
     };
     const channel = channelMock([dead]);
