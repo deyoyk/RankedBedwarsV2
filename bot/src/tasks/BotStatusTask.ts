@@ -115,12 +115,26 @@ export class BotStatusTask {
       
       await this.statusMessage.edit({ embeds: [embed] });
     } catch (error) {
+      const code = this.discordErrorCode(error);
+      if (code === 10003) {
+        console.warn('[BotStatusTask] Status channel no longer exists; stopping status updates. Check BOT_STATUS_CHANNEL_ID.');
+        this.statusMessage = null;
+        this.stop();
+        return;
+      }
       console.error('[BotStatusTask] Error updating status embed:', error);
-      
+      this.statusMessage = null;
       await this.sendStatusEmbed();
     } finally {
       this.isUpdating = false;
     }
+  }
+
+  private discordErrorCode(error: unknown): number | string | undefined {
+    if (typeof error !== 'object' || error === null) return undefined;
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'number' || typeof code === 'string') return code;
+    return undefined;
   }
 
   private async createStatusEmbed(): Promise<EmbedBuilder> {

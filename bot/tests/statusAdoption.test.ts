@@ -88,4 +88,21 @@ describe('BotStatusTask message adoption', () => {
     expect(dead.edit).toHaveBeenCalled();
     expect(channel.send).toHaveBeenCalledTimes(1);
   });
+
+  it('stops polling when the status channel was deleted', async () => {
+    const channel = channelMock();
+    const task = taskWith(channel);
+    await task.start();
+
+    const message = [...channel.store.values()][0] as any;
+    message.edit.mockRejectedValue(Object.assign(new Error('Unknown Channel'), { code: 10003 }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await task.updateStatusEmbed();
+
+    expect((task as any).updateInterval).toBeNull();
+    expect(channel.send).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+    task.stop();
+  });
 });

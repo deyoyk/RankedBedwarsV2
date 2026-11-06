@@ -60,8 +60,14 @@ export class ChannelsCleanupTask {
 
       
       const validChannelIds = new Set<string>();
-      if (config.voicechannels.waitingvc) {
-        validChannelIds.add(config.voicechannels.waitingvc);
+      for (const id of Object.values(config.channels)) {
+        if (id) validChannelIds.add(id);
+      }
+      for (const id of Object.values(config.categories)) {
+        if (id) validChannelIds.add(id);
+      }
+      for (const id of Object.values(config.voicechannels)) {
+        if (id) validChannelIds.add(id);
       }
       
       for (const game of activeGames) {
@@ -96,6 +102,13 @@ export class ChannelsCleanupTask {
     }
   }
 
+  private isBotManagedChannel(channel: TextChannel | VoiceChannel): boolean {
+    const name = channel.name;
+    return /^game-\d+(?:-picking)?$/i.test(name)
+      || /^picking-\d+$/i.test(name)
+      || /^team [12] - game \d+$/i.test(name);
+  }
+
   private async cleanupCategory(guild: Guild, categoryId: string, validChannelIds: Set<string>, categoryType: string) {
     try {
       const category = await guild.channels.fetch(categoryId) as CategoryChannel;
@@ -108,7 +121,7 @@ export class ChannelsCleanupTask {
       
       
       for (const [channelId, channel] of category.children.cache) {
-        if (!validChannelIds.has(channelId)) {
+        if (!validChannelIds.has(channelId) && this.isBotManagedChannel(channel as TextChannel | VoiceChannel)) {
           
           channelsToDelete.push(channel as TextChannel | VoiceChannel);
         }
