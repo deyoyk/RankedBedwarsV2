@@ -1,6 +1,7 @@
 package com.deyo.rbw.commands;
 
 import com.deyo.rbw.RankedBedwars;
+import com.deyo.rbw.update.PluginUpdater;
 import org.bukkit.ChatColor;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -106,6 +107,9 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             case "clearcache":
                 clearPlaceholderCache(sender);
                 break;
+            case "update":
+                checkUpdate(sender);
+                break;
             default:
                 sendHelp(sender);
                 break;
@@ -126,6 +130,29 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GOLD + "/rbw enablemap <map> " + ChatColor.GRAY + "- Enable a previously disabled map");
         sender.sendMessage(ChatColor.GOLD + "/rbw reloadpermissions " + ChatColor.GRAY + "- Reload permissions and send to WebSocket");
         sender.sendMessage(ChatColor.GOLD + "/rbw clearcache " + ChatColor.GRAY + "- Clear PlaceholderAPI cache");
+        sender.sendMessage(ChatColor.GOLD + "/rbw update " + ChatColor.GRAY + "- Check GitHub for a plugin update");
+    }
+
+    private void checkUpdate(CommandSender sender) {
+        PluginUpdater updater = plugin.getPluginUpdater();
+        if (updater == null) {
+            sender.sendMessage(ChatColor.RED + "Auto-update is not initialized.");
+            return;
+        }
+        sender.sendMessage(ChatColor.GOLD + "Checking GitHub for updates...");
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            PluginUpdater.Result result = updater.checkForUpdates();
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                ChatColor color = result.status == PluginUpdater.Status.FAILED
+                        || result.status == PluginUpdater.Status.DOWNGRADE_PREVENTED
+                        ? ChatColor.YELLOW
+                        : ChatColor.GREEN;
+                sender.sendMessage(color + "Auto-update: " + result.message);
+                if (result.isStaged()) {
+                    sender.sendMessage(ChatColor.GRAY + "The jar will be replaced when the server stops.");
+                }
+            });
+        });
     }
 
     private void clearPlaceholderCache(CommandSender sender) {
@@ -271,7 +298,7 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
             return Collections.emptyList();
         }
         if (args.length == 1) {
-            List<String> completions = Arrays.asList("reload", "status", "maps", "refresh", "test", "ping", "disablemap", "enablemap", "reloadpermissions", "clearcache");
+            List<String> completions = Arrays.asList("reload", "status", "maps", "refresh", "test", "ping", "disablemap", "enablemap", "reloadpermissions", "clearcache", "update");
             return completions.stream().filter(s -> s.startsWith(args[0].toLowerCase())).collect(Collectors.toList());
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("disablemap") || args[0].equalsIgnoreCase("enablemap"))) {

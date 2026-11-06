@@ -10,6 +10,38 @@ Minecraft side of Ranked Bedwars. Warps players into arenas, reports results to 
 
 To build it yourself: `cd plugin` then `mvn clean package`. The jar lands in `target/`.
 
+## Auto updates
+
+On startup the plugin checks the latest GitHub release for `rbw-plugin.jar`.
+If it is newer than the running jar, it downloads and SHA-256 verifies it,
+then stages it for replacement.
+
+Minecraft cannot replace a plugin jar while it is loaded (especially on
+Windows), so the swap happens after the server process exits:
+
+1. Start the server. The new jar is downloaded in the background.
+2. Stop/restart the server normally.
+3. The detached updater waits for the server PID to exit, backs up the old jar
+   to `plugins/rankedbedwars/updates/backups/`, and copies the new jar into
+   place.
+4. The next server start runs the updated plugin.
+
+Local builds newer than the latest GitHub release are not downgraded. To
+disable the behaviour:
+
+```yaml
+auto-update:
+  enabled: false
+```
+
+Private repos can use `auto-update.github-token` or the `RBW_GITHUB_TOKEN`
+environment variable. The updater log is
+`plugins/rankedbedwars/updates/updater.log`. Run `/rbw update` to check
+immediately and see the result in game.
+
+This feature ships in the jar built from this version. Deploy that jar once;
+after that it updates itself from GitHub releases.
+
 ## Config it
 
 Open `plugins/rankedbedwars/config.yml` and set these two values:

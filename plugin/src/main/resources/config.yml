@@ -13,3 +13,20 @@ data-storage:
 
 
 debug: false
+
+# Automatically checks GitHub for a newer plugin jar on startup.
+# The new jar is downloaded, SHA-256 verified, and swapped in after the
+# server stops, so the next restart runs it.
+auto-update:
+  enabled: true
+  github-repo: "deyoyk/RankedBedwarsV2"
+  asset-name: "rbw-plugin.jar"
+  api-base: "https://api.github.com"
+  include-prereleases: false
+  backup-current-jar: true
+  # Set true only if you intentionally want to replace a newer local build
+  # with the latest release.
+  allow-downgrade: false
+  # Optional for private repos or higher GitHub rate limits. If omitted,
+  # RBW_GITHUB_TOKEN or GITHUB_TOKEN from the environment is used.
+  github-token: ""

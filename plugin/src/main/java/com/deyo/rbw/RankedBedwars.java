@@ -10,6 +10,7 @@ import com.deyo.rbw.managers.GameDataManager;
 import com.deyo.rbw.managers.MapManager;
 import com.deyo.rbw.managers.WebSocketManager;
 import com.deyo.rbw.placeholders.RankedBedwarsExpansion;
+import com.deyo.rbw.update.PluginUpdater;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -28,6 +29,8 @@ public class RankedBedwars extends JavaPlugin {
     private PrivateCmd privateCommand;
     private RankedBedwarsExpansion placeholderExpansion;
     private com.deyo.rbw.utils.APIClient apiClient;
+    private PluginUpdater pluginUpdater;
+    private boolean updateShutdownHookRegistered;
 
     public AdminCommand getAdminCommand() {
         return adminCommand;
@@ -53,8 +56,13 @@ public class RankedBedwars extends JavaPlugin {
     public void onEnable() {
         
         saveDefaultConfig();
-        
-        
+
+        // Check for a newer release in the background. The jar itself is
+        // swapped after this process exits, so the next restart runs it.
+        pluginUpdater = new PluginUpdater(this);
+        pluginUpdater.checkForUpdatesAsync();
+        registerUpdateShutdownHook();
+
         savePermissionsFile();
         
         initializeManagers();
@@ -99,7 +107,6 @@ public class RankedBedwars extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        
         if (placeholderExpansion != null) {
             placeholderExpansion.unregister();
         }
@@ -111,6 +118,23 @@ public class RankedBedwars extends JavaPlugin {
             apiClient.shutdown();
         }
         getLogger().info("rankedbedwars has been disabled!");
+    }
+
+    private void registerUpdateShutdownHook() {
+        if (updateShutdownHookRegistered) {
+            return;
+        }
+        updateShutdownHookRegistered = true;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try {
+                PluginUpdater updater = RankedBedwars.this.pluginUpdater;
+                if (updater != null) {
+                    updater.applyStagedUpdate();
+                }
+            } catch (Throwable error) {
+                getLogger().log(Level.WARNING, "Auto-update replacement could not be started", error);
+            }
+        }, "RBW-AutoUpdate"));
     }
 
     private void initializeManagers() {
@@ -147,7 +171,10 @@ public class RankedBedwars extends JavaPlugin {
 
     public void reload() {
         reloadConfig();
-        
+
+        pluginUpdater = new PluginUpdater(this);
+        pluginUpdater.checkForUpdatesAsync();
+
         savePermissionsFile();
         
         
@@ -175,6 +202,10 @@ public class RankedBedwars extends JavaPlugin {
 
     public GameDataManager getGameDataManager() {
         return gameDataManager;
+    }
+
+    public PluginUpdater getPluginUpdater() {
+        return pluginUpdater;
     }
 
     public MapManager getMapManager() {
