@@ -41,6 +41,7 @@ public class WebSocketManager {
     private final java.util.Map<String, String> actionBars = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<java.util.UUID> actionBarFallbackShown = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.Map<String, java.util.function.Consumer<JsonObject>> leaderboardCallbacks = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Map<String, java.util.function.Consumer<JsonObject>> statsCallbacks = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile java.lang.reflect.Method paperActionBarMethod;
     private volatile boolean paperActionBarResolved;
 
@@ -349,6 +350,9 @@ public class WebSocketManager {
                         break;
                     case "leaderboard_data":
                         handleLeaderboardData(json);
+                        break;
+                    case "stats_data":
+                        handleStatsData(json);
                         break;
                     case "screensharedontlog":
                         Bukkit.getScheduler().runTask(plugin, () -> handleScreenshareDontLog(json));
@@ -822,6 +826,7 @@ public class WebSocketManager {
         reconnectScheduled.set(false);
         stopActionBarTask();
         leaderboardCallbacks.clear();
+        statsCallbacks.clear();
 
         if (client != null && client.isOpen()) {
             client.close(1000, "Plugin disabling");
@@ -864,6 +869,37 @@ public class WebSocketManager {
         if (!json.has("request_id")) return;
         java.util.function.Consumer<JsonObject> callback =
                 leaderboardCallbacks.remove(json.get("request_id").getAsString());
+        if (callback != null) {
+            callback.accept(json);
+        }
+    }
+
+    public void requestUserStats(String ign, java.util.function.Consumer<JsonObject> callback) {
+        if (client == null || !client.isOpen()) {
+            callback.accept(new JsonObject());
+            return;
+        }
+        String requestId = "stats_" + System.currentTimeMillis() + "_" + ThreadLocalRandom.current().nextInt(100000);
+        statsCallbacks.put(requestId, callback);
+
+        JsonObject request = new JsonObject();
+        request.addProperty("type", "stats_request");
+        request.addProperty("request_id", requestId);
+        request.addProperty("ign", ign);
+        sendMessage(request.toString());
+
+        Bukkit.getScheduler().runTaskLaterAsynchronously(plugin, () -> {
+            java.util.function.Consumer<JsonObject> pending = statsCallbacks.remove(requestId);
+            if (pending != null) {
+                pending.accept(new JsonObject());
+            }
+        }, 100L);
+    }
+
+    private void handleStatsData(JsonObject json) {
+        if (!json.has("request_id")) return;
+        java.util.function.Consumer<JsonObject> callback =
+                statsCallbacks.remove(json.get("request_id").getAsString());
         if (callback != null) {
             callback.accept(json);
         }

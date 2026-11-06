@@ -338,6 +338,12 @@ interface LeaderboardRequestPayload {
   page?: number;
 }
 
+interface StatsRequestPayload {
+  type: 'stats_request';
+  request_id?: string;
+  ign?: string;
+}
+
 interface PermissionPayload {
   type: 'permission';
   [command: string]: string[] | 'permission';
@@ -386,6 +392,7 @@ type IncomingPayload =
   | PlayerStatusPayload
   | BedwarsPlayersStatusPayload
   | LeaderboardRequestPayload
+  | StatsRequestPayload
   | PermissionPayload
   | VoidingPayload
   | AuthIncomingPayload;
@@ -705,6 +712,9 @@ export class WebSocketManager {
       case 'leaderboard_request':
         await this.handleLeaderboardRequest(msg);
         break;
+      case 'stats_request':
+        await this.handleStatsRequest(msg);
+        break;
       case 'permission':
         this.handlePermission(msg);
         break;
@@ -889,6 +899,28 @@ export class WebSocketManager {
       }
     }
     this.send({ type: 'leaderboard_data', request_id: requestId, entries });
+  }
+
+  private async handleStatsRequest(msg: StatsRequestPayload) {
+    const requestId = typeof msg.request_id === 'string' ? msg.request_id : '';
+    const ign = typeof msg.ign === 'string' ? msg.ign.trim() : '';
+    if (!requestId || !ign) return;
+    let data: Record<string, unknown> | null = null;
+    try {
+      const User = (await import('../models/User')).default;
+      const user = await User.findOne({ ign })
+        .collation({ locale: 'en', strength: 2 })
+        .lean() as Record<string, unknown> | null;
+      if (user) {
+        const copy = { ...user };
+        delete copy._id;
+        delete copy.__v;
+        data = copy;
+      }
+    } catch (error) {
+      console.error('[WebSocketManager] Stats request failed:', error);
+    }
+    this.send({ type: 'stats_data', request_id: requestId, data });
   }
 
   private handlePermission(msg: PermissionPayload) {

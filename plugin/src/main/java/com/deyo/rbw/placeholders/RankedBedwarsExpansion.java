@@ -503,10 +503,6 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     }
 
     private String getCachedUserStat(String playerName, String stat) {
-        if (!isApiAvailable()) {
-            return fallbackUserStat(stat);
-        }
-
         CachedUserData cached = userDataCache.get(playerName.toLowerCase());
         
         if (cached != null && !cached.isExpired()) {
@@ -516,11 +512,6 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         
         fetchUserDataAsync(playerName);
         return fallbackUserStat(stat);
-    }
-
-    private boolean isApiAvailable() {
-        WebSocketManager manager = plugin.getWebSocketManager();
-        return manager != null && manager.isConnected();
     }
 
     private String fallbackUserStat(String stat) {
@@ -764,9 +755,6 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         if (!isValidMode(normalizedMode)) {
             return "Invalid Mode";
         }
-        if (!isApiAvailable()) {
-            return "N/A";
-        }
         
         String cacheKey = normalizedMode + "_" + getPageFromPosition(position);
         CachedLeaderboard cached = leaderboardCache.get(cacheKey);
@@ -787,9 +775,6 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         String normalizedMode = normalizeMode(mode);
         if (!isValidMode(normalizedMode)) {
             return "Invalid Mode";
-        }
-        if (!isApiAvailable()) {
-            return "0";
         }
         
         String cacheKey = normalizedMode + "_" + getPageFromPosition(position);
@@ -829,6 +814,33 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         if (!pendingUserFetches.add(cacheKey)) {
             return;
         }
+
+        WebSocketManager webSocketManager = plugin.getWebSocketManager();
+        if (webSocketManager != null && webSocketManager.isConnected()) {
+            webSocketManager.requestUserStats(playerName, response -> {
+                pendingUserFetches.remove(cacheKey);
+                JsonElement data = response.get("data");
+                if (data != null && data.isJsonObject()) {
+                    try {
+                        UserData userData = plugin.getGson().fromJson(data, UserData.class);
+                        if (userData != null) {
+                            userDataCache.put(cacheKey, new CachedUserData(userData));
+                            plugin.debug("Cached user data over WebSocket for " + playerName);
+                            return;
+                        }
+                    } catch (Exception error) {
+                        plugin.getLogger().warning("Failed to parse user data for " + playerName + ": " + error.getMessage());
+                    }
+                }
+                fetchUserDataHttp(playerName, cacheKey);
+            });
+            return;
+        }
+
+        fetchUserDataHttp(playerName, cacheKey);
+    }
+
+    private void fetchUserDataHttp(String playerName, String cacheKey) {
         CompletableFuture<UserData> future = apiClient.getUserData(playerName);
         future.thenAccept(userData -> {
             pendingUserFetches.remove(cacheKey);
@@ -854,6 +866,10 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             webSocketManager.requestLeaderboard(mode, page, response -> {
                 pendingLeaderboardFetches.remove(cacheKey);
                 Map<Integer, LeaderboardEntry> leaderboard = parseLeaderboard(response);
+                if (leaderboard.isEmpty()) {
+                    fetchLeaderboardHttp(mode, page, cacheKey);
+                    return;
+                }
                 leaderboardCache.put(cacheKey, new CachedLeaderboard(leaderboard));
                 plugin.debug("Cached leaderboard over WebSocket for " + mode + " page " + page
                         + " (" + leaderboard.size() + " entries)");
@@ -861,6 +877,10 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             return;
         }
 
+        fetchLeaderboardHttp(mode, page, cacheKey);
+    }
+
+    private void fetchLeaderboardHttp(String mode, int page, String cacheKey) {
         CompletableFuture<Map<Integer, LeaderboardEntry>> future = apiClient.getLeaderboard(mode, page);
         future.thenAccept(leaderboard -> {
             pendingLeaderboardFetches.remove(cacheKey);
