@@ -1005,7 +1005,9 @@ export class CentralizedMatchmaker {
         return false;
       }
       if (onlineCheck.online === null) {
-        console.log(`[CentralizedMatchmaker] Online check for ${ign} was inconclusive, keeping player`);
+        PresenceService.ingest(ign, false);
+        console.warn(`[CentralizedMatchmaker] Online check for ${ign} got no response, treating as offline`);
+        return false;
       }
       return true;
     } catch (error) {
@@ -1083,7 +1085,9 @@ export class CentralizedMatchmaker {
             return false;
           }
           if (onlineCheck.online === null) {
-            console.log(`[CentralizedMatchmaker] Online check for ${user.ign} was inconclusive, keeping player`);
+            PresenceService.ingest(user.ign, false);
+            console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} got no response, treating as offline`);
+            return false;
           }
         } catch (error) {
           console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error instanceof Error ? error.message : String(error)}), keeping player in queue`);

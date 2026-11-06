@@ -342,10 +342,15 @@ export class QueueListener {
     }
     if (unknown.length > 0) {
       const statuses = unknown.map(ign => PresenceService.evaluate(ign, Date.now()));
-      const online = statuses.filter(status => status === 'online').length;
-      const offline = statuses.filter(status => status === 'offline').length;
-      const unresolved = statuses.filter(status => status === 'unknown').length;
-      console.log(`[QueueListener] Presence sweep result for ${this.queueLabelById(queueId)}: ${online} online, ${offline} offline, ${unresolved} unknown`);
+      const unresolvedIgns = unknown.filter((ign, index) => statuses[index] === 'unknown');
+      for (const ign of unresolvedIgns) {
+        PresenceService.ingest(ign, false);
+        console.warn(`[QueueListener] Presence sweep: treating ${ign} as offline in ${this.queueLabelById(queueId)} because the server did not respond`);
+      }
+      const finalStatuses = unknown.map(ign => PresenceService.evaluate(ign, Date.now()));
+      const online = finalStatuses.filter(status => status === 'online').length;
+      const offline = finalStatuses.filter(status => status === 'offline').length;
+      console.log(`[QueueListener] Presence sweep result for ${this.queueLabelById(queueId)}: ${online} online, ${offline} offline, ${unresolvedIgns.length} forced offline`);
     }
   }
 
@@ -967,10 +972,12 @@ export class QueueListener {
               return;
             }
             if (onlineCheck.online === null) {
-              console.warn(`[QueueListener] Online check for ${user.ign} was inconclusive, allowing queue join`);
-            } else {
-              console.log(`[QueueListener] Online check passed for ${user.ign}`);
+              PresenceService.ingest(user.ign, false);
+              console.warn(`[QueueListener] Online check for ${user.ign} got no response, treating as offline`);
+              await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+              return;
             }
+            console.log(`[QueueListener] Online check passed for ${user.ign}`);
           } catch (error) {
             console.warn(`[QueueListener] Could not check online status for ${user.ign}, allowing queue join: ${error}`);
           }

@@ -102,14 +102,15 @@ describe('matchmaker presence fast path', () => {
     expect(valid).toBe(false);
   });
 
-  it('keeps a player when the live check is inconclusive', async () => {
+  it('treats an inconclusive live check as offline', async () => {
     UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     wsManagerMock.checkPlayerOnline.mockResolvedValue({ online: null });
     const mm = makeManager();
 
     const valid = await mm.validateSinglePlayer('a', queue, ['a'], new Set(), new Set());
 
-    expect(valid).toBe(true);
+    expect(valid).toBe(false);
+    expect(PresenceService.evaluate('Alice')).toBe('offline');
   });
 });
 

@@ -159,4 +159,20 @@ describe('QueueListener offline eviction', () => {
 
     expect(listener.queueStates.get(QUEUE_ID).players).toEqual(['a', 'b']);
   });
+
+  it('treats unresolved presence sweep checks as offline', async () => {
+    const guild = setupVoice(['a', 'b']);
+    const listener = makeListener(guild);
+    seedQueue(listener, ['a', 'b']);
+    listener.wsManager = { checkPlayerOnline: jest.fn().mockResolvedValue({ online: null }) };
+
+    const state = listener.queueStates.get(QUEUE_ID);
+    await listener.sweepQueuePresence(QUEUE_ID, state, Date.now());
+
+    expect(PresenceService.evaluate('Alice')).toBe('offline');
+    expect(PresenceService.evaluate('Bob')).toBe('offline');
+
+    await listener.validateQueueState(QUEUE_ID);
+    expect(listener.queueStates.get(QUEUE_ID).players).toEqual([]);
+  });
 });
