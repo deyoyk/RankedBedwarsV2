@@ -131,6 +131,10 @@ client.once('ready', async () => {
 
     const queueListener = new (await import('./handlers/QueueListener')).QueueListener(client, wsManager, gameManager);
     await queueListener.initialize();
+    client.on('voiceStateUpdate', (oldState, newState) => {
+      void queueListener.handleVoiceStateUpdate(oldState, newState);
+    });
+    console.log('[QueueListener] Voice state listener registered');
     channelsCleanupTask.start();
 
     new GuildJoinListener(client);
