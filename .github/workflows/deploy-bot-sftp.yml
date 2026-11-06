@@ -9,9 +9,9 @@ on:
         default: ''
         type: string
       remote_dir:
-        description: 'Absolute remote directory to deploy into'
+        description: 'Path inside the SFTP root (use / for Pterodactyl; their SFTP is already chrooted to /home/container)'
         required: true
-        default: '/home/container'
+        default: '/'
         type: string
       port:
         description: 'SFTP port (ignored when SFTP_HOST already contains a port)'
@@ -94,6 +94,7 @@ jobs:
           python3 - <<'PY'
           import os
           import posixpath
+          import socket
           import stat
           import sys
           from urllib.parse import urlparse
@@ -103,7 +104,7 @@ jobs:
           raw_host = (os.environ.get("SFTP_HOST") or "").strip()
           username = os.environ.get("SFTP_USERNAME") or ""
           password = os.environ.get("SFTP_PASSWORD") or ""
-          remote_dir = (os.environ.get("REMOTE_DIR") or "/home/container").rstrip("/") or "/"
+          remote_dir = (os.environ.get("REMOTE_DIR") or "/").rstrip("/") or "/"
           port = int(os.environ.get("PORT") or "22")
           payload = os.path.abspath("deploy/payload")
 
@@ -127,11 +128,40 @@ jobs:
               print(f"Missing extracted payload: {payload}", file=sys.stderr)
               sys.exit(1)
 
-          transport = paramiko.Transport((host, port))
-          transport.banner_timeout = 30
-          transport.auth_timeout = 30
-          transport.connect(username=username, password=password)
+          candidate_ports = [port]
+          if port == 22:
+              candidate_ports.append(2022)
+
+          transport = None
+          last_error = None
+          for candidate in candidate_ports:
+              print(f"Connecting to {host}:{candidate} as {username}...", flush=True)
+              sock = None
+              try:
+                  sock = socket.create_connection((host, candidate), timeout=30)
+                  candidate_transport = paramiko.Transport(sock)
+                  candidate_transport.banner_timeout = 30
+                  candidate_transport.auth_timeout = 30
+                  candidate_transport.channel_timeout = 30
+                  candidate_transport.connect(username=username, password=password)
+                  transport = candidate_transport
+                  port = candidate
+                  print(f"Connected on port {candidate}.", flush=True)
+                  break
+              except Exception as error:
+                  last_error = error
+                  print(f"Connection on port {candidate} failed: {error}", file=sys.stderr, flush=True)
+                  try:
+                      if sock is not None:
+                          sock.close()
+                  except Exception:
+                      pass
+          if transport is None:
+              print(f"Could not connect to SFTP: {last_error}", file=sys.stderr)
+              sys.exit(1)
+
           sftp = paramiko.SFTPClient.from_transport(transport)
+          sftp.get_channel().settimeout(60)
           try:
               def ensure_dir(path):
                   current = ""
@@ -153,11 +183,19 @@ jobs:
                       sftp.remove(path)
 
               ensure_dir(remote_dir)
-              for entry in sftp.listdir_attr(remote_dir):
+              existing = sftp.listdir_attr(remote_dir)
+              if remote_dir == "/" and existing:
+                  names = {entry.filename for entry in existing}
+                  markers = {".env", "package.json", "pterodactyl-start.sh", "src", "dist"}
+                  if not (names & markers):
+                      print("Refusing to clear the SFTP root: expected .env/package.json/src/dist", file=sys.stderr)
+                      sys.exit(1)
+              for entry in existing:
                   if entry.filename == ".env":
                       continue
                   remove_path(posixpath.join(remote_dir, entry.filename), entry)
 
+              uploaded = 0
               for root, dirs, files in os.walk(payload):
                   relative = os.path.relpath(root, payload)
                   remote_root = remote_dir if relative == "." else posixpath.join(remote_dir, relative.replace(os.sep, "/"))
@@ -167,13 +205,16 @@ jobs:
                   for filename in files:
                       local_path = os.path.join(root, filename)
                       remote_path = posixpath.join(remote_root, filename)
-                      sftp.put(local_path, remote_path)
+                      sftp.put(local_path, remote_path, confirm=False)
+                      uploaded += 1
+                      if uploaded % 50 == 0:
+                          print(f"Uploaded {uploaded} files...", flush=True)
                       if filename.endswith(".sh"):
                           try:
                               sftp.chmod(remote_path, 0o755)
                           except IOError:
                               pass
-              print(f"Uploaded {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir}")
+              print(f"Uploaded {uploaded} files from {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir}")
               print(f"Preserved: {posixpath.join(remote_dir, '.env')}")
           finally:
               sftp.close()
