@@ -155,6 +155,15 @@ describe('QueueListener admission guards', () => {
     expect(queuePlayers.get(Q1) || []).not.toContain(UID);
   });
 
+  it('solo join checks scoring games as active games too', async () => {
+    GameModel.findOne.mockImplementation((query: any) => {
+      expect(query.state.$in).toContain('scoring');
+      return chainable({ gameId: 9 });
+    });
+    await listener.handleVoiceStateUpdate(voiceState(null), voiceState(Q1));
+    expect(queuePlayers.get(Q1) || []).not.toContain(UID);
+  });
+
   it('removes the whole party even when the leaver changed party id', async () => {
     const partyId = 'P1';
     UserModel.findOne.mockImplementation(() => chainable({

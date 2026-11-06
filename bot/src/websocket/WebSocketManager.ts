@@ -1441,7 +1441,7 @@ export class WebSocketManager {
             { team1: { $in: memberIds } },
             { team2: { $in: memberIds } },
           ],
-          state: { $in: ['pending', 'active'] }
+          state: { $in: ['pending', 'active', 'scoring'] }
         }).select('gameId').lean();
       } catch (error) {
         console.error(`[WebSocketManager] Error checking active game for ${ign}:`, error);

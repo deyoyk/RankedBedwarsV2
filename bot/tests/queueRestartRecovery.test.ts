@@ -96,7 +96,8 @@ describe('QueueListener restart recovery', () => {
       players: ['a', 'b', 'c'],
       parties: new Map([['p1', ['a', 'b']], ['p2', ['c']]]),
       lastUpdate: Date.now(),
-      processing: false
+      processing: false,
+      verified: new Set(['a', 'b', 'c'])
     });
 
     await listener.updateQueueStatuses();
@@ -108,6 +109,10 @@ describe('QueueListener restart recovery', () => {
     queuePlayers.set('q1', ['a']);
     await listener.updateQueueStatuses();
     expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', 'In queue 1/8 • 2 parties');
+
+    listener.queueStates.get('q1').verified = new Set();
+    await listener.updateQueueStatuses();
+    expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', 'In queue 0/8 • 0 parties');
 
     listener.cleanup();
   });

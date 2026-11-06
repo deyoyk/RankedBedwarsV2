@@ -749,7 +749,7 @@ export class CentralizedMatchmaker {
         const activeGames = (await resolveLean<Array<{ team1?: string[]; team2?: string[] }>>(
           Game.find({
             $or: [{ team1: { $in: pendingIds } }, { team2: { $in: pendingIds } }],
-            state: { $in: ['pending', 'active'] }
+            state: { $in: ['pending', 'active', 'scoring'] }
           })
         )) ?? [];
         for (const game of activeGames ?? []) {
