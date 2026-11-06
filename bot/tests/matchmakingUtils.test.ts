@@ -64,17 +64,17 @@ describe('selectRandomMap', () => {
     expect(map).toBe('MapB');
   });
 
-  it('falls back to Aquarius when no maps exist at all', async () => {
+  it('throws instead of inventing a map when no maps exist', async () => {
     const service = makeService([], []);
-    const map = await selectRandomMap(service as any, { maxPlayers: 8 });
-    expect(map).toBe('Aquarius');
+    await expect(selectRandomMap(service as any, { maxPlayers: 8 }))
+      .rejects.toThrow(/No maps available/);
   });
 
-  it('falls back to Aquarius on error', async () => {
+  it('throws when map lookup fails', async () => {
     const service = {
       getReservedMaps: jest.fn().mockRejectedValue(new Error('boom'))
     };
-    const map = await selectRandomMap(service as any, { maxPlayers: 4 });
-    expect(map).toBe('Aquarius');
+    await expect(selectRandomMap(service as any, { maxPlayers: 4 }))
+      .rejects.toThrow('boom');
   });
 });

@@ -23,13 +23,14 @@ public class BedwarsAPIManager {
                 initialized = true;
                 return true;
             } catch (Exception e) {
+                implementation = null;
                 plugin.getLogger().severe("Failed to load MBedwars implementation: " + e.getMessage());
                 e.printStackTrace();
             }
         }
         
         
-        else if (Bukkit.getPluginManager().getPlugin("BedWars1058") != null) {
+        if (Bukkit.getPluginManager().getPlugin("BedWars1058") != null) {
             try {
                 
                 Class<?> implClass = Class.forName("com.deyo.rbw.bedwars.bedwars1058.BedWars1058Implementation");
@@ -40,6 +41,7 @@ public class BedwarsAPIManager {
                 initialized = true;
                 return true;
             } catch (Exception e) {
+                implementation = null;
                 plugin.getLogger().severe("Failed to load BedWars1058 implementation: " + e.getMessage());
                 e.printStackTrace();
             }

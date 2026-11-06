@@ -296,6 +296,11 @@ public class WebSocketManager {
                     case "check_player":
                         Bukkit.getScheduler().runTask(plugin, () -> handleCheckPlayer(json));
                         break;
+                    case "request_maps":
+                        if (plugin.getMapManager() != null) {
+                            plugin.getMapManager().sendMapInfoToBot();
+                        }
+                        break;
                     case "pong":
                         if (json.has("ping_id")) {
                             String pingId = json.get("ping_id").getAsString();

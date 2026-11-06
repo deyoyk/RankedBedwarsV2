@@ -242,10 +242,11 @@ export async function selectRandomMap(
       return warpName;
     }
 
-    return 'Aquarius';
+    try { (mapService as unknown as { requestMaps?: () => void }).requestMaps?.(); } catch { }
+    throw new Error('No maps available: the plugin has not sent map data yet');
   } catch (error) {
     console.error('[MatchmakingUtils] Error selecting map:', error);
-    return 'Aquarius';
+    throw error instanceof Error ? error : new Error(String(error));
   }
 }
 

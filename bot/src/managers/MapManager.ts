@@ -145,4 +145,12 @@ export class MapService {
     const maps = await this.getAllMapsForMatchmaking(forceRefresh);
     return maps.filter(m => !m.locked);
   }
+
+  public requestMaps(): void {
+    try {
+      this.wsManager.requestMaps?.();
+    } catch {
+      // The socket may be down.
+    }
+  }
 }

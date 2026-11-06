@@ -800,6 +800,7 @@ export class WebSocketManager {
       maxplayers: m.maxplayers ?? m.max_players,
       max_players: m.max_players ?? m.maxplayers
     }));
+    console.log(`[WebSocketManager] Received map data: ${this.allMaps.length} map(s) (${reservedMapsArr.length} available, ${lockedMapsArr.length} locked, ${disabledMapsArr.length} disabled)`);
   }
 
   private handlePlayerStatus(msg: PlayerStatusPayload) {
@@ -975,6 +976,10 @@ export class WebSocketManager {
 
   public getAllMaps(): MapInfo[] {
     return this.allMaps as MapInfo[];
+  }
+
+  public requestMaps(): void {
+    this.send({ type: 'request_maps' });
   }
 
   public getReservedMaps(): MapInfo[] {

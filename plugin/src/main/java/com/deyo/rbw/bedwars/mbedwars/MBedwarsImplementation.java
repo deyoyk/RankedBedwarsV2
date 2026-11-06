@@ -267,6 +267,7 @@ public class MBedwarsImplementation implements BedwarsAPI {
         Bukkit.getScheduler().runTask(plugin, () -> {
             try {
                 Collection<Arena> arenas = GameAPI.get().getArenas();
+                plugin.getLogger().info("Found " + arenas.size() + " arenas from MBedwars");
                 
                 for (Arena arena : arenas) {
                     String name = arena.getName();

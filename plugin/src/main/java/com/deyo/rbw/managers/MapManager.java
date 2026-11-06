@@ -108,6 +108,9 @@ public class MapManager {
     private final Set<Class<?>> noGetPlayersClasses = ConcurrentHashMap.newKeySet();
     private volatile boolean mapInfoSendPending = false;
     private volatile String lastMapInfoPayload = null;
+    private int mapInitializationRetries = 0;
+    private static final int MAX_MAP_INIT_RETRIES = 5;
+    private static final long MAP_INIT_RETRY_DELAY_TICKS = 200L;
     private int autoRefreshCursor = 0;
     private static final int AUTO_REFRESH_MAX_GROUPS_PER_TICK = 3;
     
@@ -244,12 +247,14 @@ public class MapManager {
     }
 
     public void initializeMaps() {
-        
-        
+        if (!BedwarsAPIManager.isAvailable()) {
+            BedwarsAPIManager.initialize(plugin);
+        }
         if (BedwarsAPIManager.isAvailable()) {
             BedwarsAPIManager.getImplementation().initializeMaps();
         } else {
             plugin.getLogger().warning("Cannot initialize maps: No BedWars implementation is available");
+            scheduleMapInitializationRetry("no BedWars implementation");
         }
     }
 
@@ -281,8 +286,29 @@ public class MapManager {
     }
     
     public void finishMapInitialization(String implementationName) {
-        plugin.getLogger().info("Initialized " + arenaGroups.size() + " arena groups from " + implementationName);
+        int groupCount = arenaGroups.size();
+        plugin.getLogger().info("Initialized " + groupCount + " arena groups from " + implementationName);
+        if (groupCount == 0) {
+            plugin.getLogger().warning("No arenas were loaded from " + implementationName);
+            scheduleMapInitializationRetry(implementationName);
+            return;
+        }
+
+        mapInitializationRetries = 0;
+        plugin.getLogger().info("Available maps: " + new TreeSet<>(getMapNames()));
         sendMapInfoToBot();
+    }
+
+    private void scheduleMapInitializationRetry(String reason) {
+        if (mapInitializationRetries >= MAX_MAP_INIT_RETRIES) {
+            plugin.getLogger().severe("Map initialization failed after " + MAX_MAP_INIT_RETRIES + " retries: " + reason);
+            return;
+        }
+        mapInitializationRetries++;
+        long delay = MAP_INIT_RETRY_DELAY_TICKS * mapInitializationRetries;
+        plugin.getLogger().warning("Retrying map initialization in " + (delay / 20) + "s ("
+                + mapInitializationRetries + "/" + MAX_MAP_INIT_RETRIES + "): " + reason);
+        Bukkit.getScheduler().runTaskLater(plugin, this::initializeMaps, delay);
     }
 
     public void sendMapInfoToBot() {
