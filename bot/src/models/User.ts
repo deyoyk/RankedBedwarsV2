@@ -47,6 +47,11 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
     duration: number;
     moderator: string;
   }>;
+  statResets: Array<{
+    date: Date;
+    seasonNumber?: number;
+    chapterNumber?: number;
+  }>;
 }
 
 const UserSchema: Schema = new Schema({
@@ -92,6 +97,11 @@ const UserSchema: Schema = new Schema({
     date: { type: Date, required: true },
     duration: { type: Number, required: true },
     moderator: { type: String, required: true },
+  }],
+  statResets: [{
+    date: { type: Date, required: true },
+    seasonNumber: { type: Number },
+    chapterNumber: { type: Number },
   }],
 }, { timestamps: true });
 
