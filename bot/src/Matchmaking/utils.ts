@@ -2,6 +2,7 @@ import User from '../models/User';
 import { MapService } from '../managers/MapManager';
 import config from '../config/config';
 import { scoreMapsByFrequency, pickLeastPlayedMap, resolveMapFrequencyOptions } from '../utils/mapFrequency';
+import { getPlayerIgns } from '../utils/playerDirectory';
 
 export function normalizeIdList(ids: string[]): string[] {
   const seen = new Set<string>();
@@ -24,6 +25,84 @@ export function normalizeTeams(team1: string[], team2: string[]): { team1: strin
 
 export function normalizeIgnKey(ign: string): string {
   return (ign ?? '').trim().toLowerCase();
+}
+
+export interface BedwarsPresenceChecker {
+  checkPlayers?: (igns: string[]) => Promise<Map<string, { online: boolean | null; inGame: boolean }>>;
+  checkBedwarsPlayers?: (igns: string[]) => Promise<Map<string, boolean>>;
+}
+
+export async function findInGamePlayerIds(
+  checker: BedwarsPresenceChecker | null | undefined,
+  playerIds: string[],
+  ignById: Map<string, string>
+): Promise<Set<string>> {
+  const inGame = new Set<string>();
+  if (!checker) return inGame;
+  const ids = normalizeIdList(playerIds);
+  if (ids.length === 0) return inGame;
+  const igns = [...new Set(ids.map(id => ignById.get(id)).filter((ign): ign is string => Boolean(ign)))];
+  if (igns.length === 0) return inGame;
+  const ignToId = new Map<string, string>();
+  for (const [id, ign] of ignById) ignToId.set(normalizeIgnKey(ign), id);
+
+  const missing: string[] = [];
+  if (typeof checker.checkPlayers === 'function') {
+    try {
+      const statuses = await checker.checkPlayers(igns);
+      for (const ign of igns) {
+        const status = statuses.get(normalizeIgnKey(ign));
+        if (status) {
+          if (status.inGame) {
+            const id = ignToId.get(normalizeIgnKey(ign));
+            if (id) inGame.add(id);
+          }
+        } else {
+          missing.push(ign);
+        }
+      }
+    } catch (error) {
+      console.warn('[MatchmakingUtils] Bulk player status check failed:', error);
+      missing.push(...igns);
+    }
+  } else {
+    missing.push(...igns);
+  }
+
+  if (missing.length > 0 && typeof checker.checkBedwarsPlayers === 'function') {
+    try {
+      const statuses = await checker.checkBedwarsPlayers(missing);
+      for (const [ign, inGameFlag] of statuses) {
+        if (!inGameFlag) continue;
+        const id = ignToId.get(normalizeIgnKey(ign));
+        if (id) inGame.add(id);
+      }
+    } catch (error) {
+      console.warn('[MatchmakingUtils] BedWars status check failed:', error);
+    }
+  }
+  return inGame;
+}
+
+export async function isIgnInGame(
+  checker: BedwarsPresenceChecker | null | undefined,
+  ign: string
+): Promise<boolean> {
+  if (!checker) return false;
+  try {
+    if (typeof checker.checkPlayers === 'function') {
+      const statuses = await checker.checkPlayers([ign]);
+      const status = statuses.get(normalizeIgnKey(ign));
+      if (status) return status.inGame;
+    }
+    if (typeof checker.checkBedwarsPlayers === 'function') {
+      const statuses = await checker.checkBedwarsPlayers([ign]);
+      return statuses.get(normalizeIgnKey(ign)) === true;
+    }
+  } catch (error) {
+    console.warn('[MatchmakingUtils] Single player status check failed:', error);
+  }
+  return false;
 }
 
 export function calculateTeamAverageEloFromDocs(docs: Array<{ elo?: number | null }>): number {
@@ -251,16 +330,5 @@ export async function selectRandomMap(
 }
 
 export async function getPlayerIGNs(playerIds: string[]): Promise<Map<string, string>> {
-  try {
-    const ids = normalizeIdList(playerIds);
-    if (ids.length === 0) return new Map();
-    const users = await User.find({
-      discordId: { $in: ids }
-    }).select('discordId ign');
-
-    return new Map(users.map(u => [u.discordId, u.ign]));
-  } catch (error) {
-    console.error('[MatchmakingUtils] Error getting player IGNs:', error);
-    return new Map();
-  }
+  return getPlayerIgns(playerIds);
 }

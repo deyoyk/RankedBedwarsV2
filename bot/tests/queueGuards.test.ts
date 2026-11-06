@@ -1,5 +1,6 @@
 import { queuePlayers } from '../src/types/queuePlayersMemory';
 import { claimPlayers, releasePlayers, isClaimedByOther, clearAllDraftClaims } from '../src/Matchmaking/draftClaims';
+import { clearPlayerDirectoryCache } from '../src/utils/playerDirectory';
 
 const UID = '123456789012345678';
 const Q1 = '1352587524475713619';
@@ -49,6 +50,7 @@ const wsManagerMock: any = {
   send: jest.fn(),
   setGlobalHandler: jest.fn(),
   checkPlayerOnline: jest.fn().mockResolvedValue({ online: true }),
+  checkPlayers: jest.fn().mockResolvedValue(new Map()),
   checkBedwarsPlayers: jest.fn().mockResolvedValue(new Map()),
 };
 
@@ -232,6 +234,7 @@ describe('CentralizedMatchmaker draft guards', () => {
     jest.clearAllMocks();
     queuePlayers.clear();
     clearAllDraftClaims();
+    clearPlayerDirectoryCache();
   });
 
   it('drops duplicate and in-game players before drafting', async () => {
@@ -243,7 +246,10 @@ describe('CentralizedMatchmaker draft guards', () => {
       { discordId: 'b', ign: 'B', partyId: null, elo: 1000, isBanned: false, isFrozen: false },
     ];
     UserModel.find.mockResolvedValue(users);
-    GameModel.find.mockResolvedValue([{ team1: ['a'], team2: ['x'], state: 'active' }]);
+    wsManagerMock.checkPlayers.mockResolvedValue(new Map([
+      ['a', { online: true, inGame: true }],
+      ['b', { online: true, inGame: false }],
+    ]));
     const mm = new CentralizedMatchmaker(
       { guilds: { cache: { first: () => undefined } } } as any,
       wsManagerMock,
@@ -269,7 +275,7 @@ describe('CentralizedMatchmaker draft guards', () => {
       { discordId: 'a', ign: 'A', partyId: null, elo: 1000, isBanned: false, isFrozen: false },
       { discordId: 'b', ign: 'B', partyId: null, elo: 1000, isBanned: false, isFrozen: false },
     ]);
-    GameModel.find.mockResolvedValue([]);
+    wsManagerMock.checkBedwarsPlayers.mockResolvedValue(new Map());
     const mm = new CentralizedMatchmaker(
       { guilds: { cache: { first: () => undefined } } } as any,
       wsManagerMock,

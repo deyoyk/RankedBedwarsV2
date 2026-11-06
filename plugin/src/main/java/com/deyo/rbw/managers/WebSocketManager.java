@@ -40,6 +40,8 @@ public class WebSocketManager {
     private BukkitTask actionBarTask;
     private final java.util.Map<String, String> actionBars = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.Set<java.util.UUID> actionBarFallbackShown = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private volatile java.lang.reflect.Method paperActionBarMethod;
+    private volatile boolean paperActionBarResolved;
 
     public WebSocketManager(RankedBedwars plugin) {
         this.plugin = plugin;
@@ -509,19 +511,10 @@ public class WebSocketManager {
     private void handleCheckPlayer(JsonObject json) {
         String ign = json.get("ign").getAsString();
         Player player = Bukkit.getPlayerExact(ign);
-        boolean isOnline = player != null;
-        boolean inBedwarsGame = false;
-        if (player != null && com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable()) {
-            try {
-                inBedwarsGame = com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByPlayer(player) != null;
-            } catch (Exception ignored) {
-            }
-        }
         JsonObject response = new JsonObject();
         response.addProperty("type", "player_status");
         response.addProperty("ign", ign);
-        response.addProperty("online", isOnline);
-        response.addProperty("in_bedwars_game", inBedwarsGame);
+        response.addProperty("online", player != null);
         response.addProperty("original_ign_case", ign);
         sendMessage(response.toString());
     }
@@ -533,22 +526,17 @@ public class WebSocketManager {
         }
 
         JsonObject players = new JsonObject();
-        boolean apiAvailable = com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable();
+        JsonObject onlinePlayers = new JsonObject();
         if (json.has("igns") && json.get("igns").isJsonArray()) {
             for (JsonElement element : json.getAsJsonArray("igns")) {
                 String ign = element.getAsString();
-                boolean inGame = false;
                 Player player = Bukkit.getPlayerExact(ign);
-                if (player != null && apiAvailable) {
-                    try {
-                        inGame = com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByPlayer(player) != null;
-                    } catch (Exception ignored) {
-                    }
-                }
-                players.addProperty(ign, inGame);
+                onlinePlayers.addProperty(ign, player != null);
+                players.addProperty(ign, plugin.isInBedwarsGame(player));
             }
         }
         response.add("players", players);
+        response.add("online", onlinePlayers);
         sendMessage(response.toString());
     }
     private void sendPong() {
@@ -1023,13 +1011,20 @@ public class WebSocketManager {
     private void sendActionBar(Player player, String message) {
         String legacyMessage = org.bukkit.ChatColor.translateAlternateColorCodes('&', message);
 
-        try {
-            java.lang.reflect.Method spigotActionBar = player.getClass().getMethod("sendActionBar", String.class);
-            spigotActionBar.invoke(player, legacyMessage);
-            return;
-        } catch (NoSuchMethodException ignored) {
-        } catch (Exception spigotError) {
-            plugin.getLogger().log(Level.FINE, "Paper action bar send failed, falling back to NMS", spigotError);
+        if (!paperActionBarResolved) {
+            paperActionBarResolved = true;
+            try {
+                paperActionBarMethod = player.getClass().getMethod("sendActionBar", String.class);
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
+        if (paperActionBarMethod != null) {
+            try {
+                paperActionBarMethod.invoke(player, legacyMessage);
+                return;
+            } catch (Exception spigotError) {
+                plugin.getLogger().log(Level.FINE, "Paper action bar send failed, falling back to NMS", spigotError);
+            }
         }
 
         try {

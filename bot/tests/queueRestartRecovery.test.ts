@@ -27,6 +27,8 @@ import User from '../src/models/User';
 import Party from '../src/models/Party';
 import { QueueListener } from '../src/handlers/QueueListener';
 import { queuePlayers } from '../src/types/queuePlayersMemory';
+import { clearPlayerDirectoryCache } from '../src/utils/playerDirectory';
+import { PresenceService } from '../src/services/PresenceService';
 
 const QueueModel = Queue as unknown as { find: jest.Mock };
 const UserModel = User as unknown as { find: jest.Mock };
@@ -40,7 +42,10 @@ function chain(value: any) {
 }
 
 describe('QueueListener restart recovery', () => {
-  afterEach(() => queuePlayers.clear());
+  afterEach(() => {
+    queuePlayers.clear();
+    clearPlayerDirectoryCache();
+  });
 
   it('rebuilds queue memory from Discord voice channels', async () => {
     QueueModel.find.mockReturnValue(chain([
@@ -116,12 +121,15 @@ describe('QueueListener restart recovery', () => {
       {} as any
     ) as any;
     listener.workersManager = { setChannelStatus: jest.fn().mockResolvedValue(undefined) };
+    listener.playerIgnById.set('a', 'A').set('b', 'B').set('c', 'C');
+    PresenceService.ingest('A', true);
+    PresenceService.ingest('B', true);
+    PresenceService.ingest('C', true);
     listener.queueStates.set('q1', {
       players: ['a', 'b', 'c'],
       parties: new Map([['p1', ['a', 'b']], ['p2', ['c']]]),
       lastUpdate: Date.now(),
       processing: false,
-      verified: new Set(['a', 'b', 'c'])
     });
 
     await listener.updateQueueStatuses();
@@ -132,9 +140,9 @@ describe('QueueListener restart recovery', () => {
 
     queuePlayers.set('q1', ['a']);
     await listener.updateQueueStatuses();
-    expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', 'In queue 1/8 • 2 parties');
+    expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', 'In queue 1/8 • 1 party');
 
-    listener.queueStates.get('q1').verified = new Set();
+    PresenceService.clear();
     await listener.updateQueueStatuses();
     expect(listener.workersManager.setChannelStatus).toHaveBeenLastCalledWith('q1', 'In queue 0/8 • 0 parties');
 

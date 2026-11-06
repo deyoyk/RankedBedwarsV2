@@ -3,7 +3,6 @@ import type { VoiceBasedChannel } from 'discord.js';
 import Queue from '../models/Queue';
 import User, { type IUser } from '../models/User';
 import Party from '../models/Party';
-import Game from '../models/Game';
 import config from '../config/config';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { CentralizedMatchmaker } from '../Matchmaking/CentralizedMatchmaker';
@@ -12,6 +11,7 @@ import { WorkersManager } from '../managers/WorkersManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { PresenceService } from '../services/PresenceService';
 import { maxPartySizeForQueue } from '../utils/partyQueue';
+import { findInGamePlayerIds, isIgnInGame, getPlayerIGNs as resolvePlayerIgns } from '../Matchmaking/utils';
 
 async function updatePartyActivity(partyId: string) {
   try {
@@ -30,7 +30,6 @@ interface QueueState {
   lastUpdate: number;
   processing: boolean;
   lastOfflineVersion?: number;
-  verified?: Set<string>;
 }
 
 interface QueueLike {
@@ -45,8 +44,6 @@ interface QueueLike {
   queueType?: string;
   bypassRoles: string[];
 }
-
-type QueueUserBadge = Pick<IUser, 'discordId' | 'ign' | 'partyId'>;
 
 async function resolveQuery<T>(query: unknown, selectFields?: string): Promise<T> {
   const q = query as {
@@ -79,7 +76,6 @@ export class QueueListener {
   private initialPresenceSweep: NodeJS.Timeout | null = null;
   private readonly queueStatusCache = new Map<string, string>();
   private readonly playerIgnById = new Map<string, string>();
-  private readonly playerIgnMisses = new Set<string>();
   private initialized = false;
   private shuttingDown = false;
   private linkOfflineNotified = false;
@@ -152,18 +148,18 @@ export class QueueListener {
       if (linkOnline) {
         await this.ensurePlayerIgns(queuedPlayers);
       }
-      const verified = state?.verified ?? new Set<string>();
+      const onlineIds = new Set<string>();
       if (linkOnline) {
         for (const id of queuedPlayers) {
           const ign = this.playerIgnById.get(id);
           if (ign && PresenceService.evaluate(ign) === 'online') {
-            verified.add(id);
+            onlineIds.add(id);
           }
         }
       }
-      const current = linkOnline ? queuedPlayers.filter(id => verified.has(id)).length : 0;
+      const current = linkOnline ? onlineIds.size : 0;
       const parties = linkOnline && state
-        ? [...state.parties.values()].filter(members => members.some(id => verified.has(id))).length
+        ? [...state.parties.values()].filter(members => members.some(id => onlineIds.has(id))).length
         : 0;
       const partyLabel = `${parties} ${parties === 1 ? 'party' : 'parties'}`;
       const status = `In queue ${current}/${queue.maxPlayers} • ${partyLabel}`;
@@ -209,7 +205,6 @@ export class QueueListener {
             parties: new Map(),
             lastUpdate: Date.now(),
             processing: false,
-            verified: new Set(),
           });
           queuePlayers.set(queue.channelId, []);
         }
@@ -230,7 +225,6 @@ export class QueueListener {
             parties: new Map(),
             lastUpdate: Date.now(),
             processing: false,
-            verified: new Set(),
           });
           queuePlayers.set(queue.channelId, []);
           console.log(`[QueueListener] Recovered empty queue ${voiceChannel.name} (${queue.channelId})`);
@@ -288,9 +282,6 @@ export class QueueListener {
           parties,
           lastUpdate: Date.now(),
           processing: false,
-          verified: new Set(eligible
-            .filter(user => activePlayers.includes(user.discordId) && !!user.ign && PresenceService.evaluate(user.ign) === 'online')
-            .map(user => user.discordId)),
         });
         queuePlayers.set(queue.channelId, activePlayers);
         recovered += activePlayers.length;
@@ -329,7 +320,6 @@ export class QueueListener {
           this.rescanKeys.delete(channelId);
         }
       }
-      this.playerIgnMisses.clear();
     }, 60000);
     this.cacheCleanupInterval.unref?.();
     console.log('[QueueListener] Cache cleanup started (every 60s)');
@@ -380,19 +370,10 @@ export class QueueListener {
 
   private async sweepQueuePresence(queueId: string, state: QueueState, now: number): Promise<void> {
     if (state.players.length === 0) return;
-    let users: QueueUserBadge[];
-    try {
-      users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
-    } catch (error) {
-      console.error(`[QueueListener] Presence sweep lookup failed for ${queueId}:`, error);
-      return;
-    }
-    const unknown: string[] = [];
-    for (const user of users) {
-      if (user?.ign && PresenceService.evaluate(user.ign, now) === 'unknown') {
-        unknown.push(user.ign);
-      }
-    }
+    await this.ensurePlayerIgns(state.players);
+    const unknown = state.players
+      .map(id => this.playerIgnById.get(id))
+      .filter((ign): ign is string => Boolean(ign) && PresenceService.evaluate(ign, now) === 'unknown');
     if (unknown.length > 0) {
       console.log(`[QueueListener] Presence sweep re-checking ${unknown.length} player(s) in queue ${this.queueLabelById(queueId)}`);
     }
@@ -550,17 +531,6 @@ export class QueueListener {
       }
 
       await this.ensurePlayerIgns(state.players);
-      const verified = this.ensureVerified(state);
-      for (const id of [...verified]) {
-        if (!state.players.includes(id)) verified.delete(id);
-      }
-      for (const id of state.players) {
-        const ign = this.playerIgnById.get(id);
-        if (!ign) continue;
-        const presence = PresenceService.evaluate(ign);
-        if (presence === 'online') verified.add(id);
-        else if (presence === 'offline') verified.delete(id);
-      }
 
       if (state.players.length >= queue.maxPlayers && !state.processing) {
         console.log(`[QueueListener] Queue ${queueLabel} is full (${state.players.length}/${queue.maxPlayers}), scheduling processing`);
@@ -581,9 +551,12 @@ export class QueueListener {
       if (state.lastOfflineVersion === offlineVersion) return new Set();
       state.lastOfflineVersion = offlineVersion;
 
-      let users: QueueUserBadge[];
+      let users: Array<{ discordId: string; ign: string }>;
       try {
-        users = await User.find({ discordId: { $in: state.players } }).select('discordId ign').lean();
+        await this.ensurePlayerIgns(state.players);
+        users = state.players
+          .map((id) => ({ discordId: id, ign: this.playerIgnById.get(id) }))
+          .filter((user): user is { discordId: string; ign: string } => Boolean(user.ign));
       } catch (error) {
         console.error(`[QueueListener] Offline eviction lookup failed for ${queueId}:`, error);
         return new Set();
@@ -610,8 +583,6 @@ export class QueueListener {
         }
       }
       state.players = state.players.filter((p) => !evicted.has(p));
-      const verified = this.ensureVerified(state);
-      for (const id of evicted) verified.delete(id);
       state.lastUpdate = Date.now();
       if (!state.processing) {
         queuePlayers.set(queueId, [...state.players]);
@@ -734,10 +705,6 @@ export class QueueListener {
         if (soloInGame.has(id) || queueState.players.includes(id)) continue;
         queueState.players.push(id);
         queuePlayers.set(queueId, [...queueState.players]);
-        const ign = ignById.get(id);
-        if (ign && PresenceService.evaluate(ign) === 'online') {
-          this.ensureVerified(queueState).add(id);
-        }
         console.log(`[QueueListener] Recovered solo queue member ${ignById.get(id) ?? id} in queue ${this.queueLabelById(queueId)}`);
       }
 
@@ -863,8 +830,6 @@ export class QueueListener {
       }
       state.lastUpdate = Date.now();
       queuePlayers.set(channelId, [...state.players]);
-      const verified = this.ensureVerified(state);
-      for (const id of remove) verified.delete(id);
       console.log(`[QueueListener] Removed ${before - state.players.length} stale entrant(s) from queue ${this.queueLabelById(channelId)} (now in ${this.queueLabelById(exceptChannelId)})`);
     }
   }
@@ -878,8 +843,6 @@ export class QueueListener {
       console.log(`[QueueListener] ${labels.get(playerId) ?? playerId} is in an active game, removing from queue ${this.queueLabelById(channelId)}`);
     }
     queueState.players = queueState.players.filter(p => !inGame.has(p));
-    const verified = this.ensureVerified(queueState);
-    for (const id of inGame) verified.delete(id);
     for (const [partyId, members] of queueState.parties) {
       if (members.some(m => inGame.has(m))) {
         queueState.parties.delete(partyId);
@@ -890,76 +853,28 @@ export class QueueListener {
   }
 
   private async findInGamePlayers(discordIds: string[]): Promise<Set<string>> {
-    const inGame = new Set<string>();
-    if (discordIds.length === 0) return inGame;
-
-    if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
-      return this.findInGamePlayersFromDatabase(discordIds);
-    }
-
+    if (discordIds.length === 0) return new Set();
     await this.ensurePlayerIgns(discordIds);
     const ignById = new Map<string, string>();
     for (const id of discordIds) {
       const ign = this.playerIgnById.get(id);
       if (ign) ignById.set(id, ign);
     }
-    const igns = [...new Set(ignById.values())];
-    if (igns.length === 0) return inGame;
-
-    const statuses = await this.checkBedwarsPlayers(igns);
-    for (const [id, ign] of ignById) {
-      if (statuses.get(ign.toLowerCase()) === true) {
-        inGame.add(id);
-      }
-    }
-    return inGame;
+    return findInGamePlayerIds(this.wsManager, discordIds, ignById);
   }
 
   private async isInBedwarsGame(ign: string): Promise<boolean> {
-    if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
-      const game = await resolveQuery<{ gameId: number } | null>(
-        Game.findOne({
-          $or: [{ team1: { $in: [ign] } }, { team2: { $in: [ign] } }],
-          state: { $in: ['pending', 'active', 'scoring'] }
-        }),
-        'gameId'
-      );
-      return game != null;
-    }
-
-    const statuses = await this.checkBedwarsPlayers([ign]);
-    const status = statuses.get(ign.toLowerCase());
-    if (status === undefined) {
-      console.warn(`[QueueListener] Could not check BedWars arena for ${ign}; allowing queue join`);
-    }
-    return status === true;
+    return isIgnInGame(this.wsManager, ign);
   }
 
-  private async findInGamePlayersFromDatabase(discordIds: string[]): Promise<Set<string>> {
-    const inGame = new Set<string>();
+  private async checkPlayerStatus(ign: string): Promise<{ online: boolean | null; inGame: boolean } | null> {
+    if (typeof this.wsManager.checkPlayers !== 'function') return null;
     try {
-      const games = await resolveQuery<Array<{ team1?: string[]; team2?: string[] }>>(
-        Game.find({
-          $or: [{ team1: { $in: discordIds } }, { team2: { $in: discordIds } }],
-          state: { $in: ['pending', 'active', 'scoring'] }
-        })
-      );
-      for (const game of games ?? []) {
-        for (const id of [...(game.team1 ?? []), ...(game.team2 ?? [])]) {
-          inGame.add(id);
-        }
-      }
-    } catch (error) {
-      console.error('[QueueListener] Error checking in-game players:', error);
+      const statuses = await this.wsManager.checkPlayers([ign]);
+      return statuses.get(ign.toLowerCase()) ?? null;
+    } catch {
+      return null;
     }
-    return inGame;
-  }
-
-  private async checkBedwarsPlayers(igns: string[]): Promise<Map<string, boolean>> {
-    if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
-      return new Map();
-    }
-    return this.wsManager.checkBedwarsPlayers(igns);
   }
 
   private async isQueueChannel(channelId: string | null | undefined): Promise<boolean> {
@@ -1001,34 +916,19 @@ export class QueueListener {
     return channel?.name ? `${channel.name} (${queueId})` : queueId;
   }
 
-  private ensureVerified(state: QueueState): Set<string> {
-    if (!state.verified) state.verified = new Set();
-    return state.verified;
-  }
-
   private async ensurePlayerIgns(ids: string[]): Promise<void> {
-    const missing = ids.filter(id => !this.playerIgnById.has(id) && !this.playerIgnMisses.has(id));
+    const missing = ids.filter(id => !this.playerIgnById.has(id));
     if (missing.length === 0) return;
-    const labels = await this.playerIgnMap(missing);
-    for (const id of missing) {
-      if (!labels.has(id)) this.playerIgnMisses.add(id);
-    }
+    await this.playerIgnMap(missing);
   }
 
   private async playerIgnMap(ids: string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();
-    try {
-      const users = await User.find({ discordId: { $in: ids } })
-        .select('discordId ign')
-        .lean() as Array<{ discordId: string; ign?: string }>;
-      const result = new Map(users.filter(user => user.ign).map(user => [user.discordId, user.ign as string]));
-      for (const [id, ign] of result) {
-        this.playerIgnById.set(id, ign);
-      }
-      return result;
-    } catch {
-      return new Map();
+    const result = await resolvePlayerIgns(ids);
+    for (const [id, ign] of result) {
+      this.playerIgnById.set(id, ign);
     }
+    return result;
   }
 
   private async handleQueueJoin(state: VoiceState): Promise<void> {
@@ -1099,29 +999,37 @@ export class QueueListener {
         return;
       }
 
-      let presenceVerified = presence === 'online';
+      const liveStatus = await this.checkPlayerStatus(user.ign);
       if (presence === 'unknown') {
         if (!this.isMinecraftLinkOnline()) {
           console.log(`[QueueListener] Join rejected for ${user.ign}: cannot verify presence while the Minecraft link is offline`);
           await this.moveToWaiting(state, 'Could not verify your Minecraft presence because the server link is offline. Please try again shortly.');
           return;
         }
-        try {
-          const onlineCheck = await this.wsManager.checkPlayerOnline(user.ign, 2000);
-          if (onlineCheck.online !== true) {
-            PresenceService.ingest(user.ign, false);
-            console.log(`[QueueListener] Join rejected for ${user.ign}: online check returned ${onlineCheck.online === null ? 'no response' : 'offline'}`);
+        if (liveStatus?.online !== null && liveStatus?.online !== undefined) {
+          PresenceService.ingest(user.ign, liveStatus.online);
+          if (!liveStatus.online) {
+            console.log(`[QueueListener] Join rejected for ${user.ign}: online check returned offline`);
             await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
             return;
           }
-          PresenceService.ingest(user.ign, true);
-          presenceVerified = true;
-          console.log(`[QueueListener] Online check passed for ${user.ign}`);
-        } catch (error) {
-          PresenceService.ingest(user.ign, false);
-          console.warn(`[QueueListener] Could not check online status for ${user.ign}, rejecting queue join: ${error}`);
-          await this.moveToWaiting(state, 'Could not verify your Minecraft presence. Please try again shortly.');
-          return;
+        } else {
+          try {
+            const onlineCheck = await this.wsManager.checkPlayerOnline(user.ign, 2000);
+            if (onlineCheck.online !== true) {
+              PresenceService.ingest(user.ign, false);
+              console.log(`[QueueListener] Join rejected for ${user.ign}: online check returned ${onlineCheck.online === null ? 'no response' : 'offline'}`);
+              await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+              return;
+            }
+            PresenceService.ingest(user.ign, true);
+            console.log(`[QueueListener] Online check passed for ${user.ign}`);
+          } catch (error) {
+            PresenceService.ingest(user.ign, false);
+            console.warn(`[QueueListener] Could not check online status for ${user.ign}, rejecting queue join: ${error}`);
+            await this.moveToWaiting(state, 'Could not verify your Minecraft presence. Please try again shortly.');
+            return;
+          }
         }
       }
       this.playerIgnById.set(userId, user.ign);
@@ -1145,7 +1053,8 @@ export class QueueListener {
       }
 
       if (!user.partyId) {
-        if (await this.isInBedwarsGame(user.ign)) {
+        const inBedwars = liveStatus?.inGame ?? await this.isInBedwarsGame(user.ign);
+        if (inBedwars) {
           console.log(`[QueueListener] Join rejected for ${user.ign}: already in a BedWars game`);
           await this.moveToWaiting(state, 'You are already in a BedWars game. Finish it before joining the queue.');
           return;
@@ -1171,9 +1080,6 @@ export class QueueListener {
 
       queueState.lastUpdate = Date.now();
       queuePlayers.set(queue.channelId, [...queueState.players]);
-      if (presenceVerified) {
-        this.ensureVerified(queueState).add(userId);
-      }
 
       if (!user.partyId && !wasQueued) {
         console.log(`[QueueListener] ${user.ign} joined queue ${this.queueLabel(state)} (${queueState.players.length}/${queue.maxPlayers})`);
@@ -1247,24 +1153,8 @@ export class QueueListener {
       const partyIgns = partyUsers
         .map(member => member.ign)
         .filter((ign): ign is string => Boolean(ign));
-      if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
-        const activeGame = await resolveQuery<{ gameId: number } | null>(
-          Game.findOne({
-            $or: [
-              { team1: { $in: partyMembers } },
-              { team2: { $in: partyMembers } }
-            ],
-            state: { $in: ['pending', 'active', 'scoring'] }
-          }),
-          'gameId'
-        );
-        if (activeGame) {
-          console.log(`[QueueListener] Party ${partyId} rejected: member is in game #${activeGame.gameId}`);
-          await this.moveToWaiting(state, `Party member in game #${activeGame.gameId}`);
-          return { success: false };
-        }
-      } else {
-        const bedwarsStatuses = await this.checkBedwarsPlayers(partyIgns);
+      if (typeof this.wsManager.checkBedwarsPlayers === 'function') {
+        const bedwarsStatuses = await this.wsManager.checkBedwarsPlayers(partyIgns);
         const inBedwars = partyUsers.find(member => member.ign && bedwarsStatuses.get(member.ign.toLowerCase()) === true);
         if (inBedwars?.ign) {
           console.log(`[QueueListener] Party ${partyId} rejected: ${inBedwars.ign} is already in a BedWars game`);
@@ -1315,14 +1205,6 @@ export class QueueListener {
         if (!queueState.players.includes(memberId)) {
           queueState.players.push(memberId);
         }
-      }
-
-      const verified = this.ensureVerified(queueState);
-      for (const member of partyUsers) {
-        if (!member.ign) continue;
-        const presence = PresenceService.evaluate(member.ign);
-        if (presence === 'online') verified.add(member.discordId);
-        else if (presence === 'offline') verified.delete(member.discordId);
       }
 
       console.log(`[QueueListener] ${user.ign ?? state.member?.id ?? 'Player'} joined queue ${this.queueLabel(state)} with party ${partyId} (${partyMembers.length} members, ${queueState.players.length}/${queue.maxPlayers})`);
@@ -1395,13 +1277,10 @@ export class QueueListener {
 
         queueState.players = queueState.players.filter(p => !partyMembers!.includes(p));
         queueState.parties.delete(partyId);
-        const verified = this.ensureVerified(queueState);
-        for (const memberId of partyMembers) verified.delete(memberId);
         console.log(`[QueueListener] Party ${partyId} (${partyMembers.length} members) left queue ${queueLabel} after ${playerLabel} left (${queueState.players.length}/${queue.maxPlayers})`);
       } else {
 
         queueState.players = queueState.players.filter(p => p !== userId);
-        this.ensureVerified(queueState).delete(userId);
         console.log(`[QueueListener] ${playerLabel} left queue ${queueLabel} (${queueState.players.length}/${queue.maxPlayers})`);
       }
 
@@ -1552,25 +1431,6 @@ export class QueueListener {
     }
   }
 
-  public getMatchmaker(): CentralizedMatchmaker {
-    return this.matchmaker;
-  }
-
-  public getQueueStats(): Record<string, { players: number, parties: number, processing: boolean }> {
-    const stats: Record<string, { players: number, parties: number, processing: boolean }> = {};
-
-    for (const [queueId, state] of this.queueStates.entries()) {
-      stats[queueId] = {
-        players: state.players.length,
-        parties: state.parties.size,
-        processing: state.processing
-      };
-    }
-
-    return stats;
-  }
-
-
   public cleanup(): void {
     try {
       this.shuttingDown = true;
@@ -1608,7 +1468,6 @@ export class QueueListener {
       this.queueLocks.clear();
       this.queueStatusCache.clear();
       this.playerIgnById.clear();
-      this.playerIgnMisses.clear();
       this.queueMonitorRunning = false;
       this.presenceSweepRunning = false;
 

@@ -1,4 +1,4 @@
-﻿import { Client, TextChannel, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+﻿import { Client, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import type { MessageCreateOptions } from 'discord.js';
 import Game, { IGame } from '../models/Game';
 import GameSettlement from '../models/GameSettlement';
@@ -22,6 +22,7 @@ import type { ICombatEntry } from '../models/gameTypes';
 import { parseTiers, streakBonusFor, bountyForOpponentStreak, type ProgressionTier } from '../utils/eloProgression';
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import { themedEmbed } from '../utils/betterembed';
+import { getPlayerIgns } from '../utils/playerDirectory';
 
 interface PlayerScoreData {
   player: IUser;
@@ -861,7 +862,7 @@ export class GameManager {
       if (context.winningTeam !== 1 && context.winningTeam !== 2) {
         throw new Error('Winning team must be 1 or 2');
       }
-      await this.validateGameForScoring(context.game);
+      await this.validateGameForSettlement(context.game);
 
       const previousState = context.game.state as GameState;
       const combatEntries = this.buildCombatEntries(context);
@@ -897,7 +898,7 @@ export class GameManager {
       await this.sendScoreNotifications(context, playerScoreData);
 
       try {
-        await this.updatePlayerRoles(playerScoreData);
+        await this.updatePlayerRoles(playerScoreData.map(data => data.player.discordId));
       } catch (e) {
         console.warn('[GameManager] Skipping role updates due to error (non-blocking):', e);
       }
@@ -946,7 +947,8 @@ export class GameManager {
     console.log(`[GameManager] Starting to void game ${gameId}: ${reason}`);
     try {
       if (!gameId || !reason) throw new Error('Invalid void parameters');
-      const context = await this.loadGameVoidContext(gameId, reason);
+      const { game, players } = await this.loadGameWithPlayers(gameId, true);
+      const context: GameVoidContext = { game, players, reason };
       if (!this.activeGames.has(gameId) && context.game.channels?.text) {
         this.activeGames.set(gameId, this.resourcesFromGame(context.game));
       }
@@ -956,7 +958,7 @@ export class GameManager {
           return !entry || entry.state !== 'voided';
         });
       }
-      await this.validateGameForVoiding(context.game);
+      await this.validateGameForSettlement(context.game);
 
       const previousState = context.game.state as GameState;
       const claimedGame = await this.claimGameForSettling(gameId);
@@ -982,7 +984,7 @@ export class GameManager {
       await this.revertPlayerStats(playerVoidData, gameId);
       await this.markSettlementStatus(gameId, 'stats_applied');
       this.releasePlayersInGame(gameId);
-      await this.updatePlayerRolesForVoid(playerVoidData);
+      await this.updatePlayerRoles(playerVoidData.map(data => data.player.discordId));
       await this.sendVoidNotifications(context, playerVoidData);
       try {
         const allPlayerIGNs = context.players.map(p => p.ign).filter(Boolean);
@@ -1030,22 +1032,6 @@ export class GameManager {
 
   public getActiveGameCount(): number {
     return this.activeGames.size;
-  }
-
-  public async updateGameMap(gameId: number, newMap: string): Promise<void> {
-    try {
-      await Game.updateOne({ gameId }, { map: newMap });
-
-      const resources = this.activeGames.get(gameId);
-      if (resources && resources.game) {
-        resources.game.map = newMap;
-      }
-
-      console.log(`[GameManager] Updated game ${gameId} map to: ${newMap}`);
-    } catch (error) {
-      console.error(`[GameManager] Error updating game ${gameId} map:`, error);
-      throw error;
-    }
   }
 
   public async initiateGameWarp(gameId: number): Promise<void> {
@@ -1468,60 +1454,9 @@ export class GameManager {
 
 
 
-  private async initiatePlayerWarp(
-    resources: GameResources,
-    selectedMap: string,
-    queue: QueueLike,
-    team1: string[],
-    team2: string[]
-  ): Promise<void> {
-    try {
-      const [team1IGNs, team2IGNs] = await this.getTeamsIGNs(team1, team2);
-
-
-      this.wsManager.send({
-        type: 'warp_players',
-        game_id: resources.gameId.toString(),
-        map: selectedMap,
-        is_ranked: queue.isRanked || false,
-        team1: {
-          players: team1IGNs
-        },
-        team2: {
-          players: team2IGNs
-        }
-      });
-
-      console.log(`[GameManager] Initiated warp request for game ${resources.gameId}`);
-
-    } catch (error) {
-      console.error(`[GameManager] Error initiating player warp:`, error);
-      throw error;
-    }
-  }
-
-  private async getPlayerIGNs(playerIds: string[]): Promise<string[]> {
-    try {
-      const users = await User.find({
-        discordId: { $in: playerIds }
-      }).select('discordId ign').lean();
-
-      const ignMap = new Map(users.map(u => [u.discordId, u.ign]));
-      return playerIds.map(id => ignMap.get(id)).filter(Boolean) as string[];
-
-    } catch (error) {
-      console.error('[GameManager] Error getting player IGNs:', error);
-      return [];
-    }
-  }
-
   private async getTeamsIGNs(team1: string[], team2: string[]): Promise<[string[], string[]]> {
     try {
-      const users = await User.find({
-        discordId: { $in: [...team1, ...team2] }
-      }).select('discordId ign').lean();
-
-      const ignMap = new Map(users.map(u => [u.discordId, u.ign]));
+      const ignMap = await getPlayerIgns([...team1, ...team2]);
       const toIgns = (ids: string[]): string[] => ids.map(id => ignMap.get(id)).filter(Boolean) as string[];
       return [toIgns(team1), toIgns(team2)];
     } catch (error) {
@@ -1772,78 +1707,6 @@ export class GameManager {
     }
   }
 
-  private async getGamesChannel(): Promise<TextChannel | null> {
-    try {
-      const channel = this.client.channels.cache.get(config.channels.gamesChannel);
-      return channel instanceof TextChannel ? channel : null;
-    } catch (error) {
-      console.error('[GameManager] Error getting games channel:', error);
-      return null;
-    }
-  }
-
-  private async updateUserRecentGames(
-    gameId: number,
-    team1: string[],
-    team2: string[],
-    queueData: QueueLike,
-    selectedMap: string,
-    startTime: Date
-  ): Promise<void> {
-    try {
-      const allPlayers = [...team1, ...team2];
-      console.log(`[GameManager] Updating recent games for ${allPlayers.length} players in game ${gameId}`);
-
-      const updatePromises = allPlayers.map(async (discordId) => {
-        try {
-          const user = await User.findOne({ discordId });
-          if (!user) {
-            console.warn(`[GameManager] User not found for ID: ${discordId} when updating recent games`);
-            return;
-          }
-
-          user.games += 1;
-
-          const recentGame = {
-            gameId,
-            queueId: Number.isFinite(parseInt(String(queueData.id), 10))
-              ? String(queueData.id)
-              : queueData.channelId,
-            map: selectedMap,
-            eloGain: 0,
-            kills: 0,
-            deaths: 0,
-            bedBroken: 0,
-            finalKills: 0,
-            date: startTime,
-            state: 'pending',
-            startTime: startTime,
-            won: false,
-            isMvp: false
-          };
-
-          user.recentGames.unshift(recentGame);
-
-
-
-          if (user.recentGames.length > RECENT_GAMES_CAP) {
-            user.recentGames = user.recentGames.slice(0, RECENT_GAMES_CAP);
-          }
-
-          await user.save();
-          console.log(`[GameManager] Updated recent games for user ${user.ign || discordId}`);
-        } catch (error) {
-          console.error(`[GameManager] Error updating user ${discordId} recent games:`, error);
-        }
-      });
-
-      await Promise.allSettled(updatePromises);
-      console.log(`[GameManager] Completed updating recent games for game ${gameId}`);
-    } catch (error) {
-      console.error(`[GameManager] Error updating user recent games:`, error);
-    }
-  }
-
   public cleanup(): void {
     try {
       for (const [key] of this.warpRequests) {
@@ -1997,11 +1860,10 @@ export class GameManager {
     }
   }
 
-  private async validateGameForScoring(game: IGame): Promise<void> {
+  private async validateGameForSettlement(game: IGame): Promise<void> {
     if (!game) {
       throw new Error('Game not found');
     }
-
     if (!game.team1 || !game.team2 || game.team1.length === 0 || game.team2.length === 0) {
       throw new Error('Game has invalid team data');
     }
@@ -2514,95 +2376,22 @@ export class GameManager {
     }
   }
 
-  private async updatePlayerRecentGames(player: IUser, scoreData: PlayerScoreData, game: IGame): Promise<void> {
+  private async updatePlayerRoles(playerIds: string[]): Promise<void> {
     try {
-      const now = new Date();
-      const entry: IRecentGame = {
-        gameId: game.gameId,
-        queueId: Number.isFinite(parseInt(game.queueId, 10)) ? String(parseInt(game.queueId, 10)) : game.queueId,
-        map: game.map,
-        eloGain: scoreData.eloChange,
-        elo_before: scoreData.elo_before,
-        elo_after: scoreData.elo_after,
-        kills: scoreData.stats.kills || 0,
-        deaths: scoreData.stats.deaths || 0,
-        bedBroken: scoreData.stats.bedBroken || 0,
-        finalKills: scoreData.stats.finalKills || 0,
-        finalDeaths: scoreData.finalDeaths || 0,
-        won: scoreData.isWinner,
-        isMvp: scoreData.isMvp,
-        date: now,
-        state: 'scored',
-        startTime: game.startTime,
-        endTime: now,
-        diamonds: scoreData.stats.diamonds || 0,
-        irons: scoreData.stats.irons || 0,
-        gold: scoreData.stats.gold || 0,
-        emeralds: scoreData.stats.emeralds || 0,
-        blocksPlaced: scoreData.stats.blocksPlaced || 0,
-        damageDealt: scoreData.stats.damageDealt || 0,
-        damageTaken: scoreData.stats.damageTaken || 0,
-        assists: scoreData.stats.assists || 0,
-        maxStreak: scoreData.stats.maxStreak || 0,
-        firstBlood: scoreData.stats.firstBlood === true,
-        fights: scoreData.stats.fights ? Object.keys(scoreData.stats.fights).length : 0
-      };
-
-      if (!player.recentGames) player.recentGames = [];
-
-      const idx = player.recentGames.findIndex((g) => g.gameId === game.gameId);
-      if (idx !== -1) {
-        player.recentGames[idx] = entry;
-      } else {
-        player.recentGames.unshift(entry);
-      }
-      if (player.recentGames.length > RECENT_GAMES_CAP) {
-        player.recentGames = player.recentGames.slice(0, RECENT_GAMES_CAP);
-      }
-
-
-    } catch (error) {
-      console.error(`[GameManager] Error updating recent games for ${player.discordId}:`, error);
-    }
-  }
-
-  private async updatePlayerDailyElo(player: IUser): Promise<void> {
-    try {
-      if (!player.dailyElo) {
-        player.dailyElo = [];
-      }
-
-      updateDailyElo(player, player.elo);
-
-      if (player.dailyElo.length > 30) {
-        player.dailyElo = player.dailyElo.slice(-30);
-      }
-    } catch (error) {
-      console.error(`[GameManager] Error updating daily ELO for ${player.discordId}:`, error);
-    }
-  }
-
-  private async updatePlayerRoles(playerScoreData: PlayerScoreData[]): Promise<void> {
-    try {
-      console.log('[GameManager] Updating player roles and nicknames using fix utility');
-
+      if (playerIds.length === 0) return;
       const guild = this.client.guilds.cache.first();
       if (!guild) {
         console.warn('[GameManager] No guild found for role updates');
         return;
       }
 
-
-      const updatePromises = playerScoreData.map(async (scoreData) => {
+      await Promise.allSettled(playerIds.map(async (discordId) => {
         try {
-          await fix(guild, scoreData.player.discordId);
+          await fix(guild, discordId);
         } catch (error) {
-          console.warn(`[GameManager] Could not update roles/nickname for ${scoreData.player.discordId}:`, error);
+          console.warn(`[GameManager] Could not update roles/nickname for ${discordId}:`, error);
         }
-      });
-
-      await Promise.allSettled(updatePromises);
-      console.log('[GameManager] Completed updating player roles and nicknames');
+      }));
     } catch (error) {
       console.error('[GameManager] Error updating player roles:', error);
     }
@@ -2616,7 +2405,7 @@ export class GameManager {
       const guild = this.client.guilds.cache.first();
       if (!guild) return;
 
-      const mentions = this.getMentionString(playerScoreData);
+      const mentions = this.getMentionString(playerScoreData.map(p => p.player.discordId));
       const bonusLines = this.getProgressionBonusLines(playerScoreData, context);
       const notificationContent = bonusLines ? `${mentions}\n${bonusLines}` : mentions;
 
@@ -2668,9 +2457,9 @@ export class GameManager {
 
 
 
-  private getMentionString(playerScoreData: PlayerScoreData[]): string {
+  private getMentionString(discordIds: string[]): string {
     try {
-      return playerScoreData.map(p => `<@${p.player.discordId}>`).join(' ');
+      return discordIds.map(id => `<@${id}>`).join(' ');
     } catch (error) {
       console.error('[GameManager] Error getting mention string:', error);
       return '';
@@ -2738,34 +2527,6 @@ export class GameManager {
   }
 
   
-  private async loadGameVoidContext(gameId: number, reason: string): Promise<GameVoidContext> {
-    try {
-      // A deleted/unregistered account must never make an active game
-      // impossible to void. Existing players are reverted; missing ones are
-      // skipped.
-      const { game, players } = await this.loadGameWithPlayers(gameId, true);
-
-      return {
-        game,
-        players,
-        reason
-      };
-    } catch (error) {
-      console.error('[GameManager] Error loading game void context:', error);
-      throw error;
-    }
-  }
-
-  private async validateGameForVoiding(game: IGame): Promise<void> {
-    if (!game) {
-      throw new Error('Game not found');
-    }
-
-    if (!game.team1 || !game.team2 || game.team1.length === 0 || game.team2.length === 0) {
-      throw new Error('Game has invalid team data');
-    }
-  }
-
   private async processAllPlayersForVoiding(context: GameVoidContext): Promise<PlayerVoidData[]> {
     try {
       const playerVoidData: PlayerVoidData[] = [];
@@ -3076,115 +2837,6 @@ export class GameManager {
     player.games = Math.max(0, (player.games || 0) - 1);
   }
 
-  private async revertPlayerGameStats(player: IUser, voidData: PlayerVoidData): Promise<void> {
-    try {
-      const gameStats = voidData.gameStats;
-      if (!gameStats) {
-        console.warn(`[GameManager] No game stats found for player ${player.discordId} to revert`);
-        return;
-      }
-
-      if (gameStats.state !== 'scored') {
-        console.warn(`[GameManager] Game ${gameStats.gameId} for player ${player.discordId} is not in scored state: ${gameStats.state}`);
-        player.games = Math.max(0, (player.games || 0) - 1);
-        return;
-      }
-
-      this.revertStatFields(player, gameStats);
-
-      player.experience = Math.max(0, (player.experience || 0) - voidData.experienceToRevert);
-      player.level = voidData.level_after;
-      player.kdr = player.deaths && player.deaths > 0 ? Number((player.kills / player.deaths).toFixed(2)) : (player.kills || 0);
-      player.wlr = player.losses && player.losses > 0 ? Number((player.wins / player.losses).toFixed(2)) : (player.wins || 0);
-
-      console.log(`[GameManager] Reverted stats for player ${player.discordId}: -${voidData.experienceToRevert} XP (Lv.${voidData.level_before}â†’${voidData.level_after}), ${voidData.eloChange} ELO`);
-    } catch (error) {
-      console.error(`[GameManager] Error reverting game stats for player ${player.discordId}:`, error);
-    }
-  }
-
-  private async updatePlayerRecentGamesForVoid(player: IUser, voidData: PlayerVoidData, gameId?: number): Promise<void> {
-    try {
-      const gameStats = voidData.gameStats;
-      if (!player.recentGames) player.recentGames = [];
-
-      const targetGameId = gameStats ? gameStats.gameId : gameId;
-      if (!targetGameId) {
-        console.warn(`[GameManager] No gameId available to update recentGames for ${player.discordId}`);
-        return;
-      }
-
-      const recentGameIdx = player.recentGames.findIndex(g => g.gameId === targetGameId);
-      if (recentGameIdx !== -1) {
-        const existing = player.recentGames[recentGameIdx];
-        if (existing.state === 'scored' || existing.state === 'pending') {
-          existing.state = 'voided';
-          existing.eloGain = 0;
-          existing.won = false;
-          existing.isMvp = false;
-        } else {
-          console.warn(`[GameManager] Game ${targetGameId} for player ${player.discordId} is not in scored/pending state: ${existing.state}`);
-        }
-      } else {
-        
-        player.recentGames.unshift({
-          gameId: targetGameId,
-          queueId: '0',
-          map: 'Unknown',
-          eloGain: 0,
-          kills: 0,
-          deaths: 0,
-          bedBroken: 0,
-          finalKills: 0,
-          won: false,
-          isMvp: false,
-          date: new Date(),
-          state: 'voided',
-          startTime: new Date(),
-          endTime: new Date(),
-          diamonds: 0,
-          irons: 0,
-          gold: 0,
-          emeralds: 0,
-          blocksPlaced: 0
-        });
-        if (player.recentGames.length > RECENT_GAMES_CAP) {
-          player.recentGames = player.recentGames.slice(0, RECENT_GAMES_CAP);
-        }
-      }
-    } catch (error) {
-      console.error(`[GameManager] Error updating recent games for void ${player.discordId}:`, error);
-    }
-  }
-
-  private async updatePlayerRolesForVoid(playerVoidData: PlayerVoidData[]): Promise<void> {
-    try {
-      const guild = this.client.guilds.cache.first();
-      if (!guild) {
-        console.warn('[GameManager] No guild found for role updates');
-        return;
-      }
-
-      const updatePromises = playerVoidData.map(async (voidData) => {
-        try {
-          const member = guild.members.cache.get(voidData.player.discordId)
-            ?? await guild.members.fetch(voidData.player.discordId).catch(() => null);
-          if (member) {
-
-            await fix(guild, voidData.player.discordId);
-            console.log(`[GameManager] Updated roles and nickname for player ${voidData.player.discordId}`);
-          }
-        } catch (error) {
-          console.warn(`[GameManager] Could not update roles for ${voidData.player.discordId}:`, error);
-        }
-      });
-
-      await Promise.allSettled(updatePromises);
-    } catch (error) {
-      console.error('[GameManager] Error updating player roles:', error);
-    }
-  }
-
   private async sendVoidNotifications(
     context: GameVoidContext,
     playerVoidData: PlayerVoidData[]
@@ -3194,7 +2846,7 @@ export class GameManager {
       if (!guild) return;
 
       const embed = this.createVoidEmbed(context, playerVoidData);
-      const mentions = this.getMentionStringForVoid(playerVoidData);
+      const mentions = this.getMentionString(playerVoidData.map(p => p.player.discordId));
 
       await this.sendToVoidingChannel(guild, embed, mentions);
       await this.sendToGameChannel(guild, context.game, embed, mentions);
@@ -3227,15 +2879,6 @@ export class GameManager {
     } catch (error) {
       console.error('[GameManager] Error creating void embed:', error);
       return themedEmbed().setTitle('Error').setDescription('Could not create void embed');
-    }
-  }
-
-  private getMentionStringForVoid(playerVoidData: PlayerVoidData[]): string {
-    try {
-      return playerVoidData.map(p => `<@${p.player.discordId}>`).join(' ');
-    } catch (error) {
-      console.error('[GameManager] Error getting mention string:', error);
-      return '';
     }
   }
 

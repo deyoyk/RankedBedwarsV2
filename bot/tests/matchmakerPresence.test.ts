@@ -1,5 +1,6 @@
 import { CentralizedMatchmaker } from '../src/Matchmaking/CentralizedMatchmaker';
 import { PresenceService } from '../src/services/PresenceService';
+import { clearPlayerDirectoryCache } from '../src/utils/playerDirectory';
 
 jest.mock('../src/models/Queue', () => ({
   __esModule: true,
@@ -22,17 +23,22 @@ jest.mock('../src/Matchmaking/utils', () => ({
   calculateTeamAverageElo: jest.fn().mockResolvedValue(1000),
   selectRandomMap: jest.fn().mockResolvedValue('Aquarius'),
   getPlayerIGNs: jest.fn().mockResolvedValue(new Map()),
+  findInGamePlayerIds: jest.fn().mockResolvedValue(new Set()),
+  isIgnInGame: jest.fn().mockResolvedValue(false),
 }));
 jest.mock('../src/managers/WorkersManager', () => ({
   WorkersManager: { getInstance: () => ({}) },
 }));
 
 const UserModel = require('../src/models/User').default;
+const utils = require('../src/Matchmaking/utils');
 
 const wsManagerMock: any = {
   send: jest.fn(),
   setGlobalHandler: jest.fn(),
   checkPlayerOnline: jest.fn().mockResolvedValue({ online: true }),
+  checkPlayers: jest.fn().mockResolvedValue(new Map()),
+  checkBedwarsPlayers: jest.fn().mockResolvedValue(new Map()),
 };
 
 const gameManagerMock: any = {
@@ -53,64 +59,67 @@ function makeManager() {
   return mm;
 }
 
+function userDoc() {
+  return { discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false };
+}
+
 beforeEach(() => {
   jest.clearAllMocks();
   PresenceService.clear();
+  clearPlayerDirectoryCache();
   wsManagerMock.checkPlayerOnline.mockResolvedValue({ online: true });
+  wsManagerMock.checkPlayers.mockResolvedValue(new Map());
+  wsManagerMock.checkBedwarsPlayers.mockResolvedValue(new Map());
+  utils.findInGamePlayerIds.mockResolvedValue(new Set());
+  UserModel.find.mockResolvedValue([userDoc()]);
 });
 
 describe('matchmaker presence fast path', () => {
   it('rejects a known-offline player without a live check', async () => {
-    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     PresenceService.ingest('Alice', false);
     const mm = makeManager();
 
-    const valid = await mm.validateSinglePlayer('a', queue, ['a'], new Set(), new Set());
+    const valid = await mm.validatePlayers(['a'], queue);
 
-    expect(valid).toBe(false);
+    expect(valid).toEqual([]);
     expect(wsManagerMock.checkPlayerOnline).not.toHaveBeenCalled();
   });
 
   it('accepts a known-online player without a live check', async () => {
-    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     PresenceService.ingest('Alice', true);
     const mm = makeManager();
 
-    const valid = await mm.validateSinglePlayer('a', queue, ['a'], new Set(), new Set());
+    const valid = await mm.validatePlayers(['a'], queue);
 
-    expect(valid).toBe(true);
+    expect(valid).toEqual(['a']);
     expect(wsManagerMock.checkPlayerOnline).not.toHaveBeenCalled();
   });
 
   it('falls back to a live check when presence is unknown', async () => {
-    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     const mm = makeManager();
 
-    const valid = await mm.validateSinglePlayer('a', queue, ['a'], new Set(), new Set());
+    const valid = await mm.validatePlayers(['a'], queue);
 
-    expect(valid).toBe(true);
+    expect(valid).toEqual(['a']);
     expect(wsManagerMock.checkPlayerOnline).toHaveBeenCalledWith('Alice');
   });
 
   it('rejects a player when the live check reports offline', async () => {
-    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     wsManagerMock.checkPlayerOnline.mockResolvedValue({ online: false });
     const mm = makeManager();
 
-    const valid = await mm.validateSinglePlayer('a', queue, ['a'], new Set(), new Set());
+    const valid = await mm.validatePlayers(['a'], queue);
 
-    expect(valid).toBe(false);
+    expect(valid).toEqual([]);
   });
 
   it('treats an inconclusive live check as offline', async () => {
-    UserModel.findOne.mockImplementation(() => ({ select: jest.fn().mockReturnValue({ lean: async () => ({ discordId: 'a', ign: 'Alice', elo: 1000, partyId: null, isBanned: false, isFrozen: false }) }) }));
     wsManagerMock.checkPlayerOnline.mockResolvedValue({ online: null });
     const mm = makeManager();
 
-    const valid = await mm.validateSinglePlayer('a', queue, ['a'], new Set(), new Set());
+    const valid = await mm.validatePlayers(['a'], queue);
 
-    expect(valid).toBe(false);
+    expect(valid).toEqual([]);
     expect(PresenceService.evaluate('Alice')).toBe('offline');
   });
 });
-

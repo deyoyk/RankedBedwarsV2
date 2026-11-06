@@ -266,6 +266,22 @@ public class RankedBedwars extends JavaPlugin {
                com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getName().equals("MBedwars");
     }
 
+    /**
+     * Single source of truth for "is this player currently inside a BedWars arena".
+     * The BedWars plugin owns this state, not the RBW game database.
+     */
+    public boolean isInBedwarsGame(org.bukkit.entity.Player player) {
+        if (player == null || !com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable()) {
+            return false;
+        }
+        try {
+            return com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByPlayer(player) != null;
+        } catch (Exception e) {
+            debug("Could not read BedWars arena for " + player.getName() + ": " + e.getMessage());
+            return false;
+        }
+    }
+
     public LiveGameStats getLiveGameStats(org.bukkit.entity.Player player) {
         if (player == null || !com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable()) {
             return null;

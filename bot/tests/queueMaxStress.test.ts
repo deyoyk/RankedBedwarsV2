@@ -49,11 +49,14 @@ jest.mock('../src/managers/MapManager', () => ({
 const QueueModel = require('../src/models/Queue').default;
 const UserModel = require('../src/models/User').default;
 const GameModel = require('../src/models/Game').default;
+const { clearPlayerDirectoryCache } = require('../src/utils/playerDirectory');
 
 const wsMock: any = {
   send: jest.fn(),
   setGlobalHandler: jest.fn(),
   checkPlayerOnline: jest.fn().mockResolvedValue({ online: true }),
+  checkPlayers: jest.fn().mockResolvedValue(new Map()),
+  checkBedwarsPlayers: jest.fn().mockResolvedValue(new Map()),
 };
 
 function queueDoc(channelId: string, maxPlayers = 2) {
@@ -300,6 +303,7 @@ describe('admission fuzz across seeds', () => {
     queuePlayers.clear();
     const { clearAllDraftClaims } = await import('../src/Matchmaking/draftClaims');
     clearAllDraftClaims();
+    clearPlayerDirectoryCache();
     ingame = new Set();
     cur = {};
     for (const u of USERS) cur[u] = null;
@@ -311,6 +315,28 @@ describe('admission fuzz across seeds', () => {
       discordId: filter.discordId, ign: `ign-${filter.discordId.slice(-4)}`,
       partyId: null, elo: 1000, isBanned: false, isFrozen: false,
     }));
+    UserModel.find.mockImplementation((filter: any) => {
+      const ids = filter?.discordId?.$in ?? [];
+      return chainable(ids.map((id: string) => ({ discordId: id, ign: `ign-${id.slice(-4)}` })));
+    });
+    wsMock.checkPlayers.mockImplementation(async (igns: string[]) => {
+      const statuses = new Map<string, { online: boolean; inGame: boolean }>();
+      for (const ign of igns) {
+        const suffix = String(ign).toLowerCase().replace(/^ign-/, '');
+        const id = USERS.find(user => user.slice(-4) === suffix);
+        statuses.set(String(ign).toLowerCase(), { online: true, inGame: Boolean(id && ingame.has(id)) });
+      }
+      return statuses;
+    });
+    wsMock.checkBedwarsPlayers.mockImplementation(async (igns: string[]) => {
+      const statuses = new Map<string, boolean>();
+      for (const ign of igns) {
+        const suffix = String(ign).toLowerCase().replace(/^ign-/, '');
+        const id = USERS.find(user => user.slice(-4) === suffix);
+        statuses.set(String(ign).toLowerCase(), Boolean(id && ingame.has(id)));
+      }
+      return statuses;
+    });
     GameModel.findOne.mockImplementation((filter: any) => {
       const ids = (filter?.$or ?? []).flatMap((o: any) => Object.values(o) as string[]);
       const hit = ids.find((id: string) => ingame.has(id));

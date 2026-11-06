@@ -52,10 +52,20 @@ describe('PresenceService', () => {
   });
 
   it('bounds memory by evicting the oldest records', () => {
-    for (let i = 0; i < 5005; i++) {
+    for (let i = 0; i < 50005; i++) {
       PresenceService.ingest(`player${i}`, true);
     }
     expect(PresenceService.evaluate('player0')).toBe('unknown');
-    expect(PresenceService.evaluate('player5004')).toBe('online');
+    expect(PresenceService.evaluate('player50004')).toBe('online');
+  });
+
+  it('refreshes recency when a tracked player is updated', () => {
+    for (let i = 0; i < 50000; i++) {
+      PresenceService.ingest(`player${i}`, true);
+    }
+    PresenceService.ingest('player0', true);
+    PresenceService.ingest('player50000', true);
+    expect(PresenceService.evaluate('player0')).toBe('online');
+    expect(PresenceService.evaluate('player1')).toBe('unknown');
   });
 });

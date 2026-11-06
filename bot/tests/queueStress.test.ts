@@ -1,5 +1,6 @@
 import { queuePlayers } from '../src/types/queuePlayersMemory';
 import { claimPlayers, releasePlayers, isClaimedByOther, clearAllDraftClaims } from '../src/Matchmaking/draftClaims';
+import { clearPlayerDirectoryCache } from '../src/utils/playerDirectory';
 
 const Q1 = '1352587524475713619';
 const Q2 = '1352587524475713620';
@@ -50,6 +51,8 @@ const wsManagerMock: any = {
   send: jest.fn(),
   setGlobalHandler: jest.fn(),
   checkPlayerOnline: jest.fn().mockResolvedValue({ online: true }),
+  checkPlayers: jest.fn().mockResolvedValue(new Map()),
+  checkBedwarsPlayers: jest.fn().mockResolvedValue(new Map()),
 };
 
 function queueDoc(channelId: string, maxPlayers = 100) {
@@ -136,6 +139,7 @@ describe('admission fuzz: invariants hold under random interleavings', () => {
     jest.clearAllMocks();
     queuePlayers.clear();
     clearAllDraftClaims();
+    clearPlayerDirectoryCache();
     ingame = new Set();
     QueueModel.findOne.mockImplementation((filter: any) =>
       chainable(QUEUES.includes(filter.channelId) ? queueDoc(filter.channelId) : null)
@@ -144,6 +148,10 @@ describe('admission fuzz: invariants hold under random interleavings', () => {
       discordId: filter.discordId, ign: `ign-${filter.discordId.slice(-4)}`,
       partyId: null, elo: 1000, isBanned: false, isFrozen: false,
     }));
+    UserModel.find.mockImplementation((filter: any) => {
+      const ids = filter?.discordId?.$in ?? [];
+      return chainable(ids.map((id: string) => ({ discordId: id, ign: `ign-${id.slice(-4)}` })));
+    });
     GameModel.findOne.mockImplementation((filter: any) => {
       const ids = (filter?.$or ?? []).flatMap((o: any) => Object.values(o) as string[]);
       const hit = ids.find((id: string) => ingame.has(id));
@@ -156,6 +164,24 @@ describe('admission fuzz: invariants hold under random interleavings', () => {
       });
       const busy = ids.filter((id: string) => ingame.has(id));
       return chainable(busy.length > 0 ? [{ team1: busy, team2: [] }] : []);
+    });
+    wsManagerMock.checkPlayers.mockImplementation(async (igns: string[]) => {
+      const statuses = new Map<string, { online: boolean; inGame: boolean }>();
+      for (const ign of igns) {
+        const suffix = String(ign).toLowerCase().replace(/^ign-/, '');
+        const id = USERS.find(user => user.slice(-4) === suffix);
+        statuses.set(String(ign).toLowerCase(), { online: true, inGame: Boolean(id && ingame.has(id)) });
+      }
+      return statuses;
+    });
+    wsManagerMock.checkBedwarsPlayers.mockImplementation(async (igns: string[]) => {
+      const statuses = new Map<string, boolean>();
+      for (const ign of igns) {
+        const suffix = String(ign).toLowerCase().replace(/^ign-/, '');
+        const id = USERS.find(user => user.slice(-4) === suffix);
+        statuses.set(String(ign).toLowerCase(), Boolean(id && ingame.has(id)));
+      }
+      return statuses;
     });
     const { QueueListener } = await import('../src/handlers/QueueListener');
     listener = new QueueListener(

@@ -650,28 +650,6 @@ export class PickingQueueManager {
     }
   }
 
-  private async selectCaptains(players: string[]): Promise<string[]> {
-    try {
-      const users = await User.find({
-        discordId: { $in: players }
-      }).select('discordId elo').sort({ elo: -1 });
-
-      if (users.length < 2) {
-        throw new Error('Not enough players for captain selection');
-      }
-
-      
-      const highestElo = users[0].discordId;
-      const lowestElo = users[users.length - 1].discordId;
-
-      return [highestElo, lowestElo];
-
-    } catch (error) {
-      console.error('[PickingQueue] Error selecting captains:', error);
-      throw error;
-    }
-  }
-
   private async moveAllToPickingVC(guild: Guild, playerIds: string[], vcId: string): Promise<string[]> {
     const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
     try {
@@ -1223,39 +1201,6 @@ export class PickingQueueManager {
     console.log(`[PickingQueue] Game ${gameId} - Team balance validation: Team1(${team1.length}) Team2(${team2.length}) Difference: ${difference} Valid: ${isValid}`);
     
     return { isValid, issues, difference };
-  }
-
-  private fixTeamImbalance(session: PickingSession): void {
-    try {
-      console.log(`[PickingQueue] Game ${session.gameId} - Attempting to fix team imbalance`);
-      
-      const team1Size = session.team1.length;
-      const team2Size = session.team2.length;
-      const difference = Math.abs(team1Size - team2Size);
-      
-      if (difference <= 1) {
-        console.log(`[PickingQueue] Game ${session.gameId} - Teams are balanced, no fix needed`);
-        return;
-      }
-      
-      
-      if (team1Size > team2Size) {
-        const playerToMove = session.team1.pop()!;
-        session.team2.push(playerToMove);
-        console.log(`[PickingQueue] Game ${session.gameId} - Moved ${playerToMove} from Team1 to Team2 to balance teams`);
-      }
-      
-      else if (team2Size > team1Size) {
-        const playerToMove = session.team2.pop()!;
-        session.team1.push(playerToMove);
-        console.log(`[PickingQueue] Game ${session.gameId} - Moved ${playerToMove} from Team2 to Team1 to balance teams`);
-      }
-      
-      console.log(`[PickingQueue] Game ${session.gameId} - After fix: Team1(${session.team1.join(', ')}) Team2(${session.team2.join(', ')})`);
-      
-    } catch (error) {
-      console.error(`[PickingQueue] Game ${session.gameId} - Error fixing team imbalance:`, error);
-    }
   }
 
   private async revalidateFinalTeams(

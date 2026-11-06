@@ -25,7 +25,9 @@ jest.mock('../src/models/Party', () => ({ __esModule: true, default: { findOne: 
 jest.mock('../src/Matchmaking/utils', () => ({
   calculateTeamAverageElo: jest.fn().mockResolvedValue(1000),
   selectRandomMap: jest.fn().mockResolvedValue('Aquarius'),
-  getPlayerIGNs: jest.fn().mockResolvedValue(new Map())
+  getPlayerIGNs: jest.fn().mockResolvedValue(new Map()),
+  findInGamePlayerIds: jest.fn().mockResolvedValue(new Set()),
+  isIgnInGame: jest.fn().mockResolvedValue(false)
 }));
 jest.mock('../src/managers/WorkersManager', () => ({
   WorkersManager: {
@@ -46,7 +48,8 @@ const UserModel = require('../src/models/User').default;
 const wsManagerMock: any = {
   send: jest.fn(),
   setGlobalHandler: jest.fn(),
-  checkPlayerOnline: jest.fn().mockResolvedValue({ online: true })
+  checkPlayerOnline: jest.fn().mockResolvedValue({ online: true }),
+  checkPlayers: jest.fn().mockResolvedValue(new Map())
 };
 
 const gameManagerMock: any = {

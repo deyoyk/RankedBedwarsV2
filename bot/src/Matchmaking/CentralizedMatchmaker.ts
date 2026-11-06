@@ -9,6 +9,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { PresenceService } from '../services/PresenceService';
 import { claimPlayers, releasePlayers, isClaimedByOther } from './draftClaims';
+import { findInGamePlayerIds } from './utils';
 
 function withTimeout<T>(
   promise: Promise<T>,
@@ -745,27 +746,27 @@ export class CentralizedMatchmaker {
         userDocs = [];
       }
       const userMap = new Map<string, ValidatedUserDoc>(userDocs.map(u => [u.discordId, u]));
-
-      const inGameSet = new Set<string>();
-      try {
-        const Game = (await import('../models/Game')).default as unknown as {
-          find: (filter: unknown) => unknown;
-        };
-        const activeGames = (await resolveLean<Array<{ team1?: string[]; team2?: string[] }>>(
-          Game.find({
-            $or: [{ team1: { $in: pendingIds } }, { team2: { $in: pendingIds } }],
-            state: { $in: ['pending', 'active', 'scoring'] }
-          })
-        )) ?? [];
-        for (const game of activeGames ?? []) {
-          for (const id of [...(game.team1 ?? []), ...(game.team2 ?? [])]) {
-            inGameSet.add(id);
-          }
+      const ignById = new Map<string, string>(
+        userDocs.filter(u => Boolean(u.ign)).map(u => [u.discordId, u.ign as string])
+      );
+      let liveStatuses: Map<string, { online: boolean | null; inGame: boolean }> | null = null;
+      if (typeof this.wsManager.checkPlayers === 'function' && ignById.size > 0) {
+        try {
+          liveStatuses = await this.wsManager.checkPlayers([...new Set(ignById.values())]);
+        } catch (error) {
+          console.warn('[CentralizedMatchmaker] Bulk player status check failed:', error);
         }
-      } catch (error) {
-        console.error('[CentralizedMatchmaker] Error batch-fetching active games for validation:', error);
       }
-
+      const inGameSet = new Set<string>();
+      if (liveStatuses) {
+        for (const [id, ign] of ignById) {
+          if (liveStatuses.get(ign.toLowerCase())?.inGame === true) inGameSet.add(id);
+        }
+      } else {
+        for (const id of await findInGamePlayerIds(this.wsManager, pendingIds, ignById)) {
+          inGameSet.add(id);
+        }
+      }
       const partyIds = [...new Set(userDocs.map(u => u.partyId).filter(Boolean))];
       const partyMap = new Map<string, ValidatedPartyDoc>();
       if (partyIds.length > 0) {
@@ -832,6 +833,12 @@ export class CentralizedMatchmaker {
             console.log(`[CentralizedMatchmaker] Player ${playerId} failed validation`);
           } else {
             presenceTasks.push(async () => {
+              const bulk = liveStatuses?.get(outcome.ign.toLowerCase());
+              if (bulk && bulk.online !== null) {
+                PresenceService.ingest(outcome.ign, bulk.online);
+                presenceResults.set(playerId, bulk.online);
+                return;
+              }
               const online = await this.checkPlayerOnlinePresence(outcome.ign);
               presenceResults.set(playerId, online);
             });
@@ -1021,165 +1028,6 @@ export class CentralizedMatchmaker {
     }
   }
 
-  private async validateSinglePlayer(
-    playerId: string,
-    queue: QueueLike,
-    allPlayersInQueue: string[],
-    checkedParties: Set<string>,
-    invalidParties: Set<string>,
-    ctx?: ValidationCtx
-  ): Promise<boolean> {
-    try {
-      let user = ctx?.userMap.get(playerId);
-      if (!user && !ctx) {
-        user = (await User.findOne({ discordId: playerId }).select('discordId ign isBanned isFrozen elo partyId').lean()) ?? undefined;
-      }
-
-      if (!user) {
-        console.warn(`[CentralizedMatchmaker] User ${playerId} not found in database`);
-        return false;
-      }
-
-      if (!user.ign) {
-        console.warn(`[CentralizedMatchmaker] User ${playerId} has no IGN`);
-        return false;
-      }
-
-      if (user.isBanned || user.isFrozen) {
-        console.warn(`[CentralizedMatchmaker] User ${playerId} is banned or frozen`);
-        return false;
-      }
-
-      if (user.elo !== undefined && (user.elo < queue.minElo || user.elo > queue.maxElo)) {
-        console.warn(`[CentralizedMatchmaker] User ${playerId} ELO ${user.elo} not in queue range ${queue.minElo}-${queue.maxElo}`);
-        return false;
-      }
-
-      if (user.partyId) {
-        if (invalidParties.has(user.partyId)) return false;
-        if (!checkedParties.has(user.partyId)) {
-          checkedParties.add(user.partyId);
-          const partyValidation = ctx
-            ? this.validatePartyLocal(user.partyId, queue, ctx)
-            : await this.validateParty(user.partyId, queue, allPlayersInQueue);
-          if (!partyValidation.valid) {
-            console.warn(`[CentralizedMatchmaker] Party ${user.partyId} validation failed: ${partyValidation.reason}`);
-            invalidParties.add(user.partyId);
-            return false;
-          }
-        }
-      }
-
-      const presence = PresenceService.evaluate(user.ign);
-      if (presence === 'offline') {
-        console.warn(`[CentralizedMatchmaker] User ${user.ign} is offline in Minecraft, skipping draft`);
-        return false;
-      }
-      if (presence === 'unknown') {
-        try {
-          const onlineCheck = await withTimeout(
-            this.wsManager.checkPlayerOnline(user.ign),
-            3000,
-            'Online check'
-          );
-          if (typeof onlineCheck.online === 'boolean') {
-            PresenceService.ingest(user.ign, onlineCheck.online);
-          }
-          if (onlineCheck.online === false) {
-            console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
-            return false;
-          }
-          if (onlineCheck.online === null) {
-            PresenceService.ingest(user.ign, false);
-            console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} got no response, treating as offline`);
-            return false;
-          }
-        } catch (error) {
-          console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error instanceof Error ? error.message : String(error)}), keeping player in queue`);
-        }
-      }
-
-      return true;
-    } catch (error) {
-      console.error(`[CentralizedMatchmaker] Error validating single player ${playerId}:`, error);
-      return false;
-    }
-  }
-
-  private async validateParty(
-    partyId: string,
-    queue: QueueLike,
-    playersInQueue: string[],
-    ctx?: ValidationCtx
-  ): Promise<{ valid: boolean; reason?: string }> {
-    try {
-      if (ctx) {
-        return this.validatePartyLocal(partyId, queue, ctx);
-      }
-
-      const Party = (await import('../models/Party')).default;
-      const party = await Party.findOne({ partyId }).select('partyId members').lean();
-
-      if (!party) {
-        return { valid: false, reason: 'Party not found' };
-      }
-
-      if (!party.members || party.members.length === 0) {
-        return { valid: false, reason: 'Party has no members' };
-      }
-
-      const partyMembers = party.members;
-      const queuedSet = new Set(playersInQueue);
-      const partyMembersInQueue = partyMembers.filter((memberId: string) => queuedSet.has(memberId));
-
-      if (partyMembersInQueue.length !== partyMembers.length) {
-        return { 
-          valid: false, 
-          reason: `Not all party members in queue (${partyMembersInQueue.length}/${partyMembers.length})` 
-        };
-      }
-
-      const partyUsers = await User.find({ 
-        discordId: { $in: partyMembers } 
-      }).select('discordId elo isBanned isFrozen').lean();
-
-      if (partyUsers.length !== partyMembers.length) {
-        return { 
-          valid: false, 
-          reason: 'Some party members not found in database' 
-        };
-      }
-
-      for (const member of partyUsers) {
-        if (member.isBanned || member.isFrozen) {
-          return { 
-            valid: false, 
-            reason: `Party member ${member.discordId} is banned or frozen` 
-          };
-        }
-
-        if (member.elo !== undefined && (member.elo < queue.minElo || member.elo > queue.maxElo)) {
-          return { 
-            valid: false, 
-            reason: `Party member ${member.discordId} ELO ${member.elo} not in queue range ${queue.minElo}-${queue.maxElo}` 
-          };
-        }
-      }
-
-      if (partyMembers.length > queue.maxPlayers / 2) {
-        return { 
-          valid: false, 
-          reason: `Party too large for queue (${partyMembers.length} > ${queue.maxPlayers / 2})` 
-        };
-      }
-
-      return { valid: true };
-    } catch (error) {
-      console.error(`[CentralizedMatchmaker] Error validating party ${partyId}:`, error);
-      return { valid: false, reason: 'Validation error' };
-    }
-  }
-
   private determineQueueType(queue: QueueLike): QueueType {
     
     if (queue.maxPlayers <= 2) {
@@ -1208,10 +1056,6 @@ export class CentralizedMatchmaker {
       console.error(`[CentralizedMatchmaker] Error getting queue ${queueId}:`, error);
       return null;
     }
-  }
-
-  private async sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   public async recoverPickingSessions(): Promise<number> {
