@@ -4,6 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import { fix } from '../../utils/fix';
 import User from '../../models/User';
 import { executeWithConfirmation } from '../../utils/confirmAction';
+import { themedEmbed } from '../../utils/betterembed';
 
 interface FixAllProgress {
   total: number;
@@ -150,7 +151,7 @@ function createProgressEmbed(progress: FixAllProgress): EmbedBuilder {
   
   const progressBar = createProgressBar(progressPercent);
   
-  const embed = new EmbedBuilder()
+  const embed = themedEmbed()
     .setTitle('🔄 Fix All Progress')
     .setColor('#FFA500')
     .setDescription(`Processing user roles and nicknames...`)
@@ -163,7 +164,6 @@ function createProgressEmbed(progress: FixAllProgress): EmbedBuilder {
       { name: 'Elapsed Time', value: formatTime(elapsedSeconds), inline: true },
       { name: 'ETA', value: calculateETA(progress, elapsed), inline: true }
     )
-    .setFooter({ text: 'Deyo.lol' })
     .setTimestamp();
 
   if (progress.errors.length > 0) {
@@ -186,7 +186,7 @@ function createFinalEmbed(progress: FixAllProgress): EmbedBuilder {
   const color = successRate >= 90 ? '#00FF00' : successRate >= 70 ? '#FFA500' : '#00AAAA';
   const status = successRate >= 90 ? '✅ Completed Successfully' : successRate >= 70 ? '⚠️ Completed with Issues' : '❌ Completed with Errors';
   
-  const embed = new EmbedBuilder()
+  const embed = themedEmbed()
     .setTitle(status)
     .setColor(color)
     .setDescription(`Fix all operation completed!`)
@@ -198,7 +198,6 @@ function createFinalEmbed(progress: FixAllProgress): EmbedBuilder {
       { name: 'Total Time', value: formatTime(elapsedSeconds), inline: true },
       { name: 'Average Time/User', value: `${Math.round(elapsed / progress.total)}ms`, inline: true }
     )
-    .setFooter({ text: 'Deyo.lol' })
     .setTimestamp();
 
   if (progress.failed > 0) {

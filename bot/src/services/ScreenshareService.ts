@@ -3,6 +3,7 @@ import ScreenshareSession, { IScreenshareSession } from '../models/ScreenshareSe
 import User from '../models/User';
 import config from '../config/config';
 import { v4 as uuidv4 } from 'uuid';
+import { themedEmbed } from '../utils/betterembed';
 import { 
   ScreenshareSessionResult, 
   ScreenshareFreezeResult, 
@@ -406,7 +407,7 @@ export class ScreenshareService {
   }
 
   static createFreezeEmbed(_targetId: string): EmbedBuilder {
-    return new EmbedBuilder()
+    return themedEmbed()
       .setColor(0xff0000)
       .setTitle('YOU ARE FROZEN YOU HAVE 5 MINUTES TO DOWNLOAD ANYDESK')
       .setDescription(
@@ -423,7 +424,7 @@ export class ScreenshareService {
   }
 
   static createSessionEmbed(session: IScreenshareSession, imageUrl: string): EmbedBuilder {
-    return new EmbedBuilder()
+    return themedEmbed()
       .setColor(0x5865f2)
       .setTitle('Screenshare Request')
       .setDescription(

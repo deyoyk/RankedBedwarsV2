@@ -1,10 +1,11 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { parse } from 'yaml';
 import fs from 'fs';
 import path from 'path';
 import { safeReply } from '../../utils/safeReply';
 import Season from '../../models/Season';
+import { themedEmbed } from '../../utils/betterembed';
 
 interface SeasonInfo {
   field1: string;
@@ -32,7 +33,7 @@ export async function seasoninfo(interaction: Message | ChatInputCommandInteract
 
     const currentSeason = await Season.findOne({ isActive: true });
     
-    const embed = new EmbedBuilder()
+    const embed = themedEmbed()
       .setTitle('Season Information')
       .setColor('#00AAAA')
       .setTimestamp();

@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Message, MessageComponentInteraction, ThreadAutoArchiveDuration } from 'discord.js';
 import VoteRequest from '../models/VoteRequest';
+import { themedEmbed } from './betterembed';
 
 export interface VoteData {
   upvote: Set<string>;
@@ -88,7 +89,7 @@ export function buildResultEmbed(
   requiredVotes: number,
   approved: boolean
 ): EmbedBuilder {
-  return new EmbedBuilder()
+  return themedEmbed()
     .setTitle(title)
     .setColor(approved ? '#00ff00' : '#00AAAA')
     .addFields(

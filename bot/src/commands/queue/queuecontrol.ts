@@ -1,8 +1,8 @@
-import { SlashCommandBuilder, Message, ChatInputCommandInteraction, EmbedBuilder, SlashCommandSubcommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, Message, ChatInputCommandInteraction, SlashCommandSubcommandBuilder } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Queue from '../../models/Queue';
 import { safeReply } from '../../utils/safeReply';
-import { errorEmbed } from '../../utils/betterembed';
+import { errorEmbed, themedEmbed } from '../../utils/betterembed';
 import config from '../../config/config';
 
 function addQueueOptions(sub: SlashCommandSubcommandBuilder) {
@@ -67,7 +67,7 @@ export async function queuecontrol(interaction: Message | ChatInputCommandIntera
   try {
     const update = sub === 'enable' ? { isActive: true } : { isActive: false };
     const result = await Queue.updateMany(filter, update);
-    const embed = new EmbedBuilder()
+    const embed = themedEmbed()
       .setColor(sub === 'enable' ? '#00ff00' : '#00AAAA')
       .setTitle(sub === 'enable' ? 'Queues Enabled' : 'Queues Disabled')
       .setDescription(`Affected queues: ${result.modifiedCount}`);

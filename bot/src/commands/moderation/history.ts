@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import config from '../../config/config';
@@ -11,7 +11,7 @@ interface HistoryRecordView {
 }
 
 
-import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
+import { errorEmbed, successEmbed, betterEmbed, themedEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
 export async function history(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
@@ -28,7 +28,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
       discordId = userInput.replace(/[<@!>]/g, '');
       historyType = args[1].toLowerCase();
     } else {
-      const embed = new EmbedBuilder()
+      const embed = themedEmbed()
         .setColor('#00AAAA')
         .setTitle('History Command Error')
         .setDescription(`Usage: ${config.prefix}history <userId|mention|IGN> <type>`)
@@ -51,7 +51,7 @@ export async function history(interaction: Message | ChatInputCommandInteraction
       : await User.findOne({ ign: userInput }).collation({ locale: 'en', strength: 2 }).select('discordId').lean();
 
     if (!idRow) {
-      const embed = new EmbedBuilder()
+      const embed = themedEmbed()
         .setColor('#00AAAA')
         .setTitle('History Not Found')
         .setDescription('No user found with the specified ID, mention, or IGN.')

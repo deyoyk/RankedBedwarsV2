@@ -8,6 +8,7 @@ import config from '../config/config';
 import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
 import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil } from './utils';
+import { themedEmbed } from '../utils/betterembed';
 
 interface QueueLike {
   id?: unknown;
@@ -433,8 +434,7 @@ export class RandomQueueManager {
       ...team2.map(id => `‎ <@${id}>`),
       team2.length === 0 ? '‎ *(No players)*' : ''
     ].filter(Boolean).join('\n');
-    const { EmbedBuilder } = await import('discord.js');
-    return new EmbedBuilder()
+    return themedEmbed()
       .setTitle(`Game #${gameId} Started`)
       .addFields(
         {
@@ -448,7 +448,6 @@ export class RandomQueueManager {
           inline: true
         }
       )
-      .setFooter({ text: 'Season Beta' })
       .setTimestamp()
       .setColor('#00aaaa');
   }

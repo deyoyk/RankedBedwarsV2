@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
 import { IRecentGame } from '../../models/gameBase';
+import { themedEmbed } from '../../utils/betterembed';
 
 interface RecentGamesData {
   page: number;
@@ -90,7 +91,7 @@ async function displayRecentGames(interaction: Message | ChatInputCommandInterac
 }
 
 function createNoGamesEmbed(userFilter?: string): EmbedBuilder {
-  const embed = new EmbedBuilder()
+  const embed = themedEmbed()
     .setTitle('No Recent Games')
     .setDescription(userFilter ? `No recent games found for user: ${userFilter}` : 'There are no recent games in the database.')
     .setColor('#ff6b6b')
@@ -100,7 +101,7 @@ function createNoGamesEmbed(userFilter?: string): EmbedBuilder {
 }
 
 function createRecentGamesEmbed(user: RecentGamesUser, games: IRecentGame[], currentPage: number, totalPages: number, startIndex: number, endIndex: number): EmbedBuilder {
-  const embed = new EmbedBuilder()
+  const embed = themedEmbed()
     .setTitle(`Recent Games - ${user.ign || user.discordId}`)
     .setDescription(`Showing games ${startIndex + 1}-${endIndex} of ${user.recentGames.length}`)
     .setColor('#00AAAA')

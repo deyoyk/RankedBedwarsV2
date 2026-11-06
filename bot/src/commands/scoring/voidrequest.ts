@@ -5,6 +5,7 @@ import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed, claimVoteRequest, releaseVoteRequest } from '../../utils/voteRequest';
+import { themedEmbed } from '../../utils/betterembed';
 
 interface VoidRequestData {
   gameId: string;
@@ -120,7 +121,7 @@ async function createVoidRequest(interaction: Message | ChatInputCommandInteract
 }
 
 function createVoidRequestEmbed(data: VoidRequestData, game: IGame): EmbedBuilder {
-  return new EmbedBuilder()
+  return themedEmbed()
     .setTitle('Void Request')
     .setDescription(`A void has been requested for Game ID: ${data.gameId}`)
     .addFields(

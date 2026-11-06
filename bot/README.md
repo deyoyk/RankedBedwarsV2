@@ -52,6 +52,25 @@ npm run setup
 docker compose up -d --build
 ```
 
+## Pterodactyl
+
+`npm build` is not a valid npm command. Use one of these as the server's
+startup command:
+
+```text
+npm install --include=dev && npm run build && npm start
+```
+
+or upload the bot and use the included script:
+
+```text
+bash pterodactyl-start.sh
+```
+
+The script installs dev dependencies (Pterodactyl often sets
+`NODE_ENV=production`, but `tsup`/`typescript` are needed to build), builds
+the bot, and starts it.
+
 ## Commands
 
 All commands are slash commands: `/register`, `/stats`, `/leaderboard`, `/party`, `/queue`, `/score`, `/ban`, `/addqueue`, `/startseason`, `/help` and more. Use `/help` in Discord for the full list.

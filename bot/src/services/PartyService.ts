@@ -2,6 +2,7 @@ import { Guild, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } fro
 import Party from '../models/Party';
 import UserModel from '../models/User';
 import config from '../config/config';
+import { themedEmbed } from '../utils/betterembed';
 
 export type PartyDocument = ReturnType<typeof Party.hydrate>;
 export type PartyUserDocument = ReturnType<typeof UserModel.hydrate>;
@@ -145,7 +146,7 @@ export class PartyService {
 
       await this.updatePartyActivity(party.partyId);
 
-      const embed = new EmbedBuilder()
+      const embed = themedEmbed()
         .setColor('#00ff00')
         .setTitle('Party Invitation')
         .setDescription(`<@${targetId}>, you have been invited to join the party!`)

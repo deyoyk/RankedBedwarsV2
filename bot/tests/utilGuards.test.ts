@@ -1,6 +1,6 @@
 import { getLevelInfo } from '../src/utils/levelSystem';
 import { computePagination, validatePositiveInt } from '../src/managers/validationHelpers';
-import { betterEmbed } from '../src/utils/betterembed';
+import { betterEmbed, errorEmbed, successEmbed, themedEmbed, EMBED_THEME } from '../src/utils/betterembed';
 import { checkPermission } from '../src/utils/permissions';
 
 function bruteTotal(level: number): number {
@@ -64,6 +64,22 @@ describe('betterEmbed guards', () => {
     const json = betterEmbed('t', '#00ff00', 'Title', false, 'foot').builder.toJSON();
     expect(json.footer?.text).toBe('foot');
     expect(json.footer?.icon_url).toBeUndefined();
+  });
+  it('uses the shared theme defaults everywhere', () => {
+    const json = betterEmbed('t').builder.toJSON();
+    expect(json.color).toBe(EMBED_THEME.defaultColor);
+    expect(json.title).toBe(EMBED_THEME.defaultTitle);
+    expect(json.footer?.text).toBe(EMBED_THEME.footer);
+
+    expect(errorEmbed('e').builder.toJSON().color).toBe(EMBED_THEME.errorColor);
+    expect(errorEmbed('e').builder.toJSON().title).toBe(EMBED_THEME.errorTitle);
+    expect(successEmbed('s').builder.toJSON().color).toBe(EMBED_THEME.successColor);
+    expect(successEmbed('s').builder.toJSON().title).toBe(EMBED_THEME.successTitle);
+  });
+  it('themed embeds always carry the standard footer', () => {
+    const json = themedEmbed().toJSON();
+    expect(json.color).toBe(EMBED_THEME.defaultColor);
+    expect(json.footer?.text).toBe(EMBED_THEME.footer);
   });
 });
 

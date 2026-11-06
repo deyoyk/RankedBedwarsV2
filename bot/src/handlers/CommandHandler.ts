@@ -1,10 +1,5 @@
 
-import {
-  Client,
-  Message,
-  ChatInputCommandInteraction,
-  EmbedBuilder,
-} from 'discord.js';
+import { Client, Message, ChatInputCommandInteraction } from 'discord.js';
 
 import config from '../config/config';
 import { checkPermission } from '../utils/permissions';
@@ -12,6 +7,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 
 import type { BotCommandFn } from '../types/commands';
+import { themedEmbed } from '../utils/betterembed';
 
 export type CommandFn = BotCommandFn;
 
@@ -87,7 +83,7 @@ export class CommandHandler {
       requiredRoles.length > 0 &&
       !requiredRoles.includes('everyone')
     ) {
-      const embed = new EmbedBuilder()
+      const embed = themedEmbed()
         .setColor('#00AAAA')
         .setTitle('You do not have permission')
         .setDescription(

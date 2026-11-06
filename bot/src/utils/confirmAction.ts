@@ -1,6 +1,6 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedField } from 'discord.js';
+import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType, EmbedField } from 'discord.js';
 import { safeReply } from './safeReply';
-import { errorEmbed, successEmbed } from './betterembed';
+import { errorEmbed, successEmbed, themedEmbed } from './betterembed';
 
 export interface ConfirmActionConfig {
   commandName: string;
@@ -26,7 +26,7 @@ export async function executeWithConfirmation(
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 
   try {
-    const confirmEmbed = new EmbedBuilder()
+    const confirmEmbed = themedEmbed()
       .setTitle(config.confirmTitle)
       .setColor('#FFA500')
       .setDescription(config.confirmDescription)
@@ -81,11 +81,10 @@ export async function executeWithConfirmation(
       await config.onConfirm();
 
     } catch {
-      const timeoutEmbed = new EmbedBuilder()
+      const timeoutEmbed = themedEmbed()
         .setTitle('⏰ Confirmation Expired')
         .setColor('#00AAAA')
         .setDescription('The confirmation has expired. Please run the command again if you want to proceed.')
-        .setFooter({ text: 'Deyo.lol' })
         .setTimestamp();
 
       await message.edit({

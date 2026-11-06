@@ -1,7 +1,8 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
 import { safeReply } from '../../utils/safeReply';
+import { themedEmbed } from '../../utils/betterembed';
 
 export async function endseason(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
     void args;
@@ -11,7 +12,7 @@ export async function endseason(interaction: Message | ChatInputCommandInteracti
 
 
         if (result.success) {
-            const embed = new EmbedBuilder()
+            const embed = themedEmbed()
                 .setColor('#00ff00')
                 .setTitle('Season Ended!')
                 .setDescription(`**${result.seasonInfo?.name}** (Season ${result.seasonInfo?.seasonNumber} Chapter ${result.seasonInfo?.chapterNumber}) has been successfully ended`)
@@ -27,7 +28,7 @@ export async function endseason(interaction: Message | ChatInputCommandInteracti
 
             await safeReply(interaction, { embeds: [embed] });
         } else {
-            const embed = new EmbedBuilder()
+            const embed = themedEmbed()
                 .setColor('#00AAAA')
                 .setTitle('❌ Error')
                 .setDescription(result.message);
@@ -37,7 +38,7 @@ export async function endseason(interaction: Message | ChatInputCommandInteracti
     } catch (error) {
         console.error('Error ending season:', error);
 
-        const embed = new EmbedBuilder()
+        const embed = themedEmbed()
             .setColor('#00AAAA')
             .setTitle('❌ Error')
             .setDescription('An error occurred while ending the season. Please check the logs and try again.');

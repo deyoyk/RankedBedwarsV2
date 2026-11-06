@@ -23,6 +23,7 @@ import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
 
 import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil, getPlayerIGNs as getPlayerIGNsUtil } from './utils';
+import { themedEmbed } from '../utils/betterembed';
 
 interface QueueLike {
   id?: unknown;
@@ -274,7 +275,7 @@ export class PickingQueueManager {
     const team1Value = this.buildTeamValue(team1, captains[0], team1Avg, ignMap);
     const team2Value = this.buildTeamValue(team2, captains[1], team2Avg, ignMap);
     const statusField = `**Status:** ${status}`;
-    return new EmbedBuilder()
+    return themedEmbed()
       .setTitle(`Game #${gameId} Started`)
       .addFields(
         {
@@ -293,7 +294,6 @@ export class PickingQueueManager {
           inline: false
         }
       )
-      .setFooter({ text: 'Season Beta' })
       .setColor('#00aaaa')
       .setTimestamp();
   }
@@ -803,7 +803,7 @@ export class PickingQueueManager {
         `**Status:** Ongoing`,
         `**Auto-pick:** <t:${autoPickTimestamp}:R>`
       ].join('\n');
-      return new EmbedBuilder()
+      return themedEmbed()
         .setTitle(`**Game #${session.gameId} Started**`)
         .addFields(
           {
@@ -826,7 +826,7 @@ export class PickingQueueManager {
         .setTimestamp();
     } catch (error) {
       console.error('[PickingQueue] Error building picking embed:', error);
-      return new EmbedBuilder().setTitle('Error').setDescription('Could not build picking embed');
+      return themedEmbed().setTitle('Error').setDescription('Could not build picking embed');
     }
   }
 
@@ -1116,7 +1116,7 @@ export class PickingQueueManager {
 
   private async sendVoidNotice(channel: TextChannel): Promise<void> {
     try {
-      const embed = new EmbedBuilder()
+      const embed = themedEmbed()
         .setTitle('❌ Game Cancelled')
         .setDescription('The picking process was cancelled due to timeout or other issues.')
         .setColor('#00AAAA')

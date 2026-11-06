@@ -1,8 +1,9 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { getLevelInfo, EXPERIENCE_REWARDS } from '../../utils/levelSystem';
 import { safeReply } from '../../utils/safeReply';
+import { themedEmbed } from '../../utils/betterembed';
 
 export async function level(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
     void wsManager;
@@ -26,7 +27,7 @@ export async function level(interaction: Message | ChatInputCommandInteraction, 
         const user = await User.findOne({ discordId: targetId }).select('discordId ign experience').lean();
 
         if (!user) {
-            const embed = new EmbedBuilder()
+            const embed = themedEmbed()
                 .setColor('#00AAAA')
                 .setTitle('\u274c User Not Found')
                 .setDescription('This user is not registered in the system.');
@@ -39,7 +40,7 @@ export async function level(interaction: Message | ChatInputCommandInteraction, 
         const progressPercentage = ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100);
         const progressBar = '\u2588'.repeat(Math.floor(progressPercentage / 5)) + '\u2591'.repeat(20 - Math.floor(progressPercentage / 5));
 
-        const embed = new EmbedBuilder()
+        const embed = themedEmbed()
             .setColor('#00ff00')
             .setTitle(`Level Information - ${user.ign || targetUsername || targetId}`)
             .addFields(
@@ -91,7 +92,7 @@ export async function level(interaction: Message | ChatInputCommandInteraction, 
     } catch (error) {
         console.error('Error in level command:', error);
 
-        const embed = new EmbedBuilder()
+        const embed = themedEmbed()
             .setColor('#00AAAA')
             .setTitle('\u274c Error')
             .setDescription('An error occurred while fetching level information.');

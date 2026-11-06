@@ -1,7 +1,8 @@
-import { Events, GuildMember, EmbedBuilder, Client } from 'discord.js';
+import { Events, GuildMember, Client } from 'discord.js';
 import User from '../models/User';
 import { fix } from '../utils/fix';
 import config from '../config/config';
+import { themedEmbed } from '../utils/betterembed';
 
 export class GuildJoinListener {
   private client: Client;
@@ -24,7 +25,7 @@ export class GuildJoinListener {
       if (user) {
         console.log(`[GuildJoinListener] User ${member.user.tag} exists in database, sending welcome back embed`);
         
-        const embed = new EmbedBuilder()
+        const embed = themedEmbed()
           .setTitle('Welcome Back!')
           .setDescription(`Hey <@${member.id}>, it's not your first time being in this server, lemme fix your roles`)
           .setColor('#00ff00')

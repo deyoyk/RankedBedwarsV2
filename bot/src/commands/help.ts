@@ -1,10 +1,11 @@
 
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, EmbedBuilder, ButtonBuilder, ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
+import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 import fs from 'fs';
 import path from 'path';
 import pkg from '../../package.json';
+import { themedEmbed } from '../utils/betterembed';
 
 
 async function getCommandCategories() {
@@ -88,7 +89,7 @@ export async function help(interaction: Message | ChatInputCommandInteraction, a
     const commandCategories = await getCommandCategories();
     console.log('[Help] Command categories:', Object.keys(commandCategories));
     
-    const embed = new EmbedBuilder()
+    const embed = themedEmbed()
       .setTitle(`Ranked Bedwars System v${pkg.version}`)
       .setDescription('Made by <@919498122940547072> `Deyo` and Managed by [Zerocode](https://discord.com/invite/23hPVuuam3) \n\n:star2: Select a category to view commands and their required roles.')
       .setColor('#00AAAA')
@@ -141,7 +142,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
     const end = start + perPage;
     const pagedCommands = validCommands.slice(start, end);
 
-    const embed = new EmbedBuilder()
+    const embed = themedEmbed()
       .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Commands`)
       .setDescription(
         '\n' +

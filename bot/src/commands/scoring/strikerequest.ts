@@ -5,6 +5,7 @@ import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
 import { safeReply } from '../../utils/safeReply';
 import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed, claimVoteRequest, releaseVoteRequest } from '../../utils/voteRequest';
+import { themedEmbed } from '../../utils/betterembed';
 
 interface StrikeRequestData {
   gameId: string;
@@ -127,7 +128,7 @@ async function createStrikeRequest(interaction: Message | ChatInputCommandIntera
 }
 
 function createStrikeRequestEmbed(data: StrikeRequestData, game: IGame | null): EmbedBuilder {
-  return new EmbedBuilder()
+  return themedEmbed()
     .setTitle('Strike Request')
     .setDescription(`A strike has been requested against <@${data.targetId}>`)
     .addFields(

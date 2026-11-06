@@ -3,7 +3,6 @@ import { config as dotenvConfig } from 'dotenv';
 dotenvConfig();
 
 const clean = (v: string | undefined): string => (v ?? '').trim();
-const cleanOpt = (v: string | undefined): string => (v ?? '').trim();
 
 export function isSnowflake(v: string): boolean {
   return /^\d{17,20}$/.test(v);
@@ -28,23 +27,6 @@ export function validateConfig(cfg: Config): string[] {
 }
 
 interface Config {
-  embed?: {
-    defaultText?: string;
-    defaultColor?: string;
-    defaultTitle?: string;
-    defaultEphemeral?: boolean;
-    defaultFooter?: string;
-    errorText?: string;
-    errorColor?: string;
-    errorTitle?: string;
-    errorEphemeral?: boolean;
-    errorFooter?: string;
-    successText?: string;
-    successColor?: string;
-    successTitle?: string;
-    successEphemeral?: boolean;
-    successFooter?: string;
-  };
   token: string;
   clientId: string;
   guildId: string;
@@ -149,23 +131,6 @@ function parsedNonNegativeInt(raw: string | undefined, fallback: number): number
 }
 
 const configuration: Config = {
-  embed: {
-    defaultText: clean(process.env.EMBED_DEFAULT_TEXT) || ' ',
-    defaultColor: clean(process.env.EMBED_DEFAULT_COLOR) || '#00AAAA',
-    defaultTitle: clean(process.env.EMBED_DEFAULT_TITLE) || 'Notice',
-    defaultEphemeral: clean(process.env.EMBED_DEFAULT_EPHEMERAL) === 'true',
-    defaultFooter: clean(process.env.EMBED_DEFAULT_FOOTER) || 'Deyo.lol',
-    errorText: cleanOpt(process.env.EMBED_ERROR_TEXT),
-    errorColor: clean(process.env.EMBED_ERROR_COLOR) || '#00AAAA',
-    errorTitle: clean(process.env.EMBED_ERROR_TITLE) || 'Error',
-    errorEphemeral: clean(process.env.EMBED_ERROR_EPHEMERAL) === 'true',
-    errorFooter: clean(process.env.EMBED_ERROR_FOOTER) || 'Deyo.lol',
-    successText: cleanOpt(process.env.EMBED_SUCCESS_TEXT),
-    successColor: clean(process.env.EMBED_SUCCESS_COLOR) || '#00ff00',
-    successTitle: clean(process.env.EMBED_SUCCESS_TITLE) || 'Success',
-    successEphemeral: clean(process.env.EMBED_SUCCESS_EPHEMERAL) === 'true',
-    successFooter: clean(process.env.EMBED_SUCCESS_FOOTER) || 'Deyo.lol',
-  },
   token: clean(process.env.DISCORD_TOKEN),
   clientId: clean(process.env.CLIENT_ID),
   guildId: clean(process.env.GUILD_ID),

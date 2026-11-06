@@ -11,6 +11,7 @@ import { ISeasonGames } from '../models/SeasonGames';
 import { getLevelInfo } from '../utils/levelSystem';
 import { EmbedBuilder } from 'discord.js';
 import { validatePositiveInt, validatePageLimit, computePagination } from './validationHelpers';
+import { themedEmbed } from '../utils/betterembed';
 
 export interface SeasonStartOptions {
   seasonNumber: number;
@@ -225,7 +226,7 @@ export class SeasonManager {
 
       const activeSeason = await Season.findOne({ isActive: true });
       if (activeSeason) {
-        const embed = new EmbedBuilder()
+        const embed = themedEmbed()
           .setColor('#00AAAA')
           .setTitle('❌ Error')
           .setDescription(
@@ -246,7 +247,7 @@ export class SeasonManager {
       });
 
       if (existingSeason) {
-        const embed = new EmbedBuilder()
+        const embed = themedEmbed()
           .setColor('#00AAAA')
           .setTitle('❌ Error')
           .setDescription(
@@ -288,7 +289,7 @@ export class SeasonManager {
         await session.endSession();
       }
 
-      const embed = new EmbedBuilder()
+      const embed = themedEmbed()
         .setColor('#00ff00')
         .setTitle('🎉 Season Started!')
         .setDescription(
@@ -319,7 +320,7 @@ export class SeasonManager {
     } catch (error) {
       console.error('Error starting season:', error);
 
-      const embed = new EmbedBuilder()
+      const embed = themedEmbed()
         .setColor('#00AAAA')
         .setTitle('❌ Error')
         .setDescription('An error occurred while starting the season.');

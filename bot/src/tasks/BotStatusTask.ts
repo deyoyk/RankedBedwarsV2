@@ -5,6 +5,7 @@ import config from '../config/config';
 import os from 'os';
 import path from 'path';
 import botPackage from '../../package.json';
+import { themedEmbed } from '../utils/betterembed';
 
 export class BotStatusTask {
   private client: Client;
@@ -123,11 +124,9 @@ export class BotStatusTask {
   }
 
   private async createStatusEmbed(): Promise<EmbedBuilder> {
-    const embed = new EmbedBuilder()
+    const embed = themedEmbed()
       .setTitle('Bot Environment Status ✌️')
-      .setColor(0x00AAAA) 
-      .setFooter({ text: 'Made by ✼ Deyo ✼' })
-      
+      .setColor(0x00AAAA)
       .setImage(this.statusImageCdnUrl || 'attachment://rbw.gif');
 
     try {

@@ -21,6 +21,7 @@ import type { IRecentGame } from '../models/gameBase';
 import type { ICombatEntry } from '../models/gameTypes';
 import { parseTiers, streakBonusFor, bountyForOpponentStreak, type ProgressionTier } from '../utils/eloProgression';
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
+import { themedEmbed } from '../utils/betterembed';
 
 interface PlayerScoreData {
   player: IUser;
@@ -3215,7 +3216,7 @@ export class GameManager {
       const rawMap = context.game.map; 
       const versionMatch = rawMap.match(/(\d+v\d+)/);
       const mapName = versionMatch ? rawMap.slice(0, versionMatch.index).trim() || rawMap : rawMap;
-      return new EmbedBuilder()
+      return themedEmbed()
         .setTitle(`Game #${context.game.gameId} Voided`)
         .setDescription(`**Reason:** ${context.reason}\n**Map:** ${mapName}`)
         .addFields([
@@ -3225,7 +3226,7 @@ export class GameManager {
         .setTimestamp();
     } catch (error) {
       console.error('[GameManager] Error creating void embed:', error);
-      return new EmbedBuilder().setTitle('Error').setDescription('Could not create void embed');
+      return themedEmbed().setTitle('Error').setDescription('Could not create void embed');
     }
   }
 
@@ -3261,7 +3262,7 @@ export class GameManager {
       const guild = this.client.guilds.cache.first();
       if (!guild || !game.channels) return;
 
-      const deletionEmbed = new EmbedBuilder()
+      const deletionEmbed = themedEmbed()
         .setTitle('Game Channels Deletion')
         .setDescription('This game\'s channels will be deleted in 30 seconds.')
         .setColor('#FF9900')

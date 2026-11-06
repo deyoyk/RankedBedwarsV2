@@ -1,29 +1,50 @@
 import { EmbedBuilder } from 'discord.js';
-import config from '../config/config';
 
-
+/**
+ * Single source of truth for embed styling.
+ *
+ * These values used to live in environment variables. Edit this file to
+ * change the look of every bot embed; all embed helpers and direct embeds
+ * use the same palette and footer.
+ */
+export const EMBED_THEME = {
+  defaultColor: 0x3498DB,
+  errorColor: 0xE74C3C,
+  successColor: 0x2ECC71,
+  footer: 'deyo Ranked Bedwars',
+  defaultTitle: 'Notice',
+  errorTitle: 'Error',
+  successTitle: 'Success',
+  errorText: 'An error occurred.',
+  successText: 'Success!',
+} as const;
 
 function cleanColor(color: string | number) {
   if (typeof color === 'string') {
-    
     let c = color.trim();
     if (c.startsWith('-#')) c = c.slice(2);
     if (c.startsWith('#')) c = c.slice(1);
-    
+
     if (/^[0-9a-fA-F]{6}$/.test(c)) {
       return parseInt(c, 16);
     }
-    
-    return 0x5865F2; 
+
+    return 0x5865F2;
   }
   if (typeof color === 'number' && !isNaN(color)) {
     if (!Number.isInteger(color) || color < 0 || color > 0xffffff) return 0x5865F2;
     return color;
   }
-  
+
   return 0x5865F2;
 }
 
+
+export function themedEmbed(color: string | number = EMBED_THEME.defaultColor) {
+  return new EmbedBuilder()
+    .setColor(cleanColor(color))
+    .setFooter({ text: EMBED_THEME.footer });
+}
 
 export function betterEmbed(
   text?: string,
@@ -33,11 +54,11 @@ export function betterEmbed(
   footer?: string,
   iconURL?: string
 ) {
-  const finalText = text !== undefined ? text : (config.embed && config.embed.defaultText) ? config.embed.defaultText : 'No description provided.';
-  const finalColor = color !== undefined ? color : (config.embed && config.embed.defaultColor) ? config.embed.defaultColor : '#00AAAA';
-  const finalTitle = title !== undefined ? title : (config.embed && config.embed.defaultTitle) ? config.embed.defaultTitle : 'Notice';
-  const finalEphemeral = ephemeral !== undefined ? ephemeral : (config.embed && typeof config.embed.defaultEphemeral === 'boolean') ? config.embed.defaultEphemeral : false;
-  const finalFooter = footer !== undefined ? footer : (config.embed && config.embed.defaultFooter) ? config.embed.defaultFooter : 'Deyo.lol';
+  const finalText = text !== undefined ? text : '';
+  const finalColor = color !== undefined ? color : EMBED_THEME.defaultColor;
+  const finalTitle = title !== undefined ? title : EMBED_THEME.defaultTitle;
+  const finalEphemeral = ephemeral !== undefined ? ephemeral : false;
+  const finalFooter = footer !== undefined ? footer : EMBED_THEME.footer;
   const finalIcon = iconURL;
   let safeColor: number;
   try {
@@ -57,11 +78,10 @@ export function betterEmbed(
   }
   return {
     embeds: [builder],
-    flags: finalEphemeral ? 64 : 0, 
-    builder, 
+    flags: finalEphemeral ? 64 : 0,
+    builder,
   };
 }
-
 
 export function errorEmbed(
   text?: string,
@@ -71,11 +91,11 @@ export function errorEmbed(
   iconURL?: string
 ) {
   return betterEmbed(
-    text !== undefined ? text : config.embed?.errorText,
-    config.embed?.errorColor,
-    title !== undefined ? title : config.embed?.errorTitle,
-    ephemeral !== undefined ? ephemeral : config.embed?.errorEphemeral,
-    footer !== undefined ? footer : (config.embed?.errorFooter ?? config.embed?.defaultFooter),
+    text !== undefined ? text : EMBED_THEME.errorText,
+    EMBED_THEME.errorColor,
+    title !== undefined ? title : EMBED_THEME.errorTitle,
+    ephemeral !== undefined ? ephemeral : false,
+    footer !== undefined ? footer : EMBED_THEME.footer,
     iconURL
   );
 }
@@ -88,11 +108,11 @@ export function successEmbed(
   iconURL?: string
 ) {
   return betterEmbed(
-    text !== undefined ? text : config.embed?.successText,
-    config.embed?.successColor,
-    title !== undefined ? title : config.embed?.successTitle,
-    ephemeral !== undefined ? ephemeral : config.embed?.successEphemeral,
-    footer !== undefined ? footer : (config.embed?.successFooter ?? config.embed?.defaultFooter),
+    text !== undefined ? text : EMBED_THEME.successText,
+    EMBED_THEME.successColor,
+    title !== undefined ? title : EMBED_THEME.successTitle,
+    ephemeral !== undefined ? ephemeral : false,
+    footer !== undefined ? footer : EMBED_THEME.footer,
     iconURL
   );
 }

@@ -1,8 +1,9 @@
 import User from '../models/User';
 import config from '../config/config';
-import { Guild, EmbedBuilder, TextChannel } from 'discord.js';
+import { Guild, TextChannel } from 'discord.js';
 import path from 'path';
 import fs from 'fs';
+import { themedEmbed } from './betterembed';
 
 interface PunishmentEmbedOptions {
   guild: Guild;
@@ -117,7 +118,7 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     descriptionLines.push('\nIf you wish to appeal this punishment, please create an appeal Support Channel and staff will be swift to help.');
   }
 
-  const embed = new EmbedBuilder()
+  const embed = themedEmbed()
     .setTitle(customTitle || config_.title)
     .setColor(customColor ?? config_.color)
     .setDescription(descriptionLines.join('\n'))
