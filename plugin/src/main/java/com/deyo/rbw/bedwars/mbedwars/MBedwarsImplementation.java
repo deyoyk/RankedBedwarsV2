@@ -159,15 +159,21 @@ public class MBedwarsImplementation implements BedwarsAPI {
             
             
             storeTeamInfo(arena, team1Players, team2Players);
-            Bukkit.getScheduler().runTaskLater(plugin, () -> {                    plugin.getMapManager().sendWarpSuccess(gameId);
-                }, 20L);
-                
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                plugin.getMapManager().sendWarpSuccess(gameId);
+            }, 20L);
+
+            // The players are added by delayed tasks (5 ticks). Starting the
+            // arena before that leaves every team empty, which marks all beds
+            // as destroyed and makes the scoreboard show dead teams.
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
                 try {
                     arena.setStatus(ArenaStatus.RUNNING);
-                    plugin.debug("Arena status set to STARTING for map: " + mapName);
+                    plugin.debug("Arena status set to RUNNING for map: " + mapName);
                 } catch (Exception e) {
                     plugin.getLogger().warning("Error setting arena status: " + e.getMessage());
                 }
+            }, 10L);
             
             
 
