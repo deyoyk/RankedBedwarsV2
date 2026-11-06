@@ -96,6 +96,8 @@ jobs:
           import socket
           import sys
           import time
+          import hashlib
+          import json
           from concurrent.futures import ThreadPoolExecutor, as_completed
           from urllib.parse import urlparse
 
@@ -190,8 +192,27 @@ jobs:
 
               ensure_dir(remote_dir)
 
+              manifest_path = posixpath.join(remote_dir, ".rbw-manifest.json")
+              previous_manifest = {}
+              try:
+                  manifest_handle = sftp.file(manifest_path, "r")
+                  try:
+                      previous_manifest = json.loads(manifest_handle.read().decode("utf-8") or "{}")
+                  finally:
+                      manifest_handle.close()
+              except Exception:
+                  previous_manifest = {}
+
+              def file_sha256(path):
+                  digest = hashlib.sha256()
+                  with open(path, "rb") as handle:
+                      for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                          digest.update(chunk)
+                  return digest.hexdigest()
+
               uploads = []
               directories = set()
+              manifest = {}
               for root, _dirs, files in os.walk(payload):
                   relative = os.path.relpath(root, payload)
                   remote_root = remote_dir if relative == "." else posixpath.join(remote_dir, relative.replace(os.sep, "/"))
@@ -199,46 +220,63 @@ jobs:
                   for filename in files:
                       local_path = os.path.join(root, filename)
                       remote_path = posixpath.join(remote_root, filename)
+                      manifest_key = posixpath.relpath(remote_path, remote_dir)
+                      digest = file_sha256(local_path)
+                      manifest[manifest_key] = digest
+                      if previous_manifest.get(manifest_key) == digest:
+                          continue
                       uploads.append((local_path, remote_path, filename.endswith(".sh")))
 
               for directory in sorted(directories):
                   ensure_dir(directory)
 
-              worker_count = max(1, min(8, len(uploads)))
-              chunks = [[] for _ in range(worker_count)]
-              for index, item in enumerate(uploads):
-                  chunks[index % worker_count].append(item)
+              skipped = len(manifest) - len(uploads)
+              if skipped > 0:
+                  print(f"Skipping {skipped} unchanged file(s) from the previous deployment", flush=True)
 
-              print(f"Uploading {len(uploads)} file(s) with {worker_count} parallel connections...", flush=True)
               started = time.time()
+              if uploads:
+                  worker_count = max(1, min(8, len(uploads)))
+                  chunks = [[] for _ in range(worker_count)]
+                  for index, item in enumerate(uploads):
+                      chunks[index % worker_count].append(item)
 
-              def upload_chunk(index, chunk):
-                  worker_transport, worker_sftp = connect(chosen_port)
-                  try:
-                      for local_path, remote_path, is_script in chunk:
-                          worker_sftp.put(local_path, remote_path, confirm=False)
-                          if is_script:
-                              try:
-                                  worker_sftp.chmod(remote_path, 0o755)
-                              except IOError:
-                                  pass
-                      return index, len(chunk)
-                  finally:
-                      worker_sftp.close()
-                      worker_transport.close()
+                  print(f"Uploading {len(uploads)} changed file(s) with {worker_count} parallel connections...", flush=True)
 
-              with ThreadPoolExecutor(max_workers=worker_count) as executor:
-                  futures = [
-                      executor.submit(upload_chunk, index, chunk)
-                      for index, chunk in enumerate(chunks)
-                      if chunk
-                  ]
-                  for future in as_completed(futures):
-                      index, count = future.result()
-                      print(f"Worker {index + 1} uploaded {count} file(s)", flush=True)
+                  def upload_chunk(index, chunk):
+                      worker_transport, worker_sftp = connect(chosen_port)
+                      try:
+                          for local_path, remote_path, is_script in chunk:
+                              worker_sftp.put(local_path, remote_path, confirm=False)
+                              if is_script:
+                                  try:
+                                      worker_sftp.chmod(remote_path, 0o755)
+                                  except IOError:
+                                      pass
+                          return index, len(chunk)
+                      finally:
+                          worker_sftp.close()
+                          worker_transport.close()
+
+                  with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                      futures = [
+                          executor.submit(upload_chunk, index, chunk)
+                          for index, chunk in enumerate(chunks)
+                          if chunk
+                      ]
+                      for future in as_completed(futures):
+                          index, count = future.result()
+                          print(f"Worker {index + 1} uploaded {count} file(s)", flush=True)
+
+              manifest_data = json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
+              manifest_handle = sftp.file(manifest_path, "w")
+              try:
+                  manifest_handle.write(manifest_data)
+              finally:
+                  manifest_handle.close()
 
               elapsed = time.time() - started
-              print(f"Uploaded {len(uploads)} files from {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir} in {elapsed:.1f}s")
+              print(f"Uploaded {len(uploads)} changed file(s) from {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir} in {elapsed:.1f}s")
               print(f"Preserved: {posixpath.join(remote_dir, '.env')}, node_modules")
           finally:
               sftp.close()
