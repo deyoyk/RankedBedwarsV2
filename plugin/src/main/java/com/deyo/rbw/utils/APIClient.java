@@ -130,7 +130,8 @@ public class APIClient {
                     }
                     return null;
                 }
-                logger.warning("HTTP request failed with response code: " + response.statusCode());
+                logger.warning("HTTP request failed with response code: " + response.statusCode()
+                        + " for " + urlString + " - " + trimBody(response.body()));
                 return null;
             } catch (HttpTimeoutException e) {
                 lastFailure = e;
@@ -153,6 +154,12 @@ public class APIClient {
     private void backoffBeforeRetry(int attempt) throws InterruptedException {
         long delayMs = (long) (200 * Math.pow(2, attempt) + Math.random() * 100);
         Thread.sleep(delayMs);
+    }
+
+    private String trimBody(String body) {
+        if (body == null) return "";
+        String value = body.replace('\n', ' ').replace('\r', ' ').trim();
+        return value.length() > 300 ? value.substring(0, 300) + "..." : value;
     }
 
     private UserData createDefaultUserData() {
