@@ -16,8 +16,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class RankedBedwarsExpansion extends PlaceholderExpansion {
     
@@ -48,8 +46,12 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         Map<String, String> aliases = new HashMap<>();
         aliases.put("winstreak", "winStreak");
         aliases.put("win_streak", "winStreak");
+        aliases.put("ws", "winStreak");
         aliases.put("losestreak", "loseStreak");
         aliases.put("lose_streak", "loseStreak");
+        aliases.put("ls", "loseStreak");
+        aliases.put("kd", "kdr");
+        aliases.put("wl", "wlr");
         aliases.put("finalkills", "finalKills");
         aliases.put("final_kills", "finalKills");
         aliases.put("fk", "finalKills");
@@ -89,8 +91,10 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     }
     
     
-    private static final Pattern TOP_PATTERN = Pattern.compile("top_([a-z_]+)_([0-9]+)");
-    private static final Pattern TOP_VALUE_PATTERN = Pattern.compile("top_([a-z_]+)_([0-9]+)_value");
+    private static final String[] LEADERBOARD_PREFIXES = {
+            "leaderboards_", "leaderboard_", "top_", "lb_", "rank_"
+    };
+    private static final String LEADERBOARD_VALUE_SUFFIX = "_value";
     
     public RankedBedwarsExpansion(RankedBedwars plugin) {
         this.plugin = plugin;
@@ -666,22 +670,73 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     }
     
     private String handleLeaderboardPlaceholder(String params) {
-        
-        Matcher topValueMatcher = TOP_VALUE_PATTERN.matcher(params);
-        if (topValueMatcher.matches()) {
-            String mode = topValueMatcher.group(1);
-            int position = Integer.parseInt(topValueMatcher.group(2));
-            return getCachedLeaderboardValue(mode, position);
+        if (params == null || params.isEmpty()) {
+            return "N/A";
         }
-        
-        Matcher topMatcher = TOP_PATTERN.matcher(params);
-        if (topMatcher.matches()) {
-            String mode = topMatcher.group(1);
-            int position = Integer.parseInt(topMatcher.group(2));
-            return getCachedLeaderboardPlayer(mode, position);
+
+        String normalized = params.toLowerCase(Locale.ROOT).trim();
+        boolean value = normalized.endsWith(LEADERBOARD_VALUE_SUFFIX);
+        if (value) {
+            normalized = normalized.substring(0, normalized.length() - LEADERBOARD_VALUE_SUFFIX.length());
+        } else {
+            for (String suffix : new String[]{"_name", "_player", "_ign"}) {
+                if (normalized.endsWith(suffix)) {
+                    normalized = normalized.substring(0, normalized.length() - suffix.length());
+                    break;
+                }
+            }
         }
-        
-        return null;
+
+        String rest = null;
+        for (String prefix : LEADERBOARD_PREFIXES) {
+            if (normalized.startsWith(prefix)) {
+                rest = normalized.substring(prefix.length());
+                break;
+            }
+        }
+        if (rest == null || rest.isEmpty()) {
+            return "N/A";
+        }
+
+        String[] parts = rest.split("_");
+        int position = 1;
+        int positionIndex = -1;
+        for (int i = 0; i < parts.length; i++) {
+            if (!parts[i].isEmpty() && parts[i].chars().allMatch(Character::isDigit)) {
+                try {
+                    position = Integer.parseInt(parts[i]);
+                } catch (NumberFormatException ignored) {
+                    return "N/A";
+                }
+                positionIndex = i;
+                break;
+            }
+        }
+
+        StringBuilder modeBuilder = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i == positionIndex || parts[i].isEmpty()) {
+                continue;
+            }
+            if (modeBuilder.length() > 0) {
+                modeBuilder.append('_');
+            }
+            modeBuilder.append(parts[i]);
+        }
+
+        String mode = modeBuilder.length() == 0 ? "elo" : modeBuilder.toString();
+        if (position <= 0) {
+            return "N/A";
+        }
+
+        String normalizedMode = normalizeMode(mode);
+        if (!isValidMode(normalizedMode)) {
+            return "Invalid Mode";
+        }
+
+        return value
+                ? getCachedLeaderboardValue(normalizedMode, position)
+                : getCachedLeaderboardPlayer(normalizedMode, position);
     }
     
     private String getCachedLeaderboardPlayer(String mode, int position) {

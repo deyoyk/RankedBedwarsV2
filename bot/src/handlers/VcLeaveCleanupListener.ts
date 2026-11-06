@@ -23,6 +23,11 @@ export function registerVcLeaveCleanupListener(client: Client) {
       await channel.delete('Team VC is empty after user left and game is scored/voided');
       console.log(`[VcLeaveCleanupListener] Deleted empty team VC: ${channel.name} (${oldState.channelId})`);
     } catch (error) {
+      const code = (error as { code?: number | string }).code;
+      if (code === 10003 || code === '10003') {
+        console.log(`[VcLeaveCleanupListener] Channel ${oldState.channelId} was already deleted`);
+        return;
+      }
       console.error(`[VcLeaveCleanupListener] Error cleaning up channel ${oldState.channelId}:`, error);
     }
   });

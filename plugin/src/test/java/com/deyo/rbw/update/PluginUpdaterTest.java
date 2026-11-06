@@ -173,6 +173,10 @@ public class PluginUpdaterTest {
         return out.toString();
     }
 
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
     @Test
     public void upToDateWhenRemoteDigestMatchesCurrentJar() throws Exception {
         releaseWith("v6", OLD_JAR, sha256(OLD_JAR), "2026-01-01T00:00:00Z");
@@ -192,10 +196,16 @@ public class PluginUpdaterTest {
         assertEquals(PluginUpdater.Status.STAGED, result.status);
         assertEquals(sha256(newJar), result.sha256);
         Path pending = dataDir.resolve("updates/pending-update.json");
-        assertTrue(Files.exists(pending));
-        String json = new String(Files.readAllBytes(pending), StandardCharsets.UTF_8);
-        assertTrue(json.contains("\"tag\":\"v6\""));
-        assertTrue(json.contains(sha256(newJar)));
+        if (isWindows()) {
+            assertTrue(Files.exists(pending));
+            String json = new String(Files.readAllBytes(pending), StandardCharsets.UTF_8);
+            assertTrue(json.contains("\"tag\":\"v6\""));
+            assertTrue(json.contains(sha256(newJar)));
+        } else {
+            assertArrayEquals(newJar, Files.readAllBytes(currentJar));
+            assertFalse(Files.exists(pending));
+            assertTrue(Files.exists(dataDir.resolve("updates/last-update.json")));
+        }
     }
 
     @Test
@@ -205,7 +215,11 @@ public class PluginUpdaterTest {
         PluginUpdater.Result result = updater(Instant.parse("2020-01-01T00:00:00Z")).checkForUpdates();
 
         assertEquals(PluginUpdater.Status.STAGED, result.status, result.message);
-        assertTrue(Files.exists(dataDir.resolve("updates/pending-update.json")));
+        if (isWindows()) {
+            assertTrue(Files.exists(dataDir.resolve("updates/pending-update.json")));
+        } else {
+            assertArrayEquals(newJar, Files.readAllBytes(currentJar));
+        }
     }
 
     @Test
@@ -256,7 +270,12 @@ public class PluginUpdaterTest {
         releaseWith("v6", newJar, sha256(newJar), "2026-01-01T00:00:00Z");
         assertEquals(PluginUpdater.Status.STAGED, updater(Instant.parse("2020-01-01T00:00:00Z"))
                 .checkForUpdates().status);
-        assertTrue(Files.exists(dataDir.resolve("updates/pending-update.json")));
+        if (isWindows()) {
+            assertTrue(Files.exists(dataDir.resolve("updates/pending-update.json")));
+        } else {
+            assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));
+            Files.write(currentJar, OLD_JAR);
+        }
 
         PluginUpdater.Result result = updater(Instant.parse("2027-01-01T00:00:00Z")).checkForUpdates();
 

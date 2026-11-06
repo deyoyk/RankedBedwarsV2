@@ -183,7 +183,15 @@ public class MBedwarsListener implements Listener {
         Arena arena = event.getArena();
         String arenaName = arena.getName();
         Player player = event.getPlayer();
+        if (player == null) {
+            plugin.debug("Ignoring bed break in arena " + arenaName + " without a player");
+            return;
+        }
         Team team = event.getTeam();
+        if (team == null) {
+            plugin.debug("Ignoring bed break in arena " + arenaName + " without a team");
+            return;
+        }
         GameInstance gameInstance = gameInstances.get(arenaName);
         if (gameInstance == null) return;
         String teamName;

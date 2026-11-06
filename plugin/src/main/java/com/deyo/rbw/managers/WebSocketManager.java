@@ -9,6 +9,7 @@ import com.google.gson.JsonParser;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
@@ -36,6 +37,9 @@ public class WebSocketManager {
     private final AtomicBoolean reconnectScheduled = new AtomicBoolean(false);
     private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
     private BukkitTask pendingScoringTask;
+    private BukkitTask actionBarTask;
+    private final java.util.Map<String, String> actionBars = new java.util.concurrent.ConcurrentHashMap<>();
+    private final java.util.Set<java.util.UUID> actionBarFallbackShown = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public WebSocketManager(RankedBedwars plugin) {
         this.plugin = plugin;
@@ -203,6 +207,7 @@ public class WebSocketManager {
                 }
                 @Override
                 public void onClose(int code, String reason, boolean remote) {
+                    stopActionBarTask();
                     if (remote) {
                         plugin.getLogger().warning("WebSocket connection closed by server: " + reason + " (code: " + code + ")");
                         plugin.getLogger().warning("The RankedBedwars bot might have restarted or shut down");
@@ -295,6 +300,9 @@ public class WebSocketManager {
                         break;
                     case "check_player":
                         Bukkit.getScheduler().runTask(plugin, () -> handleCheckPlayer(json));
+                        break;
+                    case "check_bedwars_players":
+                        Bukkit.getScheduler().runTask(plugin, () -> handleCheckBedwarsPlayers(json));
                         break;
                     case "request_maps":
                         if (plugin.getMapManager() != null) {
@@ -500,12 +508,47 @@ public class WebSocketManager {
     }
     private void handleCheckPlayer(JsonObject json) {
         String ign = json.get("ign").getAsString();
-        boolean isOnline = Bukkit.getPlayerExact(ign) != null;
+        Player player = Bukkit.getPlayerExact(ign);
+        boolean isOnline = player != null;
+        boolean inBedwarsGame = false;
+        if (player != null && com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable()) {
+            try {
+                inBedwarsGame = com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByPlayer(player) != null;
+            } catch (Exception ignored) {
+            }
+        }
         JsonObject response = new JsonObject();
         response.addProperty("type", "player_status");
         response.addProperty("ign", ign);
         response.addProperty("online", isOnline);
+        response.addProperty("in_bedwars_game", inBedwarsGame);
         response.addProperty("original_ign_case", ign);
+        sendMessage(response.toString());
+    }
+    private void handleCheckBedwarsPlayers(JsonObject json) {
+        JsonObject response = new JsonObject();
+        response.addProperty("type", "bedwars_players_status");
+        if (json.has("request_id")) {
+            response.addProperty("request_id", json.get("request_id").getAsString());
+        }
+
+        JsonObject players = new JsonObject();
+        boolean apiAvailable = com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable();
+        if (json.has("igns") && json.get("igns").isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray("igns")) {
+                String ign = element.getAsString();
+                boolean inGame = false;
+                Player player = Bukkit.getPlayerExact(ign);
+                if (player != null && apiAvailable) {
+                    try {
+                        inGame = com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().getArenaByPlayer(player) != null;
+                    } catch (Exception ignored) {
+                    }
+                }
+                players.addProperty(ign, inGame);
+            }
+        }
+        response.add("players", players);
         sendMessage(response.toString());
     }
     private void sendPong() {
@@ -785,6 +828,7 @@ public class WebSocketManager {
         plugin.getLogger().info("Shutting down WebSocket connection...");
         
         reconnectScheduled.set(false);
+        stopActionBarTask();
 
         if (client != null && client.isOpen()) {
             client.close(1000, "Plugin disabling");
@@ -903,41 +947,91 @@ public class WebSocketManager {
                     return;
                 }
                 JsonObject queues = json.getAsJsonObject("queues");
+                java.util.Map<String, String> bars = new java.util.HashMap<>();
                 for (String queueId : queues.keySet()) {
-                    showQueueStatus(queues.getAsJsonObject(queueId));
+                    JsonElement queueElement = queues.get(queueId);
+                    if (queueElement != null && queueElement.isJsonObject()) {
+                        collectQueueActionBars(queueElement.getAsJsonObject(), bars);
+                    }
                 }
+                Bukkit.getScheduler().runTask(plugin, () -> updateQueueActionBars(bars));
             } catch (Exception e) {
                 plugin.getLogger().log(Level.WARNING, "Error handling queue status", e);
             }
         });
     }
 
-    private void showQueueStatus(JsonObject queue) {
-        if (!queue.has("players")) {
+    private void collectQueueActionBars(JsonObject queue, java.util.Map<String, String> bars) {
+        if (queue == null || !queue.has("players") || !queue.get("players").isJsonArray()) {
             return;
         }
+
+        int minElo = queue.has("min_elo") ? queue.get("min_elo").getAsInt() : 0;
+        int maxElo = queue.has("max_elo") ? queue.get("max_elo").getAsInt() : 0;
+        int currentPlayers = queue.has("current_players") ? queue.get("current_players").getAsInt() : 0;
+        int maxPlayers = queue.has("max_players") ? queue.get("max_players").getAsInt() : 0;
+        String queueMessage = String.format("§6In Queue §e[%d-%d] §f%d/%d",
+                minElo, maxElo, currentPlayers, maxPlayers);
+
         JsonArray playersArray = queue.getAsJsonArray("players");
-        java.util.List<String> queuePlayers = new java.util.ArrayList<>();
         for (int i = 0; i < playersArray.size(); i++) {
-            queuePlayers.add(playersArray.get(i).getAsString());
-        }
-        String queueMessage = String.format("§6In Queue [§e%d-%d§6] §f%d/%d §7Ranked: %s §7Picking: %s",
-            queue.get("min_elo").getAsInt(), queue.get("max_elo").getAsInt(),
-            queue.get("current_players").getAsInt(), queue.get("max_players").getAsInt(),
-            queue.get("is_ranked").getAsBoolean() ? "§atrue" : "§cfalse",
-            queue.get("is_picking").getAsBoolean() ? "§atrue" : "§cfalse"
-        );
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            for (String playerName : queuePlayers) {
-                org.bukkit.entity.Player player = Bukkit.getPlayerExact(playerName);
-                if (player != null && player.isOnline()) {
-                    sendActionBar(player, queueMessage);
-                }
+            JsonElement playerElement = playersArray.get(i);
+            if (playerElement != null && playerElement.isJsonPrimitive()) {
+                bars.put(playerElement.getAsString(), queueMessage);
             }
-        });
+        }
+    }
+
+    private void updateQueueActionBars(java.util.Map<String, String> bars) {
+        actionBars.clear();
+        actionBars.putAll(bars);
+        if (actionBars.isEmpty()) {
+            stopActionBarTask();
+        } else {
+            startActionBarTask();
+        }
+    }
+
+    private void startActionBarTask() {
+        if (actionBarTask != null) {
+            return;
+        }
+        actionBarTask = Bukkit.getScheduler().runTaskTimer(plugin, this::pushQueueActionBars, 0L, 20L);
+    }
+
+    private void pushQueueActionBars() {
+        if (actionBars.isEmpty()) {
+            stopActionBarTask();
+            return;
+        }
+        for (java.util.Map.Entry<String, String> entry : actionBars.entrySet()) {
+            Player player = Bukkit.getPlayerExact(entry.getKey());
+            if (player != null && player.isOnline()) {
+                sendActionBar(player, entry.getValue());
+            }
+        }
+    }
+
+    private void stopActionBarTask() {
+        if (actionBarTask != null) {
+            actionBarTask.cancel();
+            actionBarTask = null;
+        }
+        actionBars.clear();
     }
     
-    private void sendActionBar(org.bukkit.entity.Player player, String message) {
+    private void sendActionBar(Player player, String message) {
+        String legacyMessage = org.bukkit.ChatColor.translateAlternateColorCodes('&', message);
+
+        try {
+            java.lang.reflect.Method spigotActionBar = player.getClass().getMethod("sendActionBar", String.class);
+            spigotActionBar.invoke(player, legacyMessage);
+            return;
+        } catch (NoSuchMethodException ignored) {
+        } catch (Exception spigotError) {
+            plugin.getLogger().log(Level.FINE, "Paper action bar send failed, falling back to NMS", spigotError);
+        }
+
         try {
             Class<?> craftPlayerClass = Class.forName("org.bukkit.craftbukkit." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".entity.CraftPlayer");
             java.lang.reflect.Method getHandleMethod = craftPlayerClass.getMethod("getHandle");
@@ -946,15 +1040,23 @@ public class WebSocketManager {
             java.lang.reflect.Method sendPacketMethod = playerConnectionClass.getMethod("sendPacket", Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".Packet"));
             Class<?> chatSerializerClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".IChatBaseComponent$ChatSerializer");
 
-            Object chatBaseComponent = chatSerializerClass.getMethod("a", String.class).invoke(null,
-                    "{\"text\":\"" + org.bukkit.ChatColor.translateAlternateColorCodes('&', message) + "\",\"bold\":true,\"color\":\"red\",\"italic\":false}");
+            String jsonMessage = "{\"text\":\"" + escapeJson(legacyMessage) + "\"}";
+            Object chatBaseComponent = chatSerializerClass.getMethod("a", String.class).invoke(null, jsonMessage);
 
             Class<?> packetPlayOutChatClass = Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".PacketPlayOutChat");
             Object packetPlayOutChat = packetPlayOutChatClass.getConstructor(Class.forName("net.minecraft.server." + Bukkit.getServer().getClass().getPackage().getName().split("\\.")[3] + ".IChatBaseComponent"), byte.class).newInstance(chatBaseComponent, (byte) 2);
             sendPacketMethod.invoke(entityPlayer.getClass().getField("playerConnection").get(entityPlayer), packetPlayOutChat);
-        } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException | java.lang.reflect.InvocationTargetException | NoSuchFieldException | InstantiationException e) {
-            player.sendMessage("§8[§6Queue§8] " + message);
+        } catch (Exception e) {
+            if (actionBarFallbackShown.add(player.getUniqueId())) {
+                plugin.getLogger().log(Level.WARNING, "Could not send action bar to " + player.getName()
+                        + "; sending it as a chat message instead", e);
+                player.sendMessage("§8[§6Queue§8] " + legacyMessage);
+            }
         }
+    }
+
+    private static String escapeJson(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private static final java.util.regex.Pattern IGN_PATTERN = java.util.regex.Pattern.compile("^[a-zA-Z0-9_]{1,16}$");

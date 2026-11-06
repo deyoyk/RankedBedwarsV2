@@ -373,6 +373,24 @@ public class PluginUpdater {
                 pending.downloadedAt = Instant.now().toString();
                 writePending(pending);
 
+                if (!isWindows()) {
+                    try {
+                        installDirect(pending, staged);
+                        return new Result(
+                                Status.STAGED,
+                                "Downloaded " + asset.name + " from release " + release.tag
+                                        + "; the jar was replaced immediately, restart to load it",
+                                release.tag,
+                                download.sha256
+                        );
+                    } catch (Exception installError) {
+                        plugin.getLogger().warning(
+                                "Auto-update: immediate replacement failed, it will apply on shutdown: "
+                                        + installError.getMessage()
+                        );
+                    }
+                }
+
                 return new Result(
                         Status.STAGED,
                         "Downloaded " + asset.name + " from release " + release.tag

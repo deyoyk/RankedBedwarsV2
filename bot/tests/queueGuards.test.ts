@@ -49,6 +49,7 @@ const wsManagerMock: any = {
   send: jest.fn(),
   setGlobalHandler: jest.fn(),
   checkPlayerOnline: jest.fn().mockResolvedValue({ online: true }),
+  checkBedwarsPlayers: jest.fn().mockResolvedValue(new Map()),
 };
 
 function queueDoc(channelId: string) {
@@ -114,6 +115,7 @@ describe('QueueListener admission guards', () => {
       discordId: UID, ign: 'Steve', partyId: null, elo: 1000, isBanned: false, isFrozen: false,
     }));
     GameModel.findOne.mockImplementation(() => chainable(null));
+    wsManagerMock.checkBedwarsPlayers.mockResolvedValue(new Map());
     const { QueueListener } = await import('../src/handlers/QueueListener');
     listener = new QueueListener(
       { guilds: { cache: { first: () => undefined } } } as any,
@@ -149,19 +151,19 @@ describe('QueueListener admission guards', () => {
     expect(queuePlayers.get(Q2)).toContain(UID);
   });
 
-  it('solo join while in an active game is rejected', async () => {
-    GameModel.findOne.mockImplementation(() => chainable({ gameId: 7 }));
+  it('solo join while in a BedWars game is rejected', async () => {
+    wsManagerMock.checkBedwarsPlayers.mockResolvedValue(new Map([['steve', true]]));
     await listener.handleVoiceStateUpdate(voiceState(null), voiceState(Q1));
     expect(queuePlayers.get(Q1) || []).not.toContain(UID);
+    expect(wsManagerMock.checkBedwarsPlayers).toHaveBeenCalled();
   });
 
-  it('solo join checks scoring games as active games too', async () => {
-    GameModel.findOne.mockImplementation((query: any) => {
-      expect(query.state.$in).toContain('scoring');
-      return chainable({ gameId: 9 });
-    });
+  it('solo join uses the Minecraft BedWars check instead of the RBW game database', async () => {
+    GameModel.findOne.mockClear();
+    wsManagerMock.checkBedwarsPlayers.mockResolvedValue(new Map([['steve', false]]));
     await listener.handleVoiceStateUpdate(voiceState(null), voiceState(Q1));
-    expect(queuePlayers.get(Q1) || []).not.toContain(UID);
+    expect(queuePlayers.get(Q1)).toContain(UID);
+    expect(GameModel.findOne).not.toHaveBeenCalled();
   });
 
   it('removes the whole party even when the leaver changed party id', async () => {

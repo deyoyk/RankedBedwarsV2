@@ -199,6 +199,36 @@ public class PlaceholderExpansionTest {
     }
 
     @Test
+    public void leaderboardPlaceholdersSupportCommonFormats() throws Exception {
+        WebSocketManager manager = mock(WebSocketManager.class);
+        when(manager.isConnected()).thenReturn(true);
+        when(plugin.getWebSocketManager()).thenReturn(manager);
+        cacheLeaderboard("wins_1", Map.of(1, new LeaderboardEntry("Steve", 42)));
+
+        OfflinePlayer offline = mock(OfflinePlayer.class);
+        when(offline.getName()).thenReturn("Alex");
+
+        assertEquals("Steve", expansion.onRequest(null, "top_1_wins"));
+        assertEquals("Steve", expansion.onRequest(null, "leaderboard_wins_1"));
+        assertEquals("Steve", expansion.onRequest(null, "lb_1_wins"));
+        assertEquals("Steve", expansion.onRequest(null, "rank_wins_1"));
+        assertEquals("42", expansion.onRequest(null, "top_1_wins_value"));
+        assertEquals("Steve", expansion.onRequest(null, "top_wins_1_name"));
+        assertEquals("Steve", expansion.onRequest(offline, "top_1_wins"));
+        assertEquals("Steve", expansion.onRequest(null, "top_wins"));
+    }
+
+    @Test
+    public void unknownPlaceholdersNeverReturnRawPlaceholderText() {
+        OfflinePlayer offline = mock(OfflinePlayer.class);
+        when(offline.getName()).thenReturn("Steve");
+
+        assertEquals("N/A", expansion.onRequest(null, "some_unknown_placeholder"));
+        assertEquals("N/A", expansion.onRequest(offline, "some_unknown_placeholder"));
+        assertEquals("Invalid Mode", expansion.onRequest(null, "top_not_a_mode_1"));
+    }
+
+    @Test
     public void playerPlaceholdersUseFallbacksWhenApiIsDisconnected() {
         OfflinePlayer offline = mock(OfflinePlayer.class);
         when(offline.getName()).thenReturn("Steve");

@@ -14,6 +14,7 @@ import com.deyo.rbw.update.PluginUpdater;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.File;
 import java.nio.file.Path;
@@ -32,6 +33,7 @@ public class RankedBedwars extends JavaPlugin {
     private RankedBedwarsExpansion placeholderExpansion;
     private com.deyo.rbw.utils.APIClient apiClient;
     private PluginUpdater pluginUpdater;
+    private BukkitTask updateCheckTask;
     private boolean updateShutdownHookRegistered;
 
     public AdminCommand getAdminCommand() {
@@ -65,6 +67,18 @@ public class RankedBedwars extends JavaPlugin {
         pluginUpdater = new PluginUpdater(this);
         pluginUpdater.checkForUpdatesAsync();
         registerUpdateShutdownHook();
+        if (updateCheckTask == null) {
+            updateCheckTask = getServer().getScheduler().runTaskTimer(
+                    this,
+                    () -> {
+                        if (pluginUpdater != null) {
+                            pluginUpdater.checkForUpdatesAsync();
+                        }
+                    },
+                    20L * 60L * 5L,
+                    20L * 60L * 5L
+            );
+        }
 
         savePermissionsFile();
         
@@ -113,6 +127,10 @@ public class RankedBedwars extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (updateCheckTask != null) {
+            updateCheckTask.cancel();
+            updateCheckTask = null;
+        }
         if (placeholderExpansion != null) {
             placeholderExpansion.unregister();
         }

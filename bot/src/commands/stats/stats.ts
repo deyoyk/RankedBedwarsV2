@@ -47,7 +47,6 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
   const mvps = user.mvps || 0;
   const elo = user.elo || 0;
   const winStreak = user.winStreak || 0;
-  const loseStreak = user.loseStreak || 0;
   const wlr = losses > 0 ? wins / losses : wins;
   const kdr = deaths > 0 ? kills / deaths : kills;
   const winRate = games > 0 ? wins / games : 0;
@@ -63,7 +62,7 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
 
   const playSecs = user.playtimeSeconds || 0;
   const playtime = playSecs < 3600 ? `${Math.floor(playSecs / 60)}m` : playSecs < 86400 ? `${Math.floor(playSecs / 3600)}h` : `${Math.floor(playSecs / 86400)}d`;
-  const streak = winStreak > 0 ? `+${winStreak}` : loseStreak > 0 ? `-${loseStreak}` : '0';
+  const streak = winStreak > 0 ? `+${winStreak}` : '0';
 
   const rankFields = [
     'wins',

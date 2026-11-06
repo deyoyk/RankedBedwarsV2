@@ -61,7 +61,6 @@ async function resolveQuery<T>(query: unknown, selectFields?: string): Promise<T
 export class QueueListener {
   private client: Client;
   private matchmaker: CentralizedMatchmaker;
-  private gameManager: GameManager;
   private wsManager: WebSocketManager;
   private workersManager: WorkersManager;
   private partyCache: Map<string, { members: string[], timestamp: number }> = new Map();
@@ -95,7 +94,6 @@ export class QueueListener {
 
   constructor(client: Client, wsManager: WebSocketManager, gameManager: GameManager) {
     this.client = client;
-    this.gameManager = gameManager;
     this.wsManager = wsManager;
     this.workersManager = WorkersManager.getInstance();
     this.matchmaker = new CentralizedMatchmaker(client, wsManager, gameManager);
@@ -895,26 +893,54 @@ export class QueueListener {
     const inGame = new Set<string>();
     if (discordIds.length === 0) return inGame;
 
-    const registry = this.gameManager as unknown as {
-      getPlayersInActiveGames?: (ids: string[]) => Set<string>;
-    };
-    if (typeof registry?.getPlayersInActiveGames === 'function') {
-      for (const id of registry.getPlayersInActiveGames(discordIds)) {
+    if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
+      return this.findInGamePlayersFromDatabase(discordIds);
+    }
+
+    await this.ensurePlayerIgns(discordIds);
+    const ignById = new Map<string, string>();
+    for (const id of discordIds) {
+      const ign = this.playerIgnById.get(id);
+      if (ign) ignById.set(id, ign);
+    }
+    const igns = [...new Set(ignById.values())];
+    if (igns.length === 0) return inGame;
+
+    const statuses = await this.checkBedwarsPlayers(igns);
+    for (const [id, ign] of ignById) {
+      if (statuses.get(ign.toLowerCase()) === true) {
         inGame.add(id);
       }
     }
+    return inGame;
+  }
 
-    const unknownIds = discordIds.filter(id => !inGame.has(id));
-    if (unknownIds.length === 0) return inGame;
+  private async isInBedwarsGame(ign: string): Promise<boolean> {
+    if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
+      const game = await resolveQuery<{ gameId: number } | null>(
+        Game.findOne({
+          $or: [{ team1: { $in: [ign] } }, { team2: { $in: [ign] } }],
+          state: { $in: ['pending', 'active', 'scoring'] }
+        }),
+        'gameId'
+      );
+      return game != null;
+    }
 
+    const statuses = await this.checkBedwarsPlayers([ign]);
+    const status = statuses.get(ign.toLowerCase());
+    if (status === undefined) {
+      console.warn(`[QueueListener] Could not check BedWars arena for ${ign}; allowing queue join`);
+    }
+    return status === true;
+  }
+
+  private async findInGamePlayersFromDatabase(discordIds: string[]): Promise<Set<string>> {
+    const inGame = new Set<string>();
     try {
-      const Game = (await import('../models/Game')).default as unknown as {
-        find: (filter: unknown) => unknown;
-      };
-      if (!Game || typeof Game.find !== 'function') return inGame;
       const games = await resolveQuery<Array<{ team1?: string[]; team2?: string[] }>>(
         Game.find({
-          $or: [{ team1: { $in: unknownIds } }, { team2: { $in: unknownIds } }],
+          $or: [{ team1: { $in: discordIds } }, { team2: { $in: discordIds } }],
           state: { $in: ['pending', 'active', 'scoring'] }
         })
       );
@@ -929,28 +955,11 @@ export class QueueListener {
     return inGame;
   }
 
-  private async isPlayerInActiveGame(discordId: string): Promise<{ gameId: number } | null> {
-    try {
-      const registry = this.gameManager as unknown as {
-        getActiveGameIdForPlayer?: (id: string) => number | null;
-      };
-      if (typeof registry?.getActiveGameIdForPlayer === 'function') {
-        const gameId = registry.getActiveGameIdForPlayer(discordId);
-        if (gameId) return { gameId };
-      }
-
-      const game = await resolveQuery<{ gameId: number } | null>(
-        Game.findOne({
-          $or: [{ team1: discordId }, { team2: discordId }],
-          state: { $in: ['pending', 'active', 'scoring'] }
-        }),
-        'gameId'
-      );
-      return game ?? null;
-    } catch (error) {
-      console.error('[QueueListener] Error checking active game:', error);
-      return null;
+  private async checkBedwarsPlayers(igns: string[]): Promise<Map<string, boolean>> {
+    if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
+      return new Map();
     }
+    return this.wsManager.checkBedwarsPlayers(igns);
   }
 
   private async isQueueChannel(channelId: string | null | undefined): Promise<boolean> {
@@ -1136,10 +1145,9 @@ export class QueueListener {
       }
 
       if (!user.partyId) {
-        const activeGame = await this.isPlayerInActiveGame(userId);
-        if (activeGame) {
-          console.log(`[QueueListener] Join rejected for ${user.ign}: already in game #${activeGame.gameId}`);
-          await this.moveToWaiting(state, `you are already in game #${activeGame.gameId}`);
+        if (await this.isInBedwarsGame(user.ign)) {
+          console.log(`[QueueListener] Join rejected for ${user.ign}: already in a BedWars game`);
+          await this.moveToWaiting(state, 'You are already in a BedWars game. Finish it before joining the queue.');
           return;
         }
         this.removeFromOtherQueues([userId], queue.channelId);
@@ -1228,23 +1236,41 @@ export class QueueListener {
         discordId: { $in: partyMembers }
       }).select('discordId ign elo isBanned isFrozen').lean();
 
-      const activeGamePromise = resolveQuery<{ gameId: number } | null>(
-        Game.findOne({
-          $or: [
-            { team1: { $in: partyMembers } },
-            { team2: { $in: partyMembers } }
-          ],
-          state: { $in: ['pending', 'active', 'scoring'] }
-        }),
-        'gameId'
-      );
-
-      const [partyUsers, activeGame] = await Promise.all([partyUsersPromise, activeGamePromise]);
+      const partyUsers = await partyUsersPromise;
 
       if (partyUsers.length !== partyMembers.length) {
         console.log(`[QueueListener] Party ${partyId} rejected: ${partyMembers.length - partyUsers.length} member(s) not found in database`);
         await this.moveToWaiting(state, 'Some party members not found');
         return { success: false };
+      }
+
+      const partyIgns = partyUsers
+        .map(member => member.ign)
+        .filter((ign): ign is string => Boolean(ign));
+      if (typeof this.wsManager.checkBedwarsPlayers !== 'function') {
+        const activeGame = await resolveQuery<{ gameId: number } | null>(
+          Game.findOne({
+            $or: [
+              { team1: { $in: partyMembers } },
+              { team2: { $in: partyMembers } }
+            ],
+            state: { $in: ['pending', 'active', 'scoring'] }
+          }),
+          'gameId'
+        );
+        if (activeGame) {
+          console.log(`[QueueListener] Party ${partyId} rejected: member is in game #${activeGame.gameId}`);
+          await this.moveToWaiting(state, `Party member in game #${activeGame.gameId}`);
+          return { success: false };
+        }
+      } else {
+        const bedwarsStatuses = await this.checkBedwarsPlayers(partyIgns);
+        const inBedwars = partyUsers.find(member => member.ign && bedwarsStatuses.get(member.ign.toLowerCase()) === true);
+        if (inBedwars?.ign) {
+          console.log(`[QueueListener] Party ${partyId} rejected: ${inBedwars.ign} is already in a BedWars game`);
+          await this.moveToWaiting(state, `Party member ${inBedwars.ign} is already in a BedWars game`);
+          return { success: false };
+        }
       }
 
       for (const member of partyUsers) {
@@ -1260,12 +1286,6 @@ export class QueueListener {
           await this.moveToWaiting(state, `Party member ELO not in queue range`);
           return { success: false };
         }
-      }
-
-      if (activeGame) {
-        console.log(`[QueueListener] Party ${partyId} rejected: member is in game #${activeGame.gameId}`);
-        await this.moveToWaiting(state, `Party member in game #${activeGame.gameId}`);
-        return { success: false };
       }
 
       const guild = this.client.guilds.cache.first();

@@ -10,11 +10,12 @@ const activeScreenshareThreads: {
 import { WebSocketServer, WebSocket, RawData } from 'ws';
 import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
+import { queuePlayers } from '../types/queuePlayersMemory';
 import { PlayerData, GameResult } from '../types/GameTypes';
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import * as http from 'http';
 import express from 'express';
-import { Client, Collection, GuildMember } from 'discord.js';
+import { Client, GuildMember } from 'discord.js';
 import config from '../config/config';
 import { maxPartySizeForQueue } from '../utils/partyQueue';
 
@@ -319,7 +320,14 @@ interface PlayerStatusPayload {
   type: 'player_status';
   ign: string;
   online: boolean;
+  in_bedwars_game?: boolean;
   original_ign_case?: string;
+}
+
+interface BedwarsPlayersStatusPayload {
+  type: 'bedwars_players_status';
+  request_id?: string;
+  players?: Record<string, boolean>;
 }
 
 interface PermissionPayload {
@@ -368,6 +376,7 @@ type IncomingPayload =
   | GameStartPayload
   | MapsInfoPayload
   | PlayerStatusPayload
+  | BedwarsPlayersStatusPayload
   | PermissionPayload
   | VoidingPayload
   | AuthIncomingPayload;
@@ -426,7 +435,8 @@ export class WebSocketManager {
   
   
   
-  private checkPlayerCallbacks: Map<string, Set<(online: boolean, original_ign_case?: string) => void>> = new Map();
+  private checkPlayerCallbacks: Map<string, Set<(online: boolean, original_ign_case?: string, inBedwarsGame?: boolean) => void>> = new Map();
+  private bedwarsCheckCallbacks: Map<string, (players: Record<string, boolean>) => void> = new Map();
   private listeners: { [type: string]: Set<(msg: IncomingPayload) => void> } = {};
   private globalHandlers: { [type: string]: ((msg: IncomingPayload) => void) | undefined } = {};
   private queueFromInGameLocks: Map<string, Promise<void>> = new Map();
@@ -534,6 +544,7 @@ export class WebSocketManager {
               }
             }
             this.client = ws; 
+            this.lastQueueStatusHash = null;
             this.startQueueStatusBroadcast();
             PresenceService.setConnected(true);
             console.log('[WebSocketManager] Client authenticated successfully');
@@ -614,6 +625,7 @@ export class WebSocketManager {
     if (msg.type === 'auth') {
       const authMsg = msg;
       if (process.env.AUTH_KEY && authMsg.auth_key === process.env.AUTH_KEY) {
+        this.lastQueueStatusHash = null;
         this.send({ type: 'auth_success', message: 'Authentication successful' });
         console.log('[WebSocketManager] Authentication successful');
         // Give the plugin a moment to re-announce games that warped while
@@ -675,6 +687,9 @@ export class WebSocketManager {
         break;
       case 'player_status':
         this.handlePlayerStatus(msg);
+        break;
+      case 'bedwars_players_status':
+        this.handleBedwarsPlayersStatus(msg);
         break;
       case 'permission':
         this.handlePermission(msg);
@@ -808,10 +823,19 @@ export class WebSocketManager {
     const callbacks = this.checkPlayerCallbacks.get(ign);
     if (callbacks && callbacks.size > 0) {
       for (const cb of Array.from(callbacks)) {
-        cb(msg.online, msg.original_ign_case);
+        cb(msg.online, msg.original_ign_case, msg.in_bedwars_game);
       }
       this.checkPlayerCallbacks.delete(ign);
     }
+  }
+
+  private handleBedwarsPlayersStatus(msg: BedwarsPlayersStatusPayload) {
+    const requestId = typeof msg.request_id === 'string' ? msg.request_id : '';
+    if (!requestId) return;
+    const callback = this.bedwarsCheckCallbacks.get(requestId);
+    if (!callback) return;
+    this.bedwarsCheckCallbacks.delete(requestId);
+    callback(msg.players && typeof msg.players === 'object' ? msg.players : {});
   }
 
   private handlePermission(msg: PermissionPayload) {
@@ -1013,7 +1037,7 @@ export class WebSocketManager {
   public async checkPlayerOnline(
     ign: string,
     timeoutMs: number = 3000
-  ): Promise<{ online: boolean | null; original_ign_case?: string }> {
+  ): Promise<{ online: boolean | null; original_ign_case?: string; in_bedwars_game?: boolean }> {
     if (!this.isConnected()) {
       return { online: null };
     }
@@ -1030,13 +1054,13 @@ export class WebSocketManager {
         this.checkPlayerCallbacks.set(normalizedIgn, callbacks);
       }
 
-      const cb = (online: boolean, original_ign_case?: string) => {
+      const cb = (online: boolean, original_ign_case?: string, in_bedwars_game?: boolean) => {
         clearTimeout(timeout);
         callbacks.delete(cb);
         if (callbacks.size === 0) {
           this.checkPlayerCallbacks.delete(normalizedIgn);
         }
-        resolve({ online, original_ign_case });
+        resolve({ online, original_ign_case, in_bedwars_game });
       };
 
       const timeout = setTimeout(() => {
@@ -1051,6 +1075,33 @@ export class WebSocketManager {
       if (isNew) {
         this.send({ type: 'check_player', ign });
       }
+    });
+  }
+
+  public async checkBedwarsPlayers(igns: string[], timeoutMs: number = 3000): Promise<Map<string, boolean>> {
+    const unique = [...new Set(igns.map(ign => (ign ?? '').trim()).filter(Boolean))];
+    if (unique.length === 0 || !this.isConnected()) {
+      return new Map();
+    }
+
+    const requestId = `bedwars_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.bedwarsCheckCallbacks.delete(requestId);
+        resolve(new Map());
+      }, timeoutMs);
+
+      this.bedwarsCheckCallbacks.set(requestId, (players) => {
+        clearTimeout(timeout);
+        const result = new Map<string, boolean>();
+        for (const ign of unique) {
+          const entry = players[ign] ?? players[ign.toLowerCase()] ?? players[ign.toUpperCase()];
+          result.set(ign.toLowerCase(), entry === true);
+        }
+        resolve(result);
+      });
+
+      this.send({ type: 'check_bedwars_players', request_id: requestId, igns: unique });
     });
   }
 
@@ -1598,7 +1649,7 @@ export class WebSocketManager {
       } catch (error) {
         console.error('[WebSocketManager] Error broadcasting queue status:', error);
       }
-    }, 10000);
+    }, 1000);
     this.queueStatusInterval.unref?.();
 
     console.log('[WebSocketManager] Queue status broadcast started');
@@ -1620,62 +1671,31 @@ export class WebSocketManager {
       
       const queueStatus: Record<string, QueueStatusEntry> = {};
 
-      const allMemberIds = new Set<string>();
-      const channelMemberMap = new Map<string, { channelId: string; members: Collection<string, GuildMember> }>();
-
-      
-      if (this.discordClient) {
-        const guild = this.discordClient.guilds.cache.first();
-        if (guild) {
-          for (let i = 0; i < queues.length; i += 5) {
-            const chunk = queues.slice(i, i + 5);
-            await Promise.allSettled(chunk.map(async (queue) => {
-              try {
-                const cached = guild.channels.cache.get(queue.channelId);
-                const channel = cached ?? await guild.channels.fetch(queue.channelId).catch(() => null);
-                if (channel && channel.isVoiceBased()) {
-                  channelMemberMap.set(queue.channelId, { channelId: queue.channelId, members: channel.members });
-                  for (const [memberId] of channel.members) {
-                    allMemberIds.add(memberId);
-                  }
-                }
-              } catch {
-              }
-            }));
-          }
+      const allQueuedIds = new Set<string>();
+      for (const queue of queues) {
+        for (const playerId of queuePlayers.get(queue.channelId) || []) {
+          allQueuedIds.add(playerId);
         }
       }
 
-      
-      const memberIdsArray = Array.from(allMemberIds);
       const userMap = new Map<string, string>();
-      if (memberIdsArray.length > 0) {
-        const users = await User.find({ discordId: { $in: memberIdsArray } }).select('discordId ign').lean();
+      if (allQueuedIds.size > 0) {
+        const users = await User.find({ discordId: { $in: [...allQueuedIds] } }).select('discordId ign').lean();
         for (const user of users) {
           if (user.ign) userMap.set(user.discordId, user.ign);
         }
       }
 
-      
       for (const queue of queues) {
-        let currentPlayerCount = 0;
-        const playersInQueue: string[] = [];
-
-        const channelData = channelMemberMap.get(queue.channelId);
-        if (channelData) {
-          currentPlayerCount = channelData.members.size;
-          for (const [memberId] of channelData.members) {
-            const ign = userMap.get(memberId);
-            if (ign) {
-              playersInQueue.push(ign);
-            }
-          }
-        }
+        const playerIds = [...new Set(queuePlayers.get(queue.channelId) || [])];
+        const playersInQueue = playerIds
+          .map(playerId => userMap.get(playerId))
+          .filter((ign): ign is string => Boolean(ign));
 
         queueStatus[queue.channelId] = {
           min_elo: queue.minElo,
           max_elo: queue.maxElo,
-          current_players: currentPlayerCount,
+          current_players: playerIds.length,
           max_players: queue.maxPlayers,
           is_ranked: queue.isRanked,
           is_picking: queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking,
@@ -1729,6 +1749,7 @@ export class WebSocketManager {
     } catch {
     }
     this.client = null;
+    this.bedwarsCheckCallbacks.clear();
     PresenceService.setConnected(false);
     if ((global as unknown as { _wsManager?: WebSocketManager })._wsManager === this) {
       (global as unknown as { _wsManager?: WebSocketManager })._wsManager = undefined;

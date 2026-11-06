@@ -119,4 +119,13 @@ Leaderboard placeholders support the same modes:
 %rbw_top_elo_1%              -> player name at #1
 %rbw_top_elo_1_value%        -> value at #1
 %rbw_top_final_kills_1%      -> aliases such as final_kills work too
+%rbw_top_1_elo%              -> position-first form is accepted too
+%rbw_leaderboard_elo_1%      -> leaderboard_<mode>_<pos>
+%rbw_lb_elo_1%               -> lb_<mode>_<pos>
 ```
+
+Unknown leaderboard modes return `Invalid Mode` and unknown leaderboard placeholders return `N/A`
+instead of leaving the raw `%rbw_...%` text on screen.
+
+Players who are in a queue see a repeating action bar such as
+`In Queue [0-600] 1/8`; it refreshes every second while they remain queued.
