@@ -28,9 +28,9 @@ permissions:
 
 jobs:
   deploy:
-    name: Upload and extract bot files
+    name: Upload bot files
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: Validate inputs
@@ -73,7 +73,6 @@ jobs:
       - name: Verify and extract archive
         run: |
           set -euo pipefail
-          unzip -l deploy/rbw-bot.zip | head -40
           unzip -l deploy/rbw-bot.zip | grep -qE ' package\.json$'
           mkdir -p deploy/payload
           unzip -oq deploy/rbw-bot.zip -d deploy/payload
@@ -82,7 +81,7 @@ jobs:
       - name: Install SFTP client
         run: python3 -m pip install --quiet paramiko==3.5.1
 
-      - name: Clear remote directory and upload files
+      - name: Upload files in parallel
         env:
           SFTP_HOST: ${{ secrets.SFTP_HOST || vars.SFTP_HOST }}
           SFTP_USERNAME: ${{ secrets.SFTP_USERNAME || vars.SFTP_USERNAME }}
@@ -95,8 +94,9 @@ jobs:
           import os
           import posixpath
           import socket
-          import stat
           import sys
+          import time
+          from concurrent.futures import ThreadPoolExecutor, as_completed
           from urllib.parse import urlparse
 
           import paramiko
@@ -128,40 +128,39 @@ jobs:
               print(f"Missing extracted payload: {payload}", file=sys.stderr)
               sys.exit(1)
 
+          def connect(candidate_port, timeout=30):
+              sock = socket.create_connection((host, candidate_port), timeout=timeout)
+              transport = paramiko.Transport(sock)
+              transport.banner_timeout = timeout
+              transport.auth_timeout = timeout
+              transport.channel_timeout = timeout
+              transport.connect(username=username, password=password)
+              sftp = paramiko.SFTPClient.from_transport(transport)
+              sftp.get_channel().settimeout(120)
+              return transport, sftp
+
           candidate_ports = [port]
           if port == 22:
               candidate_ports.append(2022)
 
           transport = None
+          sftp = None
+          chosen_port = port
           last_error = None
           for candidate in candidate_ports:
               print(f"Connecting to {host}:{candidate} as {username}...", flush=True)
-              sock = None
               try:
-                  sock = socket.create_connection((host, candidate), timeout=30)
-                  candidate_transport = paramiko.Transport(sock)
-                  candidate_transport.banner_timeout = 30
-                  candidate_transport.auth_timeout = 30
-                  candidate_transport.channel_timeout = 30
-                  candidate_transport.connect(username=username, password=password)
-                  transport = candidate_transport
-                  port = candidate
+                  transport, sftp = connect(candidate)
+                  chosen_port = candidate
                   print(f"Connected on port {candidate}.", flush=True)
                   break
               except Exception as error:
                   last_error = error
                   print(f"Connection on port {candidate} failed: {error}", file=sys.stderr, flush=True)
-                  try:
-                      if sock is not None:
-                          sock.close()
-                  except Exception:
-                      pass
-          if transport is None:
+          if transport is None or sftp is None:
               print(f"Could not connect to SFTP: {last_error}", file=sys.stderr)
               sys.exit(1)
 
-          sftp = paramiko.SFTPClient.from_transport(transport)
-          sftp.get_channel().settimeout(60)
           try:
               def normalize_remote(requested):
                   value = "/" + requested.strip("/") if requested.strip("/") else "/"
@@ -189,48 +188,58 @@ jobs:
                       except IOError:
                           sftp.mkdir(current)
 
-              def remove_path(path, entry):
-                  if stat.S_ISDIR(entry.st_mode):
-                      for child in sftp.listdir_attr(path):
-                          remove_path(posixpath.join(path, child.filename), child)
-                      sftp.rmdir(path)
-                  else:
-                      sftp.remove(path)
-
               ensure_dir(remote_dir)
-              existing = sftp.listdir_attr(remote_dir)
-              if remote_dir == "/" and existing:
-                  names = {entry.filename for entry in existing}
-                  markers = {".env", "package.json", "pterodactyl-start.sh", "src", "dist"}
-                  if not (names & markers):
-                      print("Refusing to clear the SFTP root: expected .env/package.json/src/dist", file=sys.stderr)
-                      sys.exit(1)
-              for entry in existing:
-                  if entry.filename == ".env":
-                      continue
-                  remove_path(posixpath.join(remote_dir, entry.filename), entry)
 
-              uploaded = 0
-              for root, dirs, files in os.walk(payload):
+              uploads = []
+              directories = set()
+              for root, _dirs, files in os.walk(payload):
                   relative = os.path.relpath(root, payload)
                   remote_root = remote_dir if relative == "." else posixpath.join(remote_dir, relative.replace(os.sep, "/"))
-                  ensure_dir(remote_root)
-                  for directory in dirs:
-                      ensure_dir(posixpath.join(remote_root, directory))
+                  directories.add(remote_root)
                   for filename in files:
                       local_path = os.path.join(root, filename)
                       remote_path = posixpath.join(remote_root, filename)
-                      sftp.put(local_path, remote_path, confirm=False)
-                      uploaded += 1
-                      if uploaded % 50 == 0:
-                          print(f"Uploaded {uploaded} files...", flush=True)
-                      if filename.endswith(".sh"):
-                          try:
-                              sftp.chmod(remote_path, 0o755)
-                          except IOError:
-                              pass
-              print(f"Uploaded {uploaded} files from {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir}")
-              print(f"Preserved: {posixpath.join(remote_dir, '.env')}")
+                      uploads.append((local_path, remote_path, filename.endswith(".sh")))
+
+              for directory in sorted(directories):
+                  ensure_dir(directory)
+
+              worker_count = max(1, min(8, len(uploads)))
+              chunks = [[] for _ in range(worker_count)]
+              for index, item in enumerate(uploads):
+                  chunks[index % worker_count].append(item)
+
+              print(f"Uploading {len(uploads)} file(s) with {worker_count} parallel connections...", flush=True)
+              started = time.time()
+
+              def upload_chunk(index, chunk):
+                  worker_transport, worker_sftp = connect(chosen_port)
+                  try:
+                      for local_path, remote_path, is_script in chunk:
+                          worker_sftp.put(local_path, remote_path, confirm=False)
+                          if is_script:
+                              try:
+                                  worker_sftp.chmod(remote_path, 0o755)
+                              except IOError:
+                                  pass
+                      return index, len(chunk)
+                  finally:
+                      worker_sftp.close()
+                      worker_transport.close()
+
+              with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                  futures = [
+                      executor.submit(upload_chunk, index, chunk)
+                      for index, chunk in enumerate(chunks)
+                      if chunk
+                  ]
+                  for future in as_completed(futures):
+                      index, count = future.result()
+                      print(f"Worker {index + 1} uploaded {count} file(s)", flush=True)
+
+              elapsed = time.time() - started
+              print(f"Uploaded {len(uploads)} files from {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir} in {elapsed:.1f}s")
+              print(f"Preserved: {posixpath.join(remote_dir, '.env')}, node_modules")
           finally:
               sftp.close()
               transport.close()
@@ -242,5 +251,6 @@ jobs:
             echo "- Release: \`$TAG\`"
             echo "- Server: \`$SFTP_HOST\`"
             echo "- Directory: \`$REMOTE_DIR\`"
-            echo "- Preserved: \`.env\`"
+            echo "- Mode: parallel file upload"
+            echo "- Preserved: \`.env\`, \`node_modules\`"
           } >> "$GITHUB_STEP_SUMMARY"
