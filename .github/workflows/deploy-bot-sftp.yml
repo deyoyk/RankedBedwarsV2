@@ -193,15 +193,24 @@ jobs:
               ensure_dir(remote_dir)
 
               manifest_path = posixpath.join(remote_dir, ".rbw-manifest.json")
-              previous_manifest = {}
+              previous_files = {}
+              previous_dirs = set()
               try:
                   manifest_handle = sftp.file(manifest_path, "r")
                   try:
-                      previous_manifest = json.loads(manifest_handle.read().decode("utf-8") or "{}")
+                      raw_manifest = json.loads(manifest_handle.read().decode("utf-8") or "{}")
                   finally:
                       manifest_handle.close()
+                  if isinstance(raw_manifest, dict):
+                      if isinstance(raw_manifest.get("files"), dict):
+                          previous_files = raw_manifest["files"]
+                          previous_dirs = set(raw_manifest.get("dirs") or [])
+                      else:
+                          previous_files = raw_manifest
               except Exception:
-                  previous_manifest = {}
+                  previous_files = {}
+                  previous_dirs = set()
+              previous_dirs.update(posixpath.dirname(key) or "." for key in previous_files)
 
               def file_sha256(path):
                   digest = hashlib.sha256()
@@ -215,20 +224,23 @@ jobs:
               manifest = {}
               for root, _dirs, files in os.walk(payload):
                   relative = os.path.relpath(root, payload)
-                  remote_root = remote_dir if relative == "." else posixpath.join(remote_dir, relative.replace(os.sep, "/"))
-                  directories.add(remote_root)
+                  relative_dir = "." if relative == "." else relative.replace(os.sep, "/")
+                  directories.add(relative_dir)
+                  remote_root = remote_dir if relative_dir == "." else posixpath.join(remote_dir, relative_dir)
                   for filename in files:
                       local_path = os.path.join(root, filename)
                       remote_path = posixpath.join(remote_root, filename)
                       manifest_key = posixpath.relpath(remote_path, remote_dir)
                       digest = file_sha256(local_path)
                       manifest[manifest_key] = digest
-                      if previous_manifest.get(manifest_key) == digest:
+                      if previous_files.get(manifest_key) == digest:
                           continue
                       uploads.append((local_path, remote_path, filename.endswith(".sh")))
 
               for directory in sorted(directories):
-                  ensure_dir(directory)
+                  if directory == "." or directory in previous_dirs:
+                      continue
+                  ensure_dir(posixpath.join(remote_dir, directory))
 
               skipped = len(manifest) - len(uploads)
               if skipped > 0:
@@ -268,7 +280,11 @@ jobs:
                           index, count = future.result()
                           print(f"Worker {index + 1} uploaded {count} file(s)", flush=True)
 
-              manifest_data = json.dumps(manifest, indent=2, sort_keys=True).encode("utf-8")
+              manifest_data = json.dumps(
+                  {"files": manifest, "dirs": sorted(directories)},
+                  indent=2,
+                  sort_keys=True
+              ).encode("utf-8")
               manifest_handle = sftp.file(manifest_path, "w")
               try:
                   manifest_handle.write(manifest_data)
