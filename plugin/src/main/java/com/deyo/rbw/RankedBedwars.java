@@ -101,8 +101,11 @@ public class RankedBedwars extends JavaPlugin {
         
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
             placeholderExpansion = new RankedBedwarsExpansion(this);
-            placeholderExpansion.register();
-            getLogger().info("PlaceholderAPI integration enabled!");
+            if (placeholderExpansion.register()) {
+                getLogger().info("PlaceholderAPI integration enabled!");
+            } else {
+                getLogger().warning("PlaceholderAPI expansion could not be registered!");
+            }
         }
         
         getLogger().info("rankedbedwars has been enabled!");

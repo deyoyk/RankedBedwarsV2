@@ -1,6 +1,7 @@
 package com.deyo.rbw.placeholders;
 
 import com.deyo.rbw.RankedBedwars;
+import com.deyo.rbw.managers.WebSocketManager;
 import com.deyo.rbw.models.LeaderboardEntry;
 import com.deyo.rbw.models.LiveGameStats;
 import com.deyo.rbw.models.UserData;
@@ -26,6 +27,8 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     
     private final Map<String, CachedUserData> userDataCache = new ConcurrentHashMap<>();
     private final Map<String, CachedLeaderboard> leaderboardCache = new ConcurrentHashMap<>();
+    private final Set<String> pendingUserFetches = ConcurrentHashMap.newKeySet();
+    private final Set<String> pendingLeaderboardFetches = ConcurrentHashMap.newKeySet();
     
     
     private static final long USER_CACHE_TTL = TimeUnit.MINUTES.toMillis(5); 
@@ -124,15 +127,6 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
 
     @Override
     public @Nullable String onRequest(OfflinePlayer player, @NotNull String params) {
-        if (player == null) {
-            return null;
-        }
-
-        String playerName = player.getName();
-        if (playerName == null) {
-            return null;
-        }
-
         String normalizedParams = params.toLowerCase(Locale.ROOT);
         if (normalizedParams.startsWith("ingame_")) {
             normalizedParams = "game_" + normalizedParams.substring("ingame_".length());
@@ -144,6 +138,15 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
             if (gameValue != null) {
                 return gameValue;
             }
+        }
+
+        if (player == null) {
+            return handleLeaderboardPlaceholder(normalizedParams);
+        }
+
+        String playerName = player.getName();
+        if (playerName == null) {
+            return handleLeaderboardPlaceholder(normalizedParams);
         }
 
         switch (normalizedParams) {
@@ -476,6 +479,10 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     }
 
     private String getCachedUserStat(String playerName, String stat) {
+        if (!isApiAvailable()) {
+            return fallbackUserStat(stat);
+        }
+
         CachedUserData cached = userDataCache.get(playerName.toLowerCase());
         
         if (cached != null && !cached.isExpired()) {
@@ -484,7 +491,28 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         
         
         fetchUserDataAsync(playerName);
-        return "Loading...";
+        return fallbackUserStat(stat);
+    }
+
+    private boolean isApiAvailable() {
+        WebSocketManager manager = plugin.getWebSocketManager();
+        return manager != null && manager.isConnected();
+    }
+
+    private String fallbackUserStat(String stat) {
+        switch (stat) {
+            case "ign":
+            case "discord_id":
+                return "N/A";
+            case "playtime_formatted":
+                return "0s";
+            case "banned":
+            case "muted":
+            case "frozen":
+                return "false";
+            default:
+                return "0";
+        }
     }
     
     private String getUserStatValue(UserData userData, String stat) {
@@ -661,6 +689,9 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         if (!isValidMode(normalizedMode)) {
             return "Invalid Mode";
         }
+        if (!isApiAvailable()) {
+            return "N/A";
+        }
         
         String cacheKey = normalizedMode + "_" + getPageFromPosition(position);
         CachedLeaderboard cached = leaderboardCache.get(cacheKey);
@@ -672,13 +703,16 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         
         
         fetchLeaderboardAsync(normalizedMode, getPageFromPosition(position));
-        return "Loading...";
+        return "N/A";
     }
     
     private String getCachedLeaderboardValue(String mode, int position) {
         String normalizedMode = normalizeMode(mode);
         if (!isValidMode(normalizedMode)) {
             return "Invalid Mode";
+        }
+        if (!isApiAvailable()) {
+            return "0";
         }
         
         String cacheKey = normalizedMode + "_" + getPageFromPosition(position);
@@ -698,7 +732,7 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
         
         
         fetchLeaderboardAsync(normalizedMode, getPageFromPosition(position));
-        return "Loading...";
+        return "0";
     }
 
     private boolean isValidMode(String mode) {
@@ -714,13 +748,19 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     }
     
     private void fetchUserDataAsync(String playerName) {
+        String cacheKey = playerName.toLowerCase();
+        if (!pendingUserFetches.add(cacheKey)) {
+            return;
+        }
         CompletableFuture<UserData> future = apiClient.getUserData(playerName);
         future.thenAccept(userData -> {
+            pendingUserFetches.remove(cacheKey);
             if (userData != null) {
-                userDataCache.put(playerName.toLowerCase(), new CachedUserData(userData));
+                userDataCache.put(cacheKey, new CachedUserData(userData));
                 plugin.debug("Cached user data for " + playerName);
             }
         }).exceptionally(throwable -> {
+            pendingUserFetches.remove(cacheKey);
             plugin.getLogger().warning("Failed to fetch user data for " + playerName + ": " + throwable.getMessage());
             return null;
         });
@@ -728,13 +768,18 @@ public class RankedBedwarsExpansion extends PlaceholderExpansion {
     
     private void fetchLeaderboardAsync(String mode, int page) {
         String cacheKey = mode + "_" + page;
+        if (!pendingLeaderboardFetches.add(cacheKey)) {
+            return;
+        }
         CompletableFuture<Map<Integer, LeaderboardEntry>> future = apiClient.getLeaderboard(mode, page);
         future.thenAccept(leaderboard -> {
+            pendingLeaderboardFetches.remove(cacheKey);
             if (leaderboard != null && !leaderboard.isEmpty()) {
                 leaderboardCache.put(cacheKey, new CachedLeaderboard(leaderboard));
                 plugin.debug("Cached leaderboard data for " + mode + " page " + page);
             }
         }).exceptionally(throwable -> {
+            pendingLeaderboardFetches.remove(cacheKey);
             plugin.getLogger().warning("Failed to fetch leaderboard for " + mode + " page " + page + ": " + throwable.getMessage());
             return null;
         });

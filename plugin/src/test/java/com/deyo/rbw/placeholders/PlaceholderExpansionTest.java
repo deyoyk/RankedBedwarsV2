@@ -1,6 +1,8 @@
 package com.deyo.rbw.placeholders;
 
 import com.deyo.rbw.RankedBedwars;
+import com.deyo.rbw.managers.WebSocketManager;
+import com.deyo.rbw.models.LeaderboardEntry;
 import com.deyo.rbw.models.LiveGameStats;
 import com.deyo.rbw.models.UserData;
 import com.google.gson.Gson;
@@ -13,7 +15,10 @@ import org.bukkit.scheduler.BukkitTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
 
@@ -51,6 +56,18 @@ public class PlaceholderExpansionTest {
                 "getUserStatValue", UserData.class, String.class);
         method.setAccessible(true);
         return (String) method.invoke(expansion, user, stat);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void cacheLeaderboard(String key, Map<Integer, LeaderboardEntry> data) throws Exception {
+        Field field = RankedBedwarsExpansion.class.getDeclaredField("leaderboardCache");
+        field.setAccessible(true);
+        Map<String, Object> cache = (Map<String, Object>) field.get(expansion);
+        Class<?> cachedType = Class.forName(
+                "com.deyo.rbw.placeholders.RankedBedwarsExpansion$CachedLeaderboard");
+        Constructor<?> constructor = cachedType.getDeclaredConstructor(Map.class);
+        constructor.setAccessible(true);
+        cache.put(key, constructor.newInstance(data));
     }
 
     @Test
@@ -155,5 +172,55 @@ public class PlaceholderExpansionTest {
         assertEquals("bedBroken", normalize.invoke(expansion, "bb"));
         assertEquals("playtimeSeconds", normalize.invoke(expansion, "playtime"));
         assertEquals("damageDealt", normalize.invoke(expansion, "damage_dealt"));
+    }
+
+    @Test
+    public void globalLeaderboardPlaceholdersDoNotRequireAPlayer() {
+        WebSocketManager manager = mock(WebSocketManager.class);
+        when(manager.isConnected()).thenReturn(false);
+        when(plugin.getWebSocketManager()).thenReturn(manager);
+
+        assertEquals("0", expansion.onRequest(null, "top_wins_1_value"));
+        assertEquals("N/A", expansion.onRequest(null, "top_wins_1"));
+        assertEquals("0", expansion.onRequest(null, "top_elo_1_value"));
+    }
+
+    @Test
+    public void cachedLeaderboardPlaceholdersResolveWithoutAPlayer() throws Exception {
+        WebSocketManager manager = mock(WebSocketManager.class);
+        when(manager.isConnected()).thenReturn(true);
+        when(plugin.getWebSocketManager()).thenReturn(manager);
+        cacheLeaderboard("wins_1", Map.of(1, new LeaderboardEntry("Steve", 42)));
+        cacheLeaderboard("kdr_1", Map.of(1, new LeaderboardEntry("Alex", 1.75)));
+
+        assertEquals("42", expansion.onRequest(null, "top_wins_1_value"));
+        assertEquals("Steve", expansion.onRequest(null, "top_wins_1"));
+        assertEquals("1.75", expansion.onRequest(null, "top_kdr_1_value"));
+    }
+
+    @Test
+    public void playerPlaceholdersUseFallbacksWhenApiIsDisconnected() {
+        OfflinePlayer offline = mock(OfflinePlayer.class);
+        when(offline.getName()).thenReturn("Steve");
+
+        WebSocketManager manager = mock(WebSocketManager.class);
+        when(manager.isConnected()).thenReturn(false);
+        when(plugin.getWebSocketManager()).thenReturn(manager);
+
+        assertEquals("0", expansion.onRequest(offline, "wins"));
+        assertEquals("0", expansion.onRequest(offline, "elo"));
+        assertEquals("N/A", expansion.onRequest(offline, "ign"));
+        assertEquals("false", expansion.onRequest(offline, "banned"));
+    }
+
+    @Test
+    public void playerPlaceholdersUseFallbacksWhenApiManagerIsMissing() {
+        OfflinePlayer offline = mock(OfflinePlayer.class);
+        when(offline.getName()).thenReturn("Steve");
+        when(plugin.getWebSocketManager()).thenReturn(null);
+
+        assertEquals("0", expansion.onRequest(offline, "wins"));
+        assertEquals("0", expansion.onRequest(null, "top_wins_1_value"));
+        assertEquals("N/A", expansion.onRequest(null, "top_wins_1"));
     }
 }
