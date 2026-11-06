@@ -353,6 +353,7 @@ export class CentralizedMatchmaker {
     const startTime = Date.now();
     const state = this.getOrCreateProcessingState(queueId);
     const metrics = this.getOrCreateMetrics(queueId);
+    console.log(`[CentralizedMatchmaker] Processing requested for queue ${queueId}`);
 
     if (state.isProcessing || this.activeRuns.has(queueId)) {
       console.log(`[CentralizedMatchmaker] Queue ${queueId} already being processed`);
@@ -402,6 +403,7 @@ export class CentralizedMatchmaker {
     try {
       const queue = await this.getQueueSafely(queueId);
       if (!queue) {
+        console.warn(`[CentralizedMatchmaker] Queue ${queueId} not found or inactive, aborting processing`);
         errors.push(`Queue ${queueId} not found or inactive`);
         return { success: false, gamesCreated: 0, errors };
       }
@@ -411,13 +413,16 @@ export class CentralizedMatchmaker {
       state.priority = this.calculateQueuePriority(rawPlayers.length, queue.maxPlayers, metrics.lastProcessedAt);
       const players = [...new Set(rawPlayers)];
       if (players.length !== rawPlayers.length) {
+        console.log(`[CentralizedMatchmaker] Queue ${queueId}: removed ${rawPlayers.length - players.length} duplicate entrant(s)`);
         queuePlayers.set(queueId, players);
       }
 
       if (players.length < queue.maxPlayers) {
+        console.log(`[CentralizedMatchmaker] Queue ${queueId}: waiting for players (${players.length}/${queue.maxPlayers})`);
         return { success: true, gamesCreated: 0 };
       }
 
+      console.log(`[CentralizedMatchmaker] Queue ${queueId}: validating ${players.length} player(s) (priority ${state.priority.toFixed(2)})`);
       let validated: string[];
       try {
         validated = await withTimeout(this.validatePlayers(players, queue), 5000, 'Validation');
@@ -426,6 +431,7 @@ export class CentralizedMatchmaker {
         return { success: false, gamesCreated: 0, errors: ['Player validation timed out'] };
       }
       validPlayers = validated;
+      console.log(`[CentralizedMatchmaker] Queue ${queueId}: ${validPlayers.length}/${players.length} player(s) passed validation`);
 
       if (validPlayers.length !== players.length) {
         const currentQueuePlayers = queuePlayers.get(queueId) || [];
@@ -445,6 +451,7 @@ export class CentralizedMatchmaker {
       }
 
       if (validPlayers.length < queue.maxPlayers) {
+        console.log(`[CentralizedMatchmaker] Queue ${queueId}: ${validPlayers.length}/${queue.maxPlayers} valid player(s), waiting`);
         return { success: true, gamesCreated: 0 };
       }
 
@@ -459,6 +466,7 @@ export class CentralizedMatchmaker {
       claimPlayers(validPlayers, owner, Math.max(180000, processingTimeout * 2));
       const runnable = validPlayers.filter(p => !isClaimedByOther(p, owner));
       if (runnable.length < queue.maxPlayers) {
+        console.log(`[CentralizedMatchmaker] Queue ${queueId}: ${runnable.length}/${queue.maxPlayers} runnable player(s) after claims, waiting`);
         return { success: true, gamesCreated: 0 };
       }
 
@@ -467,8 +475,10 @@ export class CentralizedMatchmaker {
       const maxGamesForThisQueue = Math.min(maxPossibleGames, capacityLimit, 10);
 
       if (maxGamesForThisQueue <= 0) {
+        console.log(`[CentralizedMatchmaker] Queue ${queueId}: no game capacity available (active ${activeGames}/${this.MAX_CONCURRENT_GAMES})`);
         return { success: true, gamesCreated: 0 };
       }
+      console.log(`[CentralizedMatchmaker] Queue ${queueId}: starting run with ${runnable.length} player(s), up to ${maxGamesForThisQueue} game(s)`);
 
       if (((queue.isPicking ?? (queue as unknown as { ispicking?: boolean }).ispicking) || queue.queueType === 'picking') && queue.maxPlayers <= 2) {
         console.log(`[CentralizedMatchmaker] Using random queue for ${queue.maxPlayers}-player game (overriding picking mode)`);
@@ -566,6 +576,7 @@ export class CentralizedMatchmaker {
 
       gamesCreated = processingResult.gamesCreated;
       run.result = processingResult;
+      console.log(`[CentralizedMatchmaker] Queue ${queueId}: created ${gamesCreated} game(s)`);
 
       state.retryCount = 0;
       state.errors = [];
@@ -625,6 +636,7 @@ export class CentralizedMatchmaker {
       const joinedDuringProcessing = currentQueuePlayers.filter(p => !snapshotSet.has(p) && !usedPlayers.has(p) && stillPresent(p));
       const remainingPlayers = runnable.filter(p => !usedPlayers.has(p) && stillPresent(p));
       queuePlayers.set(queueId, [...remainingPlayers, ...joinedDuringProcessing]);
+      console.log(`[CentralizedMatchmaker] Queue ${queueId}: reconciled ${remainingPlayers.length} remaining and ${joinedDuringProcessing.length} late join(s) after processing`);
     } catch (error) {
       console.error(`[CentralizedMatchmaker] Error reconciling queue ${queueId} after processing:`, error);
     }
@@ -992,6 +1004,9 @@ export class CentralizedMatchmaker {
         console.warn(`[CentralizedMatchmaker] User ${ign} is not online`);
         return false;
       }
+      if (onlineCheck.online === null) {
+        console.log(`[CentralizedMatchmaker] Online check for ${ign} was inconclusive, keeping player`);
+      }
       return true;
     } catch (error) {
       console.warn(`[CentralizedMatchmaker] Online check for ${ign} failed (${error instanceof Error ? error.message : String(error)}), keeping player in queue`);
@@ -1066,6 +1081,9 @@ export class CentralizedMatchmaker {
           if (onlineCheck.online === false) {
             console.warn(`[CentralizedMatchmaker] User ${user.ign} is not online`);
             return false;
+          }
+          if (onlineCheck.online === null) {
+            console.log(`[CentralizedMatchmaker] Online check for ${user.ign} was inconclusive, keeping player`);
           }
         } catch (error) {
           console.warn(`[CentralizedMatchmaker] Online check for ${user.ign} failed (${error instanceof Error ? error.message : String(error)}), keeping player in queue`);

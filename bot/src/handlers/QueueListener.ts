@@ -83,7 +83,10 @@ export class QueueListener {
   private readonly QUEUE_CHECK_INTERVAL = 5000;
   private readonly QUEUE_STATUS_INTERVAL = 3000;
   private readonly CHANNEL_CACHE_TTL = 30000;
-  private readonly PRESENCE_SWEEP_INTERVAL = 30000;
+  private readonly PRESENCE_SWEEP_INTERVAL = (() => {
+    const configured = Number.parseInt(process.env.PRESENCE_SWEEP_INTERVAL_MS ?? '', 10);
+    return Number.isFinite(configured) ? Math.max(10000, configured) : 60000;
+  })();
 
   constructor(client: Client, wsManager: WebSocketManager, gameManager: GameManager) {
     this.client = client;
@@ -103,6 +106,7 @@ export class QueueListener {
     this.startQueueMonitor();
     this.startPresenceSweep();
     this.startQueueStatusUpdates();
+    console.log(`[QueueListener] Queue listener initialized with ${this.queueStates.size} queue(s) and ${[...this.queueStates.values()].reduce((total, state) => total + state.players.length, 0)} queued player(s)`);
   }
 
   private startQueueStatusUpdates(): void {
@@ -139,6 +143,7 @@ export class QueueListener {
       try {
         await workers.setChannelStatus(queue.channelId, status);
         this.queueStatusCache.set(queue.channelId, status);
+        console.log(`[QueueListener] Queue status updated for ${this.queueLabelById(queue.channelId)}: ${status}`);
       } catch (error) {
         console.warn(`[QueueListener] Could not set status for queue ${this.queueLabelById(queue.channelId)}: ${error}`);
       }
@@ -148,6 +153,7 @@ export class QueueListener {
       if (activeIds.has(channelId)) continue;
       try {
         await workers.setChannelStatus(channelId, null);
+        console.log(`[QueueListener] Queue status cleared for ${this.queueLabelById(channelId)}`);
       } catch {
         // Queue channel may already be gone.
       }
@@ -182,6 +188,7 @@ export class QueueListener {
             processing: false,
           });
           queuePlayers.set(queue.channelId, []);
+          console.log(`[QueueListener] Recovered empty queue ${voiceChannel.name} (${queue.channelId})`);
           continue;
         }
 
@@ -262,6 +269,8 @@ export class QueueListener {
         }
       }
     }, 60000);
+    this.cacheCleanupInterval.unref?.();
+    console.log('[QueueListener] Cache cleanup started (every 60s)');
   }
 
   private startQueueMonitor(): void {
@@ -275,6 +284,7 @@ export class QueueListener {
       }
     }, this.QUEUE_CHECK_INTERVAL);
     this.queueMonitorInterval.unref?.();
+    console.log('[QueueListener] Queue monitor started (every 5s)');
   }
 
   private startPresenceSweep(): void {
@@ -290,6 +300,7 @@ export class QueueListener {
       }
     }, this.PRESENCE_SWEEP_INTERVAL);
     this.presenceSweepInterval.unref?.();
+    console.log(`[QueueListener] Presence sweep started (every ${Math.round(this.PRESENCE_SWEEP_INTERVAL / 1000)}s)`);
   }
 
   private async sweepUnknownPresence(): Promise<void> {
@@ -329,6 +340,13 @@ export class QueueListener {
         }
       });
     }
+    if (unknown.length > 0) {
+      const statuses = unknown.map(ign => PresenceService.evaluate(ign, Date.now()));
+      const online = statuses.filter(status => status === 'online').length;
+      const offline = statuses.filter(status => status === 'offline').length;
+      const unresolved = statuses.filter(status => status === 'unknown').length;
+      console.log(`[QueueListener] Presence sweep result for ${this.queueLabelById(queueId)}: ${online} online, ${offline} offline, ${unresolved} unknown`);
+    }
   }
 
   private static readonly QUEUE_TICK_CONCURRENCY = 5;
@@ -340,11 +358,14 @@ export class QueueListener {
         Queue.find({ isActive: true }),
         'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
       );
+      const queuedPlayers = [...this.queueStates.values()].reduce((total, state) => total + state.players.length, 0);
+      console.log(`[QueueListener] Queue check started: ${queues.length} active queue(s), ${queuedPlayers} queued player(s)`);
 
       for (let i = 0; i < queues.length; i += QueueListener.QUEUE_TICK_CONCURRENCY) {
         const chunk = queues.slice(i, i + QueueListener.QUEUE_TICK_CONCURRENCY);
         await Promise.allSettled(chunk.map((queue) => this.validateQueueState(queue.channelId, queue)));
       }
+      console.log('[QueueListener] Queue check completed');
     } catch (error) {
       console.error('[QueueListener] Error in queue monitor:', error);
     }
@@ -365,6 +386,7 @@ export class QueueListener {
         );
       }
       if (!queue) {
+        console.log(`[QueueListener] Queue ${queueId} no longer exists, dropping in-memory state`);
         this.queueStates.delete(queueId);
         return;
       }
@@ -373,16 +395,28 @@ export class QueueListener {
       if (!state) return;
 
       const guild = this.client.guilds.cache.first();
-      if (!guild) return;
+      if (!guild) {
+        console.warn(`[QueueListener] Queue check skipped for ${queueId}: no guild available`);
+        return;
+      }
 
       const voiceChannel = guild.channels.cache?.get(queueId) ?? await guild.channels.fetch(queueId).catch(() => null);
-      if (!voiceChannel || !voiceChannel.isVoiceBased()) return;
+      if (!voiceChannel || !voiceChannel.isVoiceBased()) {
+        console.warn(`[QueueListener] Queue check skipped for ${queueId}: voice channel missing or invalid`);
+        return;
+      }
 
       const playersInVC = new Set(voiceChannel.members.keys());
       const validPlayers: string[] = [];
       const validParties = new Map<string, string[]>();
       const queueLabel = `${voiceChannel.name} (${queueId})`;
       const missingPlayers: string[] = [];
+      const beforePlayers = state.players.length;
+      const beforeParties = state.parties.size;
+
+      if (beforePlayers > 0 || beforeParties > 0) {
+        console.log(`[QueueListener] Queue check ${queueLabel}: ${beforePlayers}/${queue.maxPlayers} players, ${beforeParties} parties, ${playersInVC.size} in voice`);
+      }
 
       for (const playerId of state.players) {
         if (playersInVC.has(playerId)) {
@@ -445,7 +479,10 @@ export class QueueListener {
 
 
       if (state.players.length >= queue.maxPlayers && !state.processing) {
+        console.log(`[QueueListener] Queue ${queueLabel} is full (${state.players.length}/${queue.maxPlayers}), scheduling processing`);
         await this.scheduleQueueProcessing(queueId);
+      } else if (state.players.length !== beforePlayers || state.parties.size !== beforeParties) {
+        console.log(`[QueueListener] Queue check ${queueLabel} updated: ${beforePlayers} -> ${state.players.length} players, ${beforeParties} -> ${state.parties.size} parties`);
       }
 
     } catch (error) {
@@ -478,6 +515,8 @@ export class QueueListener {
       const offlineSet = new Set(offline);
       const evicted = new Set<string>(offline);
       const queueLabel = voiceChannel?.name ? `${voiceChannel.name} (${queueId})` : queueId;
+      const offlineNames = offline.map(id => ignById.get(id) ?? id).join(', ');
+      console.log(`[QueueListener] Queue ${queueLabel}: evicting ${offline.length} offline player(s): ${offlineNames}`);
       for (const [partyId, members] of state.parties) {
         if (members.some((m) => offlineSet.has(m))) {
           members.forEach((m) => evicted.add(m));
@@ -567,6 +606,7 @@ export class QueueListener {
       const prev = this.rescanKeys.get(queueId);
       if (prev && prev.key === key && Date.now() - prev.ts < 15000) return;
       this.rescanKeys.set(queueId, { key, ts: Date.now() });
+      console.log(`[QueueListener] Party rescan ${this.queueLabelById(queueId)}: ${uncovered.length} uncovered member(s), ${queueState.parties.size} known party/parties`);
 
       const users = await User.find({ discordId: { $in: uncovered } })
         .select('discordId partyId ign isBanned isFrozen')
@@ -611,15 +651,27 @@ export class QueueListener {
       const rosterById = new Map(partyDocs.map((p) => [p.partyId, p.members as string[]]));
       for (const [partyId, present] of presentByParty) {
         const roster = rosterById.get(partyId) ?? this.partyCache.get(partyId)?.members;
-        if (!roster) continue;
+        if (!roster) {
+          console.warn(`[QueueListener] Party ${partyId} has no roster, skipping recovery in ${this.queueLabelById(queueId)}`);
+          continue;
+        }
         this.partyCache.set(partyId, { members: roster, timestamp: Date.now() });
-        if (!roster.every(id => playersInVC.has(id))) continue;
+        if (!roster.every(id => playersInVC.has(id))) {
+          console.log(`[QueueListener] Party ${partyId} is not fully in queue ${this.queueLabelById(queueId)}, waiting for members`);
+          continue;
+        }
         if (PresenceService.isConnected() && present.some((id) => {
           const ign = ignById.get(id);
           return !!ign && PresenceService.evaluate(ign) === 'offline';
-        })) continue;
+        })) {
+          console.log(`[QueueListener] Party ${partyId} has an offline member, skipping recovery in ${this.queueLabelById(queueId)}`);
+          continue;
+        }
         const member = voiceChannel.members.get(present[0]);
-        if (!member) continue;
+        if (!member) {
+          console.warn(`[QueueListener] Party ${partyId} member ${present[0]} is missing from voice cache in ${this.queueLabelById(queueId)}`);
+          continue;
+        }
         await this.handlePartyJoin({ member } as VoiceState, { partyId, ign: ignById.get(present[0]) }, queueState, queue);
       }
     } catch (error) {
@@ -639,10 +691,13 @@ export class QueueListener {
         ]);
 
         if (!wasQueueChannel && isQueueChannel) {
+          console.log(`[QueueListener] Queue event: ${userId} entered ${this.queueLabel(newState)}`);
           await this.handleQueueJoin(newState);
         } else if (wasQueueChannel && !isQueueChannel) {
+          console.log(`[QueueListener] Queue event: ${userId} left ${this.queueLabel(oldState)}`);
           await this.handleQueueLeave(oldState);
         } else if (wasQueueChannel && isQueueChannel && oldState.channelId !== newState.channelId) {
+          console.log(`[QueueListener] Queue event: ${userId} switched ${this.queueLabel(oldState)} -> ${this.queueLabel(newState)}`);
           await this.handleQueueSwitch(oldState, newState);
         }
       });
@@ -847,44 +902,54 @@ export class QueueListener {
         'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
       );
       if (!queue || queue.isActive === false) {
+        console.log(`[QueueListener] Join rejected for ${state.member?.id ?? 'unknown'}: queue ${this.queueLabel(state)} is missing or disabled`);
         await this.moveToWaiting(state, 'This queue is currently disabled.');
         return;
       }
 
       const userId = state.member?.id;
       if (!userId) return;
+      console.log(`[QueueListener] Join check started for ${userId} in ${this.queueLabel(state)}`);
 
       const user = await resolveQuery<Pick<IUser, 'discordId' | 'ign' | 'partyId' | 'elo' | 'isBanned' | 'isFrozen'> | null>(
         User.findOne({ discordId: userId }),
         'discordId ign partyId elo isBanned isFrozen'
       );
       if (!user) {
+        console.log(`[QueueListener] Join rejected for ${userId}: not registered`);
         await this.moveToWaiting(state, 'you are not registered. Please register to participate. Maybe `/update`?');
         return;
       }
 
       if (!user.ign) {
+        console.log(`[QueueListener] Join rejected for ${userId}: no IGN configured`);
         await this.moveToWaiting(state, "you don't have a valid IGN. Please update your profile.");
         return;
       }
 
       if (user.isBanned || user.isFrozen) {
+        console.log(`[QueueListener] Join rejected for ${user.ign}: banned or frozen`);
         await this.moveToWaiting(state, 'you have a restricted role. please contact a staff if you think its a mistake');
         return;
       }
 
       const member = state.member;
-      if (!member) return;
+      if (!member) {
+        console.log(`[QueueListener] Join rejected for ${user.ign}: member missing from voice state`);
+        return;
+      }
 
       const hasBypassRole = queue.bypassRoles.some((roleId: string) => member.roles.cache.has(roleId));
 
       if (!hasBypassRole && (user.elo < queue.minElo || user.elo > queue.maxElo)) {
+        console.log(`[QueueListener] Join rejected for ${user.ign}: ELO ${user.elo} outside ${queue.minElo}-${queue.maxElo}`);
         await this.moveToWaiting(state, `ELO ${user.elo} not in range (${queue.minElo}-${queue.maxElo})`);
         return;
       }
 
       const presence = PresenceService.evaluate(user.ign);
       if (presence === 'offline') {
+        console.log(`[QueueListener] Join rejected for ${user.ign}: presence is offline`);
         await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
         return;
       }
@@ -897,15 +962,20 @@ export class QueueListener {
           try {
             const onlineCheck = await this.wsManager.checkPlayerOnline(user.ign, 2000);
             if (onlineCheck.online === false) {
+              console.log(`[QueueListener] Join rejected for ${user.ign}: online check returned offline`);
               await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
               return;
             }
             if (onlineCheck.online === null) {
               console.warn(`[QueueListener] Online check for ${user.ign} was inconclusive, allowing queue join`);
+            } else {
+              console.log(`[QueueListener] Online check passed for ${user.ign}`);
             }
           } catch (error) {
             console.warn(`[QueueListener] Could not check online status for ${user.ign}, allowing queue join: ${error}`);
           }
+        } else {
+          console.log(`[QueueListener] Online check skipped for ${user.ign}: Minecraft link is offline`);
         }
       }
 
@@ -924,11 +994,13 @@ export class QueueListener {
           processing: false
         };
         this.queueStates.set(queue.channelId, queueState);
+        console.log(`[QueueListener] Created queue state for ${this.queueLabel(state)}`);
       }
 
       if (!user.partyId) {
         const activeGame = await this.isPlayerInActiveGame(userId);
         if (activeGame) {
+          console.log(`[QueueListener] Join rejected for ${user.ign}: already in game #${activeGame.gameId}`);
           await this.moveToWaiting(state, `you are already in game #${activeGame.gameId}`);
           return;
         }
@@ -956,6 +1028,8 @@ export class QueueListener {
 
       if (!user.partyId && !wasQueued) {
         console.log(`[QueueListener] ${user.ign} joined queue ${this.queueLabel(state)} (${queueState.players.length}/${queue.maxPlayers})`);
+      } else if (!user.partyId && wasQueued) {
+        console.log(`[QueueListener] ${user.ign} is already in queue ${this.queueLabel(state)}, ignoring duplicate join`);
       }
 
       const isQueueFull = queueState.players.length >= queue.maxPlayers;
@@ -980,6 +1054,7 @@ export class QueueListener {
     try {
       const partyId = user.partyId;
       if (!partyId) {
+        console.log(`[QueueListener] Party join rejected for ${user.ign ?? state.member?.id ?? 'unknown'}: no party id`);
         await this.moveToWaiting(state, 'Invalid party');
         return { success: false };
       }
@@ -995,13 +1070,16 @@ export class QueueListener {
           members: partyMembers,
           timestamp: Date.now()
         });
+        console.log(`[QueueListener] Party ${partyId} loaded with ${partyMembers.length} member(s) for ${this.queueLabel(state)}`);
       } else {
+        console.log(`[QueueListener] Party ${partyId} not found for ${user.ign ?? state.member?.id ?? 'unknown'}`);
         await this.moveToWaiting(state, 'Invalid party');
         return { success: false };
       }
 
       const isValidPartySize = await this.validatePartySize(state, partyMembers, queue);
       if (!isValidPartySize) {
+        console.log(`[QueueListener] Party ${partyId} failed party-size validation for ${this.queueLabel(state)}`);
         return { success: false };
       }
 
@@ -1023,32 +1101,42 @@ export class QueueListener {
       const [partyUsers, activeGame] = await Promise.all([partyUsersPromise, activeGamePromise]);
 
       if (partyUsers.length !== partyMembers.length) {
+        console.log(`[QueueListener] Party ${partyId} rejected: ${partyMembers.length - partyUsers.length} member(s) not found in database`);
         await this.moveToWaiting(state, 'Some party members not found');
         return { success: false };
       }
 
       for (const member of partyUsers) {
         if (member.isBanned || member.isFrozen) {
+          console.log(`[QueueListener] Party ${partyId} rejected: a member is banned or frozen`);
           await this.moveToWaiting(state, `Party member is banned or frozen`);
           return { success: false };
         }
 
         if (member.elo < queue.minElo || member.elo > queue.maxElo) {
+          console.log(`[QueueListener] Party ${partyId} rejected: member ELO ${member.elo} outside ${queue.minElo}-${queue.maxElo}`);
           await this.moveToWaiting(state, `Party member ELO not in queue range`);
           return { success: false };
         }
       }
 
       if (activeGame) {
+        console.log(`[QueueListener] Party ${partyId} rejected: member is in game #${activeGame.gameId}`);
         await this.moveToWaiting(state, `Party member in game #${activeGame.gameId}`);
         return { success: false };
       }
 
       const guild = this.client.guilds.cache.first();
-      if (!guild) return { success: false };
+      if (!guild) {
+        console.warn(`[QueueListener] Party ${partyId} rejected: no guild available`);
+        return { success: false };
+      }
 
       const voiceChannel = guild.channels.cache?.get(queue.channelId) ?? await guild.channels.fetch(queue.channelId).catch(() => null);
-      if (!voiceChannel || !voiceChannel.isVoiceBased()) return { success: false };
+      if (!voiceChannel || !voiceChannel.isVoiceBased()) {
+        console.warn(`[QueueListener] Party ${partyId} rejected: queue voice channel ${queue.channelId} is missing or invalid`);
+        return { success: false };
+      }
 
       const playersInVC = new Set(voiceChannel.members.keys());
       const membersInVC = partyMembers.filter(memberId => playersInVC.has(memberId));
@@ -1090,7 +1178,7 @@ export class QueueListener {
         'channelId maxPlayers isActive'
       );
       if (!queue || queue.isActive === false) {
-
+        console.log(`[QueueListener] Leave check skipped for ${state.member?.id ?? 'unknown'}: queue ${this.queueLabel(state)} is missing or disabled`);
         return;
       }
 
@@ -1101,10 +1189,16 @@ export class QueueListener {
         User.findOne({ discordId: userId }),
         'discordId partyId ign'
       );
-      if (!user) return;
+      if (!user) {
+        console.log(`[QueueListener] Leave check skipped for ${userId}: user not registered`);
+        return;
+      }
 
       const queueState = this.queueStates.get(queue.channelId);
-      if (!queueState) return;
+      if (!queueState) {
+        console.log(`[QueueListener] Leave check skipped for ${user.ign ?? userId}: no queue state for ${this.queueLabel(state)}`);
+        return;
+      }
 
       const wasQueueFull = queueState.players.length >= queue.maxPlayers;
       const playerLabel = user.ign ?? userId;
@@ -1158,7 +1252,7 @@ export class QueueListener {
 
   private async handleQueueSwitch(oldState: VoiceState, newState: VoiceState): Promise<void> {
     try {
-
+      console.log(`[QueueListener] Queue switch for ${newState.member?.id ?? 'unknown'}: ${this.queueLabel(oldState)} -> ${this.queueLabel(newState)}`);
       await this.handleQueueLeave(oldState);
 
 
@@ -1175,20 +1269,31 @@ export class QueueListener {
       this.cancelQueueProcessing(queueId);
 
       const queueState = this.queueStates.get(queueId);
-      if (!queueState || queueState.processing) return;
+      if (!queueState) {
+        console.log(`[QueueListener] Cannot schedule processing for ${queueId}: no queue state`);
+        return;
+      }
+      if (queueState.processing) {
+        console.log(`[QueueListener] Queue ${this.queueLabelById(queueId)} is already processing, not scheduling again`);
+        return;
+      }
 
       queueState.processing = true;
+      console.log(`[QueueListener] Scheduling processing for ${this.queueLabelById(queueId)} in 1s (${queueState.players.length} players, ${queueState.parties.size} parties)`);
 
       const timeout = setTimeout(async () => {
         if (this.shuttingDown) return;
         try {
+          console.log(`[QueueListener] Starting processing for ${this.queueLabelById(queueId)}`);
           await this.matchmaker.processQueue(queueId);
+          console.log(`[QueueListener] Processing finished for ${this.queueLabelById(queueId)}`);
         } catch (error) {
           console.error(`[QueueListener] Error processing queue ${queueId}:`, error);
         } finally {
           const state = this.queueStates.get(queueId);
           if (state) {
             state.processing = false;
+            console.log(`[QueueListener] Queue ${this.queueLabelById(queueId)} after processing: ${state.players.length} players, ${state.parties.size} parties`);
           }
           this.processingLocks.delete(queueId);
           if (!this.shuttingDown) {
@@ -1210,6 +1315,7 @@ export class QueueListener {
     if (timeout) {
       clearTimeout(timeout);
       this.processingLocks.delete(queueId);
+      console.log(`[QueueListener] Cancelled scheduled processing for ${this.queueLabelById(queueId)}`);
     }
   }
 
@@ -1235,7 +1341,7 @@ export class QueueListener {
         );
       }
 
-      console.warn(`[QueueListener] User ${member.user.username} moved to waiting due to: ${reason}`);
+      console.warn(`[QueueListener] ${member.user.username} moved to waiting from ${this.queueLabel(state)} due to: ${reason}`);
     } catch (error) {
       console.error('[QueueListener] Error moving to waiting:', error);
     }
@@ -1259,10 +1365,12 @@ export class QueueListener {
       const highestAllowedSize = maxPartySizeForQueue(queue, roleSizes);
 
       if (partySize > highestAllowedSize) {
+        console.log(`[QueueListener] Party size check failed for ${partySize} member(s) in ${this.queueLabelById(queue.channelId)} (max ${highestAllowedSize})`);
         await this.moveToWaiting(state, `Party too large (${partySize} > ${highestAllowedSize})`);
         return false;
       }
 
+      console.log(`[QueueListener] Party size check passed for ${partySize} member(s) in ${this.queueLabelById(queue.channelId)} (max ${highestAllowedSize})`);
       return true;
     } catch (error) {
       console.error('[QueueListener] Error validating party size:', error);
