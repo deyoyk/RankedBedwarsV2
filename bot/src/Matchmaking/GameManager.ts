@@ -23,6 +23,7 @@ import { parseTiers, streakBonusFor, bountyForOpponentStreak, type ProgressionTi
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import { themedEmbed } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
+import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 
 interface PlayerScoreData {
   player: IUser;
@@ -406,15 +407,7 @@ export class GameManager {
       this.manualWarpRetries.delete(gameId);
 
       if (resources) {
-        const deletions = [
-          resources.gameChannel,
-          resources.pickingChannel,
-          resources.team1Voice,
-          resources.team2Voice,
-        ]
-          .filter((channel): channel is { id: string } => Boolean(channel?.id))
-          .map(channel => this.workersManager.deleteChannel(channel.id, 2).catch(() => undefined));
-        await Promise.allSettled(deletions);
+        await this.closeGameResources(resources, `Game ${gameId} aborted: ${reason}`, 2);
       }
 
       const game = await Game.findOne({ gameId }).select('team1 team2 state').lean().catch(() => null);
@@ -453,15 +446,7 @@ export class GameManager {
 
   private async cleanupFailedGameCreation(gameId: number, resources: GameResources): Promise<void> {
     try {
-      const deletions = [
-        resources.gameChannel,
-        resources.pickingChannel,
-        resources.team1Voice,
-        resources.team2Voice,
-      ]
-        .filter((channel): channel is { id: string } => Boolean(channel?.id))
-        .map(channel => this.workersManager.deleteChannel(channel.id, 0).catch(() => undefined));
-      await Promise.allSettled(deletions);
+      await this.closeGameResources(resources, `Game ${gameId} creation failed`, 0);
 
       const game = await Game.findOne({ gameId }).select('team1 team2').lean().catch(() => null);
       if (game) {
@@ -1187,25 +1172,7 @@ export class GameManager {
     try {
       console.log(`[GameManager] Creating game resources for game ${gameId} using WorkersManager`);
 
-      const gameChannel = await this.workersManager.createChannel({
-        name: `game-${gameId}`,
-        type: ChannelType.GuildText,
-        parent: config.categories.gameCategory,
-        permissionOverwrites: [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel]
-          },
-          ...allPlayers.map(playerId => ({
-            id: playerId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.SendMessages,
-              PermissionFlagsBits.ReadMessageHistory
-            ]
-          }))
-        ]
-      }, 9);
+      const gameChannel = await createGameThread(guild, gameId, allPlayers);
       created.push(gameChannel);
 
       const team1Voice = await this.workersManager.createChannel({
@@ -1268,7 +1235,9 @@ export class GameManager {
 
     } catch (error) {
       await Promise.allSettled(
-        created.map(channel => this.workersManager.deleteChannel(channel.id, 0).catch(() => undefined)),
+        created.map((channel, index) => index === 0
+          ? closeGameTextChannel(guild, channel.id, `Game ${gameId} creation failed`)
+          : this.workersManager.deleteChannel(channel.id, 0).catch(() => undefined)),
       );
       console.error(`[GameManager] Error creating game resources for game ${gameId}:`, error);
       throw error;
@@ -1649,6 +1618,26 @@ export class GameManager {
     }
   }
 
+  private async closeGameResources(
+    resources: Partial<GameResources>,
+    reason: string,
+    priority: number = 2,
+  ): Promise<void> {
+    const tasks: Array<Promise<unknown>> = [];
+    if (resources.gameChannel?.id) {
+      const guild = await this.getGuild();
+      if (guild) {
+        tasks.push(closeGameTextChannel(guild, resources.gameChannel.id, reason));
+      }
+    }
+    for (const channel of [resources.pickingChannel, resources.team1Voice, resources.team2Voice]) {
+      if (channel?.id) {
+        tasks.push(this.workersManager.deleteChannel(channel.id, priority).catch(() => undefined));
+      }
+    }
+    await Promise.allSettled(tasks);
+  }
+
   private async cleanupGame(gameId: number): Promise<void> {
     try {
       const resources = this.activeGames.get(gameId);
@@ -1666,20 +1655,7 @@ export class GameManager {
       this.cleaningGames.add(gameId);
       const timer = setTimeout(async () => {
         try {
-          const deletions: Array<Promise<unknown>> = [];
-          if (resources.gameChannel) {
-            deletions.push(this.workersManager.deleteChannel(resources.gameChannel.id, 2));
-          }
-          if (resources.pickingChannel) {
-            deletions.push(this.workersManager.deleteChannel(resources.pickingChannel.id, 2));
-          }
-          if (resources.team1Voice) {
-            deletions.push(this.workersManager.deleteChannel(resources.team1Voice.id, 2));
-          }
-          if (resources.team2Voice) {
-            deletions.push(this.workersManager.deleteChannel(resources.team2Voice.id, 2));
-          }
-          await Promise.allSettled(deletions);
+          await this.closeGameResources(resources, `Game ${gameId} ended`, 2);
         } catch (error) {
           console.error(`[GameManager] Error cleaning up channels for game ${gameId}:`, error);
         } finally {
@@ -2906,8 +2882,8 @@ export class GameManager {
       if (!guild || !game.channels) return;
 
       const deletionEmbed = themedEmbed()
-        .setTitle('Game Channels Deletion')
-        .setDescription('This game\'s channels will be deleted in 30 seconds.')
+        .setTitle('Game Thread Archival')
+        .setDescription('This game\'s thread will be archived in 30 seconds.')
         .setColor('#FF9900')
         .setTimestamp(new Date(Date.now() + 30000));
 

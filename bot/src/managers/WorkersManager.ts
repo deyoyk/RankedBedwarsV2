@@ -805,11 +805,13 @@ export class WorkersManager {
   private async executeMessageSend(client: Client, data: WorkerTaskData): Promise<unknown> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
-    const channel = guild.channels.cache.get(data.channelId as string) as TextChannel;
+    const channelId = data.channelId as string;
+    const channel = guild.channels.cache.get(channelId)
+      ?? await guild.channels.fetch(channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) {
       throw new Error('Channel not found or not text-based');
     }
-    return await channel.send(data.message as string | MessageCreateOptions);
+    return await (channel as TextChannel).send(data.message as string | MessageCreateOptions);
   }
 
   private performHealthCheck(): void {

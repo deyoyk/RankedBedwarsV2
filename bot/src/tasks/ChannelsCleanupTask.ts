@@ -97,9 +97,45 @@ export class ChannelsCleanupTask {
       
       await this.cleanupCategory(guild, config.categories.voiceCategory, validChannelIds, 'voice');
 
+      await this.cleanupGameThreads(guild, validChannelIds);
+
       console.log('[ChannelsCleanupTask] Channel cleanup completed');
     } catch (error) {
       console.error('[ChannelsCleanupTask] Error during channel cleanup:', error);
+    }
+  }
+
+  private async cleanupGameThreads(guild: Guild, validChannelIds: Set<string>): Promise<void> {
+    const parentId = config.channels.gameThreadsChannel;
+    if (!parentId) return;
+    const parent = guild.channels.cache.get(parentId)
+      ?? await guild.channels.fetch(parentId).catch(() => null);
+    if (!parent || parent.type !== ChannelType.GuildText || !parent.isTextBased()) {
+      console.warn(`[ChannelsCleanupTask] GAME_THREADS_CHANNEL_ID is missing or invalid: ${parentId}`);
+      return;
+    }
+
+    let active;
+    try {
+      active = await parent.threads.fetchActive();
+    } catch (error) {
+      console.warn('[ChannelsCleanupTask] Could not fetch active game threads:', error);
+      return;
+    }
+
+    let archived = 0;
+    for (const thread of active.threads.values()) {
+      if (!/^game-\d+(?:-picking)?$/i.test(thread.name)) continue;
+      if (validChannelIds.has(thread.id)) continue;
+      try {
+        await thread.setArchived(true, 'Orphaned game thread cleanup');
+        archived += 1;
+      } catch (error) {
+        console.warn(`[ChannelsCleanupTask] Could not archive thread ${thread.id}:`, error);
+      }
+    }
+    if (archived > 0) {
+      console.log(`[ChannelsCleanupTask] Archived ${archived} orphaned game thread(s)`);
     }
   }
 

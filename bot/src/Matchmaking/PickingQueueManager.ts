@@ -1,6 +1,6 @@
 import { 
   Client, 
-  TextChannel, 
+  ThreadChannel, 
   VoiceChannel,
   Guild, 
   EmbedBuilder, 
@@ -24,6 +24,7 @@ import { PresenceService } from '../services/PresenceService';
 
 import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil, getPlayerIGNs as getPlayerIGNsUtil } from './utils';
 import { themedEmbed } from '../utils/betterembed';
+import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 
 interface QueueLike {
   id?: unknown;
@@ -371,7 +372,7 @@ export class PickingQueueManager {
     selectedMap: string,
     token?: { cancelled: boolean }
   ): Promise<{ success: boolean }> {
-    let resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel } | null = null;
+    let resources: { gameId: number; gameChannel: ThreadChannel; pickingChannel: VoiceChannel } | null = null;
     let session: PickingSession | null = null;
 
     try {
@@ -459,7 +460,7 @@ export class PickingQueueManager {
   private async completePicking(
     session: PickingSession,
     finalTeams: { team1: string[]; team2: string[] },
-    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+    resources: { gameId: number; gameChannel: ThreadChannel; pickingChannel: VoiceChannel },
     queueData: QueueLike,
     selectedMap: string,
   ): Promise<{ success: boolean }> {
@@ -586,55 +587,40 @@ export class PickingQueueManager {
     gameId: number,
     players: string[],
     _queueData: QueueLike
-  ): Promise<{ gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel }> {
+  ): Promise<{ gameId: number; gameChannel: ThreadChannel; pickingChannel: VoiceChannel }> {
     try {
       console.log(`[PickingQueue] Creating picking resources for game ${gameId} using WorkersManager`);
       
-      
-      const [pickingChannel, gameChannel] = await Promise.all([
-        this.workersManager.createChannel<VoiceChannel>({
-          name: `picking-${gameId}`,
-          type: ChannelType.GuildVoice,
-          parent: config.categories.voiceCategory,
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.Connect],
-              allow: [PermissionFlagsBits.Speak]
-            },
-            ...players.map(playerId => ({
-              id: playerId,
-              allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.Connect,
-                PermissionFlagsBits.Speak,
-                PermissionFlagsBits.UseVAD,
-                PermissionFlagsBits.Stream
-              ]
-            }))
-          ]
-        }, 9), 
+      const pickingChannel = await this.workersManager.createChannel<VoiceChannel>({
+        name: `picking-${gameId}`,
+        type: ChannelType.GuildVoice,
+        parent: config.categories.voiceCategory,
+        permissionOverwrites: [
+          {
+            id: guild.roles.everyone.id,
+            deny: [PermissionFlagsBits.Connect],
+            allow: [PermissionFlagsBits.Speak]
+          },
+          ...players.map(playerId => ({
+            id: playerId,
+            allow: [
+              PermissionFlagsBits.ViewChannel,
+              PermissionFlagsBits.Connect,
+              PermissionFlagsBits.Speak,
+              PermissionFlagsBits.UseVAD,
+              PermissionFlagsBits.Stream
+            ]
+          }))
+        ]
+      }, 9);
 
-        this.workersManager.createChannel<TextChannel>({
-          name: `game-${gameId}-picking`,
-          type: ChannelType.GuildText,
-          parent: config.categories.gameCategory,
-          permissionOverwrites: [
-            {
-              id: guild.roles.everyone.id,
-              deny: [PermissionFlagsBits.ViewChannel]
-            },
-            ...players.map(playerId => ({
-              id: playerId,
-              allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory
-              ]
-            }))
-          ]
-        }, 9) 
-      ]);
+      let gameChannel: ThreadChannel;
+      try {
+        gameChannel = await createGameThread(guild, gameId, players, 'picking');
+      } catch (error) {
+        await this.workersManager.deleteChannel(pickingChannel.id, 0).catch(() => undefined);
+        throw error;
+      }
 
       console.log(`[PickingQueue] Successfully created picking resources for game ${gameId}`);
 
@@ -729,7 +715,7 @@ export class PickingQueueManager {
   }
 
   private async sendPickingEmbed(
-    channel: TextChannel,
+    channel: ThreadChannel,
     session: PickingSession,
     map: string,
     queueData: Pick<QueueLike, 'isRanked'>
@@ -866,7 +852,7 @@ export class PickingQueueManager {
   }
 
   private async executePicking(
-    channel: TextChannel,
+    channel: ThreadChannel,
     session: PickingSession,
     queueData: QueueLike,
     selectedMap: string,
@@ -945,7 +931,7 @@ export class PickingQueueManager {
     }
   }
 
-  private async awaitPick(channel: TextChannel, session: PickingSession): Promise<string | null> {
+  private async awaitPick(channel: ThreadChannel, session: PickingSession): Promise<string | null> {
     try {
       const collector = channel.createMessageComponentCollector({
         componentType: ComponentType.StringSelect,
@@ -1092,7 +1078,7 @@ export class PickingQueueManager {
     }
   }
 
-  private async sendVoidNotice(channel: TextChannel): Promise<void> {
+  private async sendVoidNotice(channel: ThreadChannel): Promise<void> {
     try {
       const embed = themedEmbed()
         .setTitle('❌ Game Cancelled')
@@ -1134,17 +1120,18 @@ export class PickingQueueManager {
   }
 
   public async cleanupPickingChannels(resources: Partial<GameResources>): Promise<void> {
-    const deletions: Array<Promise<unknown>> = [];
+    const tasks: Array<Promise<unknown>> = [];
+    const guild = await this.getGuild();
     if (resources.pickingChannel?.id) {
-      deletions.push(this.workersManager.deleteChannel(resources.pickingChannel.id, 2));
+      tasks.push(this.workersManager.deleteChannel(resources.pickingChannel.id, 2));
     }
-    if (resources.gameChannel?.id) {
-      deletions.push(this.workersManager.deleteChannel(resources.gameChannel.id, 2));
+    if (resources.gameChannel?.id && guild) {
+      tasks.push(closeGameTextChannel(guild, resources.gameChannel.id, 'Picking session ended'));
     }
-    const results = await Promise.allSettled(deletions);
+    const results = await Promise.allSettled(tasks);
     for (const result of results) {
       if (result.status === 'rejected') {
-        console.error('[PickingQueue] Failed to delete picking channel:', result.reason);
+        console.error('[PickingQueue] Failed to close picking channel:', result.reason);
       }
     }
   }
@@ -1426,7 +1413,7 @@ export class PickingQueueManager {
 
   private async abortRecoveredPickingSession(
     gameId: number,
-    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+    resources: { gameId: number; gameChannel: ThreadChannel; pickingChannel: VoiceChannel },
   ): Promise<void> {
     try {
       const waitingVcId = config.voicechannels.waitingvc;
@@ -1446,7 +1433,7 @@ export class PickingQueueManager {
 
   private async resumeRecoveredPicking(
     session: PickingSession,
-    resources: { gameId: number; gameChannel: TextChannel; pickingChannel: VoiceChannel },
+    resources: { gameId: number; gameChannel: ThreadChannel; pickingChannel: VoiceChannel },
     queueData: QueueLike,
     selectedMap: string,
   ): Promise<void> {
@@ -1501,7 +1488,7 @@ export class PickingQueueManager {
 
           const resources = {
             gameId: state.gameId,
-            gameChannel: gameChannel as TextChannel,
+            gameChannel: gameChannel as ThreadChannel,
             pickingChannel: pickingChannel as VoiceChannel,
           };
           const age = state.updatedAt ? Date.now() - new Date(state.updatedAt).getTime() : 0;

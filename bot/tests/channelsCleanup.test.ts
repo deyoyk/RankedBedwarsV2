@@ -3,6 +3,7 @@ import { ChannelsCleanupTask } from '../src/tasks/ChannelsCleanupTask';
 import Game from '../src/models/Game';
 import Queue from '../src/models/Queue';
 import PickingSessionState from '../src/models/PickingSessionState';
+import config from '../src/config/config';
 
 jest.mock('../src/config/config', () => ({
   __esModule: true,
@@ -66,6 +67,14 @@ function category(id: string, children: Array<ReturnType<typeof textChannel> | R
     children: {
       cache: new Map(children.map(channel => [channel.id, channel]))
     }
+  };
+}
+
+function gameThread(id: string, name: string) {
+  return {
+    id,
+    name,
+    setArchived: jest.fn().mockResolvedValue(undefined)
   };
 }
 
@@ -171,5 +180,51 @@ describe('ChannelsCleanupTask', () => {
     expect(queueChannel.delete).not.toHaveBeenCalled();
     expect(pickingGame.delete).not.toHaveBeenCalled();
     expect(pickingVoice.delete).not.toHaveBeenCalled();
+  });
+
+  it('archives orphaned game threads and keeps active ones', async () => {
+    const configMock = config as unknown as { channels: { gameThreadsChannel?: string } };
+    configMock.channels.gameThreadsChannel = 'game-threads';
+
+    try {
+      const activeThread = gameThread('thread-active', 'game-1000');
+      const orphanThread = gameThread('thread-orphan', 'game-999');
+      const orphanPickingThread = gameThread('thread-picking', 'game-998-picking');
+      const unrelatedThread = gameThread('thread-chat', 'general-chat');
+
+      const parent = {
+        id: 'game-threads',
+        type: ChannelType.GuildText,
+        isTextBased: () => true,
+        threads: {
+          fetchActive: jest.fn(async () => ({
+            threads: new Map(
+              [activeThread, orphanThread, orphanPickingThread, unrelatedThread]
+                .map(thread => [thread.id, thread])
+            )
+          }))
+        }
+      };
+
+      const cache = new Map<string, unknown>([[parent.id, parent]]);
+      const guild = {
+        channels: {
+          cache,
+          fetch: jest.fn(async (id?: string) => id ? cache.get(id) : cache)
+        }
+      };
+
+      GameModel.find.mockReturnValue(leanQuery([{ channels: { text: 'thread-active' } }]));
+
+      const task = new ChannelsCleanupTask({ guilds: { cache: { first: () => guild } } } as any);
+      await (task as any).cleanupOrphanedChannels();
+
+      expect(activeThread.setArchived).not.toHaveBeenCalled();
+      expect(orphanThread.setArchived).toHaveBeenCalledWith(true, 'Orphaned game thread cleanup');
+      expect(orphanPickingThread.setArchived).toHaveBeenCalledWith(true, 'Orphaned game thread cleanup');
+      expect(unrelatedThread.setArchived).not.toHaveBeenCalled();
+    } finally {
+      delete configMock.channels.gameThreadsChannel;
+    }
   });
 });

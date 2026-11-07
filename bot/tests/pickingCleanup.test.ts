@@ -1,7 +1,18 @@
 import { PickingQueueManager } from '../src/Matchmaking/PickingQueueManager';
 
+const mockCloseGameTextChannel = jest.fn().mockResolvedValue('archived');
+
+jest.mock('../src/utils/gameThreads', () => ({
+  createGameThread: jest.fn(),
+  closeGameTextChannel: (...args: unknown[]) => mockCloseGameTextChannel(...args),
+}));
+
 function makeManager(deleteChannel: jest.Mock) {
-  const manager = new PickingQueueManager({} as any, {} as any, {} as any);
+  const manager = new PickingQueueManager(
+    { guilds: { cache: { first: () => ({}) } } } as any,
+    {} as any,
+    {} as any
+  );
   (manager as any).workersManager = { deleteChannel };
   return manager as any;
 }
@@ -14,24 +25,35 @@ function resources() {
 }
 
 describe('PickingQueueManager channel cleanup', () => {
-  it('deletes the picking voice and text channels', async () => {
+  beforeEach(() => {
+    mockCloseGameTextChannel.mockClear();
+    mockCloseGameTextChannel.mockResolvedValue('archived');
+  });
+
+  it('archives the picking thread and deletes the voice channel', async () => {
     const deleteChannel = jest.fn().mockResolvedValue(undefined);
     await makeManager(deleteChannel).cleanupPickingChannels(resources());
-    expect(deleteChannel).toHaveBeenCalledTimes(2);
+    expect(deleteChannel).toHaveBeenCalledTimes(1);
     expect(deleteChannel).toHaveBeenCalledWith('picking-vc-1', 2);
-    expect(deleteChannel).toHaveBeenCalledWith('picking-text-1', 2);
+    expect(mockCloseGameTextChannel).toHaveBeenCalledWith(
+      expect.anything(),
+      'picking-text-1',
+      'Picking session ended'
+    );
   });
   it('skips channels that were never created', async () => {
     const deleteChannel = jest.fn().mockResolvedValue(undefined);
     await makeManager(deleteChannel).cleanupPickingChannels({});
     expect(deleteChannel).not.toHaveBeenCalled();
+    expect(mockCloseGameTextChannel).not.toHaveBeenCalled();
   });
   it('tolerates deletion failures without throwing', async () => {
     const deleteChannel = jest.fn().mockRejectedValue(new Error('Missing Access'));
     await expect(makeManager(deleteChannel).cleanupPickingChannels(resources())).resolves.toBeUndefined();
-    expect(deleteChannel).toHaveBeenCalledTimes(2);
+    expect(deleteChannel).toHaveBeenCalledTimes(1);
+    expect(mockCloseGameTextChannel).toHaveBeenCalledTimes(1);
   });
-  it('timeout clears the session and deletes stashed channels', async () => {
+  it('timeout clears the session and closes stashed channels', async () => {
     const deleteChannel = jest.fn().mockResolvedValue(undefined);
     const manager = makeManager(deleteChannel);
     manager.activeSessions.set(7, {
@@ -49,7 +71,8 @@ describe('PickingQueueManager channel cleanup', () => {
     manager.handlePickingTimeout(7);
     await new Promise(resolve => setImmediate(resolve));
     expect(manager.activeSessions.has(7)).toBe(false);
-    expect(deleteChannel).toHaveBeenCalledTimes(2);
+    expect(deleteChannel).toHaveBeenCalledTimes(1);
+    expect(mockCloseGameTextChannel).toHaveBeenCalledTimes(1);
   });
 
   it('does not create a game when the session ends during final revalidation', async () => {

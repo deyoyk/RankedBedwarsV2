@@ -100,6 +100,7 @@ interface Config {
   channels: {
 
     gamesChannel: string;
+    gameThreadsChannel: string;
     scoringChannel: string;
     voidingChannel: string;
     alertsChannel: string;
@@ -208,6 +209,7 @@ const configuration: Config = {
   },
   channels: {
     gamesChannel: clean(process.env.GAMES_CHANNEL_ID),
+    gameThreadsChannel: clean(process.env.GAME_THREADS_CHANNEL_ID),
     scoringChannel: clean(process.env.SCORING_CHANNEL_ID),
     voidingChannel: clean(process.env.VOIDING_CHANNEL_ID),
     alertsChannel: clean(process.env.ALERTS_CHANNEL_ID),

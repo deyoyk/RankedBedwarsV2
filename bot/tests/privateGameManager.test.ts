@@ -1,5 +1,7 @@
 const mockDeleteChannel = jest.fn().mockResolvedValue(undefined);
 const mockCreateChannel = jest.fn();
+const mockCreateGameThread = jest.fn();
+const mockCloseGameTextChannel = jest.fn().mockResolvedValue('archived');
 
 jest.mock('../src/models/Game', () => ({
   __esModule: true,
@@ -38,6 +40,11 @@ jest.mock('../src/managers/WorkersManager', () => ({
       sendMessage: jest.fn().mockResolvedValue(undefined),
     }),
   },
+}));
+jest.mock('../src/utils/gameThreads', () => ({
+  __esModule: true,
+  createGameThread: (...args: unknown[]) => mockCreateGameThread(...args),
+  closeGameTextChannel: (...args: unknown[]) => mockCloseGameTextChannel(...args),
 }));
 jest.mock('../src/utils/scoreImage', () => ({
   __esModule: true,
@@ -117,6 +124,9 @@ describe('GameManager private game lifecycle', () => {
     jest.clearAllMocks();
     mockCreateChannel.mockReset();
     mockDeleteChannel.mockResolvedValue(undefined);
+    mockCreateGameThread.mockReset();
+    mockCreateGameThread.mockResolvedValue({ id: 'text-1' });
+    mockCloseGameTextChannel.mockResolvedValue('archived');
     GameModel.findOne.mockReturnValue(chain(null));
     GameModel.find.mockResolvedValue([]);
     SettlementModel.find.mockReturnValue({
@@ -282,7 +292,7 @@ describe('GameManager private game lifecycle', () => {
     expect(wsMock.send).not.toHaveBeenCalled();
   });
 
-  it('deletes partially created channels when database creation fails', async () => {
+  it('archives the game thread when database creation fails', async () => {
     const manager = makeManager();
     jest.spyOn(manager as any, 'createGameResources').mockResolvedValue(resources());
     jest.spyOn(manager as any, 'createGameInDatabaseAndUpdateUsers').mockRejectedValue(new Error('db down'));
@@ -291,16 +301,19 @@ describe('GameManager private game lifecycle', () => {
     await expect(manager.createGame(1, null, ['a', 'b'], ['c', 'd'], 'Quad'))
       .rejects.toThrow('db down');
 
-    expect(mockDeleteChannel).toHaveBeenCalledWith('text-1', 0);
+    expect(mockCloseGameTextChannel).toHaveBeenCalledWith(
+      expect.anything(),
+      'text-1',
+      expect.stringContaining('creation failed'),
+    );
+    expect(mockDeleteChannel).not.toHaveBeenCalledWith('text-1', expect.anything());
     expect(mockDeleteChannel).toHaveBeenCalledWith('voice-1', 0);
     expect(mockDeleteChannel).toHaveBeenCalledWith('voice-2', 0);
   });
 
-  it('deletes already-created channels when a later channel creation fails', async () => {
+  it('archives the already-created thread when a later channel creation fails', async () => {
     const manager = makeManager();
-    mockCreateChannel
-      .mockResolvedValueOnce({ id: 'text-1' })
-      .mockRejectedValueOnce(new Error('missing permissions'));
+    mockCreateChannel.mockRejectedValueOnce(new Error('missing permissions'));
 
     await expect((manager as any).createGameResources(
       clientMock.guilds.cache.first(),
@@ -310,7 +323,17 @@ describe('GameManager private game lifecycle', () => {
       null,
     )).rejects.toThrow('missing permissions');
 
-    expect(mockDeleteChannel).toHaveBeenCalledWith('text-1', 0);
+    expect(mockCreateGameThread).toHaveBeenCalledWith(
+      clientMock.guilds.cache.first(),
+      1,
+      ['a', 'b', 'c', 'd'],
+    );
+    expect(mockCloseGameTextChannel).toHaveBeenCalledWith(
+      clientMock.guilds.cache.first(),
+      'text-1',
+      expect.stringContaining('creation failed'),
+    );
+    expect(mockDeleteChannel).not.toHaveBeenCalledWith('text-1', expect.anything());
   });
 
   it('abortGame removes active resources and marks the game voided', async () => {
@@ -322,7 +345,14 @@ describe('GameManager private game lifecycle', () => {
 
     await manager.abortGame(7, 'warp failed');
 
-    expect(mockDeleteChannel).toHaveBeenCalledWith('text-1', 2);
+    expect(mockCloseGameTextChannel).toHaveBeenCalledWith(
+      expect.anything(),
+      'text-1',
+      expect.stringContaining('aborted'),
+    );
+    expect(mockDeleteChannel).not.toHaveBeenCalledWith('text-1', expect.anything());
+    expect(mockDeleteChannel).toHaveBeenCalledWith('voice-1', 2);
+    expect(mockDeleteChannel).toHaveBeenCalledWith('voice-2', 2);
     expect(GameModel.updateOne).toHaveBeenCalledWith(
       { gameId: 7, state: { $in: ['pending', 'active'] } },
       expect.objectContaining({ $set: expect.objectContaining({ state: 'voided', reason: 'warp failed' }) }),
