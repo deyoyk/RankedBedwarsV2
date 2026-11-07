@@ -1,15 +1,10 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { safeReply } from '../../utils/safeReply';
-import config from '../../config/config';
 
- 
-
-
-
-export async function addelo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function addelo(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let roleId: string;
   let startElo: number;
   let endElo: number;
@@ -18,7 +13,7 @@ export async function addelo(interaction: Message | ChatInputCommandInteraction,
   let mvpElo: number;
   let bedElo: number;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     roleId = interaction.options.getString('role_id', true);
     startElo = interaction.options.getInteger('start_elo', true);
     endElo = interaction.options.getInteger('end_elo', true);
@@ -32,24 +27,7 @@ export async function addelo(interaction: Message | ChatInputCommandInteraction,
       await safeReply(interaction, errorEmbed('All arguments are required and must be valid.', 'ELO Rank Creation Error'));
       return;
     }
-  } else {
-    if (!args || args.length < 6) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}addelo <roleId> <startElo> <endElo> <winElo> <loseElo> <mvpElo> [bedElo]`, 'ELO Rank Creation Error'));
-      return;
-    }
-    roleId = args[0];
-    startElo = Number(args[1]);
-    endElo = Number(args[2]);
-    winElo = Number(args[3]);
-    loseElo = Number(args[4]);
-    mvpElo = Number(args[5]);
-    bedElo = args.length > 6 ? Number(args[6]) : 0;
-    
-    if (!roleId || isNaN(startElo) || isNaN(endElo) || isNaN(winElo) || isNaN(loseElo) || isNaN(mvpElo) || (args.length > 6 && isNaN(bedElo))) {
-      await safeReply(interaction, errorEmbed('All arguments are required and must be valid numbers.', 'ELO Rank Creation Error'));
-      return;
-    }
-  }
+  
 
   try {
     

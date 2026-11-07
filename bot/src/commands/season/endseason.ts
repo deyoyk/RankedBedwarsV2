@@ -1,12 +1,11 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
 import { safeReply } from '../../utils/safeReply';
 import { themedEmbed } from '../../utils/betterembed';
 
-export async function endseason(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
-    void args;
-    void wsManager;
+export async function endseason(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
+    void _wsManager;
     try {
         const result = await SeasonManager.endSeason();
 

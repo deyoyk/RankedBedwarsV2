@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, ButtonStyle } from 'discord.js';
+import { ButtonStyle, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { fix } from '../../utils/fix';
@@ -16,7 +16,7 @@ interface FixAllProgress {
   lastUpdateTime: number;
 }
 
-export async function fixall(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function fixall(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   const total = await User.countDocuments();
   if (!total) {
     const { safeReply } = await import('../../utils/safeReply');
@@ -43,7 +43,7 @@ export async function fixall(interaction: Message | ChatInputCommandInteraction,
   });
 }
 
-async function executeFixAll(interaction: Message | ChatInputCommandInteraction, total: number) {
+async function executeFixAll(interaction: ChatInputCommandInteraction, total: number) {
   const progress: FixAllProgress = {
     total,
     processed: 0,
@@ -56,20 +56,9 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
 
   console.log(`[FixAll] Starting fix for ${total} users`);
 
-  let progressMsg: Message | undefined = undefined;
-  
-  if (interaction instanceof ChatInputCommandInteraction) {
-    await safeReply(interaction, {
-      embeds: [createProgressEmbed(progress)]
-    });
-  } else {
-    const channel = interaction.channel;
-    if (channel && 'send' in channel) {
-      progressMsg = await channel.send({
-        embeds: [createProgressEmbed(progress)]
-      });
-    }
-  }
+  await safeReply(interaction, {
+    embeds: [createProgressEmbed(progress)]
+  });
 
   const batchSize = 25;
   const rateLimitDelay = 1000;
@@ -117,11 +106,7 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
       progress.lastUpdateTime = now;
       
       try {
-        if (progressMsg) {
-          await progressMsg.edit({ embeds: [createProgressEmbed(progress)] });
-        } else if (interaction instanceof ChatInputCommandInteraction) {
-          await safeReply(interaction, { embeds: [createProgressEmbed(progress)] });
-        }
+        await safeReply(interaction, { embeds: [createProgressEmbed(progress)] });
       } catch (updateError) {
         console.error('[FixAll] Failed to update progress embed:', updateError);
       }
@@ -133,12 +118,7 @@ async function executeFixAll(interaction: Message | ChatInputCommandInteraction,
   }
 
   const finalEmbed = createFinalEmbed(progress);
-  
-  if (progressMsg) {
-    await progressMsg.edit({ embeds: [finalEmbed] });
-  } else if (interaction instanceof ChatInputCommandInteraction) {
-    await safeReply(interaction, { embeds: [finalEmbed] });
-  }
+  await safeReply(interaction, { embeds: [finalEmbed] });
 
   console.log(`[FixAll] Completed fix for ${total} users. Success: ${progress.successful}, Failed: ${progress.failed}`);
 }

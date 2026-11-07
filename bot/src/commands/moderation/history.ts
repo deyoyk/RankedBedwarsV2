@@ -1,7 +1,8 @@
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
-import config from '../../config/config';
+import { betterEmbed, errorEmbed, successEmbed, themedEmbed } from '../../utils/betterembed';
+import { safeReply } from '../../utils/safeReply';
 
 interface HistoryRecordView {
   reason: string;
@@ -10,33 +11,15 @@ interface HistoryRecordView {
   moderator: string;
 }
 
-
-import { errorEmbed, successEmbed, betterEmbed, themedEmbed } from '../../utils/betterembed';
-import { safeReply } from '../../utils/safeReply';
-
-export async function history(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function history(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let discordId: string;
   let historyType: string;
-  let userInput: string | null = null;
+  const userInput: string | null = null;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     discordId = interaction.options.getString('user_id', true);
     historyType = interaction.options.getString('type', true).toLowerCase();
-  } else {
-    if (args && args.length >= 2) {
-      userInput = args[0];
-      discordId = userInput.replace(/[<@!>]/g, '');
-      historyType = args[1].toLowerCase();
-    } else {
-      const embed = themedEmbed()
-        .setColor('#00AAAA')
-        .setTitle('History Command Error')
-        .setDescription(`Usage: ${config.prefix}history <userId|mention|IGN> <type>`)
-        .setTimestamp();
-      await safeReply(interaction, { embeds: [embed] });
-      return;
-    }
-  }
+  
 
   if (!['ban', 'mute', 'strike'].includes(historyType)) {
     await safeReply(interaction, errorEmbed('Valid types are: `ban`, `mute`, `strike`.', 'Invalid History Type'));
@@ -132,7 +115,7 @@ Moderator: ${item.moderator}
     const row = buildPaginationRow(currentPage, totalPages);
 
     const message = await safeReply(interaction, { embeds: [embed], components: [row], fetchReply: true });
-    const ownerId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+    const ownerId = interaction.user.id;
     const collector = (message as unknown as Message | undefined)?.createMessageComponentCollector({
       filter: (i) => i.user.id === ownerId,
       time: 60000

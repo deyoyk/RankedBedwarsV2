@@ -1,15 +1,11 @@
-import { ChatInputCommandInteraction, Message, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message } from 'discord.js';
 import { safeReply } from '../../utils/safeReply';
 import { MapService } from '../../managers/MapManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { betterEmbed, errorEmbed } from '../../utils/betterembed';
 
- 
-
-
 export async function maps(
-  interaction: Message | ChatInputCommandInteraction,
-  args?: string[],
+  interaction: ChatInputCommandInteraction,
   wsManager?: WebSocketManager
 ) {
   if (!wsManager) {
@@ -64,8 +60,8 @@ export async function maps(
     fetchReply: true
   })) as unknown as Message | undefined;
 
-  function getUserId(i: Message | ChatInputCommandInteraction): string {
-    return (i instanceof ChatInputCommandInteraction) ? i.user.id : i.author.id;
+  function getUserId(i: ChatInputCommandInteraction): string {
+    return i.user.id;
   }
 
   const collector = sentMsg?.createMessageComponentCollector({

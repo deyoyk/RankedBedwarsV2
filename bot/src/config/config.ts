@@ -122,8 +122,6 @@ interface Config {
   token: string;
   clientId: string;
   guildId: string;
-  prefixenabled?: boolean;
-  prefix: string;
   workers: {
     enabled: boolean;
     tokens: string[];
@@ -235,8 +233,6 @@ const configuration: Config = {
   token: clean(process.env.DISCORD_TOKEN),
   clientId: clean(process.env.CLIENT_ID),
   guildId: clean(process.env.GUILD_ID),
-  prefixenabled: clean(process.env.PREFIX_ENABLED) === 'true',
-  prefix: clean(process.env.PREFIX) || '!',
   workers: {
     enabled: clean(process.env.WORKERS_ENABLED) === 'true',
     tokens: workerTokens

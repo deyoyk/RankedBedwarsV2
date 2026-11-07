@@ -1,16 +1,5 @@
 import { h, VNode } from '../renderer';
-import {
-  avatar,
-  badge,
-  COLORS,
-  decor,
-  divider,
-  gameFooter,
-  MEDIUM,
-  panel,
-  rootStyle,
-  text,
-} from '../theme';
+import { avatar, badge, COLORS, decor, divider, gameFooter, MEDIUM, panel, rootStyle, text } from '../theme';
 
 export type StartTemplatePlayer = {
   username: string;

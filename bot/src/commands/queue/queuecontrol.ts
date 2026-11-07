@@ -1,9 +1,8 @@
-import { SlashCommandBuilder, Message, ChatInputCommandInteraction, SlashCommandSubcommandBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, SlashCommandBuilder, SlashCommandSubcommandBuilder } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Queue from '../../models/Queue';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
-import config from '../../config/config';
 
 function addQueueOptions(sub: SlashCommandSubcommandBuilder) {
   return sub
@@ -30,29 +29,17 @@ export const queueControlData = new SlashCommandBuilder()
   .addSubcommand(sub => addQueueOptions(sub.setName('enable').setDescription('Enable queues')))
   .addSubcommand(sub => addQueueOptions(sub.setName('disable').setDescription('Disable queues')));
 
-export async function queuecontrol(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
-  void wsManager;
+export async function queuecontrol(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
+  void _wsManager;
   let sub: string;
   let type: string;
   let queueId: string | undefined;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     sub = interaction.options.getSubcommand();
     type = interaction.options.getString('type', true);
     queueId = interaction.options.getString('queue_id') ?? undefined;
-  } else {
-    if (!args || args.length < 2) {
-      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'error')] });
-      return;
-    }
-    sub = args[0].toLowerCase();
-    type = args[1].toLowerCase();
-    queueId = args[2];
-    if ((sub !== 'enable' && sub !== 'disable') || (type !== 'ranked' && type !== 'unranked' && type !== 'specific')) {
-      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'error')] });
-      return;
-    }
-  }
+  
 
   let filter: Record<string, unknown> = {};
   if (type === 'ranked') filter = { isRanked: true };

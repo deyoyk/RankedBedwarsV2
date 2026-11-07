@@ -41,14 +41,25 @@ const GameModel = require('../src/models/Game').default;
 const QueueModel = require('../src/models/Queue').default;
 const SeasonModel = require('../src/models/Season').default;
 
-function message(argsReply = true) {
-  void argsReply;
+function interaction(options: Record<string, any> = {}, overrides: Record<string, any> = {}) {
   return {
-    content: '',
-    author: { id: '999000000000000001' },
-    member: null,
+    id: `interaction-${Math.random().toString(36).slice(2)}`,
+    user: { id: '999000000000000001' },
+    member: { roles: { cache: new Map() } },
     guild: { id: 'guild1', members: { cache: { get: () => undefined } } },
-    reply: jest.fn().mockResolvedValue({})
+    options: {
+      getUser: (name: string) => options[name] ?? null,
+      getString: (name: string) => options[name] ?? null,
+      getInteger: (name: string) => options[name] ?? null,
+      getBoolean: (name: string) => options[name] ?? null,
+      getAttachment: (name: string) => options[name] ?? null,
+      getSubcommand: () => options.__subcommand ?? 'enable',
+    },
+    reply: jest.fn().mockResolvedValue({}),
+    deferReply: jest.fn().mockResolvedValue(undefined),
+    editReply: jest.fn().mockResolvedValue({}),
+    followUp: jest.fn().mockResolvedValue({}),
+    ...overrides,
   } as any;
 }
 
@@ -90,30 +101,32 @@ describe('edit command validation', () => {
   it('rejects Infinity and negative values without writing', async () => {
     const user = mockUser();
     UserModel.findOne.mockResolvedValue(user);
-    const interaction = message();
+    const first = interaction({ user: { id: '123456789012345678' }, stat: 'elo', value: 'Infinity' });
+    const second = interaction({ user: { id: '123456789012345678' }, stat: 'wins', value: '-3' });
 
-    await edit(interaction, ['<@123456789012345678>', 'elo', 'Infinity']);
-    await edit(interaction, ['<@123456789012345678>', 'wins', '-3']);
+    await edit(first);
+    await edit(second);
 
     expect(UserModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(user.elo).toBe(1000);
-    expect(interaction.reply).toHaveBeenCalledTimes(2);
+    expect(first.reply).toHaveBeenCalledTimes(1);
+    expect(second.reply).toHaveBeenCalledTimes(1);
   });
 
   it('accepts finite non-negative values with a single atomic update', async () => {
     const user = mockUser();
     UserModel.findOne.mockResolvedValue(user);
     UserModel.findOneAndUpdate.mockResolvedValue({ ...user, elo: 1500 });
-    const interaction = message();
+    const target = interaction({ user: { id: '123456789012345678' }, stat: 'elo', value: '1500' });
 
-    await edit(interaction, ['<@123456789012345678>', 'elo', '1500']);
+    await edit(target);
 
     expect(UserModel.findOneAndUpdate).toHaveBeenCalledWith(
       { discordId: '123456789012345678' },
       { $set: { elo: 1500 } },
       { new: true }
     );
-    expect(interaction.reply).toHaveBeenCalledTimes(1);
+    expect(target.reply).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -121,15 +134,15 @@ describe('forceregister and forcerename validation', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('rejects invalid discord ids', async () => {
-    const interaction = message();
-    await forceregister(interaction, ['notanid', 'Steve']);
+    const target = interaction({ user: null, ign: 'Steve' });
+    await forceregister(target);
     expect(UserModel.findOne).not.toHaveBeenCalled();
-    expect(interaction.reply).toHaveBeenCalled();
+    expect(target.reply).toHaveBeenCalled();
   });
 
   it('rejects invalid IGNs', async () => {
-    const interaction = message();
-    await forceregister(interaction, ['<@123456789012345678>', 'x!']);
+    const target = interaction({ user: { id: '123456789012345678' }, ign: 'x!' });
+    await forceregister(target);
     expect(UserModel.findOne).not.toHaveBeenCalled();
   });
 
@@ -145,122 +158,34 @@ describe('forceregister and forcerename validation', () => {
       return chain as any;
     });
     UserModel.findOneAndUpdate.mockResolvedValue(mockUser());
-    const interaction = message();
-    await forceregister(interaction, ['<@123456789012345678>', 'abc']);
+    const target = interaction({ user: { id: '123456789012345678' }, ign: 'abc' });
+    await forceregister(target);
     expect(UserModel.findOne).toHaveBeenCalledWith({ ign: 'abc', discordId: { $ne: '123456789012345678' } });
     const ignCall = seen.find(s => s.query.ign);
     expect(ignCall?.chain.collation).toHaveBeenCalledWith({ locale: 'en', strength: 2 });
   });
 
   it('forcerename rejects invalid ids and IGNs', async () => {
-    const badId = message();
-    await forcerename(badId, ['junk', 'Steve']);
+    const badId = interaction({ user: null, new_ign: 'Steve' });
+    await forcerename(badId);
     expect(UserModel.findOne).not.toHaveBeenCalled();
 
-    const badIgn = message();
-    await forcerename(badIgn, ['<@123456789012345678>', 'no good!']);
+    const badIgn = interaction({ user: { id: '123456789012345678' }, new_ign: 'no good!' });
+    await forcerename(badIgn);
     expect(UserModel.findOne).not.toHaveBeenCalled();
-  });
-});
-
-describe('score and void prefix validation', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it('rejects non numeric game ids and out of range teams', async () => {
-    const badId = message();
-    await score(badId, ['abc', '1', 'Steve']);
-    expect(GameModel.findOne).not.toHaveBeenCalled();
-
-    const badTeam = message();
-    await score(badTeam, ['42', '3', 'Steve']);
-    expect(GameModel.findOne).not.toHaveBeenCalled();
-  });
-
-  it('rejects non numeric void targets', async () => {
-    const interaction = message();
-    await voidGame(interaction, ['NaN']);
-    expect(GameModel.findOne).not.toHaveBeenCalled();
-    expect(interaction.reply).toHaveBeenCalled();
-  });
-
-  it('rejects more MVPs than the configured limit', async () => {
-    const originalLimit = config.maxMvpsPerGame;
-    config.maxMvpsPerGame = 1;
-    try {
-      const interaction = message();
-      await score(interaction, ['42', '1', 'Steve,Alex']);
-      expect(GameModel.findOne).not.toHaveBeenCalled();
-      expect(interaction.reply).toHaveBeenCalled();
-      expect(JSON.stringify(interaction.reply.mock.calls)).toContain('at most 1 MVP');
-    } finally {
-      config.maxMvpsPerGame = originalLimit;
-    }
-  });
-
-  it('rejects more bed breakers than the configured limit', async () => {
-    const originalLimit = config.maxBedBreakersPerGame;
-    config.maxBedBreakersPerGame = 1;
-    try {
-      const interaction = message();
-      await score(interaction, ['42', '1', 'Steve', 'Alex,Cara']);
-      expect(GameModel.findOne).not.toHaveBeenCalled();
-      expect(interaction.reply).toHaveBeenCalled();
-      expect(JSON.stringify(interaction.reply.mock.calls)).toContain('at most 1 bed breaker');
-    } finally {
-      config.maxBedBreakersPerGame = originalLimit;
-    }
-  });
-});
-
-describe('addqueue prefix validation', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    QueueModel.findOne = jest.fn().mockResolvedValue(null);
-  });
-
-  it('reads bypass roles from the seventh argument', async () => {
-    const interaction = message();
-    await addqueue(interaction,
-      ['1352587524475713619', '8', '0', '3000', 'true', 'false', '111111111111111111,222222222222222222']);
-
-    expect(QueueModel).toHaveBeenCalledWith(expect.objectContaining({
-      maxPlayers: 8,
-      bypassRoles: ['111111111111111111', '222222222222222222']
-    }));
-  });
-
-  it('rejects inverted elo ranges and tiny lobbies', async () => {
-    const badRange = message();
-    await addqueue(badRange, ['1352587524475713619', '8', '3000', '0', 'true', 'false']);
-    expect(QueueModel).not.toHaveBeenCalled();
-
-    const tiny = message();
-    await addqueue(tiny, ['1352587524475713619', '1', '0', '3000', 'true', 'false']);
-    expect(QueueModel).not.toHaveBeenCalled();
-  });
-});
-
-describe('lose prefix validation', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  it('rejects non mentions without touching the database', async () => {
-    const interaction = message();
-    await lose(interaction, ['somestring']);
-    expect(UserModel.findOne).not.toHaveBeenCalled();
-    expect(interaction.reply).toHaveBeenCalled();
   });
 });
 
 describe('moderation error replies hide internals', () => {
   it('does not leak manager errors to users', async () => {
-    const interaction = message();
-    await executeModerationAction(interaction, ['<@123456789012345678>', '1h', 'spam'], {
+    const target = interaction({ user: { id: '123456789012345678' }, duration: '1h', reason: 'spam' });
+    await executeModerationAction(target, {
       commandName: 'ban',
       actionVerb: 'Banned',
       hasDuration: true,
       managerCall: async () => { throw new Error('db secret xyz'); }
     });
-    const replied = JSON.stringify(interaction.reply.mock.calls);
+    const replied = JSON.stringify(target.reply.mock.calls);
     expect(replied).not.toContain('db secret xyz');
     expect(replied).toContain('Failed to ban user.');
   });
@@ -288,7 +213,11 @@ describe('CommandHandler slash failure replies', () => {
 
     await handler.handleInteraction(interaction);
 
-    expect(interaction.editReply).toHaveBeenCalledWith('Something went wrong running that command.');
+    expect(interaction.editReply).toHaveBeenCalledWith(expect.objectContaining({
+      embeds: expect.any(Array)
+    }));
+    const payload = interaction.editReply.mock.calls[0][0];
+    expect(payload.embeds[0].toJSON().description).toBe('Something went wrong running that command.');
   });
 });
 

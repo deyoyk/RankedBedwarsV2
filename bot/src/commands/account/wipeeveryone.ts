@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, ButtonStyle } from 'discord.js';
+import { ButtonStyle, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
@@ -7,7 +7,7 @@ import { successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
 
-export async function wipeeveryone(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function wipeeveryone(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   const total = await User.countDocuments();
   if (!total) {
     const { errorEmbed } = await import('../../utils/betterembed');
@@ -34,23 +34,13 @@ export async function wipeeveryone(interaction: Message | ChatInputCommandIntera
   });
 }
 
-async function executeWipeEveryone(interaction: Message | ChatInputCommandInteraction, total: number) {
+async function executeWipeEveryone(interaction: ChatInputCommandInteraction, total: number) {
   const startTime = Date.now();
   let processed = 0;
 
-  let progressMsg: Message | undefined = undefined;
-  if (interaction instanceof ChatInputCommandInteraction) {
-    await safeReply(interaction, {
-      embeds: [successEmbed(`Starting wipe for **${total}** users...`, 'Wipe Everyone Progress').builder]
-    });
-  } else {
-    const channel = interaction.channel;
-    if (channel && 'send' in channel) {
-      progressMsg = await channel.send({
-        embeds: [successEmbed(`Starting wipe for **${total}** users...`, 'Wipe Everyone Progress').builder]
-      });
-    }
-  }
+  await safeReply(interaction, {
+    embeds: [successEmbed(`Starting wipe for **${total}** users...`, 'Wipe Everyone Progress').builder]
+  });
 
   const reportProgress = async () => {
     const percent = ((processed / total) * 100).toFixed(1);
@@ -63,11 +53,7 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
       `ETA: ~${etaStr}`,
       'Wipe Everyone Progress'
     );
-    if (interaction instanceof ChatInputCommandInteraction) {
-      await safeReply(interaction, { embeds: [embed.builder] });
-    } else if (progressMsg) {
-      await progressMsg.edit({ embeds: [embed.builder] });
-    }
+    await safeReply(interaction, { embeds: [embed.builder] });
   };
 
   const zeroed: Record<string, unknown> = {};
@@ -100,9 +86,5 @@ async function executeWipeEveryone(interaction: Message | ChatInputCommandIntera
     `All user stats have been wiped and roles/nicknames updated.\n\nProcessed: **${total} / ${total}** (100%)`,
     'Wipe Everyone Complete'
   );
-  if (interaction instanceof ChatInputCommandInteraction) {
-    await safeReply(interaction, { embeds: [embed.builder] });
-  } else if (progressMsg) {
-    await progressMsg.edit({ embeds: [embed.builder] });
-  }
+  await safeReply(interaction, { embeds: [embed.builder] });
 }

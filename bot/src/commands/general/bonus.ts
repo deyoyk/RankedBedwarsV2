@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, themedEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
@@ -37,7 +37,7 @@ function buildBonusDescription(): string {
   return lines.join('\n');
 }
 
-export async function bonus(interaction: Message | ChatInputCommandInteraction, _args?: string[], _wsManager?: WebSocketManager) {
+export async function bonus(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   try {
     const embed = themedEmbed()
       .setTitle('Scoring System')

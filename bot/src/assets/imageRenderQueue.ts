@@ -2,7 +2,7 @@ import os from 'os';
 import { Worker } from 'worker_threads';
 import satori from 'satori';
 import { Resvg } from '@resvg/resvg-js';
-import { loadImageFonts, type ImageFont } from './assets';
+import { type ImageFont, loadImageFonts } from './assets';
 import type { VNode } from './renderer';
 
 export type RenderOptions = {

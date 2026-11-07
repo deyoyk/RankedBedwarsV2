@@ -1,28 +1,16 @@
-import { 
-  Client, 
-  ThreadChannel, 
-  VoiceChannel,
-  Guild, 
-  EmbedBuilder, 
-  ActionRowBuilder, 
-  StringSelectMenuBuilder,
-  ComponentType,
-  ChannelType,
-  PermissionFlagsBits
-} from 'discord.js';
+import { ActionRowBuilder, ChannelType, Client, ComponentType, EmbedBuilder, Guild, PermissionFlagsBits, StringSelectMenuBuilder, ThreadChannel, VoiceChannel } from 'discord.js';
 import User from '../models/User';
 import Party from '../models/Party';
 import Game from '../models/Game';
 import config from '../config/config';
-import { PickingSession, GameResources, QueueProcessingResult } from '../types/GameTypes';
+import { GameResources, PickingSession, QueueProcessingResult } from '../types/GameTypes';
 import { GameManager } from './GameManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
 import PickingSessionState from '../models/PickingSessionState';
 import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
-
-import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil, getPlayerIGNs as getPlayerIGNsUtil } from './utils';
+import { calculateTeamAverageElo, getPlayerIGNs as getPlayerIGNsUtil, selectRandomMap as selectRandomMapUtil } from './utils';
 import { themedEmbed } from '../utils/betterembed';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 

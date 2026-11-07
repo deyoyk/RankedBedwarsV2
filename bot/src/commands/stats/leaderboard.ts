@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ModalSubmitInteraction } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User, { IUser } from '../../models/User';
 import { betterEmbed, errorEmbed } from '../../utils/betterembed';
@@ -50,23 +50,15 @@ async function getCachedTotal(valueField: string): Promise<number> {
   return total;
 }
 
-export async function leaderboard(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function leaderboard(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let page = 0;
   let mode = 'elo';
   const usersPerPage = 10;
   let searchIGN: string | null = null;
   let searchPosition: number | null = null;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
-    mode = interaction.options.getString('mode') || 'elo';
-    page = Math.max((interaction.options.getInteger('page') || 1) - 1, 0);
-  } else if (args && args.length > 0) {
-    mode = args[0] || 'elo';
-    if (args[1]) {
-      const parsedPage = parseInt(args[1]);
-      if (!isNaN(parsedPage)) page = parsedPage - 1;
-    }
-  }
+  mode = interaction.options.getString('mode') || 'elo';
+  page = Math.max((interaction.options.getInteger('page') || 1) - 1, 0);
 
   async function renderPage(page: number) {
     const { title, field: valueField } = getModeConfig(mode);
@@ -159,21 +151,14 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
 
   async function replyEmbed(embedObj: ReturnType<typeof betterEmbed>, components?: ActionRowBuilder<ButtonBuilder>[]) {
     const payload = { embeds: [embedObj.builder], components: components || [] };
-    if (interaction instanceof ChatInputCommandInteraction) {
+    
       if (replyMsg) {
         await safeReply(interaction, payload).catch(() => {});
         return;
       }
       const msg = await safeReply(interaction, { ...payload, fetchReply: true });
       replyMsg = msg as unknown as Message | undefined;
-    } else {
-      if (replyMsg) {
-        await replyMsg.edit(payload).catch(() => {});
-        return;
-      }
-      const msg = await safeReply(interaction, payload);
-      replyMsg = msg as unknown as Message | undefined;
-    }
+    
   }
 
   await renderPage(page);
@@ -183,14 +168,9 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
 
   collector?.on('collect', async i => {
     
-    let authorId: string | undefined = undefined;
-    if (interaction instanceof ChatInputCommandInteraction) {
-      authorId = interaction.user.id;
-    } else if ('author' in interaction && interaction.author) {
-      authorId = interaction.author.id;
-    }
+    const authorId = interaction.user.id;
     if (i.user.id !== authorId) {
-      await i.reply({ content: 'You cannot interact with this leaderboard.', flags: 64 }); 
+      await i.reply(errorEmbed('You cannot interact with this leaderboard.', 'Leaderboard Error', true)); 
       return;
     }
     let needsUpdate = false;
@@ -279,7 +259,7 @@ export async function leaderboard(interaction: Message | ChatInputCommandInterac
   });
 
   collector?.on('end', async () => {
-    if (interaction instanceof ChatInputCommandInteraction && interaction.replied) {
+    if (interaction.replied) {
       await interaction.editReply({ components: [] });
     }
   });

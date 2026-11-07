@@ -1,6 +1,6 @@
 import { Client } from 'discord.js';
 import User from '../models/User';
-import { TeamBalanceResult, QueueProcessingResult } from '../types/GameTypes';
+import { QueueProcessingResult, TeamBalanceResult } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
 import { GameManager } from './GameManager';

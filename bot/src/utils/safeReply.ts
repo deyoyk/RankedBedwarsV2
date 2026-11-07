@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, InteractionResponse, InteractionReplyOptions, MessagePayload, InteractionEditReplyOptions } from 'discord.js';
+import { ChatInputCommandInteraction, InteractionEditReplyOptions, InteractionReplyOptions, InteractionResponse, Message, MessagePayload } from 'discord.js';
 
 function errorCode(error: unknown): number | undefined {
   if (typeof error === 'object' && error !== null) {

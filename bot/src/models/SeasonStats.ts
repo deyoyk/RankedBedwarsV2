@@ -1,5 +1,5 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { recentGameSubdoc, dailyEloSubdoc, IRecentGame, IDailyElo } from './gameBase';
+import mongoose, { Document, Schema } from 'mongoose';
+import { dailyEloSubdoc, IDailyElo, IRecentGame, recentGameSubdoc } from './gameBase';
 import { coreStatFields, IUserStats } from './statFields';
 
 export interface ISeasonStats extends Document, IUserStats {

@@ -1,4 +1,4 @@
-import { Events, GuildMember, Client } from 'discord.js';
+import { Client, Events, GuildMember } from 'discord.js';
 import User from '../models/User';
 import { fix } from '../utils/fix';
 import config from '../config/config';

@@ -1,4 +1,4 @@
-import { PlayerData, RecentGame, Helpers, generateThemeImage } from './base';
+import { generateThemeImage, Helpers, PlayerData, RecentGame } from './base';
 
 export type ThemeGenerator = (playerData: PlayerData, recentGames: RecentGame[], helpers: Helpers) => Promise<Buffer>;
 

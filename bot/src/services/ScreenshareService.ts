@@ -1,18 +1,11 @@
-import { Guild, GuildMember, TextChannel, CategoryChannel, OverwriteResolvable, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, EmbedBuilder, Guild, GuildMember, OverwriteResolvable, TextChannel } from 'discord.js';
 import ScreenshareSession, { IScreenshareSession } from '../models/ScreenshareSession';
 import User from '../models/User';
 import config from '../config/config';
 import { v4 as uuidv4 } from 'uuid';
 import { themedEmbed } from '../utils/betterembed';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
-import { 
-  ScreenshareSessionResult, 
-  ScreenshareFreezeResult, 
-  ScreenshareCloseResult,
-  ScreenshareValidationResult,
-  ScreensharePermissionCheck,
-  ScreenshareChannelConfig
-} from '../types/screenshare';
+import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreenshareSessionResult, ScreenshareValidationResult } from '../types/screenshare';
 
 export class ScreenshareService {
   private static readonly SESSION_TIMEOUT = 15 * 60 * 1000; 

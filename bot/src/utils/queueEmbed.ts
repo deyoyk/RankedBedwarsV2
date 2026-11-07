@@ -16,7 +16,7 @@ export function queueSystemEmbed(
 ): EmbedBuilder {
   const input = Array.isArray(lines) ? lines : [lines];
   const allLines = input.flatMap(line => String(line).split('\n'));
-  const symbol = status === 'success' ? ' ✓' : status === 'error' ? ' ✗' : '';
+  const symbol = status === 'success' ? ' \u2713' : status === 'error' ? ' \u2717' : '';
 
   const description = allLines
     .map((line, index) => `> ${line}${index === allLines.length - 1 ? symbol : ''}`)

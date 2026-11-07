@@ -1,19 +1,9 @@
-import {
-  Message,
-  ChatInputCommandInteraction,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  StringSelectMenuInteraction,
-  ButtonBuilder,
-  ButtonStyle
-} from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-
-import { errorEmbed, betterEmbed, successEmbed } from '../../utils/betterembed';
+import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import UserModel from '../../models/User';
 import { fix } from '../../utils/fix';
-
 
 const SETTINGS = [
   { key: 'toggleprefix', label: 'Show Prefix', description: 'Show only IGN or [ELO] IGN in nickname.' },
@@ -23,8 +13,8 @@ const SETTINGS = [
 ] as const;
 type SettingKey = typeof SETTINGS[number]['key'];
 
-export async function settings(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+export async function settings(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
+  const userId = interaction.user.id;
   const user = await UserModel.findOne({ discordId: userId }).select('settings').lean();
   if (!user) {
     await safeReply(interaction, errorEmbed('You need to register first!', 'Settings Error'));

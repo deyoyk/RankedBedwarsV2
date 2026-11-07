@@ -1,22 +1,16 @@
-import { Message, ChatInputCommandInteraction, GuildMember, TextChannel } from 'discord.js';
+import { ChatInputCommandInteraction, GuildMember, TextChannel } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
 
-export async function ssclose(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
-  void wsManager;
+export async function ssclose(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
+  void _wsManager;
   let reason: string;
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     reason = interaction.options.getString('reason', true);
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}ssclose <reason>`, 'Screenshare Error'));
-      return;
-    }
-    reason = args.join(' ');
-  }
+  
   const channel = interaction.channel as TextChannel;
   const guild = interaction.guild;
 
@@ -54,7 +48,7 @@ export async function ssclose(interaction: Message | ChatInputCommandInteraction
       return;
     }
 
-    const closerId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+    const closerId = interaction.user.id;
     const result = await ScreenshareService.closeSession(guild, session.sessionId, closerId, reason);
 
     if (!result.success) {

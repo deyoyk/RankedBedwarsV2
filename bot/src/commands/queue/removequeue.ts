@@ -1,23 +1,16 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
-import config from '../../config/config';
 
-export async function removequeue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function removequeue(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let channelId: string;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     channelId = interaction.options.getString('channel_id', true);
-  } else {
-    if (!args || args.length !== 1) {
-      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}removequeue <channelId>`, 'error')] });
-      return;
-    }
-    channelId = args[0];
-  }
+  
 
   try {
     const queue = await Queue.findOneAndDelete({ channelId });

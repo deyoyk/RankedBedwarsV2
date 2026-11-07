@@ -33,13 +33,18 @@ function partyDoc() {
   } as any;
 }
 
-function interaction() {
+function interaction(action = 'invite', targetUser?: any) {
   const guild = { id: 'guild-1' };
   return {
+    id: `interaction-${action}`,
     guild,
-    author: { id: UID },
+    user: { id: UID },
     channelId: 'channel-1',
     client: { users: { cache: { get: jest.fn() } } },
+    options: {
+      getString: (name: string) => (name === 'action' ? action : null),
+      getUser: () => targetUser ?? null,
+    },
     reply: jest.fn().mockResolvedValue({}),
   } as any;
 }
@@ -51,41 +56,19 @@ function replyText(target: any): string {
 describe('party command safety', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('supports prefix party join with the party id', async () => {
-    mockedJoin.mockResolvedValue({ success: true, party: partyDoc() });
-    const target = interaction();
+    it('rejects self-invites before calling the service', async () => {
+    const target = interaction('invite', { id: UID, bot: false });
 
-    await party(target, ['join', 'P']);
-
-    expect(mockedJoin).toHaveBeenCalledWith(UID, 'P', target.guild);
-    expect(replyText(target)).toContain('successfully joined the party');
-  });
-
-  it('supports prefix party settings', async () => {
-    mockedUpdate.mockResolvedValue({ success: true, party: partyDoc() });
-    const target = interaction();
-
-    await party(target, ['settings', 'private', 'true']);
-
-    expect(mockedUpdate).toHaveBeenCalledWith(UID, 'private', 'true');
-    expect(replyText(target)).toContain('Party settings updated');
-  });
-
-  it('rejects self-invites before calling the service', async () => {
-    const target = interaction();
-    target.client.users.cache.get.mockReturnValue({ id: UID, bot: false });
-
-    await party(target, ['invite', `<@${UID}>`]);
+    await party(target);
 
     expect(PartyService.inviteToParty).not.toHaveBeenCalled();
     expect(replyText(target)).toContain('cannot invite yourself');
   });
 
   it('rejects bot invites before calling the service', async () => {
-    const target = interaction();
-    target.client.users.cache.get.mockReturnValue({ id: BOT_ID, bot: true });
+    const target = interaction('invite', { id: BOT_ID, bot: true });
 
-    await party(target, ['invite', `<@${BOT_ID}>`]);
+    await party(target);
 
     expect(PartyService.inviteToParty).not.toHaveBeenCalled();
     expect(replyText(target)).toContain('cannot invite a bot');

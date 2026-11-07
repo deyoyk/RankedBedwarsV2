@@ -4,7 +4,7 @@ import User from '../models/User';
 import { BanManager } from './BanManager';
 import { parseDuration } from '../utils/parseDuration';
 import { generatePunishmentId } from './punishmentBase';
-import { PunishmentOperation, PunishmentRecord, createPendingOperation, sendPunishmentNotification } from './punishmentHelpers';
+import { createPendingOperation, PunishmentOperation, PunishmentRecord, sendPunishmentNotification } from './punishmentHelpers';
 
 interface StrikeManagerStats {
   totalStrikes: number;

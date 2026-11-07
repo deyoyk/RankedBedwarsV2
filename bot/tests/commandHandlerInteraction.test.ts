@@ -49,7 +49,7 @@ describe('CommandHandler expired interaction guard', () => {
 
     await handler.handleInteraction(target);
 
-    expect(run).toHaveBeenCalledWith(target, undefined, expect.anything());
+    expect(run).toHaveBeenCalledWith(target, expect.anything());
   });
 
   it('ignores duplicate dispatch of the same interaction', async () => {

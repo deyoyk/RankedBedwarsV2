@@ -1,12 +1,11 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
-import config from '../../config/config';
-import { getMaxMvpsPerGame, getMaxBedBreakersPerGame, mvpLimitMessage, bedBreakerLimitMessage, uniquePlayers } from '../../utils/scoringLimits';
+import { bedBreakerLimitMessage, getMaxBedBreakersPerGame, getMaxMvpsPerGame, mvpLimitMessage, uniquePlayers } from '../../utils/scoringLimits';
 
 interface ScoreParams {
   gameId: number;
@@ -16,41 +15,26 @@ interface ScoreParams {
   reason: string;
 }
 
-function parseScoreArgs(interaction: Message | ChatInputCommandInteraction, args?: string[], _wsManager?: WebSocketManager): ScoreParams | null {
-  if (interaction instanceof ChatInputCommandInteraction) {
-    const gameId = interaction.options.getInteger('game_id');
-    const winningTeam = interaction.options.getInteger('winning_team') ?? interaction.options.getInteger('winningteam');
-    if (!gameId) return null;
-    if (!winningTeam || (winningTeam !== 1 && winningTeam !== 2)) return null;
-    const mvpsStr = interaction.options.getString('mvps') || '';
-    const bedbreaksStr = interaction.options.getString('bedbreaks') || '';
-    return {
-      gameId,
-      winningTeam: winningTeam as 1 | 2,
-      mvps: mvpsStr ? mvpsStr.split(',').map(id => id.trim()).filter(Boolean) : [],
-      bedbreaks: bedbreaksStr ? bedbreaksStr.split(',').map(id => id.trim()).filter(Boolean) : [],
-      reason: interaction.options.getString('reason') || `scored by <@${interaction.user.id}>: no reason provided`
-    };
-  } else {
-    if (!args || args.length < 3) return null;
-    const gameId = parseInt(args[0], 10);
-    const winningTeam = parseInt(args[1], 10);
-    if (!Number.isInteger(gameId) || gameId <= 0) return null;
-    if (winningTeam !== 1 && winningTeam !== 2) return null;
-    return {
-      gameId,
-      winningTeam: winningTeam as 1 | 2,
-      mvps: args[2] ? args[2].split(',').map(id => id.trim()).filter(Boolean) : [],
-      bedbreaks: args[3] ? args[3].split(',').map(id => id.trim()).filter(Boolean) : [],
-      reason: args[4] ? args.slice(4).join(' ') : `scored by <@${interaction.author.id}>: no reason provided`
-    };
-  }
+function parseScoreArgs(interaction: ChatInputCommandInteraction): ScoreParams | null {
+  const gameId = interaction.options.getInteger('game_id');
+  const winningTeam = interaction.options.getInteger('winning_team') ?? interaction.options.getInteger('winningteam');
+  if (!gameId) return null;
+  if (!winningTeam || (winningTeam !== 1 && winningTeam !== 2)) return null;
+  const mvpsStr = interaction.options.getString('mvps') || '';
+  const bedbreaksStr = interaction.options.getString('bedbreaks') || '';
+  return {
+    gameId,
+    winningTeam: winningTeam as 1 | 2,
+    mvps: mvpsStr ? mvpsStr.split(',').map(id => id.trim()).filter(Boolean) : [],
+    bedbreaks: bedbreaksStr ? bedbreaksStr.split(',').map(id => id.trim()).filter(Boolean) : [],
+    reason: interaction.options.getString('reason') || `scored by <@${interaction.user.id}>: no reason provided`
+  };
 }
 
-export async function score(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  const params = parseScoreArgs(interaction, args);
+export async function score(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
+  const params = parseScoreArgs(interaction);
   if (!params) {
-    await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}score <gameId> <winningTeam:1|2> [mvps_comma] [bedbreaks_comma] [reason]`, 'Score Command Error'));
+    await safeReply(interaction, errorEmbed(`Usage: /score <gameId> <winningTeam:1|2> [mvps_comma] [bedbreaks_comma] [reason]`, 'Score Command Error'));
     return;
   }
 
@@ -91,7 +75,7 @@ export async function score(interaction: Message | ChatInputCommandInteraction, 
       ignToId[user.ign] = user.discordId;
     }
 
-    const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
+    const resolvedWs = _wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
     if (!resolvedWs) {
       await safeReply(interaction, errorEmbed('WebSocket manager not available.', 'Score Command Error'));
       return;

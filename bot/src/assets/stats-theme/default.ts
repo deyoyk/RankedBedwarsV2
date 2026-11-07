@@ -1,17 +1,5 @@
 import { h, VNode } from '../renderer';
-import {
-  accent,
-  badge,
-  COLORS,
-  decor,
-  divider,
-  FONT,
-  MEDIUM,
-  panel,
-  rootStyle,
-  sectionLabel,
-  text,
-} from '../theme';
+import { accent, badge, COLORS, decor, divider, FONT, MEDIUM, panel, rootStyle, sectionLabel, text } from '../theme';
 
 export type DefaultTile = {
   value: string;

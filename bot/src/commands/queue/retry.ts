@@ -1,10 +1,9 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 
-export async function retry(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  void args;
+export async function retry(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
   const Game = (await import('../../models/Game')).default;
   const channelId = interaction.channelId;
   const game = await Game.findOne({ 'channels.text': channelId })

@@ -1,22 +1,16 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import UserModel from '../../models/User';
 import { fix } from '../../utils/fix';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
-import config from '../../config/config';
 
-export async function nick(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+export async function nick(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
+  const userId = interaction.user.id;
+  const action = interaction.options.getString('action', true).toLowerCase();
+  const nickname = (interaction.options.getString('nickname') || '').trim();
 
-  if (!args || args.length === 0 || (args[0].toLowerCase() === 'set' && args.length === 1)) {
-    await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}nick <set/remove> [nickname]`, 'Nickname Error'));
-    return;
-  }
-
-  const action = args[0].toLowerCase();
   if (action === 'set') {
-    const nickname = args.slice(1).join(' ').trim();
     if (!nickname) {
       await safeReply(interaction, errorEmbed('Please provide a nickname to set.', 'Nickname Error'));
       return;

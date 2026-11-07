@@ -34,7 +34,7 @@ describe('retry command', () => {
     const retryWarp = jest.fn().mockResolvedValue({ attempts: 1, maxAttempts: 3 });
     const target = interaction();
 
-    await retry(target, undefined, { getGameManager: () => ({ retryWarp }) } as any);
+    await retry(target, { getGameManager: () => ({ retryWarp }) } as any);
 
     expect(retryWarp).toHaveBeenCalledWith(42);
     expect(replyText(target)).toContain('attempt 1/3');
@@ -45,7 +45,7 @@ describe('retry command', () => {
     const retryWarp = jest.fn().mockRejectedValue(new Error('Please wait 12s before retrying game 42.'));
     const target = interaction();
 
-    await retry(target, undefined, { getGameManager: () => ({ retryWarp }) } as any);
+    await retry(target, { getGameManager: () => ({ retryWarp }) } as any);
 
     expect(replyText(target)).toContain('Please wait 12s');
   });
@@ -55,7 +55,7 @@ describe('retry command', () => {
     const retryWarp = jest.fn();
     const target = interaction();
 
-    await retry(target, undefined, { getGameManager: () => ({ retryWarp }) } as any);
+    await retry(target, { getGameManager: () => ({ retryWarp }) } as any);
 
     expect(retryWarp).not.toHaveBeenCalled();
     expect(replyText(target)).toContain('can no longer be retried');
@@ -65,7 +65,7 @@ describe('retry command', () => {
     GameModel.findOne.mockReturnValue(query({ gameId: 42, state: 'pending' }));
     const target = interaction();
 
-    await retry(target, undefined, { getGameManager: () => null } as any);
+    await retry(target, { getGameManager: () => null } as any);
 
     expect(replyText(target)).toContain('Game manager is not available');
   });

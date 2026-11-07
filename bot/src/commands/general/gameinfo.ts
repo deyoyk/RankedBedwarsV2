@@ -1,23 +1,16 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
-import { betterEmbed } from '../../utils/betterembed';
+import { betterEmbed, errorEmbed } from '../../utils/betterembed';
 import Game from '../../models/Game';
-import config from '../../config/config';
 
-export async function gameinfo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+export async function gameinfo(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
   let gameId: number | undefined;
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     gameId = interaction.options.getInteger('game_id', true);
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, `Usage: ${config.prefix}gameinfo <gameId>`);
-      return;
-    }
-    gameId = parseInt(args[0]);
-  }
+  
   if (!gameId || isNaN(gameId)) {
-    await safeReply(interaction, 'Invalid game ID.');
+    await safeReply(interaction, errorEmbed('Invalid game ID.', 'Game Info Error'));
     return;
   }
   const games = await Game.aggregate([
@@ -58,7 +51,7 @@ export async function gameinfo(interaction: Message | ChatInputCommandInteractio
   ]);
   const game = games[0];
   if (!game) {
-    await safeReply(interaction, 'Game not found!');
+    await safeReply(interaction, errorEmbed('Game not found!', 'Game Info Error'));
     return;
   }
 

@@ -1,40 +1,18 @@
-import { Message, ChatInputCommandInteraction, EmbedBuilder, User as DiscordUser, Guild, ComponentType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, EmbedBuilder, Guild, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
+import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
-import { PartyService, type PartyDocument } from '../../services/PartyService';
+import { type PartyDocument, PartyService } from '../../services/PartyService';
 import { PrivateGameService } from '../../services/PrivateGameService';
-import config from '../../config/config';
 
-export async function party(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  let action: string;
-  let targetUser: DiscordUser | undefined;
-  let extraArgs: string[] | undefined;
+export async function party(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
+  const action = interaction.options.getString('action', true);
+  const targetUser = interaction.options.getUser('user') || undefined;
+  const partyId = interaction.options.getString('party_id');
+  const argsString = interaction.options.getString('args');
+  const extraArgs = partyId ? ['join', partyId] : argsString ? argsString.split(/\s+/) : undefined;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
-    action = interaction.options.getString('action', true);
-    targetUser = interaction.options.getUser('user') || undefined;
-    const partyId = interaction.options.getString('party_id');
-    const argsString = interaction.options.getString('args');
-    if (partyId) extraArgs = ['join', partyId];
-    else if (argsString) extraArgs = argsString.split(/\s+/);
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}party <action> [user]`, 'Party Usage Error'));
-      return;
-    }
-    action = args[0];
-    extraArgs = args.slice(1);
-    if (args[1]) {
-      const mentionMatch = args[1].match(/^<@!?(\d+)>$/);
-      const targetId = mentionMatch ? mentionMatch[1] : (/^\d+$/.test(args[1]) ? args[1] : null);
-      if (targetId) {
-        targetUser = interaction.client.users.cache.get(targetId) ?? { id: targetId } as DiscordUser;
-      }
-    }
-  }
-
-  const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+  const userId = interaction.user.id;
   const guild = interaction.guild;
 
   if (!guild) {
@@ -98,11 +76,9 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
         await handleListParties(interaction);
         break;
       case 'join': {
-        const partyIdToJoin = interaction instanceof ChatInputCommandInteraction
-          ? (interaction.options.getString('party_id') ?? extraArgs?.[0])
-          : extraArgs?.[0];
+        const partyIdToJoin = interaction.options.getString('party_id') ?? extraArgs?.[0];
         if (!partyIdToJoin) {
-          await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}party join <partyId>`, 'Party Usage Error'));
+          await safeReply(interaction, errorEmbed(`Usage: /party join <partyId>`, 'Party Usage Error'));
           return;
         }
         await handleJoinParty(interaction, userId, partyIdToJoin, guild);
@@ -117,7 +93,7 @@ export async function party(interaction: Message | ChatInputCommandInteraction, 
   }
 }
 
-async function handleCreateParty(interaction: Message | ChatInputCommandInteraction, userId: string) {
+async function handleCreateParty(interaction: ChatInputCommandInteraction, userId: string) {
   const result = await PartyService.createParty(userId);
   
   if (!result.success) {
@@ -136,7 +112,7 @@ async function handleCreateParty(interaction: Message | ChatInputCommandInteract
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleInviteToParty(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
+async function handleInviteToParty(interaction: ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
   const result = await PartyService.inviteToParty(userId, targetId, guild);
   
   if (!result.success) {
@@ -228,7 +204,7 @@ function buildPartyEmbed(party: PartyDocument, description: string, color: strin
 }
 
 async function handlePartyAction(
-  interaction: Message | ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction,
   serviceCall: Promise<{ success: boolean; message?: string; party?: PartyDocument }>,
   embedConfig: { description: string; color: string; title: string; extraFields?: Array<{ name: string; value: string; inline: boolean }> }
 ) {
@@ -241,7 +217,7 @@ async function handlePartyAction(
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleLeaveParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: Guild) {
+async function handleLeaveParty(interaction: ChatInputCommandInteraction, userId: string, guild: Guild) {
   await handlePartyAction(
     interaction,
     PartyService.leaveParty(userId, guild),
@@ -249,7 +225,7 @@ async function handleLeaveParty(interaction: Message | ChatInputCommandInteracti
   );
 }
 
-async function handlePartyInfo(interaction: Message | ChatInputCommandInteraction, userId: string) {
+async function handlePartyInfo(interaction: ChatInputCommandInteraction, userId: string) {
   const result = await PartyService.getPartyInfo(userId);
   if (!result.success) {
     await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
@@ -268,7 +244,7 @@ async function handlePartyInfo(interaction: Message | ChatInputCommandInteractio
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleDisbandParty(interaction: Message | ChatInputCommandInteraction, userId: string, guild: Guild) {
+async function handleDisbandParty(interaction: ChatInputCommandInteraction, userId: string, guild: Guild) {
   await handlePartyAction(
     interaction,
     PartyService.disbandParty(userId, guild),
@@ -278,7 +254,7 @@ async function handleDisbandParty(interaction: Message | ChatInputCommandInterac
   );
 }
 
-async function handleKickFromParty(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
+async function handleKickFromParty(interaction: ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
   await handlePartyAction(
     interaction,
     PartyService.kickFromParty(userId, targetId, guild),
@@ -286,7 +262,7 @@ async function handleKickFromParty(interaction: Message | ChatInputCommandIntera
   );
 }
 
-async function handlePromoteToLeader(interaction: Message | ChatInputCommandInteraction, userId: string, targetId: string) {
+async function handlePromoteToLeader(interaction: ChatInputCommandInteraction, userId: string, targetId: string) {
   await handlePartyAction(
     interaction,
     PartyService.promoteToLeader(userId, targetId),
@@ -296,7 +272,7 @@ async function handlePromoteToLeader(interaction: Message | ChatInputCommandInte
   );
 }
 
-async function handlePartySettings(interaction: Message | ChatInputCommandInteraction, userId: string, args?: string[]) {
+async function handlePartySettings(interaction: ChatInputCommandInteraction, userId: string, args?: string[]) {
   if (!args || args.length === 0) {
     const result = await PartyService.getPartyInfo(userId);
     
@@ -336,7 +312,7 @@ async function handlePartySettings(interaction: Message | ChatInputCommandIntera
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleListParties(interaction: Message | ChatInputCommandInteraction) {
+async function handleListParties(interaction: ChatInputCommandInteraction) {
   const result = await PartyService.listPublicParties();
   
   if (!result.success) {
@@ -363,7 +339,7 @@ async function handleListParties(interaction: Message | ChatInputCommandInteract
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleJoinParty(interaction: Message | ChatInputCommandInteraction, userId: string, partyId: string, guild: Guild) {
+async function handleJoinParty(interaction: ChatInputCommandInteraction, userId: string, partyId: string, guild: Guild) {
   const result = await PartyService.joinParty(userId, partyId, guild);
   if (!result.success) {
     await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
@@ -377,7 +353,7 @@ async function handleJoinParty(interaction: Message | ChatInputCommandInteractio
 }
 
 async function handleStartPrivateGame(
-  interaction: Message | ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction,
   userId: string,
   guild: Guild,
   wsManager?: WebSocketManager,
@@ -519,7 +495,7 @@ async function handleStartPrivateGame(
 }
 
 async function handleCancelPrivateGame(
-  interaction: Message | ChatInputCommandInteraction,
+  interaction: ChatInputCommandInteraction,
   userId: string,
   wsManager?: WebSocketManager,
 ) {

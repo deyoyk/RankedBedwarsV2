@@ -1,36 +1,16 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
 import { safeReply } from '../../utils/safeReply';
-import { errorEmbed } from '../../utils/betterembed';
-import config from '../../config/config';
+import { errorEmbed, successEmbed } from '../../utils/betterembed';
 
-export async function startseason(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
-  void wsManager;
-  let seasonNumber: number;
-  let chapterNumber: number;
-  let name: string;
-  let description: string;
+export async function startseason(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
+  void _wsManager;
+  const seasonNumber = interaction.options.getInteger('season', true);
+  const chapterNumber = interaction.options.getInteger('chapter', true);
+  const name = interaction.options.getString('name', true);
+  const description = interaction.options.getString('description') || '';
 
-  if (interaction instanceof ChatInputCommandInteraction) {
-    seasonNumber = interaction.options.getInteger('season', true);
-    chapterNumber = interaction.options.getInteger('chapter', true);
-    name = interaction.options.getString('name', true);
-    description = interaction.options.getString('description') || '';
-  } else {
-    if (!args || args.length < 3) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}startseason <season> <chapter> <name> [description]`, 'StartSeason Usage Error'));
-      return;
-    }
-    seasonNumber = parseInt(args[0], 10);
-    chapterNumber = parseInt(args[1], 10);
-    name = args[2];
-    description = args.slice(3).join(' ') || '';
-    if (!Number.isInteger(seasonNumber) || !Number.isInteger(chapterNumber)) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}startseason <season> <chapter> <name> [description]`, 'StartSeason Usage Error'));
-      return;
-    }
-  }
 
   try {
     const result = await SeasonManager.startSeason({
@@ -43,13 +23,17 @@ export async function startseason(interaction: Message | ChatInputCommandInterac
     if (result.embed) {
       await safeReply(interaction, { embeds: [result.embed] });
     } else {
-      await safeReply(interaction, { content: result.message });
+      const embed = result.success
+        ? successEmbed(result.message, 'Season Started')
+        : errorEmbed(result.message, 'Season Start Failed');
+      await safeReply(interaction, embed);
     }
   } catch (error) {
     console.error('Error starting season:', error);
-    await safeReply(interaction, {
-      content: 'An error occurred while starting the season. Please check the logs and try again.'
-    }).catch(() => {});
+    await safeReply(interaction, errorEmbed(
+      'An error occurred while starting the season. Please check the logs and try again.',
+      'Season Start Error'
+    )).catch(() => {});
   }
 }
 

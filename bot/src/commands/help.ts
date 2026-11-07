@@ -1,12 +1,10 @@
-
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, ButtonBuilder, ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ChatInputCommandInteraction, StringSelectMenuBuilder, StringSelectMenuInteraction, StringSelectMenuOptionBuilder } from 'discord.js';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 import fs from 'fs';
 import path from 'path';
 import pkg from '../../package.json';
-import { themedEmbed } from '../utils/betterembed';
-
+import { errorEmbed, themedEmbed } from '../utils/betterembed';
 
 async function getCommandCategories() {
   const candidates = [
@@ -82,9 +80,8 @@ function getCommandRoles(cmd: string): string {
   }
 }
 
-export async function help(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
-  void args;
-  void wsManager;
+export async function help(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
+  void _wsManager;
   try {
     const commandCategories = await getCommandCategories();
     console.log('[Help] Command categories:', Object.keys(commandCategories));
@@ -97,7 +94,7 @@ export async function help(interaction: Message | ChatInputCommandInteraction, a
     const selectMenu = buildCategorySelectMenu(commandCategories);
 
     if (selectMenu.options.length === 0) {
-      await safeReply(interaction, { content: 'No command categories found.' });
+      await safeReply(interaction, errorEmbed('No command categories found.', 'Help Error'));
       return;
     }
 
@@ -108,7 +105,7 @@ export async function help(interaction: Message | ChatInputCommandInteraction, a
     console.error('Error in help command:', error);
 
     try {
-      await safeReply(interaction, { content: 'There was an error loading the help menu. Please try again.' });
+      await safeReply(interaction, errorEmbed('There was an error loading the help menu. Please try again.', 'Help Error'));
     } catch (followUpError) {
       console.error('Error sending followUp:', followUpError);
     }
@@ -184,7 +181,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
     console.error('Error in handleHelpMenu:', error);
     try {
       await interaction.editReply({
-        content: 'There was an error displaying the help menu. Please try again.',
+        embeds: [errorEmbed('There was an error displaying the help menu. Please try again.', 'Help Error').builder],
         components: []
       }).catch(() => {});
     } catch (replyError) {
@@ -211,7 +208,7 @@ export async function handleHelpPagination(interaction: ButtonInteraction) {
     console.error('Error in handleHelpPagination:', error);
     try {
       await interaction.update({
-        content: 'There was an error navigating the help pages. Please try again.',
+        embeds: [errorEmbed('There was an error navigating the help pages. Please try again.', 'Help Error').builder],
         components: []
       }).catch(() => {});
     } catch (replyError) {

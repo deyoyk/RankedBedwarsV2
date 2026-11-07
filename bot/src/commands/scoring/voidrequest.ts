@@ -1,11 +1,11 @@
-import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder, Message } from 'discord.js';
 import Game, { type IGame } from '../../models/Game';
 import configuration from '../../config/config';
 import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
-import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed, claimVoteRequest, releaseVoteRequest } from '../../utils/voteRequest';
-import { themedEmbed } from '../../utils/betterembed';
+import { buildResultEmbed, claimVoteRequest, createDiscussionThread, createVoteButtons, releaseVoteRequest, setupVoteCollector, VoteData } from '../../utils/voteRequest';
+import { errorEmbed, successEmbed, themedEmbed } from '../../utils/betterembed';
 
 interface VoidRequestData {
   gameId: string;
@@ -13,48 +13,33 @@ interface VoidRequestData {
   requesterId: string;
 }
 
-export async function voidrequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function voidrequest(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   try {
-    const requestData = await parseVoidRequest(interaction, args);
+    const requestData = await parseVoidRequest(interaction);
     if (!requestData) return;
 
     const validationResult = await validateVoidRequest(requestData);
     if (!validationResult.isValid) {
-      await safeReply(interaction, { content: validationResult.error });
+      await safeReply(interaction, errorEmbed(validationResult.error || 'Invalid void request.', 'Void Request Error'));
       return;
     }
 
     await createVoidRequest(interaction, requestData, validationResult.game);
   } catch (error) {
     console.error('Error in voidrequest command:', error);
-    await safeReply(interaction, { content: 'An error occurred while processing your void request.' });
+    await safeReply(interaction, errorEmbed('An error occurred while processing your void request.', 'Void Request Error'));
   }
 }
 
-async function parseVoidRequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<VoidRequestData | null> {
-  const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+async function parseVoidRequest(interaction: ChatInputCommandInteraction): Promise<VoidRequestData | null> {
+  const requesterId = interaction.user.id;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     const gameId = interaction.options.getString('game_id', true);
     const reason = interaction.options.getString('reason', true);
 
     return { gameId, reason, requesterId };
-  } else {
-    if (!args || args.length < 2) {
-      await safeReply(interaction, `Usage: ${configuration.prefix}voidrequest <gameid> <reason>`);
-      return null;
-    }
-
-    const [gameId, ...reasonParts] = args;
-    const reason = reasonParts.join(' ');
-
-    if (!reason.trim()) {
-      await safeReply(interaction, 'Please provide a valid reason for the void request.');
-      return null;
-    }
-
-    return { gameId, reason, requesterId };
-  }
+  
 }
 
 async function validateVoidRequest(data: VoidRequestData): Promise<{ isValid: true; game: IGame } | { isValid: false; error: string; game?: undefined }> {
@@ -79,10 +64,10 @@ async function validateVoidRequest(data: VoidRequestData): Promise<{ isValid: tr
   return { isValid: true, game };
 }
 
-async function createVoidRequest(interaction: Message | ChatInputCommandInteraction, data: VoidRequestData, game: IGame) {
+async function createVoidRequest(interaction: ChatInputCommandInteraction, data: VoidRequestData, game: IGame) {
   const channel = interaction.guild?.channels.cache.get(configuration.channels.voidrequestsChannel);
   if (!channel?.isTextBased()) {
-    await safeReply(interaction, { content: 'Void request channel not found.' });
+    await safeReply(interaction, errorEmbed('Void request channel not found.', 'Void Request Error'));
     return;
   }
 
@@ -91,7 +76,7 @@ async function createVoidRequest(interaction: Message | ChatInputCommandInteract
 
   const claimed = await claimVoteRequest(data.gameId, 'void', data.requesterId);
   if (!claimed) {
-    await safeReply(interaction, { content: 'There is already an open vote request for this game.' });
+    await safeReply(interaction, errorEmbed('There is already an open vote request for this game.', 'Void Request Error'));
     return;
   }
 
@@ -117,7 +102,7 @@ async function createVoidRequest(interaction: Message | ChatInputCommandInteract
     await processVoteResults(message, data, votes, allPlayers);
   });
 
-  await safeReply(interaction, { content: 'Void request created successfully.' });
+  await safeReply(interaction, successEmbed('Void request created successfully.', 'Void Request Created'));
 }
 
 function createVoidRequestEmbed(data: VoidRequestData, game: IGame): EmbedBuilder {
@@ -176,7 +161,8 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
     console.error('Error processing void request results:', error);
     await releaseVoteRequest(data.gameId, 'void');
     await message.edit({
-      content: `${teamMentions} Error processing void request results.`,
+      content: teamMentions,
+      embeds: [errorEmbed('Error processing void request results.', 'Void Request Error').builder],
       components: []
     });
   }

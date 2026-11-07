@@ -1,12 +1,10 @@
-
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { getEloRanks } from '../../utils/fix';
 
-
-export async function ranks(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function ranks(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
 
   try {
     const ranks = (await getEloRanks()).slice().sort((a, b) => a.startElo - b.startElo);

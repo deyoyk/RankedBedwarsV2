@@ -1,3 +1,5 @@
+import type { IGame } from '../models/Game';
+
 export enum GameState {
   PENDING = 'pending',
   ACTIVE = 'active',
@@ -10,8 +12,6 @@ export enum QueueType {
   RANDOM = 'random',
   PICKING = 'picking'
 }
-
-import type { IGame } from '../models/Game';
 
 export interface GameResources {
   gameId: number;

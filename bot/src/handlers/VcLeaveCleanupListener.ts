@@ -1,4 +1,3 @@
-
 import { Client, VoiceState } from 'discord.js';
 import Game from '../models/Game';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';

@@ -1,35 +1,23 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
-import { ensureUserStats, computeWlr } from '../../utils/userStats';
-import config from '../../config/config';
+import { computeWlr, ensureUserStats } from '../../utils/userStats';
 
-export async function lose(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function lose(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetId: string;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     const user = interaction.options.getUser('user');
     if (!user) {
       await safeReply(interaction, errorEmbed('User not found.'));
       return;
     }
     targetId = user.id;
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}lose <@user>`, 'Lose Usage Error'));
-      return;
-    }
-    const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
-    if (!mentionMatch) {
-      await safeReply(interaction, errorEmbed('Please provide a user mention (e.g. <@1234567890>).', 'Lose Usage Error'));
-      return;
-    }
-    targetId = mentionMatch[1];
-  }
+  
 
   try {
     const existing = await User.findOne({ discordId: targetId });

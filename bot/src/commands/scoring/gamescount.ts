@@ -1,8 +1,8 @@
 import { safeReply } from '../../utils/safeReply';
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, StringSelectMenuBuilder, ComponentType } from 'discord.js';
+import { ActionRowBuilder, ChatInputCommandInteraction, ComponentType, Message, StringSelectMenuBuilder } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
-import { betterEmbed } from '../../utils/betterembed';
+import { betterEmbed, errorEmbed } from '../../utils/betterembed';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
 
 const DURATIONS = [
@@ -18,7 +18,7 @@ const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 1280, height: 720 });
 const gamesChartCache = new Map<string, { at: number; buffer: Buffer }>();
 const GAMES_CHART_TTL_MS = 30000;
 
-export async function gamescount(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function gamescount(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let selectedDuration = '30d';
 
   function getStartDate(duration: string) {
@@ -199,20 +199,14 @@ async function renderChart(keys: string[], counts: Record<string, Record<string,
   embed.builder.setTimestamp();
 
   let sentMsg: Message;
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     sentMsg = await safeReply(interaction, { embeds: [embed.builder], files: [{ attachment: chartBuffer, name: 'games_count_chart.png' }], components, fetchReply: true }) as Message;
-  } else {
-    const channel = interaction.channel;
-    if (!channel || !('send' in channel) || typeof channel.send !== 'function') {
-      throw new Error('Cannot send games count chart: channel is not sendable.');
-    }
-    sentMsg = await channel.send({ embeds: [embed.builder], files: [{ attachment: chartBuffer, name: 'games_count_chart.png' }], components });
-  }
+  
 
   const collector = sentMsg.createMessageComponentCollector({ componentType: ComponentType.StringSelect, time: 5 * 60 * 1000 });
   collector.on('collect', async (i) => {
-    if (i.user.id !== (interaction instanceof ChatInputCommandInteraction ? interaction.user.id : (interaction as Message).author.id)) {
-      await i.reply({ content: 'You cannot interact with this menu.', ephemeral: true });
+    if (i.user.id !== interaction.user.id) {
+      await i.reply(errorEmbed('You cannot interact with this menu.', 'Games Count Error', true));
       return;
     }
     if (i.isStringSelectMenu && i.isStringSelectMenu() && i.customId === 'gamescount_duration') {

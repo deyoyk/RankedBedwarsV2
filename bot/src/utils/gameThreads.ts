@@ -1,10 +1,4 @@
-import {
-  ChannelType,
-  type Guild,
-  type GuildBasedChannel,
-  type TextChannel,
-  type ThreadChannel,
-} from 'discord.js';
+import { ChannelType, type Guild, type GuildBasedChannel, type TextChannel, type ThreadChannel } from 'discord.js';
 import config from '../config/config';
 
 export type GameTextChannel = ThreadChannel | TextChannel;

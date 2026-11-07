@@ -1,4 +1,4 @@
-import { Client, ChannelType, CategoryChannel, Guild, TextChannel, VoiceChannel } from 'discord.js';
+import { CategoryChannel, ChannelType, Client, Guild, TextChannel, VoiceChannel } from 'discord.js';
 import Game from '../models/Game';
 import Queue from '../models/Queue';
 import PickingSessionState from '../models/PickingSessionState';

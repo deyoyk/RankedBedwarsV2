@@ -4,8 +4,6 @@ const base = {
   token: 'tok',
   clientId: '123456789012345678',
   guildId: '1272163435467243612',
-  prefixenabled: true,
-  prefix: '!',
   workers: { enabled: false, tokens: [] },
   categories: { gameCategory: '', voiceCategory: '', screenshareCategory: '' },
   channels: {

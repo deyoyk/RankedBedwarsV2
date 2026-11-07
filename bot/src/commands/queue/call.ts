@@ -1,36 +1,19 @@
-import { Message, ChatInputCommandInteraction, VoiceChannel } from 'discord.js';
+import { ChatInputCommandInteraction, VoiceChannel } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import Game from '../../models/Game';
 import User from '../../models/User';
-import config from '../../config/config';
 
- 
-
-
-export async function call(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function call(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetUser: string;
   let senderId: string;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     const targetUserOption = interaction.options.getUser('user', true);
     targetUser = targetUserOption.id;
     senderId = interaction.user.id;
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}call <@user>`, 'Usage Error'));
-      return;
-    }
-    const userArg = args[0];
-    const userMatch = userArg.match(/^<@!?(\d+)>$/) || userArg.match(/^(\d+)$/);
-    if (!userMatch) {
-      await safeReply(interaction, errorEmbed('Please provide a valid user mention or ID.', 'Usage Error'));
-      return;
-    }
-    targetUser = userMatch[1];
-    senderId = interaction.author.id;
-  }
+  
 
   try {
     

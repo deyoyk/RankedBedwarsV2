@@ -1,9 +1,9 @@
-import { Message, ChatInputCommandInteraction, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
 import { IRecentGame } from '../../models/gameBase';
-import { themedEmbed } from '../../utils/betterembed';
+import { errorEmbed, themedEmbed } from '../../utils/betterembed';
 
 interface RecentGamesData {
   page: number;
@@ -12,41 +12,31 @@ interface RecentGamesData {
   requesterId: string;
 }
 
-export async function recentgames(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function recentgames(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   try {
-    const data = await parseRecentGamesRequest(interaction, args);
+    const data = await parseRecentGamesRequest(interaction);
     if (!data) return;
 
     const user = await findUser(data);
     if (!user) {
-      await safeReply(interaction, { 
-        content: data.userFilter ? `No user found: ${data.userFilter}` : 'User not found.' 
-      });
+      await safeReply(interaction, errorEmbed(
+        data.userFilter ? `No user found: ${data.userFilter}` : 'User not found.',
+        'Recent Games Error'
+      ));
       return;
     }
 
     await displayRecentGames(interaction, user, data);
   } catch (error) {
     console.error('Error in recentgames command:', error);
-    await safeReply(interaction, { content: 'An error occurred while fetching recent games.' });
+    await safeReply(interaction, errorEmbed('An error occurred while fetching recent games.', 'Recent Games Error'));
   }
 }
 
-async function parseRecentGamesRequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<RecentGamesData | null> {
-  const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
-  let page = 0;
-  let userFilter: string | undefined;
-
-  if (interaction instanceof ChatInputCommandInteraction) {
-    page = Math.max(0, (interaction.options.getInteger('page') || 1) - 1);
-    userFilter = interaction.options.getString('user') || undefined;
-  } else if (args && args.length > 0) {
-    const parsedPage = parseInt(args[0]);
-    if (!isNaN(parsedPage) && parsedPage > 0) {
-      page = parsedPage - 1;
-    }
-    userFilter = args[1];
-  }
+async function parseRecentGamesRequest(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<RecentGamesData | null> {
+  const requesterId = interaction.user.id;
+  const page = Math.max(0, (interaction.options.getInteger('page') || 1) - 1);
+  const userFilter = interaction.options.getString('user') || undefined;
 
   return { page, gamesPerPage: 15, userFilter, requesterId };
 }
@@ -67,7 +57,7 @@ async function findUser(data: RecentGamesData): Promise<RecentGamesUser | null> 
 
 type RecentGamesUser = Pick<IUser, 'discordId' | 'ign' | 'recentGames'>;
 
-async function displayRecentGames(interaction: Message | ChatInputCommandInteraction, user: RecentGamesUser, data: RecentGamesData) {
+async function displayRecentGames(interaction: ChatInputCommandInteraction, user: RecentGamesUser, data: RecentGamesData) {
   if (!user.recentGames || user.recentGames.length === 0) {
     const embed = createNoGamesEmbed(data.userFilter);
     await safeReply(interaction, { embeds: [embed] });
@@ -187,7 +177,7 @@ function createPaginationComponents(currentPage: number, totalPages: number): Ac
   return [row];
 }
 
-async function setupPaginationCollector(interaction: Message | ChatInputCommandInteraction, user: RecentGamesUser, data: RecentGamesData, totalPages: number) {
+async function setupPaginationCollector(interaction: ChatInputCommandInteraction, user: RecentGamesUser, data: RecentGamesData, totalPages: number) {
   const collector = interaction.channel?.createMessageComponentCollector({ 
     time: 300000,
     filter: (i) => i.user.id === data.requesterId
@@ -215,13 +205,13 @@ async function setupPaginationCollector(interaction: Message | ChatInputCommandI
       await i.update({ embeds: [embed], components });
     } catch (error) {
       console.error('Error handling pagination:', error);
-      await i.reply({ content: 'An error occurred while updating the page.', ephemeral: true });
+      await i.reply(errorEmbed('An error occurred while updating the page.', 'Recent Games Error', true));
     }
   });
 
   collector.on('end', async () => {
     try {
-      if (interaction instanceof ChatInputCommandInteraction && interaction.replied) {
+      if (interaction.replied) {
         const { safeReply } = await import('../../utils/safeReply');
         await safeReply(interaction, { components: [] });
       }

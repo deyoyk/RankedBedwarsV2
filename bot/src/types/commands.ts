@@ -1,15 +1,13 @@
-import { ChatInputCommandInteraction, Message } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 
 /**
- * Canonical command context passed to every command.
- * Keeps business logic identical while giving every file the same shape.
+ * Canonical slash-command context passed to every command.
  */
-export type CommandInteraction = Message | ChatInputCommandInteraction;
+export type CommandInteraction = ChatInputCommandInteraction;
 
 export type BotCommandFn = (
   interaction: CommandInteraction,
-  args?: string[],
   wsManager?: WebSocketManager,
 ) => Promise<void> | void;
 
@@ -21,7 +19,7 @@ export interface BotCommand {
 
 /**
  * Resolve the active WebSocketManager.
- * Prefers the injected instance, falls back to the global for legacy call sites.
+ * Prefers the injected instance, falls back to the global.
  */
 export function resolveWsManager(injected?: WebSocketManager): WebSocketManager | undefined {
   if (injected) return injected;
@@ -29,9 +27,7 @@ export function resolveWsManager(injected?: WebSocketManager): WebSocketManager 
   return g._wsManager;
 }
 
-/** Get the invoking user's id regardless of interaction type. */
+/** Get the invoking user's id. */
 export function getInvokerId(interaction: CommandInteraction): string {
-  return interaction instanceof ChatInputCommandInteraction
-    ? interaction.user.id
-    : interaction.author.id;
+  return interaction.user.id;
 }

@@ -1,3 +1,15 @@
+import { RawData, WebSocket, WebSocketServer } from 'ws';
+import { PresenceService } from '../services/PresenceService';
+import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
+import { queuePlayers } from '../types/queuePlayersMemory';
+import { GameResult, PlayerData } from '../types/GameTypes';
+import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
+import * as http from 'http';
+import express from 'express';
+import { Client, GuildMember } from 'discord.js';
+import config from '../config/config';
+import { maxPartySizeForQueue } from '../utils/partyQueue';
+import { getPlayerIgns } from '../utils/playerDirectory';
 
 const activeScreenshareThreads: {
   [ign: string]: {
@@ -6,19 +18,6 @@ const activeScreenshareThreads: {
     expiresAt: number;
   }
 } = {};
-
-import { WebSocketServer, WebSocket, RawData } from 'ws';
-import { PresenceService } from '../services/PresenceService';
-import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
-import { queuePlayers } from '../types/queuePlayersMemory';
-import { PlayerData, GameResult } from '../types/GameTypes';
-import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
-import * as http from 'http';
-import express from 'express';
-import { Client, GuildMember } from 'discord.js';
-import config from '../config/config';
-import { maxPartySizeForQueue } from '../utils/partyQueue';
-import { getPlayerIgns } from '../utils/playerDirectory';
 
 type MapEntry = MapsJsonPayload['reserved'][number];
 

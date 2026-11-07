@@ -1,8 +1,8 @@
 /**
  * A-to-Z smoke test for every Discord bot command.
- * No live bot needed: mocked Discord interactions + mocked DB/managers.
- * For each command: verifies export shape, then runs slash-happy,
- * prefix-happy, and prefix-empty (usage) paths without throwing,
+ * No live bot needed: mocked slash interactions + mocked DB/managers.
+ * For each command: verifies export shape, then runs the slash-happy path
+ * without throwing,
  * asserting a reply was sent.
  */
 import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
@@ -334,62 +334,62 @@ import { seasoninfo } from '../src/commands/season/seasoninfo';
 const MENTION = `<@${ID19}>`;
 const discordUser = { id: ID19, username: 'Steve', displayAvatarURL: () => 'http://avatar' };
 
-type Row = { name: string; fn: any; slash: Record<string, any>; prefix: string[] };
+type Row = { name: string; fn: any; slash: Record<string, any> };
 const ROWS: Row[] = [
-  { name: 'help', fn: help, slash: {}, prefix: [] },
-  { name: 'register', fn: register, slash: { ign: 'Steve' }, prefix: ['Steve'] },
-  { name: 'forceregister', fn: forceregister, slash: { user: discordUser, ign: 'Steve' }, prefix: [MENTION, 'Steve'] },
-  { name: 'forcerename', fn: forcerename, slash: { user: discordUser, new_ign: 'Alex' }, prefix: [MENTION, 'Alex'] },
-  { name: 'unregister', fn: unregister, slash: { user: discordUser }, prefix: [MENTION] },
-  { name: 'nick', fn: nick, slash: {}, prefix: ['set', 'CoolNick'] },
-  { name: 'settings', fn: settings, slash: {}, prefix: [] },
-  { name: 'refresh', fn: refresh, slash: {}, prefix: [] },
-  { name: 'fixall', fn: fixall, slash: {}, prefix: [] },
-  { name: 'addelo', fn: addelo, slash: { role_id: CHAN19, start_elo: 0, end_elo: 100, win_elo: 10, lose_elo: 5, mvp_elo: 2 }, prefix: [CHAN19, '0', '100', '10', '5', '2'] },
-  { name: 'removeelo', fn: removeelo, slash: { role_id: CHAN19 }, prefix: [CHAN19] },
-  { name: 'wipe', fn: wipe, slash: { user: discordUser }, prefix: [MENTION] },
-  { name: 'wipeeveryone', fn: wipeeveryone, slash: {}, prefix: [] },
-  { name: 'statreset', fn: statreset, slash: {}, prefix: [] },
-  { name: 'claimelo', fn: claimelo, slash: {}, prefix: [] },
-  { name: 'queues', fn: queues, slash: {}, prefix: [] },
-  { name: 'games', fn: games, slash: {}, prefix: [] },
-  { name: 'gameinfo', fn: gameinfo, slash: { game_id: 1 }, prefix: ['1'] },
-  { name: 'maps', fn: maps, slash: {}, prefix: [] },
-  { name: 'ranks', fn: ranks, slash: {}, prefix: [] },
-  { name: 'bonus', fn: bonus, slash: {}, prefix: [] },
-  { name: 'ban', fn: ban, slash: { user: discordUser, duration: '1h', reason: 'test' }, prefix: [MENTION, '1h', 'test'] },
-  { name: 'unban', fn: unban, slash: { user: discordUser, user_id: ID19 }, prefix: [ID19] },
-  { name: 'mute', fn: mute, slash: { user: discordUser, duration: '1h', reason: 'test' }, prefix: [MENTION, '1h', 'test'] },
-  { name: 'unmute', fn: unmute, slash: { user: discordUser, user_id: ID19 }, prefix: [ID19] },
-  { name: 'strike', fn: strike, slash: { user: discordUser, reason: 'test' }, prefix: [MENTION, 'test'] },
-  { name: 'unstrike', fn: unstrike, slash: { user: discordUser, reason: 'test' }, prefix: [MENTION, 'test'] },
-  { name: 'history', fn: history, slash: { user_id: ID19, type: 'ban' }, prefix: [ID19, 'ban'] },
-  { name: 'screenshare', fn: screenshare, slash: { user: discordUser, reason: 'check', image: { url: 'http://img.png' } }, prefix: [] },
-  { name: 'ssclose', fn: ssclose, slash: { reason: 'done' }, prefix: ['done'] },
-  { name: 'queue', fn: queue, slash: {}, prefix: [] },
-  { name: 'party', fn: party, slash: { action: 'info' }, prefix: ['info'] },
-  { name: 'call', fn: call, slash: { user: discordUser }, prefix: [MENTION] },
-  { name: 'retry', fn: retry, slash: {}, prefix: [] },
-  { name: 'addqueue', fn: addqueue, slash: { channel_id: CHAN19, max_players: 8, min_elo: 0, max_elo: 3000, is_ranked: true, is_picking: false }, prefix: [CHAN19, '8', '0', '3000', 'true', 'false'] },
-  { name: 'removequeue', fn: removequeue, slash: { channel_id: CHAN19 }, prefix: [CHAN19] },
-  { name: 'queuecontrol', fn: queuecontrol, slash: { __subcommand: 'enable', type: 'ranked' }, prefix: ['enable', 'ranked'] },
-  { name: 'score', fn: score, slash: { game_id: 1, winning_team: 1 }, prefix: ['1', '1', 'Steve'] },
-  { name: 'win', fn: win, slash: { user: discordUser }, prefix: [MENTION] },
-  { name: 'lose', fn: lose, slash: { user: discordUser }, prefix: [MENTION] },
-  { name: 'void', fn: voidGame, slash: { game_id: 1, reason: 'test' }, prefix: ['1', 'test'] },
-  { name: 'forcevoid', fn: forcevoid, slash: {}, prefix: [] },
-  { name: 'edit', fn: edit, slash: { user: discordUser, stat: 'elo', value: '1500' }, prefix: [MENTION, 'elo', '1500'] },
-  { name: 'gamescount', fn: gamescount, slash: {}, prefix: [] },
-  { name: 'strikerequest', fn: strikerequest, slash: { game_id: '1', target: discordUser, reason: 'test' }, prefix: ['1', MENTION, 'test'] },
-  { name: 'voidrequest', fn: voidrequest, slash: { game_id: '1', reason: 'test' }, prefix: ['1', 'test'] },
-  { name: 'stats', fn: stats, slash: { user: discordUser }, prefix: [MENTION] },
-  { name: 'leaderboard', fn: leaderboard, slash: { mode: 'elo', page: 1 }, prefix: ['elo', '1'] },
-  { name: 'recentgames', fn: recentgames, slash: { page: 1 }, prefix: [] },
-  { name: 'level', fn: level, slash: { user: discordUser }, prefix: [MENTION] },
-  { name: 'startseason', fn: startseason, slash: { season: 2, chapter: 1, name: 'S2' }, prefix: ['2', '1', 'S2'] },
-  { name: 'endseason', fn: endseason, slash: {}, prefix: [] },
-  { name: 'listseasons', fn: listseasons, slash: {}, prefix: [] },
-  { name: 'seasoninfo', fn: seasoninfo, slash: {}, prefix: [] },
+  { name: 'help', fn: help, slash: {} },
+  { name: 'register', fn: register, slash: { ign: 'Steve' } },
+  { name: 'forceregister', fn: forceregister, slash: { user: discordUser, ign: 'Steve' } },
+  { name: 'forcerename', fn: forcerename, slash: { user: discordUser, new_ign: 'Alex' } },
+  { name: 'unregister', fn: unregister, slash: { user: discordUser } },
+  { name: 'nick', fn: nick, slash: { action: 'remove' } },
+  { name: 'settings', fn: settings, slash: {} },
+  { name: 'refresh', fn: refresh, slash: {} },
+  { name: 'fixall', fn: fixall, slash: {} },
+  { name: 'addelo', fn: addelo, slash: { role_id: CHAN19, start_elo: 0, end_elo: 100, win_elo: 10, lose_elo: 5, mvp_elo: 2 } },
+  { name: 'removeelo', fn: removeelo, slash: { role_id: CHAN19 } },
+  { name: 'wipe', fn: wipe, slash: { user: discordUser } },
+  { name: 'wipeeveryone', fn: wipeeveryone, slash: {} },
+  { name: 'statreset', fn: statreset, slash: {} },
+  { name: 'claimelo', fn: claimelo, slash: {} },
+  { name: 'queues', fn: queues, slash: {} },
+  { name: 'games', fn: games, slash: {} },
+  { name: 'gameinfo', fn: gameinfo, slash: { game_id: 1 } },
+  { name: 'maps', fn: maps, slash: {} },
+  { name: 'ranks', fn: ranks, slash: {} },
+  { name: 'bonus', fn: bonus, slash: {} },
+  { name: 'ban', fn: ban, slash: { user: discordUser, duration: '1h', reason: 'test' } },
+  { name: 'unban', fn: unban, slash: { user: discordUser, user_id: ID19 } },
+  { name: 'mute', fn: mute, slash: { user: discordUser, duration: '1h', reason: 'test' } },
+  { name: 'unmute', fn: unmute, slash: { user: discordUser, user_id: ID19 } },
+  { name: 'strike', fn: strike, slash: { user: discordUser, reason: 'test' } },
+  { name: 'unstrike', fn: unstrike, slash: { user: discordUser, reason: 'test' } },
+  { name: 'history', fn: history, slash: { user_id: ID19, type: 'ban' } },
+  { name: 'screenshare', fn: screenshare, slash: { user: discordUser, reason: 'check', image: { url: 'http://img.png' } } },
+  { name: 'ssclose', fn: ssclose, slash: { reason: 'done' } },
+  { name: 'queue', fn: queue, slash: {} },
+  { name: 'party', fn: party, slash: { action: 'info' } },
+  { name: 'call', fn: call, slash: { user: discordUser } },
+  { name: 'retry', fn: retry, slash: {} },
+  { name: 'addqueue', fn: addqueue, slash: { channel_id: CHAN19, max_players: 8, min_elo: 0, max_elo: 3000, is_ranked: true, is_picking: false } },
+  { name: 'removequeue', fn: removequeue, slash: { channel_id: CHAN19 } },
+  { name: 'queuecontrol', fn: queuecontrol, slash: { __subcommand: 'enable', type: 'ranked' } },
+  { name: 'score', fn: score, slash: { game_id: 1, winning_team: 1 } },
+  { name: 'win', fn: win, slash: { user: discordUser } },
+  { name: 'lose', fn: lose, slash: { user: discordUser } },
+  { name: 'void', fn: voidGame, slash: { game_id: 1, reason: 'test' } },
+  { name: 'forcevoid', fn: forcevoid, slash: {} },
+  { name: 'edit', fn: edit, slash: { user: discordUser, stat: 'elo', value: '1500' } },
+  { name: 'gamescount', fn: gamescount, slash: {} },
+  { name: 'strikerequest', fn: strikerequest, slash: { game_id: '1', target: discordUser, reason: 'test' } },
+  { name: 'voidrequest', fn: voidrequest, slash: { game_id: '1', reason: 'test' } },
+  { name: 'stats', fn: stats, slash: { user: discordUser } },
+  { name: 'leaderboard', fn: leaderboard, slash: { mode: 'elo', page: 1 } },
+  { name: 'recentgames', fn: recentgames, slash: { page: 1 } },
+  { name: 'level', fn: level, slash: { user: discordUser } },
+  { name: 'startseason', fn: startseason, slash: { season: 2, chapter: 1, name: 'S2' } },
+  { name: 'endseason', fn: endseason, slash: {} },
+  { name: 'listseasons', fn: listseasons, slash: {} },
+  { name: 'seasoninfo', fn: seasoninfo, slash: {} },
 ];
 
 describe('command contract: exports + canonical signature', () => {
@@ -428,10 +428,20 @@ describe('CommandManager registers every command once with valid slash payload',
     }
     expect(new Set(names).size).toBe(names.length);
     for (const cmd of cmds) {
+      expect(cmd.name).toMatch(/^[a-z0-9_-]{1,32}$/);
+      expect(cmd.description.length).toBeLessThanOrEqual(100);
       const opts = cmd.options ?? cmd.apiData?.options ?? [];
+      expect(opts.length).toBeLessThanOrEqual(25);
       for (const o of opts) {
         expect(o.type).toBeDefined();
         expect(o.name).toBeDefined();
+        expect(o.name).toMatch(/^[a-z0-9_-]{1,32}$/);
+        expect(String(o.description ?? '').length).toBeLessThanOrEqual(100);
+        expect([1, 2, 3, 4, 5, 6, 7, 8, 10, 11]).toContain(o.type);
+        if ('choices' in o && Array.isArray(o.choices)) {
+          expect(o.choices.length).toBeGreaterThan(0);
+          expect(o.choices.length).toBeLessThanOrEqual(25);
+        }
       }
     }
     await (mgr as any).registerSlashCommands();
@@ -439,55 +449,18 @@ describe('CommandManager registers every command once with valid slash payload',
   });
 });
 
-describe.each(ROWS.map(r => [r.name, r.fn, r.slash, r.prefix]))(
+describe.each(ROWS.map(r => [r.name, r.fn, r.slash]))(
   'smoke: %s',
-  (_name, fn: any, slashOpts: any, prefixArgs: string[]) => {
+  (_name, fn: any, slashOpts: any) => {
     it('slash happy-path resolves and replies', async () => {
       const interaction = mockSlash(slashOpts);
-      await expect(fn(interaction, undefined, wsManager)).resolves.toBeUndefined();
+      await expect(fn(interaction, wsManager)).resolves.toBeUndefined();
       expect(replied(interaction)).toBe(true);
-    });
-    it('prefix happy-path resolves and replies', async () => {
-      const interaction = mockMessage();
-      await expect(fn(interaction, prefixArgs, wsManager)).resolves.toBeUndefined();
-      const answered = interaction.reply.mock.calls.length > 0
-        || (interaction.channel.send?.mock.calls.length ?? 0) > 0;
-      expect(answered).toBe(true);
-    });
-    it('prefix empty-args does not throw (usage path)', async () => {
-      const interaction = mockMessage();
-      await expect(fn(interaction, [], wsManager)).resolves.toBeUndefined();
-      const answered = interaction.reply.mock.calls.length > 0
-        || (interaction.channel.send?.mock.calls.length ?? 0) > 0;
-      expect(answered).toBe(true);
     });
   }
 );
 
-describe('CommandHandler routing incl. aliases, permissions, errors', () => {
-  it('routes prefix aliases and unknown commands', async () => {
-    const config = (await import('../src/config/config')).default as any;
-    const prevEnabled = config.prefixenabled;
-    const prevPrefix = config.prefix;
-    config.prefixenabled = true;
-    config.prefix = '!';
-    try {
-      const { CommandHandler } = await import('../src/handlers/CommandHandler');
-      const handler = new CommandHandler({} as any, wsManager);
-      const banFn = jest.fn().mockResolvedValue(undefined);
-      handler.registerCommand('ban', banFn);
-      handler.registerAlias('tb', 'ban');
-      const msg = mockMessage({ content: '!tb @user 1h spam' });
-      await handler.handleMessage(msg);
-      expect(banFn).toHaveBeenCalled();
-      const unknown = mockMessage({ content: '!nope' });
-      await handler.handleMessage(unknown);
-      expect(unknown.reply).toHaveBeenCalled();
-    } finally {
-      config.prefixenabled = prevEnabled;
-      config.prefix = prevPrefix;
-    }
-  });
+describe('CommandHandler routing, permissions, errors', () => {
   it('denies without permission and defers slash', async () => {
     const { CommandHandler } = await import('../src/handlers/CommandHandler');
     (global as any)._wsManager = { getPermission: () => ['999'] };

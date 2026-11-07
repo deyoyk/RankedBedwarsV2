@@ -1,34 +1,19 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
-import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
-import config from '../../config/config';
+import { isValidIgn } from '../../utils/inputValidation';
 
-
-
-export async function forcerename(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  let targetUser: string | null;
-  let newIgn: string;
-
-  if (interaction instanceof ChatInputCommandInteraction) {
-    const user = interaction.options.getUser('user', true);
-    targetUser = user.id;
-    newIgn = interaction.options.getString('new_ign', true);
-  } else {
-    if (!args || args.length < 2) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}forcerename <user> <newign>`, 'Force Rename Error'));
-      return;
-    }
-    targetUser = parseDiscordId(args[0]);
-    if (!targetUser) {
-      await safeReply(interaction, errorEmbed('Please mention a valid user or ID.', 'Force Rename Error'));
-      return;
-    }
-    newIgn = args[1];
+export async function forcerename(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
+  const user = interaction.options.getUser('user');
+  if (!user) {
+    await safeReply(interaction, errorEmbed('Please provide a valid user.', 'Force Rename Error'));
+    return;
   }
+  const targetUser = user.id;
+  const newIgn = interaction.options.getString('new_ign', true);
 
   if (!isValidIgn(newIgn)) {
     await safeReply(interaction, errorEmbed('IGN must be 3-16 characters of letters, numbers or underscores.', 'Force Rename Error'));
@@ -55,7 +40,7 @@ export async function forcerename(interaction: Message | ChatInputCommandInterac
       { name: 'User', value: `<@${targetUser}>`, inline: true },
       { name: 'Previous IGN', value: oldIgn || 'None', inline: true },
       { name: 'New IGN', value: newIgn, inline: true },
-      { name: 'Moderator', value: `<@${interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id}>`, inline: true }
+      { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true }
     );
     await safeReply(interaction, embed);
 

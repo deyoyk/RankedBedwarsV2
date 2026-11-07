@@ -4,7 +4,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import config from '../config/config';
 import os from 'os';
 import botPackage from '../../package.json';
-import { themedEmbed, EMBED_THEME } from '../utils/betterembed';
+import { EMBED_THEME, themedEmbed } from '../utils/betterembed';
 
 export const STATUS_EMBED_TITLE = 'Bot Environment Status';
 const STATUS_WARNING_COLOR = 0xF1C40F;

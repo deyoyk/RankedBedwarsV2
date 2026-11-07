@@ -1,25 +1,21 @@
-﻿import { Client, Guild, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
-import type { MessageCreateOptions } from 'discord.js';
+import { ChannelType, Client, EmbedBuilder, Guild, type MessageCreateOptions, PermissionFlagsBits } from 'discord.js';
 import Game, { IGame } from '../models/Game';
 import GameSettlement from '../models/GameSettlement';
 import User, { IUser } from '../models/User';
 import EloRank, { IEloRank } from '../models/EloRank';
-import { getNextSequence, Counter } from '../models/Counter';
+import { Counter, getNextSequence } from '../models/Counter';
 import config from '../config/config';
-import { GameState, GameResources, WarpRequestData, GameResult, VoidResult, PlayerData } from '../types/GameTypes';
+import { GameResources, GameResult, GameState, PlayerData, VoidResult, WarpRequestData } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { fix } from '../utils/fix';
 import { normalizeTeams } from './utils';
 import { generateScoreImageBuffer } from '../utils/scoreImage';
-import {
-  checkLevelUp,
-  EXPERIENCE_REWARDS
-} from '../utils/levelSystem';
+import { checkLevelUp, EXPERIENCE_REWARDS } from '../utils/levelSystem';
 import { WorkersManager } from '../managers/WorkersManager';
 import { updateDailyElo } from '../utils/userStats';
 import type { IRecentGame } from '../models/gameBase';
 import type { ICombatEntry } from '../models/gameTypes';
-import { parseTiers, streakBonusFor, bountyForOpponentStreak, type ProgressionTier } from '../utils/eloProgression';
+import { bountyForOpponentStreak, parseTiers, type ProgressionTier, streakBonusFor } from '../utils/eloProgression';
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import { themedEmbed } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';

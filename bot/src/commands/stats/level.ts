@@ -1,29 +1,18 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
-import { getLevelInfo, EXPERIENCE_REWARDS } from '../../utils/levelSystem';
+import { EXPERIENCE_REWARDS, getLevelInfo } from '../../utils/levelSystem';
 import { safeReply } from '../../utils/safeReply';
 import { themedEmbed } from '../../utils/betterembed';
 
-export async function level(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
-    void wsManager;
+export async function level(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
+    void _wsManager;
     try {
-        let targetId: string;
-        let targetAvatar: string | undefined;
-        let targetUsername: string | undefined;
-        if (interaction instanceof ChatInputCommandInteraction) {
-            const targetUser = interaction.options.getUser('user') || interaction.user;
-            targetId = targetUser.id;
-            targetAvatar = targetUser.displayAvatarURL();
-            targetUsername = targetUser.username;
-        } else {
-            if (args && args.length > 0) {
-                const m = args[0].match(/^<@!?(\d+)>$/);
-                targetId = m ? m[1] : args[0].replace(/[<@!>]/g, '');
-            } else {
-                targetId = interaction.author.id;
-            }
-        }
+        const targetUser = interaction.options.getUser('user') || interaction.user;
+        const targetId = targetUser.id;
+        const targetAvatar = targetUser.displayAvatarURL();
+        const targetUsername = targetUser.username;
+
         const user = await User.findOne({ discordId: targetId }).select('discordId ign experience').lean();
 
         if (!user) {

@@ -1,16 +1,12 @@
 import mongoose from 'mongoose';
-import Season from '../models/Season';
-import SeasonStats from '../models/SeasonStats';
-import SeasonGames from '../models/SeasonGames';
+import Season, { ISeason } from '../models/Season';
+import SeasonStats, { ISeasonStats } from '../models/SeasonStats';
+import SeasonGames, { ISeasonGames } from '../models/SeasonGames';
 import User from '../models/User';
 import Game from '../models/Game';
-import { ISeason } from '../models/Season';
-import { ISeasonStats } from '../models/SeasonStats';
-import { ISeasonGames } from '../models/SeasonGames';
-
 import { getLevelInfo } from '../utils/levelSystem';
 import { EmbedBuilder } from 'discord.js';
-import { validatePositiveInt, validatePageLimit, computePagination } from './validationHelpers';
+import { computePagination, validatePageLimit, validatePositiveInt } from './validationHelpers';
 import { themedEmbed } from '../utils/betterembed';
 
 export interface SeasonStartOptions {

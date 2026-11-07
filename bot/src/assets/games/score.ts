@@ -1,17 +1,5 @@
 import { h, VNode } from '../renderer';
-import {
-  avatar,
-  badge,
-  COLORS,
-  decor,
-  divider,
-  FONT,
-  gameFooter,
-  MEDIUM,
-  panel,
-  rootStyle,
-  text,
-} from '../theme';
+import { avatar, badge, COLORS, decor, divider, FONT, gameFooter, MEDIUM, panel, rootStyle, text } from '../theme';
 
 export type ScoreTemplatePlayer = {
   username: string;

@@ -1,23 +1,15 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import Season from '../../models/Season';
-import { betterEmbed } from '../../utils/betterembed';
+import { betterEmbed, themedEmbed } from '../../utils/betterembed';
 import { resolveTheme } from '../../assets/stats-theme';
 import { getLevelInfo } from '../../utils/levelSystem';
-import config from '../../config/config';
 
- 
+export async function stats(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
+  const targetUserId = interaction.options.getUser('user')?.id || interaction.user.id;
 
-export async function stats(interaction: Message | ChatInputCommandInteraction, args?: string[], _wsManager?: WebSocketManager) {
-  let targetUserId: string;
-
-  if (interaction instanceof ChatInputCommandInteraction) {
-    targetUserId = interaction.options.getUser('user')?.id || interaction.user.id;
-  } else {
-    targetUserId = args && args[0] ? args[0].replace(/[<@!>]/g, '') : interaction.author.id;
-  }
 
 
   
@@ -32,13 +24,6 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
     return;
   }
 
-  if (!(interaction instanceof ChatInputCommandInteraction) && (!args || args.length === 0)) {
-    const usageEmbed = betterEmbed(`Usage: ${config.prefix}stats <@user|userId>`, '#ffcc00', 'Stats Usage');
-    await safeReply(interaction, { embeds: [usageEmbed.builder] });
-    return;
-  }
-
-  
   const wins = user.wins || 0;
   const losses = user.losses || 0;
   const games = user.games || 0;
@@ -185,5 +170,8 @@ export async function stats(interaction: Message | ChatInputCommandInteraction, 
     return;
   }
 
-  await safeReply(interaction, { files: [{ attachment: buffer, name: `${playerData.ign}_stats.png` }], content: '' });
+  await safeReply(interaction, {
+    embeds: [themedEmbed().setTitle('Player Stats').setImage(`attachment://${playerData.ign}_stats.png`)],
+    files: [{ attachment: buffer, name: `${playerData.ign}_stats.png` }]
+  });
 }

@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { betterEmbed } from '../../utils/betterembed';
 import Game from '../../models/Game';
@@ -6,7 +6,7 @@ import { paginate } from '../../utils/paginate';
 
 type GameListItem = { gameId: number; state: string };
 
-export async function games(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function games(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   await paginate<GameListItem>(interaction, {
     commandName: 'games',
     title: 'Game History',

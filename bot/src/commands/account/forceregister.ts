@@ -1,34 +1,19 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
-import { parseDiscordId, isValidIgn } from '../../utils/inputValidation';
-import config from '../../config/config';
+import { isValidIgn } from '../../utils/inputValidation';
 
-
-
-export async function forceregister(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  let targetUser: string | null;
-  let ign: string;
-
-  if (interaction instanceof ChatInputCommandInteraction) {
-    const user = interaction.options.getUser('user', true);
-    targetUser = user.id;
-    ign = interaction.options.getString('ign', true);
-  } else {
-    if (!args || args.length < 2) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}forceregister <user> <ign>`, 'Force Register Error'));
-      return;
-    }
-    targetUser = parseDiscordId(args[0]);
-    if (!targetUser) {
-      await safeReply(interaction, errorEmbed('Please mention a valid user or ID.', 'Force Register Error'));
-      return;
-    }
-    ign = args[1];
+export async function forceregister(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
+  const user = interaction.options.getUser('user');
+  if (!user) {
+    await safeReply(interaction, errorEmbed('Please provide a valid user.', 'Force Register Error'));
+    return;
   }
+  const targetUser = user.id;
+  const ign = interaction.options.getString('ign', true);
 
   if (!isValidIgn(ign)) {
     await safeReply(interaction, errorEmbed('IGN must be 3-16 characters of letters, numbers or underscores.', 'Force Register Error'));
@@ -57,7 +42,7 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
         { name: 'User', value: `<@${targetUser}>`, inline: true },
         { name: 'Previous IGN', value: oldIgn || 'None', inline: true },
         { name: 'New IGN', value: ign, inline: true },
-        { name: 'Moderator', value: `<@${interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id}>`, inline: true }
+        { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: true }
       );
       await safeReply(interaction, embed);
     } else {
@@ -103,7 +88,7 @@ export async function forceregister(interaction: Message | ChatInputCommandInter
       const embed = successEmbed(`Successfully force registered <@${targetUser}>`, '✅ User Force Registered');
       embed.builder.addFields(
         { name: 'IGN', value: ign, inline: false },
-        { name: 'Moderator', value: `<@${interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id}>`, inline: false }
+        { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: false }
       );
       await safeReply(interaction, embed);
     }

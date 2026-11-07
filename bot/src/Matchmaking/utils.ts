@@ -1,7 +1,7 @@
 import User from '../models/User';
 import { MapService } from '../managers/MapManager';
 import config from '../config/config';
-import { scoreMapsByFrequency, pickLeastPlayedMap, resolveMapFrequencyOptions } from '../utils/mapFrequency';
+import { pickLeastPlayedMap, resolveMapFrequencyOptions, scoreMapsByFrequency } from '../utils/mapFrequency';
 import { getPlayerIgns } from '../utils/playerDirectory';
 
 export function normalizeIdList(ids: string[]): string[] {

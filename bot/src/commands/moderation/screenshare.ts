@@ -1,17 +1,13 @@
-import { Message, ChatInputCommandInteraction, TextChannel } from 'discord.js';
+import { ChatInputCommandInteraction, TextChannel } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
 
-export async function screenshare(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
+export async function screenshare(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager): Promise<void> {
   const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
   void resolvedWs;
-  if (!(interaction instanceof ChatInputCommandInteraction)) {
-    await safeReply(interaction, errorEmbed('Use /screenshare <user> <reason> [image] (slash command) to request a screenshare.', 'Screenshare Error'));
-    return;
-  }
   const target = interaction.options.getUser('user') ?? interaction.options.getUser('target');
   const reason = interaction.options.getString('reason', true);
   const image = interaction.options.getAttachment('image') ?? interaction.options.getAttachment('proof');

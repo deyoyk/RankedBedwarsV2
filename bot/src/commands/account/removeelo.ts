@@ -1,23 +1,15 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { safeReply } from '../../utils/safeReply';
-import config from '../../config/config';
 
-
-export async function removeelo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function removeelo(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let roleId: string;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     roleId = interaction.options.getString('role_id', true);
-  } else {
-    if (!args || args.length !== 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}removeelo <roleId>`, 'ELO Rank Removal Error'));
-      return;
-    }
-    roleId = args[0];
-  }
+  
 
   try {
     const rank = await EloRank.findOneAndDelete({ roleId });

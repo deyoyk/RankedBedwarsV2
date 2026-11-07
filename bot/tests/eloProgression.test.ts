@@ -257,7 +257,7 @@ describe('ranks command progression sections', () => {
     const { getEloRanks } = require('../src/utils/fix');
     getEloRanks.mockResolvedValue([{ roleId: '123456789012345678', startElo: 0, endElo: 999, winElo: 10, loseElo: 5, mvpElo: 2, bedElo: 1 }]);
     const reply = jest.fn().mockResolvedValue({});
-    await ranks({ reply } as any, [], undefined);
+    await ranks({ reply, user: { id: '1' } } as any);
     expect(reply).toHaveBeenCalled();
     const text = JSON.stringify(reply.mock.calls[0][0]);
     expect(text).toContain('123456789012345678');

@@ -3,7 +3,8 @@ import { wipe } from '../commands/account/wipe';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
-import { Client, Collection, ButtonInteraction, SlashCommandBuilder, type ApplicationCommandDataResolvable, type ApplicationCommandOptionData } from 'discord.js';
+import { errorEmbed, successEmbed } from '../utils/betterembed';
+import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, SlashCommandBuilder } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
 import { addelo } from '../commands/account/addelo';
@@ -39,7 +40,7 @@ import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
 import { lose } from '../commands/scoring/lose';
 import { unregister } from '../commands/account/unregister';
-import { help, handleHelpMenu, handleHelpPagination } from '../commands/help';
+import { handleHelpMenu, handleHelpPagination, help } from '../commands/help';
 import { leaderboard } from '../commands/stats/leaderboard';
 import { removequeue } from '../commands/queue/removequeue';
 import { removeelo } from '../commands/account/removeelo';
@@ -59,10 +60,6 @@ import { seasoninfo } from '../commands/season/seasoninfo';
 import { statreset } from '../commands/account/statreset';
 import { claimelo } from '../commands/account/claimelo';
 import { queuecontrol, queueControlData } from '../commands/queue/queuecontrol';
-
-
-
-
 
 interface Command {
   name: string;
@@ -89,13 +86,6 @@ export class CommandManager {
       this.commandHandler.registerCommand(name, command.execute);
     }
 
-    this.commandHandler.registerAlias('tempban', 'ban');
-    this.commandHandler.registerAlias('tb', 'ban');
-    this.commandHandler.registerAlias('tempmute', 'mute');
-    this.commandHandler.registerAlias('tm', 'mute');
-
-
-    client.on('messageCreate', (message) => this.commandHandler.handleMessage(message));
     client.on('interactionCreate', async (interaction) => {
       try {
 
@@ -132,18 +122,19 @@ export class CommandManager {
 
         try {
           if (interaction.isRepliable()) {
+            const embed = errorEmbed('An error occurred while processing your request.', 'Command Error').builder;
             if (!interaction.replied && !interaction.deferred) {
               await interaction.reply({
-                content: 'An error occurred while processing your request.',
+                embeds: [embed],
                 flags: 64 
               }).catch(() => { });
             } else if (interaction.deferred) {
               await interaction.editReply({
-                content: 'An error occurred while processing your request.'
+                embeds: [embed]
               }).catch(() => { });
             } else if (interaction.replied) {
               await interaction.followUp({
-                content: 'An error occurred while processing your request.',
+                embeds: [embed],
                 flags: 64 
               }).catch(() => { });
             }
@@ -168,23 +159,23 @@ export class CommandManager {
 
       const sessionId = interaction.customId.replace('ss_cancel_', '');
       if (!sessionId) {
-        await interaction.reply({ content: 'Invalid session ID.', ephemeral: true });
+        await interaction.reply(errorEmbed('Invalid session ID.', 'Screenshare Error', true));
         return;
       }
 
       const session = await ScreenshareService.getSessionById(sessionId);
       if (!session) {
-        await interaction.reply({ content: 'Screenshare session not found or already closed.', ephemeral: true });
+        await interaction.reply(errorEmbed('Screenshare session not found or already closed.', 'Screenshare Error', true));
         return;
       }
 
       if (session.status !== 'pending') {
-        await interaction.reply({ content: `This screenshare session is already ${session.status}.`, ephemeral: true });
+        await interaction.reply(errorEmbed(`This screenshare session is already ${session.status}.`, 'Screenshare Error', true));
         return;
       }
 
       if (session.requesterId !== interaction.user.id) {
-        await interaction.reply({ content: 'Only the requester can cancel this screenshare request.', ephemeral: true });
+        await interaction.reply(errorEmbed('Only the requester can cancel this screenshare request.', 'Screenshare Error', true));
         return;
       }
 
@@ -196,7 +187,7 @@ export class CommandManager {
       );
 
       if (!result.success) {
-        await interaction.reply({ content: result.error || 'Failed to cancel the screenshare request.', ephemeral: true });
+        await interaction.reply(errorEmbed(result.error || 'Failed to cancel the screenshare request.', 'Screenshare Error', true));
         return;
       }
 
@@ -209,17 +200,13 @@ export class CommandManager {
         console.warn('[CommandManager] Failed to update cancelled screenshare message:', editError);
       }
 
-      await interaction.reply({ content: 'Screenshare request cancelled.', ephemeral: true });
+      await interaction.reply(successEmbed('Screenshare request cancelled.', 'Screenshare Cancelled', true));
     } catch (error) {
       console.error('[CommandManager] Error handling screenshare cancel:', error);
       if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: 'There was an error cancelling the screenshare request.', ephemeral: true }).catch(() => {});
+        await interaction.reply(errorEmbed('There was an error cancelling the screenshare request.', 'Screenshare Error', true)).catch(() => {});
       }
     }
-  }
-
-  private regChat(name: string, description: string, execute: Command['execute'], options: ApplicationCommandOptionData[] = [], apiData?: Command['apiData']) {
-    this.reg(name, description, execute, options, apiData);
   }
 
   private registerCommands() {
@@ -249,7 +236,7 @@ export class CommandManager {
   }
 
   private registerQueueCommands() {
-    this.regChat('queuecontrol', 'Enable or disable queues by type or specific queue', queuecontrol, [], queueControlData.toJSON());
+    this.reg('queuecontrol', 'Enable or disable queues by type or specific queue', queuecontrol, [], queueControlData.toJSON());
     this.reg('queue', 'Show information about players in the current queue', queue);
     this.reg('party', 'Party management', party, [
       { name: 'action', description: 'Party action to perform', type: 3, required: true, choices: [
@@ -355,12 +342,12 @@ export class CommandManager {
         { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }, { name: 'Strike', value: 'strike' }
       ]}
     ]);
-    this.regChat('screenshare', 'Request a screenshare on a user', screenshare, [
+    this.reg('screenshare', 'Request a screenshare on a user', screenshare, [
       { name: 'user', description: 'User to screenshare', type: 6, required: true },
       { name: 'reason', description: 'Reason for the screenshare', type: 3, required: true },
       { name: 'image', description: 'Proof image attachment', type: 11, required: false }
     ]);
-    this.regChat('ssclose', 'Close a screenshare session', ssclose, [
+    this.reg('ssclose', 'Close a screenshare session', ssclose, [
       { name: 'reason', description: 'Reason for closing the session', type: 3, required: true }
     ]);
   }
@@ -432,20 +419,20 @@ export class CommandManager {
       { name: 'page', description: 'Page number', type: 4, required: false },
       { name: 'user', description: 'Filter by user (Discord ID, username, or mention)', type: 3, required: false }
     ]);
-    this.regChat('level', 'View level and experience information', level, [
+    this.reg('level', 'View level and experience information', level, [
       { name: 'user', description: 'User to view level for (leave empty for yourself)', type: 6, required: false }
     ]);
   }
 
   private registerSeasonCommands() {
-    this.regChat('startseason', 'Start a new season', startseason, [
+    this.reg('startseason', 'Start a new season', startseason, [
       { name: 'season', description: 'Season number', type: 4, required: true },
       { name: 'chapter', description: 'Chapter number', type: 4, required: true },
       { name: 'name', description: 'Name of the new season', type: 3, required: true },
       { name: 'description', description: 'Description of the new season', type: 3, required: false }
     ]);
-    this.regChat('endseason', 'End the current active season and migrate data', endseason);
-    this.regChat('listseasons', 'List all seasons', listseasons);
+    this.reg('endseason', 'End the current active season and migrate data', endseason);
+    this.reg('listseasons', 'List all seasons', listseasons);
     this.reg('seasoninfo', 'Show current season information and allowed items', seasoninfo);
   }
 

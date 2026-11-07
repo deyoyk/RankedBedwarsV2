@@ -1,31 +1,17 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
-import config from '../../config/config';
 
-
-export async function unregister(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function unregister(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetUserId: string;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     const user = interaction.options.getUser('user', true);
     targetUserId = user.id;
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}unregister <@user>`, 'Unregister Error'));
-      return;
-    }
-    const userArg = args[0];
-    const userMatch = userArg.match(/^<@!?([0-9]+)>$/) || userArg.match(/^([0-9]+)$/);
-    if (!userMatch) {
-      await safeReply(interaction, errorEmbed('Please provide a valid user mention or ID.', 'Unregister Error'));
-      return;
-    }
-    targetUserId = userMatch[1];
-  }
+  
 
   try {
     const result = await User.deleteOne({ discordId: targetUserId });

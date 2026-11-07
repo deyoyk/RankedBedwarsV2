@@ -1,7 +1,6 @@
-import { Message, ChatInputCommandInteraction, GuildMember } from 'discord.js';
+import { ChatInputCommandInteraction, GuildMember, Message } from 'discord.js';
 import { safeReply } from './safeReply';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
-
 
 declare global {
   var _wsManager: WebSocketManager | undefined;

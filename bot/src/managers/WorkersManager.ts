@@ -1,4 +1,4 @@
-import { Client, TextChannel, type GuildChannelCreateOptions, type MessageCreateOptions } from 'discord.js';
+import { Client, type GuildChannelCreateOptions, type MessageCreateOptions, TextChannel } from 'discord.js';
 import config from '../config/config';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 
@@ -112,6 +112,7 @@ export class WorkersManager {
     if (worker.isReady) return true;
     return new Promise<boolean>((resolve) => {
       let settled = false;
+      // eslint-disable-next-line prefer-const
       let timer: NodeJS.Timeout;
       const finish = (value: boolean) => {
         if (settled) return;

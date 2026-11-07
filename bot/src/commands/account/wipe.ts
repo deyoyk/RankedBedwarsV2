@@ -1,33 +1,20 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
-import config from '../../config/config';
 
-export async function wipe(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function wipe(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetId: string | undefined;
   let targetMention: string | undefined;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     const user = interaction.options.getUser('user', true);
     targetId = user.id;
     targetMention = `<@${user.id}>`;
-  } else {
-    if (!args || args.length !== 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}wipe <@user>`, 'Wipe Error'));
-      return;
-    }
-    const mentionMatch = args[0].match(/^<@!?(\d+)>$/);
-    if (!mentionMatch) {
-      await safeReply(interaction, errorEmbed('Please mention a valid user.', 'Wipe Error'));
-      return;
-    }
-    targetId = mentionMatch[1];
-    targetMention = args[0];
-  }
+  
 
   try {
     const zeroed: Record<string, unknown> = {};

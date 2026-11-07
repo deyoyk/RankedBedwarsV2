@@ -1,11 +1,11 @@
-import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game, { IGame } from '../../models/Game';
 import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
 import { safeReply } from '../../utils/safeReply';
-import { VoteData, createVoteButtons, createDiscussionThread, setupVoteCollector, buildResultEmbed, claimVoteRequest, releaseVoteRequest } from '../../utils/voteRequest';
-import { themedEmbed } from '../../utils/betterembed';
+import { buildResultEmbed, claimVoteRequest, createDiscussionThread, createVoteButtons, releaseVoteRequest, setupVoteCollector, VoteData } from '../../utils/voteRequest';
+import { errorEmbed, successEmbed, themedEmbed } from '../../utils/betterembed';
 
 interface StrikeRequestData {
   gameId: string;
@@ -14,49 +14,34 @@ interface StrikeRequestData {
   requesterId: string;
 }
 
-export async function strikerequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function strikerequest(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   try {
-    const requestData = await parseStrikeRequest(interaction, args);
+    const requestData = await parseStrikeRequest(interaction);
     if (!requestData) return;
 
     const validationResult = await validateStrikeRequest(requestData);
     if (!validationResult.isValid) {
-      await safeReply(interaction, { content: validationResult.error });
+      await safeReply(interaction, errorEmbed(validationResult.error || 'Invalid strike request.', 'Strike Request Error'));
       return;
     }
 
     await createStrikeRequest(interaction, requestData);
   } catch (error) {
     console.error('Error in strikerequest command:', error);
-    await safeReply(interaction, { content: 'An error occurred while processing your strike request.' });
+    await safeReply(interaction, errorEmbed('An error occurred while processing your strike request.', 'Strike Request Error'));
   }
 }
 
-async function parseStrikeRequest(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<StrikeRequestData | null> {
-  const requesterId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+async function parseStrikeRequest(interaction: ChatInputCommandInteraction): Promise<StrikeRequestData | null> {
+  const requesterId = interaction.user.id;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     const gameId = interaction.options.getString('game_id', true);
     const target = interaction.options.getUser('target', true);
     const reason = interaction.options.getString('reason', true);
 
     return { gameId, targetId: target.id, reason, requesterId };
-  } else {
-    if (!args || args.length < 3) {
-      await safeReply(interaction, `Usage: ${configuration.prefix}strikerequest <gameid> <target> <reason>`);
-      return null;
-    }
-
-    const [gameId, targetId, ...reasonParts] = args;
-    const reason = reasonParts.join(' ');
-
-    if (!reason.trim()) {
-      await safeReply(interaction, 'Please provide a valid reason for the strike request.');
-      return null;
-    }
-
-    return { gameId, targetId, reason, requesterId };
-  }
+  
 }
 
 async function validateStrikeRequest(data: StrikeRequestData): Promise<{ isValid: boolean; error?: string; game?: IGame; team?: string[] }> {
@@ -85,10 +70,10 @@ async function validateStrikeRequest(data: StrikeRequestData): Promise<{ isValid
   return { isValid: true, game, team };
 }
 
-async function createStrikeRequest(interaction: Message | ChatInputCommandInteraction, data: StrikeRequestData) {
+async function createStrikeRequest(interaction: ChatInputCommandInteraction, data: StrikeRequestData) {
   const channel = interaction.guild?.channels.cache.get(configuration.channels.strikerequestsChannel);
   if (!channel?.isTextBased()) {
-    await safeReply(interaction, { content: 'Strike request channel not found.' });
+    await safeReply(interaction, errorEmbed('Strike request channel not found.', 'Strike Request Error'));
     return;
   }
 
@@ -98,7 +83,7 @@ async function createStrikeRequest(interaction: Message | ChatInputCommandIntera
 
   const claimed = await claimVoteRequest(data.gameId, `strike:${data.targetId}`, data.requesterId);
   if (!claimed) {
-    await safeReply(interaction, { content: 'There is already an open vote request for this target.' });
+    await safeReply(interaction, errorEmbed('There is already an open vote request for this target.', 'Strike Request Error'));
     return;
   }
 
@@ -124,7 +109,7 @@ async function createStrikeRequest(interaction: Message | ChatInputCommandIntera
     await processVoteResults(message, data, votes, team);
   });
 
-  await safeReply(interaction, { content: 'Strike request created successfully.' });
+  await safeReply(interaction, successEmbed('Strike request created successfully.', 'Strike Request Created'));
 }
 
 function createStrikeRequestEmbed(data: StrikeRequestData, game: IGame | null): EmbedBuilder {
@@ -174,7 +159,8 @@ async function processVoteResults(message: Message, data: StrikeRequestData, vot
     console.error('Error processing strike request results:', error);
     await releaseVoteRequest(data.gameId, `strike:${data.targetId}`);
     await message.edit({
-      content: `${teamMentions} Error processing strike request results.`,
+      content: teamMentions,
+      embeds: [errorEmbed('Error processing strike request results.', 'Strike Request Error').builder],
       components: []
     });
   }

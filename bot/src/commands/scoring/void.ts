@@ -1,33 +1,14 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import Game from '../../models/Game';
 import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
-import config from '../../config/config';
 
- 
+export async function voidGame(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
+  const gameId = interaction.options.getInteger('game_id', true);
+  const reason = interaction.options.getString('reason') || `voided by <@${interaction.user.id}>: no reason provided`;
 
-
-export async function voidGame(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  let gameId: number;
-  let reason: string;
-
-  if (interaction instanceof ChatInputCommandInteraction) {
-    gameId = interaction.options.getInteger('game_id', true);
-    reason = interaction.options.getString('reason') || `voided by <@${interaction.user.id}>: no reason provided`;
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}void <gameId> [reason]`, 'Void Command Error'));
-      return;
-    }
-    gameId = parseInt(args[0], 10);
-    if (!Number.isInteger(gameId) || gameId <= 0) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}void <gameId> [reason]`, 'Void Command Error'));
-      return;
-    }
-    reason = args.slice(1).join(' ') || `voided by <@${interaction.author.id}>: no reason provided`;
-  }
 
   try {
     const game = await Game.findOne({ gameId }).select('state').lean();

@@ -1,11 +1,11 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { parse } from 'yaml';
 import fs from 'fs';
 import path from 'path';
 import { safeReply } from '../../utils/safeReply';
 import Season from '../../models/Season';
-import { themedEmbed } from '../../utils/betterembed';
+import { errorEmbed, themedEmbed } from '../../utils/betterembed';
 
 interface SeasonInfo {
   field1: string;
@@ -16,15 +16,14 @@ interface SeasonInfo {
   field3value: string[];
 }
 
-export async function seasoninfo(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager): Promise<void> {
-  void args;
-  void wsManager;
+export async function seasoninfo(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
+  void _wsManager;
   try {
     const configPath = path.join(__dirname, '../../config/seasoninfo.yml');
     
     if (!fs.existsSync(configPath)) {
       const errorMessage = 'Season info configuration file not found.';
-      await safeReply(interaction, { content: errorMessage, ephemeral: true });
+      await safeReply(interaction, errorEmbed(errorMessage, 'Season Info Error', true));
       return;
     }
 
@@ -72,7 +71,7 @@ export async function seasoninfo(interaction: Message | ChatInputCommandInteract
     const errorMessage = 'There was an error loading the season information. Please try again.';
     
     try {
-      await safeReply(interaction, { content: errorMessage, ephemeral: true });
+      await safeReply(interaction, errorEmbed(errorMessage, 'Season Info Error', true));
     } catch (replyError) {
       console.error('Error sending error message:', replyError);
     }

@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
@@ -9,8 +9,8 @@ import { getMemberRoleIds } from '../../utils/memberRoles';
 import { SeasonManager } from '../../managers/SeasonManager';
 import config from '../../config/config';
 
-function actorId(interaction: Message | ChatInputCommandInteraction): string {
-  return interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+function actorId(interaction: ChatInputCommandInteraction): string {
+  return interaction.user.id;
 }
 
 interface ClaimableUser {
@@ -25,7 +25,7 @@ interface ClaimableUser {
   }>;
 }
 
-export async function claimelo(interaction: Message | ChatInputCommandInteraction, _args?: string[], _wsManager?: WebSocketManager) {
+export async function claimelo(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   const discordId = actorId(interaction);
   try {
     const roleIds = await getMemberRoleIds(interaction, discordId);

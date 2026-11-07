@@ -54,7 +54,7 @@ function fakeCollector() {
   };
 }
 
-function interaction() {
+function interaction(action = 'private', argsString?: string) {
   const collector = fakeCollector();
   const message = {
     createMessageComponentCollector: jest.fn(() => collector),
@@ -64,10 +64,20 @@ function interaction() {
     collector,
     message,
     target: {
+      id: `interaction-${action}`,
       guild: { id: 'guild-1' },
-      author: { id: UID },
+      user: { id: UID },
       channelId: 'channel-1',
       client: { users: { cache: { get: jest.fn() } } },
+      options: {
+        getString: (name: string) => {
+          if (name === 'action') return action;
+          if (name === 'args') return argsString ?? null;
+          if (name === 'party_id') return null;
+          return null;
+        },
+        getUser: () => null,
+      },
       reply: jest.fn().mockResolvedValue(message),
     } as any,
   };
@@ -103,9 +113,9 @@ describe('party private game command', () => {
   });
 
   it('shows a confirmation prompt instead of starting immediately', async () => {
-    const { target } = interaction();
+    const { target } = interaction('private', 'Quad');
 
-    await party(target, ['private', 'Quad'], ws());
+    await party(target, ws());
 
     expect(startPrivateGame).not.toHaveBeenCalled();
     const text = replyText(target);
@@ -123,9 +133,9 @@ describe('party private game command', () => {
       team2: ['c', 'd'],
     });
     const manager = ws();
-    const { target, collector } = interaction();
+    const { target, collector } = interaction('private', 'Quad');
 
-    await party(target, ['private', 'Quad'], manager);
+    await party(target, manager);
     const confirmId = buttonIds(target).find(id => id.startsWith('private_confirm_'))!;
     const button = click(confirmId);
     await collector.handlers.collect(button);
@@ -140,9 +150,9 @@ describe('party private game command', () => {
   });
 
   it('does not start when the leader cancels the confirmation', async () => {
-    const { target, collector } = interaction();
+    const { target, collector } = interaction('private');
 
-    await party(target, ['private'], ws());
+    await party(target, ws());
     const cancelId = buttonIds(target).find(id => id.startsWith('private_cancel_'))!;
     const button = click(cancelId);
     await collector.handlers.collect(button);
@@ -154,9 +164,9 @@ describe('party private game command', () => {
   });
 
   it('rejects confirmation clicks from non-leaders', async () => {
-    const { target, collector } = interaction();
+    const { target, collector } = interaction('private');
 
-    await party(target, ['private'], ws());
+    await party(target, ws());
     const confirmId = buttonIds(target).find(id => id.startsWith('private_confirm_'))!;
     const button = click(confirmId, '999999999999999999');
     await collector.handlers.collect(button);
@@ -168,9 +178,9 @@ describe('party private game command', () => {
 
   it('surfaces private game creation failures after confirmation', async () => {
     startPrivateGame.mockResolvedValue({ success: false, message: 'Party members already in a queue: A' });
-    const { target, collector } = interaction();
+    const { target, collector } = interaction('private');
 
-    await party(target, ['private'], ws());
+    await party(target, ws());
     const confirmId = buttonIds(target).find(id => id.startsWith('private_confirm_'))!;
     const button = click(confirmId);
     await collector.handlers.collect(button);
@@ -179,9 +189,9 @@ describe('party private game command', () => {
   });
 
   it('expires the confirmation when nobody responds', async () => {
-    const { target, collector, message } = interaction();
+    const { target, collector, message } = interaction('private');
 
-    await party(target, ['private'], ws());
+    await party(target, ws());
     await collector.handlers.end([], 'time');
 
     expect(message.edit).toHaveBeenCalled();
@@ -191,7 +201,7 @@ describe('party private game command', () => {
   it('requires the game service to be available', async () => {
     const { target } = interaction();
 
-    await party(target, ['private'], undefined);
+    await party(target, undefined);
 
     expect(startPrivateGame).not.toHaveBeenCalled();
     expect(replyText(target)).toContain('game service is not ready');
@@ -199,10 +209,10 @@ describe('party private game command', () => {
 
   it('cancels the active private game', async () => {
     cancelPrivateGame.mockResolvedValue({ success: true, gameId: 7 });
-    const target = interaction().target;
+    const target = interaction('cancel').target;
     const manager = ws();
 
-    await party(target, ['cancel'], manager);
+    await party(target, manager);
 
     expect(cancelPrivateGame).toHaveBeenCalledWith(UID, manager);
     expect(replyText(target)).toContain('Private game #7 has been cancelled');
@@ -210,9 +220,9 @@ describe('party private game command', () => {
 
   it('surfaces cancellation failures', async () => {
     cancelPrivateGame.mockResolvedValue({ success: false, message: 'Your party does not have an active private game' });
-    const target = interaction().target;
+    const target = interaction('cancel').target;
 
-    await party(target, ['cancel'], ws());
+    await party(target, ws());
 
     expect(replyText(target)).toContain('does not have an active private game');
   });

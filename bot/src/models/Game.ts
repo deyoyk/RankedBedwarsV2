@@ -1,5 +1,5 @@
-import mongoose, { Schema, Document } from 'mongoose';
-import { gameBaseFields, applyGetTeamOfPlayer } from './gameBase';
+import mongoose, { Document, Schema } from 'mongoose';
+import { applyGetTeamOfPlayer, gameBaseFields } from './gameBase';
 import { IGameBase } from './gameTypes';
 
 export interface IGame extends IGameBase, Document {

@@ -1,10 +1,8 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import UserModel, { type IUser } from '../../models/User';
-import config from '../../config/config';
-
 
 const EDITABLE_STATS = {
   'elo': 'number',
@@ -29,37 +27,17 @@ const EDITABLE_STATS = {
 
 type EditableStat = keyof typeof EDITABLE_STATS;
 
-export async function edit(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function edit(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetUserId: string;
   let statToEdit: string;
   let newValue: string;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     const targetUser = interaction.options.getUser('user', true);
     targetUserId = targetUser.id;
     statToEdit = interaction.options.getString('stat', true);
     newValue = interaction.options.getString('value', true);
-  } else {
-    if (!args || args.length !== 3) {
-      const availableStats = Object.keys(EDITABLE_STATS).join(', ');
-      await safeReply(interaction, errorEmbed(
-        `Usage: ${config.prefix}edit <@user> <stat> <value>\n\nAvailable stats:\n${availableStats}`, 
-        'Edit Command Usage Error'
-      ));
-      return;
-    }
-    
-    
-    const userArg = args[0];
-    const userIdMatch = userArg.match(/^<@!?(\d+)>$/) || userArg.match(/^(\d+)$/);
-    if (!userIdMatch) {
-      await safeReply(interaction, errorEmbed('Please provide a valid user mention or ID.', 'Edit Command Error'));
-      return;
-    }
-    targetUserId = userIdMatch[1];
-    statToEdit = args[1];
-    newValue = args[2];
-  }
+  
 
   
   if (!(statToEdit in EDITABLE_STATS)) {
@@ -139,7 +117,7 @@ export async function edit(interaction: Message | ChatInputCommandInteraction, a
       { name: 'Stat', value: statToEdit, inline: true },
       { name: 'Old Value', value: String(oldValue || 0), inline: true },
       { name: 'New Value', value: String(convertedValue), inline: true },
-      { name: 'Editor', value: interaction instanceof ChatInputCommandInteraction ? `<@${interaction.user.id}>` : `<@${interaction.author.id}>`, inline: true }
+      { name: 'Editor', value: `<@${interaction.user.id}>`, inline: true }
     );
 
     

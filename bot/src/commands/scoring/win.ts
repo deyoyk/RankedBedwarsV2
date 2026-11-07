@@ -1,30 +1,16 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
+import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
-import { ensureUserStats, computeWlr } from '../../utils/userStats';
+import { computeWlr, ensureUserStats } from '../../utils/userStats';
 
-export async function win(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
-  let targetUserId: string;
+export async function win(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
+  const optionUser = interaction.options.getUser('user');
+  const targetUserId = optionUser ? optionUser.id : interaction.user.id;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
-    const optionUser = interaction.options.getUser('user');
-    targetUserId = optionUser ? optionUser.id : interaction.user.id;
-  } else {
-    if (!args || args.length < 1) {
-      targetUserId = interaction.author.id;
-    } else {
-      const mentionMatch = args[0].match(/^<@!?([0-9]+)>$/);
-      if (!mentionMatch) {
-        await safeReply(interaction, errorEmbed('Please provide a user mention (e.g. <@1234567890>).', 'Win Usage Error'));
-        return;
-      }
-      targetUserId = mentionMatch[1];
-    }
-  }
 
   try {
     const existing = await User.findOne({ discordId: targetUserId });

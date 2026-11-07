@@ -43,6 +43,8 @@ const ROLE_HIGH = '222222222222222222';
 function interaction(roleIds: string[] = [ROLE_HIGH]) {
   return {
     author: { id: UID },
+    user: { id: UID },
+    id: 'interaction-1',
     member: { roles: { cache: new Map(roleIds.map(roleId => [roleId, {}])) } },
     guild: { id: 'guild-1' },
     reply: jest.fn().mockResolvedValue({}),

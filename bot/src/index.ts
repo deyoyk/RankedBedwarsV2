@@ -12,10 +12,7 @@ import { StatusRotationTask } from './tasks/StatusRotationTask';
 import { ScreenshareCleanupTask } from './tasks/ScreenshareCleanupTask';
 import { EloDecayTask } from './tasks/EloDecayTask';
 import { WorkersManager } from './managers/WorkersManager';
-
 import { GuildJoinListener } from './handlers/GuildJoinListener';
-
-
 import type { GameManager } from './Matchmaking/GameManager';
 
 declare global {

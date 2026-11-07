@@ -1,6 +1,5 @@
-import { Client, ActivityType } from 'discord.js';
+import { ActivityType, Client } from 'discord.js';
 import config from '../config/config';
-
 
 export class StatusRotationTask {
   private client: Client;

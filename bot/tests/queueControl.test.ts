@@ -9,11 +9,20 @@ jest.mock('../src/models/Queue', () => ({
 
 import { queuecontrol } from '../src/commands/queue/queuecontrol';
 
-function message() {
+function interaction(sub: string, type: string, queueId?: string) {
   return {
-    author: { id: '123456789012345678' },
+    id: `interaction-${sub}-${type}`,
+    user: { id: '123456789012345678' },
     member: { roles: { cache: new Map() } },
     guild: { id: 'guild-1' },
+    options: {
+      getSubcommand: () => sub,
+      getString: (name: string) => {
+        if (name === 'type') return type;
+        if (name === 'queue_id') return queueId ?? null;
+        return null;
+      },
+    },
     reply: jest.fn().mockResolvedValue({}),
   } as any;
 }
@@ -29,30 +38,30 @@ describe('queuecontrol embeds', () => {
   });
 
   it('reports opened ranked queues in the queue system style', async () => {
-    const target = message();
+    const target = interaction('enable', 'ranked');
 
-    await queuecontrol(target, ['enable', 'ranked']);
+    await queuecontrol(target);
 
     expect(mockUpdateMany).toHaveBeenCalledWith({ isRanked: true }, { isActive: true });
     const embed = embedJson(target);
     expect(embed.title).toBe('Queue System');
-    expect(embed.description).toBe('> Successfully opened `Ranked` queues ✓');
+    expect(embed.description).toBe('> Successfully opened `Ranked` queues \u2713');
   });
 
   it('reports closed unranked queues', async () => {
-    const target = message();
+    const target = interaction('disable', 'unranked');
 
-    await queuecontrol(target, ['disable', 'unranked']);
+    await queuecontrol(target);
 
     expect(mockUpdateMany).toHaveBeenCalledWith({ isRanked: false }, { isActive: false });
-    expect(embedJson(target).description).toBe('> Successfully closed `Unranked` queues ✓');
+    expect(embedJson(target).description).toBe('> Successfully closed `Unranked` queues \u2713');
   });
 
   it('reports when nothing matched without a success marker', async () => {
     mockUpdateMany.mockResolvedValue({ modifiedCount: 0 });
-    const target = message();
+    const target = interaction('enable', 'ranked');
 
-    await queuecontrol(target, ['enable', 'ranked']);
+    await queuecontrol(target);
 
     expect(embedJson(target).description).toBe('> No matching `Ranked` queues were updated');
   });

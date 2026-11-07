@@ -51,8 +51,13 @@ const UserModel = require('../src/models/User').default;
 
 function interaction() {
   return {
-    content: '=stats @x',
-    author: { id: '1' },
+    id: 'interaction-stats',
+    user: { id: '1' },
+    options: {
+      getUser: jest.fn(() => ({ id: '123456789012345678' })),
+      getString: jest.fn(() => null),
+      getInteger: jest.fn(() => null),
+    },
     guild: { id: 'g1' },
     channel: { id: 'c1' },
     reply: jest.fn().mockResolvedValue({}),
@@ -109,7 +114,7 @@ describe('stats ranks via single facet aggregation', () => {
     });
     const { stats } = await import('../src/commands/stats/stats');
     const msg = interaction();
-    await stats(msg, ['<@123456789012345678>'], undefined);
+    await stats(msg);
     expect(msg.reply).toHaveBeenCalled();
     expect(UserModel.aggregate).toHaveBeenCalledTimes(1);
     expect(UserModel.countDocuments).toBeUndefined();
@@ -136,7 +141,7 @@ describe('stats ranks via single facet aggregation', () => {
     UserModel.aggregate.mockResolvedValue([{}]);
     const { stats } = await import('../src/commands/stats/stats');
     const msg = interaction();
-    await stats(msg, ['<@123456789012345678>'], undefined);
+    await stats(msg);
     const ranks = captured.playerData.tiles.map((t: any) => t.rank);
     expect(ranks.every((r: string) => r === '#1')).toBe(true);
     await expect(captured.helpers.calculatePosition('anyone')).resolves.toBe(1);

@@ -1,14 +1,14 @@
 import { Client } from 'discord.js';
 import Queue from '../models/Queue';
 import User from '../models/User';
-import { QueueType, MatchmakingResult, QueueProcessingResult } from '../types/GameTypes';
+import { MatchmakingResult, QueueProcessingResult, QueueType } from '../types/GameTypes';
 import { GameManager } from './GameManager';
 import { RandomQueueManager } from './RandomQueueManager';
 import { PickingQueueManager } from './PickingQueueManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { PresenceService } from '../services/PresenceService';
-import { claimPlayers, releasePlayers, isClaimedByOther } from './draftClaims';
+import { claimPlayers, isClaimedByOther, releasePlayers } from './draftClaims';
 import { findInGamePlayerIds } from './utils';
 
 function withTimeout<T>(

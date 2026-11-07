@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 
 export type SettlementType = 'score' | 'void';
 export type SettlementStatus = 'started' | 'stats_applied' | 'completed';

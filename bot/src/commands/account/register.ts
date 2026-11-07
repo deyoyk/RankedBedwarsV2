@@ -1,29 +1,18 @@
-import { Message, ChatInputCommandInteraction, ButtonBuilder, ButtonStyle, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonInteraction, ModalSubmitInteraction, ComponentType } from 'discord.js';
-import { errorEmbed, successEmbed, betterEmbed } from '../../utils/betterembed';
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, ComponentType, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
-import config from '../../config/config';
 
- 
-
-
-export async function register(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function register(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
   let ign: string;
   let discordId: string;
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     ign = interaction.options.getString('ign', true);
     discordId = interaction.user.id;
-  } else {
-    if (!args || args.length < 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}register <ign>`, 'Register Usage Error'));
-      return;
-    }
-    ign = args[0];
-    discordId = interaction.author.id;
-  }
+  
 
   
   try {
@@ -96,7 +85,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           } catch (e) {
             console.error('Failed to edit original registration message (already registered):', e);
           }
-          await modalInt.reply({ content: 'You are already registered.', ephemeral: true });
+          await modalInt.reply(errorEmbed('You are already registered.', 'Registration Error', true));
           return;
         }
         const ignTakenAgain = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('_id').lean();
@@ -109,7 +98,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           } catch (e) {
             console.error('Failed to edit original registration message (IGN taken after):', e);
           }
-          await modalInt.reply({ content: 'IGN already registered to another user.', ephemeral: true });
+          await modalInt.reply(errorEmbed('IGN already registered to another user.', 'Registration Error', true));
           return;
         }
         try {
@@ -128,7 +117,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           } catch (e) {
             console.error('Failed to edit original registration message (duplicate):', e);
           }
-          await modalInt.reply({ content: duplicate ? 'You are already registered.' : 'Registration failed. Please try again.', ephemeral: true });
+          await modalInt.reply(errorEmbed(duplicate ? 'You are already registered.' : 'Registration failed. Please try again.', 'Registration Error', true));
           return;
         }
         
@@ -147,7 +136,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           } catch (e) {
             console.error('Failed to edit original registration message (success):', e);
           }
-          await modalInt.reply({ content: 'Registration complete.', ephemeral: true });
+          await modalInt.reply(successEmbed('Registration complete.', 'Registration Complete', true));
         } catch (fixError) {
           console.error('Error updating nickname/roles:', fixError);
           try {
@@ -163,7 +152,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
           } catch (e) {
             console.error('Failed to edit original registration message (fix error):', e);
           }
-          await modalInt.reply({ content: 'Registered, but there was a roles/nickname issue.', ephemeral: true });
+          await modalInt.reply(errorEmbed('Registered, but there was a roles/nickname issue.', 'Registration Warning', true));
         }
       } else {
         try {
@@ -174,7 +163,7 @@ export async function register(interaction: Message | ChatInputCommandInteractio
         } catch (e) {
           console.error('Failed to edit original registration message (invalid code):', e);
         }
-        await modalInt.reply({ content: 'Invalid code.', ephemeral: true });
+        await modalInt.reply(errorEmbed('Invalid code.', 'Registration Error', true));
       }
     });
   } catch (error) {

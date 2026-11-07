@@ -1,11 +1,10 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 import Queue from '../../models/Queue';
-import config from '../../config/config';
 
-export async function addqueue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function addqueue(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let channelId: string;
   let maxPlayers: number;
   let minElo: number;
@@ -14,7 +13,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
   let isPicking: boolean;
   let bypassRoles: string[] = [];
 
-  if (interaction instanceof ChatInputCommandInteraction) {
+  
     channelId = interaction.options.getString('channel_id', true);
     maxPlayers = interaction.options.getInteger('max_players', true);
     minElo = interaction.options.getInteger('min_elo', true);
@@ -25,21 +24,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
     if (bypassRolesStr) {
       bypassRoles = bypassRolesStr.split(',').map(id => id.trim());
     }
-  } else {
-    if (!args || args.length < 6) {
-      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <isPicking> [bypassRoles]`, 'error')] });
-      return;
-    }
-    channelId = args[0];
-    maxPlayers = parseInt(args[1], 10);
-    minElo = parseInt(args[2], 10);
-    maxElo = parseInt(args[3], 10);
-    isRanked = args[4].toLowerCase() === 'true';
-    isPicking = args[5].toLowerCase() === 'true';
-    if (args.length > 6) {
-      bypassRoles = args[6].split(',').map(id => id.trim());
-    }
-  }
+  
 
   if (!/^\d{17,20}$/.test(channelId)) {
     await safeReply(interaction, { embeds: [queueSystemEmbed('channelId must be a Discord voice channel ID (17-20 digits).', 'error')] });

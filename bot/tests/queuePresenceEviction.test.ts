@@ -22,7 +22,6 @@ jest.mock('../src/config/config', () => ({
   __esModule: true,
   default: {
     prefix: '!',
-    prefixenabled: true,
     serverip: 'localhost',
     CommonPartySize: 1,
     PartyQueueSize: 1,

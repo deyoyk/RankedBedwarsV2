@@ -1,5 +1,5 @@
 import { Guild } from 'discord.js';
-import { TimedPunishmentManager, TimedPunishmentKind } from './timedPunishmentManager';
+import { TimedPunishmentKind, TimedPunishmentManager } from './timedPunishmentManager';
 import type { WebSocketNotifier } from './punishmentHelpers';
 
 const kind: TimedPunishmentKind = {

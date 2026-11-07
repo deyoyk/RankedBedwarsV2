@@ -1,5 +1,4 @@
-import { Client, VoiceState } from 'discord.js';
-import type { VoiceBasedChannel } from 'discord.js';
+import { Client, type VoiceBasedChannel, VoiceState } from 'discord.js';
 import Queue from '../models/Queue';
 import User, { type IUser } from '../models/User';
 import Party from '../models/Party';
@@ -416,7 +415,6 @@ export class QueueListener {
         Queue.find({ isActive: true }),
         'channelId maxPlayers minElo maxElo isActive isRanked isPicking queueType bypassRoles'
       );
-      const queuedPlayers = [...this.queueStates.values()].reduce((total, state) => total + state.players.length, 0);
 
       for (let i = 0; i < queues.length; i += QueueListener.QUEUE_TICK_CONCURRENCY) {
         const chunk = queues.slice(i, i + QueueListener.QUEUE_TICK_CONCURRENCY);

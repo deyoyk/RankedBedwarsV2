@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
@@ -6,9 +6,9 @@ import User from '../../models/User';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
 
-export async function queue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
+export async function queue(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   try {
-    const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
+    const userId = interaction.user.id;
 
     const guild = interaction.guild;
     if (!guild) {
