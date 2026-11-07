@@ -7,7 +7,7 @@ import botPackage from '../../package.json';
 import { themedEmbed, EMBED_THEME } from '../utils/betterembed';
 
 export const STATUS_EMBED_TITLE = 'Bot Environment Status';
-const LEGACY_STATUS_EMBED_TITLES = ['Bot Environment Status ✌️'];
+const LEGACY_STATUS_TITLE_PREFIX = 'Bot Environment Status';
 const STATUS_WARNING_COLOR = 0xF1C40F;
 
 export class BotStatusTask {
@@ -34,15 +34,14 @@ export class BotStatusTask {
       }
 
       await this.sendStatusEmbed();
-      if (!this.statusMessage) {
-        console.error('[BotStatusTask] Skipping status updates: missing access or channel invalid');
-        return;
-      }
-      
-      
+
       this.updateInterval = setInterval(async () => {
         await this.updateStatusEmbed();
       }, 30 * 1000); 
+
+      if (!this.statusMessage) {
+        console.warn('[BotStatusTask] Initial status post failed; will retry every 30 seconds');
+      }
 
       console.log('[BotStatusTask] Started with 30-second updates');
     } catch (error) {
@@ -65,7 +64,13 @@ export class BotStatusTask {
         return;
       }
 
-      const channel = (guild.channels.cache?.get(config.channels.botstatusChannel) ?? await guild.channels.fetch(config.channels.botstatusChannel)) as TextChannel;
+      const channelId = config.channels.botstatusChannel;
+      if (!channelId) {
+        console.error('[BotStatusTask] BOT_STATUS_CHANNEL_ID is not configured');
+        return;
+      }
+
+      const channel = (guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId)) as TextChannel;
       if (!channel || !channel.isTextBased()) {
         console.error('[BotStatusTask] Bot status channel not found or not text-based');
         return;
@@ -74,9 +79,13 @@ export class BotStatusTask {
       const embed = await this.createStatusEmbed();
       const adopted = await this.findOwnStatusMessage(channel);
       if (adopted) {
-        this.statusMessage = adopted;
-        await adopted.edit({ embeds: [embed] });
-        return;
+        try {
+          await adopted.edit({ embeds: [embed] });
+          this.statusMessage = adopted;
+          return;
+        } catch (error) {
+          console.warn('[BotStatusTask] Could not edit the existing status message; posting a new one:', error);
+        }
       }
       this.statusMessage = await channel.send({ embeds: [embed] });
     } catch (error) {
@@ -90,10 +99,10 @@ export class BotStatusTask {
       if (!ownId) return null;
       const messages = await channel.messages.fetch({ limit: 10 });
       for (const message of messages.values()) {
-        if (message.author?.id === ownId && message.embeds?.some(embed =>
-          embed.title === STATUS_EMBED_TITLE
-          || (embed.title !== null && LEGACY_STATUS_EMBED_TITLES.includes(embed.title))
-        )) {
+        if (message.author?.id === ownId && message.embeds?.some(embed => {
+          const title = embed.title;
+          return typeof title === 'string' && title.startsWith(LEGACY_STATUS_TITLE_PREFIX);
+        })) {
           return message;
         }
       }

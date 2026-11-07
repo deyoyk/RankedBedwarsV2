@@ -123,6 +123,18 @@ beforeEach(() => {
 });
 
 describe('QueueListener offline eviction', () => {
+  it('does not send duplicate waiting notices for the same rejection', async () => {
+    const guild = setupVoice(['a']);
+    const listener = makeListener(guild);
+    const state = { member: member('a'), channelId: QUEUE_ID } as any;
+
+    await listener.moveToWaiting(state, 'This queue is currently disabled.');
+    await listener.moveToWaiting(state, 'This queue is currently disabled.');
+
+    expect(workerMocks.sendMessage).toHaveBeenCalledTimes(1);
+    expect(workerMocks.moveMembers).toHaveBeenCalledTimes(2);
+  });
+
   it('evicts a queued player who went offline in Minecraft', async () => {
     const guild = setupVoice(['a', 'b']);
     const listener = makeListener(guild);

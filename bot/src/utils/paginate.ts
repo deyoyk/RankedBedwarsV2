@@ -8,6 +8,7 @@ export interface PaginationConfig<T> {
   emptyMessage: string;
   emptyTitle: string;
   perPage: number;
+  buildEmptyEmbed?: () => EmbedBuilder;
   fetchPage: (skip: number, limit: number, total?: number) => Promise<{ items: T[]; total: number; buildEmbed: (items: T[], page: number, totalPages: number, total: number, skip: number) => EmbedBuilder }>;
 }
 
@@ -40,7 +41,10 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
     }
 
     if (items.length === 0) {
-      await safeReply(interaction, errorEmbed(config.emptyMessage, config.emptyTitle));
+      const emptyEmbed = config.buildEmptyEmbed
+        ? config.buildEmptyEmbed()
+        : errorEmbed(config.emptyMessage, config.emptyTitle).builder;
+      await safeReply(interaction, { embeds: [emptyEmbed] });
       return;
     }
 
@@ -51,6 +55,7 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
       embeds: [embed],
       components: totalPages > 1 ? [row] : []
     });
+    if (!response) return;
 
     if (totalPages > 1) {
       const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;

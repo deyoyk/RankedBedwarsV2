@@ -1,6 +1,7 @@
 import { Message, ChatInputCommandInteraction, Guild } from 'discord.js';
 import { safeReply } from './safeReply';
 import { successEmbed, errorEmbed } from './betterembed';
+import { parseDuration } from './parseDuration';
 import config from '../config/config';
 
 type ModerationEmbed = ReturnType<typeof successEmbed>;
@@ -89,6 +90,23 @@ export async function executeModerationAction(
   if (!parsed.guild) {
     await safeReply(interaction, errorEmbed('This command can only be used in a server.', `${config.commandName} Error`));
     return;
+  }
+
+  if (config.hasDuration && parsed.duration) {
+    try {
+      const milliseconds = parseDuration(parsed.duration);
+      if (milliseconds !== null && milliseconds < 60000) {
+        await safeReply(interaction, errorEmbed(
+          `${config.commandName.charAt(0).toUpperCase()}${config.commandName.slice(1)} duration must be at least 1 minute.`,
+          `${config.commandName} Error`,
+        ));
+        return;
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Invalid duration.';
+      await safeReply(interaction, errorEmbed(detail, `${config.commandName} Error`));
+      return;
+    }
   }
 
   try {

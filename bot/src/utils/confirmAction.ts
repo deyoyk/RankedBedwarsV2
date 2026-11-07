@@ -52,6 +52,7 @@ export async function executeWithConfirmation(
       components: [row],
       fetchReply: true
     });
+    if (!response) return;
 
     const message = response instanceof Message ? response : response;
 

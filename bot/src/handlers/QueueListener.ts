@@ -76,6 +76,7 @@ export class QueueListener {
   private initialPresenceSweep: NodeJS.Timeout | null = null;
   private readonly queueStatusCache = new Map<string, string>();
   private readonly playerIgnById = new Map<string, string>();
+  private readonly recentWaitingNotices = new Map<string, { reason: string; at: number }>();
   private initialized = false;
   private shuttingDown = false;
   private linkOfflineNotified = false;
@@ -83,6 +84,7 @@ export class QueueListener {
   private readonly QUEUE_CHECK_INTERVAL = 5000;
   private readonly QUEUE_STATUS_INTERVAL = 3000;
   private readonly CHANNEL_CACHE_TTL = 30000;
+  private readonly WAITING_NOTICE_DEDUPE_MS = 15000;
   private readonly PRESENCE_SWEEP_INTERVAL = (() => {
     const configured = Number.parseInt(process.env.PRESENCE_SWEEP_INTERVAL_MS ?? '', 10);
     return Number.isFinite(configured) ? Math.max(10000, configured) : 60000;
@@ -317,6 +319,11 @@ export class QueueListener {
       for (const [channelId, data] of this.rescanKeys.entries()) {
         if (now - data.ts > 300000) {
           this.rescanKeys.delete(channelId);
+        }
+      }
+      for (const [playerId, notice] of this.recentWaitingNotices.entries()) {
+        if (now - notice.at >= this.WAITING_NOTICE_DEDUPE_MS) {
+          this.recentWaitingNotices.delete(playerId);
         }
       }
     }, 60000);
@@ -1370,10 +1377,24 @@ export class QueueListener {
         await this.workersManager.moveMembers([member.id], waitingVcId, 8);
       }
 
-      const mention = `<@${member.id}>`;
-      const message = `Hey ${mention}, ${reason}`;
+      const now = Date.now();
+      const previous = this.recentWaitingNotices.get(member.id);
+      const duplicate = previous
+        && previous.reason === reason
+        && now - previous.at < this.WAITING_NOTICE_DEDUPE_MS;
+      this.recentWaitingNotices.set(member.id, { reason, at: now });
+      if (this.recentWaitingNotices.size > 1000) {
+        for (const [playerId, notice] of this.recentWaitingNotices) {
+          if (now - notice.at >= this.WAITING_NOTICE_DEDUPE_MS) {
+            this.recentWaitingNotices.delete(playerId);
+          }
+        }
+      }
 
-      if (config.channels.alertsChannel) {
+      if (!duplicate && config.channels.alertsChannel) {
+        const mention = `<@${member.id}>`;
+        const message = `Hey ${mention}, ${reason}`;
+
         await this.workersManager.sendMessage(
           config.channels.alertsChannel,
           { content: message },
@@ -1381,7 +1402,7 @@ export class QueueListener {
         );
       }
 
-      console.warn(`[QueueListener] ${member.user.username} moved to waiting from ${this.queueLabel(state)} due to: ${reason}`);
+      console.warn(`[QueueListener] ${member.user.username} moved to waiting from ${this.queueLabel(state)} due to: ${reason}${duplicate ? ' (duplicate notice suppressed)' : ''}`);
     } catch (error) {
       console.error('[QueueListener] Error moving to waiting:', error);
     }
@@ -1453,6 +1474,7 @@ export class QueueListener {
       this.partyCache.clear();
       this.playerLocks.clear();
       this.queueLocks.clear();
+      this.recentWaitingNotices.clear();
       this.queueStatusCache.clear();
       this.playerIgnById.clear();
       this.queueMonitorRunning = false;

@@ -64,6 +64,7 @@ export async function settings(interaction: Message | ChatInputCommandInteractio
     components: [row1, row2],
     fetchReply: true
   });
+  if (!reply) return;
 
   const collector = reply.createMessageComponentCollector({
     time: 5 * 60 * 1000,

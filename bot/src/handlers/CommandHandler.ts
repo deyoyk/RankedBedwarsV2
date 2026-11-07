@@ -16,6 +16,8 @@ export class CommandHandler {
   private commands: Map<string, CommandFn>;
   private aliases: Map<string, string>;
   private wsManager: WebSocketManager;
+  private readonly handledInteractions = new Set<string>();
+  private readonly MAX_HANDLED_INTERACTIONS = 2000;
 
   constructor(client: Client, wsManager: WebSocketManager) {
     this.client = client;
@@ -164,6 +166,19 @@ export class CommandHandler {
   ): Promise<void> {
     const commandName = interaction.commandName.toLowerCase();
 
+    const interactionId = interaction.id;
+    if (interactionId) {
+      if (this.handledInteractions.has(interactionId)) {
+        console.warn(`[CommandHandler] Ignoring duplicate interaction ${interactionId} for /${commandName}`);
+        return;
+      }
+      this.handledInteractions.add(interactionId);
+      if (this.handledInteractions.size > this.MAX_HANDLED_INTERACTIONS) {
+        const oldest = this.handledInteractions.values().next();
+        if (!oldest.done) this.handledInteractions.delete(oldest.value);
+      }
+    }
+
     if (!this.commands.has(commandName)) {
       return;
     }
@@ -180,6 +195,13 @@ export class CommandHandler {
         try {
           await interaction.deferReply();
         } catch (deferError) {
+          const code = (deferError as { code?: unknown })?.code;
+          if (code === 10062) {
+            console.warn(
+              `[CommandHandler] Interaction for /${commandName} expired before acknowledgement; skipping command`
+            );
+            return;
+          }
           console.error(
             `Error deferring reply for ${commandName}:`,
             deferError

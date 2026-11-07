@@ -80,6 +80,26 @@ describe('BotStatusTask message adoption', () => {
     task.stop();
   });
 
+  it('keeps retrying when the initial status post fails', async () => {
+    const channel = channelMock();
+    channel.send.mockRejectedValueOnce(new Error('Discord unavailable'));
+    const task = taskWith(channel);
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    await task.start();
+    expect((task as any).updateInterval).not.toBeNull();
+
+    await task.updateStatusEmbed();
+
+    expect(channel.send).toHaveBeenCalledTimes(2);
+    expect(channel.store.size).toBe(1);
+
+    task.stop();
+    error.mockRestore();
+    warn.mockRestore();
+  });
+
   it('does not adopt a command reply embed', async () => {
     const reply: any = {
       id: 'cmd-reply',
