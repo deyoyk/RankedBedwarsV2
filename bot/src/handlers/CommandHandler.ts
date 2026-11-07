@@ -69,7 +69,6 @@ export class CommandHandler {
 
     try {
       if (
-        commandName !== 'help' &&
         commandName !== 'screenshare' &&
         !interaction.deferred &&
         !interaction.replied

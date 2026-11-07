@@ -148,23 +148,23 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
   const descriptionLines: string[] = [];
 
   if (isRemoval) {
-    descriptionLines.push(`• ${userMention} ${style.removalPhrase}. Punishment Type: **${style.label}**.`);
-    descriptionLines.push(`• This punishment was deleted for the reason **${reasonText}**.`);
-    descriptionLines.push(`• Processed ${formatProcessedDate(new Date())}.`);
+    descriptionLines.push(`\u2022 ${userMention} ${style.removalPhrase}. Punishment Type: \`${style.label}\`.`);
+    descriptionLines.push(`\u2022 This punishment was deleted for the reason \`${reasonText}\`.`);
+    descriptionLines.push(`\u2022 Processed \`${formatProcessedDate(new Date())}\`.`);
   } else {
-    descriptionLines.push(`• ${userMention} has been issued a **${style.label}** punishment.`);
+    descriptionLines.push(`\u2022 ${userMention} has been issued a \`${style.label}\` punishment.`);
     if (expires) {
-      descriptionLines.push(`• The punishment duration is **${formatDuration(expires)}**. Expiring ${formatExpiryDate(expires)}`);
+      descriptionLines.push(`\u2022 The punishment duration is \`${formatDuration(expires)}\`. Expiring \`${formatExpiryDate(expires)}\``);
     }
-    descriptionLines.push(`• The punishment reason is **${reasonText}**`);
+    descriptionLines.push(`\u2022 The punishment reason is \`${reasonText}\``);
     if (baseType === 'ban') {
-      descriptionLines.push('• Player is no longer able to queue. They can appeal by opening a support ticket.');
+      descriptionLines.push('\u2022 Player is no longer able to queue. They can appeal by opening a support ticket.');
     }
   }
 
   if (extraFields) {
     for (const field of extraFields) {
-      descriptionLines.push(`• ${field.label}: **${field.value}**`);
+      descriptionLines.push(`\u2022 ${field.label}: \`${field.value}\``);
     }
   }
 

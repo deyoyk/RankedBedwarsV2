@@ -3,7 +3,8 @@ import type { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 import fs from 'fs';
 import path from 'path';
-import pkg from '../../package.json';
+import config from '../config/config';
+import { getReleaseVersion } from '../utils/releaseVersion';
 import { errorEmbed, themedEmbed } from '../utils/betterembed';
 
 async function getCommandCategories() {
@@ -85,10 +86,11 @@ export async function help(interaction: ChatInputCommandInteraction, _wsManager?
   try {
     const commandCategories = await getCommandCategories();
     console.log('[Help] Command categories:', Object.keys(commandCategories));
+    const releaseVersion = await getReleaseVersion();
 
     const embed = themedEmbed()
-      .setTitle(`Ranked Bedwars System v${pkg.version}`)
-      .setDescription('Made by <@1526597163885527121> `Deyo`\n\n:star2: Select a category to view commands and their required roles.')
+      .setTitle(`Ranked Bedwars System ${releaseVersion}`)
+      .setDescription(`Made by <@1526597163885527121> \`Deyo\` for \`${config.bot_stats_text}\`\n\nSelect a category to view commands and their required roles.`)
       .setColor('#00AAAA')
 
     const selectMenu = buildCategorySelectMenu(commandCategories);

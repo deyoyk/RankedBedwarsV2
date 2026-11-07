@@ -167,6 +167,10 @@ jest.mock('../src/services/PartyService', () => ({
 jest.mock('../src/managers/MapManager', () => ({
   MapService: { getSharedInstance: jest.fn().mockReturnValue({ getAllMaps: jest.fn().mockResolvedValue([{ name: 'Map1' }]) }) },
 }));
+jest.mock('../src/utils/releaseVersion', () => ({
+  getReleaseVersion: jest.fn().mockResolvedValue('v41'),
+}));
+
 jest.mock('../src/utils/fix', () => ({
   fix: jest.fn().mockResolvedValue(true),
   getEloRanks: jest.fn().mockResolvedValue([]),

@@ -54,10 +54,10 @@ describe('punishment embeds', () => {
     expect(payload.content).toBeUndefined();
     expect(embed.title).toBe('PLAYER PUNISHED');
     expect(embed.color).toBe(0x992D22);
-    expect(embed.description).toContain('has been issued a **Mute** punishment.');
-    expect(embed.description).toContain('The punishment duration is **');
-    expect(embed.description).toContain('Expiring 13-11-2026');
-    expect(embed.description).toContain('The punishment reason is **Racism, Slurs or Hate Speech**');
+    expect(embed.description).toContain('has been issued a `Mute` punishment.');
+    expect(embed.description).toContain('The punishment duration is `');
+    expect(embed.description).toContain('Expiring `13-11-2026`');
+    expect(embed.description).toContain('The punishment reason is `Racism, Slurs or Hate Speech`');
     expect(embed.thumbnail?.url).toBe('attachment://mute.png');
     expect(payload.files?.map(file => file.name)).toEqual(['mute.png']);
   });
@@ -79,7 +79,7 @@ describe('punishment embeds', () => {
 
     expect(embed.title).toBe('PLAYER PUNISHED');
     expect(embed.color).toBe(0x71368A);
-    expect(embed.description).toContain('has been issued a **Ranked Ban** punishment.');
+    expect(embed.description).toContain('has been issued a `Ranked Ban` punishment.');
     expect(embed.description).toContain('Player is no longer able to queue.');
     expect(embed.thumbnail?.url).toBe('attachment://ban.png');
     expect(payload.files?.map(file => file.name)).toEqual(['ban.png']);
@@ -101,7 +101,7 @@ describe('punishment embeds', () => {
 
     expect(embed.title).toBe('PLAYER PUNISHED');
     expect(embed.color).toBe(0xC27C0E);
-    expect(embed.description).toContain('has been issued a **Strike** punishment.');
+    expect(embed.description).toContain('has been issued a `Strike` punishment.');
     expect(embed.description).not.toContain('The punishment duration is');
     expect(embed.thumbnail?.url).toBe('attachment://strike.png');
     expect(payload.files?.map(file => file.name)).toEqual(['strike.png']);
@@ -123,9 +123,9 @@ describe('punishment embeds', () => {
 
     expect(embed.title).toBe('MUTE DELETED');
     expect(embed.color).toBe(0x1ABC9C);
-    expect(embed.description).toContain('is no longer muted. Punishment Type: **Mute**.');
-    expect(embed.description).toContain('This punishment was deleted for the reason **mistake**.');
-    expect(embed.description).toMatch(/Processed \w+, \d+ \w+, \d{4} \d{2}:\d{2}\./);
+    expect(embed.description).toContain('is no longer muted. Punishment Type: `Mute`.');
+    expect(embed.description).toContain('This punishment was deleted for the reason `mistake`.');
+    expect(embed.description).toMatch(/Processed `\w+, \d+ \w+, \d{4} \d{2}:\d{2}`\./);
     expect(embed.thumbnail?.url).toBe('attachment://unbanunmute.png');
     expect(payload.files?.map(file => file.name)).toEqual(['unbanunmute.png']);
   });
@@ -146,7 +146,7 @@ describe('punishment embeds', () => {
 
     const embed = sent(channel).embeds[0].toJSON();
     expect(embed.title).toBe(title);
-    expect(embed.description).toContain(`${phrase}. Punishment Type: **${label}**.`);
+    expect(embed.description).toContain(`${phrase}. Punishment Type: \`${label}\`.`);
     expect(embed.color).toBe(0x1ABC9C);
   });
 
