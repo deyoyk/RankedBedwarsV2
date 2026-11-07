@@ -1,5 +1,18 @@
+
 import { h, VNode } from '../renderer';
-import { accent, badge, COLORS, decor, divider, FONT, MEDIUM, panel, rootStyle, sectionLabel, text } from '../theme';
+import {
+  COLORS,
+  FONT,
+  MEDIUM,
+  accent,
+  badge,
+  decor,
+  divider,
+  panel,
+  rootStyle,
+  sectionLabel,
+  text,
+} from '../theme';
 
 export type DefaultTile = {
   value: string;
@@ -31,9 +44,36 @@ export type DefaultTemplateInput = {
 const WIDTH = 1400;
 const HEIGHT = 940;
 
-const RANK_TEXT = COLORS.purple;
-const RANK_BG = 'rgba(167,139,250,0.10)';
-const RANK_BORDER = 'rgba(167,139,250,0.32)';
+const BG = '#0B0D12';
+const CARD = '#11151C';
+const CARD_INNER = '#151B24';
+const LINE = '#252D38';
+
+const CYAN = '#54E4F2';
+const GREEN = '#5DE2A2';
+const RED = '#FF647C';
+const WHITE = '#F1F5F9';
+const MUTED = '#8491A3';
+const FAINT = '#566171';
+
+const PURPLE = '#B69CFF';
+
+const clamp = (n: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, n));
+
+function heading(
+  x: number,
+  y: number,
+  label: string,
+  detail?: string,
+): VNode {
+  return h('div', {},
+    text(x, y, 500, 20, label.toUpperCase(), 13, MUTED, MEDIUM, 'left', 1.5),
+    detail
+      ? text(850, y, 490, 20, detail.toUpperCase(), 12, FAINT, FONT, 'right', 1.2)
+      : null,
+  );
+}
 
 function header(): VNode {
   return h('div', {},
@@ -41,47 +81,57 @@ function header(): VNode {
       style: {
         position: 'absolute',
         left: 60,
-        top: 23,
-        width: 10,
-        height: 10,
-        borderRadius: 3,
-        backgroundColor: COLORS.cyan,
+        top: 26,
+        width: 8,
+        height: 8,
+        borderRadius: 2,
+        backgroundColor: CYAN,
       },
     }),
-    text(79, 16, 240, 24, 'RANKED BEDWARS', 16, COLORS.text, MEDIUM, 'left', 1.2),
-    text(252, 18, 260, 22, 'PLAYER STATISTICS', 13, COLORS.muted, MEDIUM, 'left', 1.8),
-    text(1040, 18, 300, 22, 'PROFILE CARD', 13, COLORS.faint, MEDIUM, 'right', 1.8),
+
+    text(78, 18, 260, 24, 'RBW', 17, WHITE, MEDIUM, 'left', 1.5),
+    text(130, 20, 300, 20, 'PLAYER PROFILE', 12, MUTED, FONT, 'left', 1.5),
+
+    text(
+      980, 20, 360, 20,
+      'RANKED BEDWARS  /  STATISTICS',
+      12, FAINT, FONT, 'right', 1.2,
+    ),
+
+    divider(60, 50, 1280, LINE, 1),
   );
 }
 
 function hero(input: DefaultTemplateInput): VNode {
-  const progress = Math.max(0, Math.min(1, input.xpProgress));
+  const progress = clamp(input.xpProgress, 0, 1);
 
   return h('div', {},
-    panel(60, 54, 1280, 230, 20),
+    panel(60, 70, 1280, 220, 20),
 
-    accent(60, 54, 4, 230, COLORS.cyan, 4),
+    // Left identity accent
+    accent(60, 70, 3, 220, CYAN, 3),
 
+    // Skin portrait
     h('div', {
       style: {
         position: 'absolute',
-        left: 92,
-        top: 84,
-        width: 148,
-        height: 148,
-        borderRadius: 18,
-        backgroundColor: COLORS.panelRaised,
+        left: 88,
+        top: 96,
+        width: 150,
+        height: 150,
+        borderRadius: 16,
+        backgroundColor: CARD_INNER,
         borderWidth: 1,
         borderStyle: 'solid',
-        borderColor: COLORS.line,
+        borderColor: LINE,
         overflow: 'hidden',
       },
     },
       input.skin
         ? h('img', {
             src: input.skin,
-            width: 148,
-            height: 355,
+            width: 150,
+            height: 360,
             style: {
               position: 'absolute',
               left: 0,
@@ -91,189 +141,203 @@ function hero(input: DefaultTemplateInput): VNode {
         : null,
     ),
 
-    badge(270, 76, 152, 'PLAYER PROFILE', {
-      color: COLORS.cyan,
-      background: 'rgba(77,225,242,0.08)',
-      border: 'rgba(77,225,242,0.28)',
-      height: 32,
-      size: 14,
+    // Player identity
+    badge(270, 94, 135, 'PLAYER', {
+      color: CYAN,
+      background: 'rgba(84,228,242,0.08)',
+      border: 'rgba(84,228,242,0.2)',
+      height: 28,
+      size: 12,
       letterSpacing: 1,
     }),
 
     text(
-      270, 114, 600, 62,
+      270, 132, 600, 58,
       input.ign,
-      input.ign.length > 14 ? 42 : 54,
-      COLORS.text,
-      MEDIUM,
-       'left',
-       0.4,
+      input.ign.length > 14 ? 38 : 48,
+      WHITE, MEDIUM, 'left', 0,
     ),
 
-    text(272, 180, 520, 24, input.joined, 17, COLORS.muted),
+    text(272, 190, 500, 22, input.joined, 14, MUTED),
 
-    sectionLabel(270, 212, 'LEVEL PROGRESS', COLORS.muted, COLORS.cyan),
-    text(270, 234, 180, 28, `LEVEL ${input.level}`, 22, COLORS.cyan, MEDIUM),
+    // XP progress
+    text(270, 228, 180, 20, `LEVEL ${input.level}`, 15, CYAN, MEDIUM),
+
     text(
-      640, 238, 210, 24,
+      630, 228, 220, 20,
       `${input.xpToNext.toLocaleString()} XP TO NEXT`,
-      15, COLORS.muted, FONT, 'right',
+      12, MUTED, FONT, 'right',
     ),
 
     h('div', {
       style: {
         position: 'absolute',
         left: 270,
-        top: 266,
+        top: 256,
         width: 580,
-        height: 6,
+        height: 5,
         borderRadius: 3,
-        backgroundColor: '#22303e',
+        backgroundColor: '#26313D',
         overflow: 'hidden',
       },
     },
       h('div', {
         style: {
           width: `${progress * 100}%`,
-          height: 6,
+          height: 5,
+          backgroundColor: CYAN,
           borderRadius: 3,
-          backgroundColor: COLORS.cyan,
         },
       }),
     ),
 
-    divider(940, 86, 1, COLORS.line, 166),
+    // Competitive rating
+    divider(900, 95, 1, LINE, 170),
 
-    text(990, 94, 280, 22, 'COMPETITIVE RATING', 14, COLORS.muted, MEDIUM, 'left', 1.2),
+    text(940, 102, 300, 20, 'COMPETITIVE RATING', 12, MUTED, MEDIUM, 'left', 1.3),
+
     text(
-      990, 116, 300, 78,
-      `${input.elo.toLocaleString()} RR`,
-      70, COLORS.cyan, MEDIUM,
+      940, 130, 340, 70,
+      input.elo.toLocaleString(),
+      64, CYAN, MEDIUM, 'left', -1,
     ),
-    text(990, 202, 280, 20, 'GLOBAL RANK', 13, COLORS.muted, MEDIUM, 'left', 1.2),
-    text(990, 218, 280, 40, `#${input.globalRank}`, 38, COLORS.text, MEDIUM),
+
+    text(940, 205, 250, 20, 'RANKED RATING', 12, FAINT),
+
+    badge(940, 238, 140, `#${input.globalRank}`, {
+      color: PURPLE,
+      background: 'rgba(182,156,255,0.08)',
+      border: 'rgba(182,156,255,0.25)',
+      height: 32,
+      size: 16,
+    }),
   );
 }
 
 function record(input: DefaultTemplateInput): VNode {
-  const winRate = Math.max(0, Math.min(1, input.winRate));
+  const winRate = clamp(input.winRate, 0, 1);
 
   return h('div', {},
-    panel(60, 310, 1280, 150, 18),
+    panel(60, 310, 1280, 130, 18),
 
-    sectionLabel(88, 330, 'RECORD', COLORS.muted, COLORS.cyan),
-    text(185, 330, 220, 20, 'LIFETIME', 13, COLORS.faint, MEDIUM, 'left', 1.4),
+    heading(88, 330, 'Lifetime Record', 'All-Time Statistics'),
 
-    divider(340, 354, 1, COLORS.line, 88),
-    divider(1060, 354, 1, COLORS.line, 88),
+    divider(450, 354, 1, LINE, 62),
+    divider(950, 354, 1, LINE, 62),
 
-    text(88, 352, 230, 66, input.wins, 64, COLORS.green, MEDIUM),
-    text(88, 422, 180, 22, 'TOTAL WINS', 14, COLORS.muted, FONT, 'left', 0.8),
+    // Wins
+    text(88, 360, 300, 48, input.wins, 42, GREEN, MEDIUM),
+    text(90, 410, 250, 18, 'TOTAL WINS', 12, MUTED, FONT, 'left', 1),
 
-    text(1070, 352, 200, 66, input.losses, 64, COLORS.red, MEDIUM, 'right'),
-    text(1070, 422, 200, 22, 'TOTAL LOSSES', 14, COLORS.muted, FONT, 'right', 0.8),
-
+    // Win rate
     text(
-      360, 332, 680, 56,
+      490, 358, 420, 48,
       `${(winRate * 100).toFixed(1)}%`,
-      52, COLORS.text, MEDIUM, 'center',
-    ),
-    text(360, 390, 680, 22, 'WIN RATE', 15, COLORS.muted, MEDIUM, 'center', 1.2),
-
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: 390,
-        top: 424,
-        width: 620,
-        height: 7,
-        borderRadius: 4,
-        backgroundColor: COLORS.red,
-        overflow: 'hidden',
-      },
-    },
-      h('div', {
-        style: {
-          width: `${winRate * 100}%`,
-          height: 7,
-          backgroundColor: COLORS.green,
-          borderRadius: 4,
-        },
-      }),
+      42, WHITE, MEDIUM, 'center',
     ),
 
-    text(390, 438, 620, 20, input.winCaption, 13, COLORS.muted, FONT, 'center'),
+    text(490, 408, 420, 18, 'WIN RATE', 12, MUTED, MEDIUM, 'center', 1),
+
+    // Losses
+    text(1000, 360, 280, 48, input.losses, 42, RED, MEDIUM, 'right'),
+    text(1030, 410, 250, 18, 'TOTAL LOSSES', 12, MUTED, FONT, 'right', 1),
   );
 }
 
-function statTile(x: number, y: number, t: DefaultTile): VNode {
+function statTile(x: number, y: number, tile: DefaultTile): VNode {
+  const color = tile.accent || CYAN;
+
   return h('div', {},
-    panel(x, y, 300, 118, 16),
+    panel(x, y, 300, 108, 14),
 
-    accent(x + 18, y + 18, 3, 82, t.accent || COLORS.cyan),
-
-    text(x + 34, y + 10, 244, 60, t.value, 52, COLORS.text, MEDIUM),
+    accent(x + 18, y + 20, 3, 68, color, 3),
 
     text(
-      x + 34, y + 76, 232, 22,
-      t.label,
-      14, COLORS.muted, FONT, 'left', 0.7,
+      x + 34, y + 15, 245, 48,
+      tile.value,
+      tile.value.length > 7 ? 32 : 38,
+      WHITE, MEDIUM, 'left', -0.5,
     ),
 
-    badge(x + 198, y + 12, 86, t.rank || '-', {
-      color: RANK_TEXT,
-      background: RANK_BG,
-      border: RANK_BORDER,
-      height: 34,
-      size: 17,
-    }),
+    text(
+      x + 34, y + 68, 240, 18,
+      tile.label.toUpperCase(),
+      12, MUTED, FONT, 'left', 0.8,
+    ),
+
+    tile.rank
+      ? badge(x + 205, y + 12, 78, tile.rank, {
+          color: PURPLE,
+          background: 'rgba(182,156,255,0.07)',
+          border: 'rgba(182,156,255,0.2)',
+          height: 26,
+          size: 12,
+        })
+      : null,
   );
 }
 
 function stats(input: DefaultTemplateInput): VNode {
   const xs = [60, 386, 712, 1038];
-  const ys = [486, 616];
+  const ys = [500, 620];
 
   return h('div', {},
-    sectionLabel(60, 464, 'PERFORMANCE', COLORS.muted, COLORS.cyan),
-    text(1040, 466, 300, 20, 'SEASON TOTALS', 13, COLORS.faint, MEDIUM, 'right', 1.4),
+    heading(60, 466, 'Performance', 'Season Statistics'),
 
-    ...input.tiles.slice(0, 8).map((t, i) =>
-      statTile(xs[i % 4], ys[Math.floor(i / 4)], t),
+    ...input.tiles.slice(0, 8).map((tile, i) =>
+      statTile(
+        xs[i % 4],
+        ys[Math.floor(i / 4)],
+        tile,
+      ),
     ),
   );
 }
 
 function combat(input: DefaultTemplateInput): VNode {
-  const positions = [110, 510, 910];
+  const positions = [90, 510, 930];
 
   return h('div', {},
-    panel(60, 755, 1280, 105, 18),
+    panel(60, 765, 1280, 100, 16),
 
-    sectionLabel(84, 768, 'COMBAT', COLORS.muted, COLORS.cyan),
+    heading(84, 780, 'Combat', 'Combat Performance'),
 
     ...positions.map((x, i) => {
-      const t = input.combat[i] || {
+      const tile = input.combat[i] || {
         value: '-',
         label: '',
         rank: '',
-        accent: COLORS.cyan,
+        accent: CYAN,
       };
 
       return h('div', {},
-        accent(x, 796, 3, 40, t.accent || COLORS.cyan),
+        accent(x, 817, 3, 32, tile.accent || CYAN, 3),
 
-        text(x + 14, 792, 120, 48, t.value, 44, COLORS.text, MEDIUM),
-        text(x + 140, 802, 160, 28, t.label, 15, COLORS.muted),
-        badge(x + 290, 797, 86, t.rank || '-', {
-          color: RANK_TEXT,
-          background: RANK_BG,
-          border: RANK_BORDER,
-          height: 34,
-          size: 17,
-        }),
+        text(
+          x + 14, 808, 125, 42,
+          tile.value,
+          34, WHITE, MEDIUM,
+        ),
 
-        i < 2 ? divider(x + 380, 796, 1, COLORS.line, 40) : null,
+        text(
+          x + 145, 817, 150, 24,
+          tile.label.toUpperCase(),
+          12, MUTED, FONT,
+        ),
+
+        tile.rank
+          ? badge(x + 290, 813, 70, tile.rank, {
+              color: PURPLE,
+              background: 'rgba(182,156,255,0.08)',
+              border: 'rgba(182,156,255,0.2)',
+              height: 26,
+              size: 12,
+            })
+          : null,
+
+        i < 2
+          ? divider(x + 390, 813, 1, LINE, 36)
+          : null,
       );
     }),
   );
@@ -281,13 +345,26 @@ function combat(input: DefaultTemplateInput): VNode {
 
 function footer(input: DefaultTemplateInput): VNode {
   return h('div', {},
-    divider(60, 872, 1280, COLORS.line, 1),
+    divider(60, 888, 1280, LINE, 1),
 
-    text(60, 884, 600, 20, input.seasonLine1, 14, COLORS.muted, MEDIUM, 'left', 1),
-    text(60, 906, 760, 18, input.seasonLine2, 13, COLORS.faint),
+    text(
+      60, 899, 600, 20,
+      input.seasonLine1,
+      12, MUTED, MEDIUM, 'left', 0.8,
+    ),
+
+    text(
+      60, 920, 700, 16,
+      input.seasonLine2,
+      11, FAINT,
+    ),
 
     input.footerBrand
-      ? text(940, 886, 400, 22, input.footerBrand, 14, COLORS.faint, MEDIUM, 'right', 0.4)
+      ? text(
+          940, 902, 400, 20,
+          input.footerBrand,
+          12, FAINT, MEDIUM, 'right',
+        )
       : null,
   );
 }
@@ -295,11 +372,25 @@ function footer(input: DefaultTemplateInput): VNode {
 export function defaultTemplate(
   input: DefaultTemplateInput,
 ): { root: VNode; width: number; height: number } {
-  const root = h('div', { style: rootStyle(WIDTH, HEIGHT) },
+  const root = h(
+    'div',
+    { style: rootStyle(WIDTH, HEIGHT) },
+
     decor(WIDTH, HEIGHT, 'stats'),
 
-    header(),
+    // Background
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: WIDTH,
+        height: HEIGHT,
+        backgroundColor: BG,
+      },
+    }),
 
+    header(),
     hero(input),
     record(input),
     stats(input),

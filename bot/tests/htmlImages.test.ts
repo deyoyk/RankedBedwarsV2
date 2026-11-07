@@ -140,7 +140,7 @@ describe('html image rendering', () => {
       footerBrand: 'play.deyo.lol',
     });
     const all = texts(tpl.root);
-    for (const expected of ['<Hacker>', 'RECORD', 'COMBAT', 'W/L ratio', 'play.deyo.lol', '#278', '50 RR', 'Final Deaths', 'LEVEL PROGRESS']) {
+    for (const expected of ['<Hacker>', 'LIFETIME RECORD', 'COMBAT', 'W/L RATIO', 'play.deyo.lol', '#278', '50', 'FINAL DEATHS', 'RANKED RATING']) {
       expect(all).toContain(expected);
     }
   });
