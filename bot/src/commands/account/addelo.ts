@@ -1,6 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
+import { errorEmbed, successEmbed } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { safeReply } from '../../utils/safeReply';
 
@@ -38,12 +38,12 @@ export async function addelo(interaction: ChatInputCommandInteraction, _wsManage
     });
 
     if (existingRank) {
-      const embed = betterEmbed('This ELO range overlaps with an existing rank!', '#00AAAA', 'ELO Rank Creation Error');
-      embed.builder.addFields(
+      const embed = errorEmbed('This ELO range overlaps with an existing rank!', 'ELO Rank Creation Error').builder;
+      embed.addFields(
         { name: 'Existing Range', value: `${existingRank.startElo}-${existingRank.endElo}`, inline: true },
         { name: 'Role', value: `<@&${existingRank.roleId}>`, inline: true }
       );
-      await safeReply(interaction, embed);
+      await safeReply(interaction, { embeds: [embed] });
       return;
     }
 

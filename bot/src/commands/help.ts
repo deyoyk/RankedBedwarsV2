@@ -88,10 +88,9 @@ export async function help(interaction: ChatInputCommandInteraction, _wsManager?
     console.log('[Help] Command categories:', Object.keys(commandCategories));
     const releaseVersion = await getReleaseVersion();
 
-    const embed = themedEmbed()
+    const embed = themedEmbed('info')
       .setTitle(`Ranked Bedwars System ${releaseVersion}`)
-      .setDescription(`Made by <@1526597163885527121> \`Deyo\` for \`${config.bot_stats_text}\`\n\n:star2: Select a category to view commands and their required roles.`)
-      .setColor('#00AAAA')
+      .setDescription(`Made by <@1526597163885527121> \`Deyo\` for \`${config.bot_stats_text}\`\n\nSelect a category to view commands and their required roles.`);
 
     const selectMenu = buildCategorySelectMenu(commandCategories);
 
@@ -141,17 +140,15 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
     const end = start + perPage;
     const pagedCommands = validCommands.slice(start, end);
 
-    const embed = themedEmbed()
+    const pageLine = totalPages > 1 ? `\n\n**Page:** ${page + 1}/${totalPages}` : '';
+    const embed = themedEmbed('info')
       .setTitle(`${category.charAt(0).toUpperCase() + category.slice(1)} Commands`)
       .setDescription(
-        '\n' +
+        `Select a command to view its required roles.${pageLine}\n\n` +
         pagedCommands.map((cmd) => {
-          return `\`/${cmd}\` » Required: ${getCommandRoles(cmd)}`;
+          return `- \`/${cmd}\` - Required: ${getCommandRoles(cmd)}`;
         }).join('\n')
-      )
-      .setColor('#00AAAA');
-
-    embed.setFooter({ text: 'Commands use dynamic permissions from the plugin. Same commands applicable for prefix/message commands.' });
+      );
 
     const selectMenu = buildCategorySelectMenu(commandCategories);
     const selectRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);

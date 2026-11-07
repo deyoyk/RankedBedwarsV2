@@ -82,10 +82,11 @@ describe('recentgames command', () => {
     const embed = msg.reply.mock.calls[0][0].embeds[0].toJSON();
     const games = embed.fields[0].value;
 
-    expect(games).toContain('**Game #9:** Lost');
-    expect(games).toContain('**Game #8:** Won');
-    expect(games).toContain('**Game #7:** Voided');
-    expect(games).toContain('**Game #6:** Ongoing');
-    expect(games).not.toContain('**Game #9:** Won');
+    expect(games).toContain('- **Game #9** - Lost');
+    expect(games).toContain('- **Game #8** - Won');
+    expect(games).toContain('- **Game #7** - Voided');
+    expect(games).toContain('- **Game #6** - Ongoing');
+    expect(games).not.toContain('**Game #9** - Won');
+    expect(embed.title).toBe('Info: Recent Games - LoveDeyo');
   });
 });

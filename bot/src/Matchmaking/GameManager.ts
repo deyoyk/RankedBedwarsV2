@@ -2826,17 +2826,15 @@ export class GameManager {
       const rawMap = context.game.map; 
       const versionMatch = rawMap.match(/(\d+v\d+)/);
       const mapName = versionMatch ? rawMap.slice(0, versionMatch.index).trim() || rawMap : rawMap;
-      return themedEmbed()
+      return themedEmbed('warning')
         .setTitle(`Game #${context.game.gameId} Voided`)
-        .setDescription(`**Reason:** ${context.reason}\n**Map:** ${mapName}`)
+        .setDescription(`Game #${context.game.gameId} has been voided.\n\n**Reason:** ${context.reason}\n**Map:** ${mapName}`)
         .addFields([
           { name: 'Stats Reverted', value: voidedSummary || 'None', inline: false }
-        ])
-        .setColor('#00AAAA')
-        .setTimestamp();
+        ]);
     } catch (error) {
       console.error('[GameManager] Error creating void embed:', error);
-      return themedEmbed().setTitle('Error').setDescription('Could not create void embed');
+      return themedEmbed('error').setTitle('Void Embed Error').setDescription('Could not create void embed.');
     }
   }
 
@@ -2863,10 +2861,9 @@ export class GameManager {
       const guild = this.client.guilds.cache.first();
       if (!guild || !game.channels) return;
 
-      const deletionEmbed = themedEmbed()
+      const deletionEmbed = themedEmbed('warning')
         .setTitle('Game Thread Archival')
         .setDescription('This game\'s thread will be archived in 30 seconds.')
-        .setColor('#FF9900')
         .setTimestamp(new Date(Date.now() + 30000));
 
       if (game.channels.text) {

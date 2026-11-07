@@ -432,8 +432,9 @@ export class RandomQueueManager {
       ...team2.map(id => `‎ <@${id}>`),
       team2.length === 0 ? '‎ *(No players)*' : ''
     ].filter(Boolean).join('\n');
-    return themedEmbed()
+    return themedEmbed('info')
       .setTitle(`Game #${gameId} Started`)
+      .setDescription(`Game #${gameId} has started.`)
       .addFields(
         {
           name: '**TEAM GREEN**',
@@ -446,7 +447,6 @@ export class RandomQueueManager {
           inline: true
         }
       )
-      .setTimestamp()
-      .setColor('#00aaaa');
+      .setColor('info');
   }
 }

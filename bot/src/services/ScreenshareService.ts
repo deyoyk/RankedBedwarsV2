@@ -401,48 +401,43 @@ export class ScreenshareService {
   }
 
   static createFreezeEmbed(_targetId: string): EmbedBuilder {
-    return themedEmbed()
-      .setColor(0xff0000)
-      .setTitle('YOU ARE FROZEN YOU HAVE 5 MINUTES TO DOWNLOAD ANYDESK')
+    return themedEmbed('error')
+      .setTitle('Screenshare Freeze')
       .setDescription(
-        `> **What Should You Do ?**\n\n` +
-        `> #1 Don't Log Out the Server\n` +
-        `> #2 Don't Unplug or plug any devices such as mouses/keyboards/usbs/etc..\n` +
-        `> #3 Don't Delete Rename Or Modify any file in your PC\n\n` +
-        `> Refuse to SS ***14d Ban***\n` +
-        `> Admit to cheating ***14d Ban***\n` +
-        `> Get ScreenShared ***if broken rules found you will be punished***\n` +
-        `> AnyDesk | https://anydesk.com/en`
-      )
-      .setTimestamp();
+        `You have 5 minutes to download AnyDesk and follow the instructions below.\n\n` +
+        `- Do not log out of the server.\n` +
+        `- Do not unplug or plug in any devices.\n` +
+        `- Do not delete, rename, or modify any files.\n` +
+        `- Refusing screenshare results in a 14 day ban.\n` +
+        `- Admitting to cheating results in a 14 day ban.\n` +
+        `- If broken rules are found during screenshare, you will be punished.\n\n` +
+        `**AnyDesk:** https://anydesk.com/en`
+      );
   }
 
   static createSessionEmbed(session: IScreenshareSession, imageUrl: string): EmbedBuilder {
-    return themedEmbed()
-      .setColor(0x5865f2)
+    return themedEmbed('info')
       .setTitle('Screenshare Request')
       .setDescription(
+        `A screenshare request has been created.\n\n` +
         `**Target:** <@${session.targetId}>\n` +
         `**Requester:** <@${session.requesterId}>\n` +
-        `**Reason:** ${session.reason}`
+        `**Reason:** ${session.reason}\n` +
+        `**Expires:** 15 minutes`
       )
-      .setImage(imageUrl)
-      .setFooter({ text: `Expires in 15 minutes` })
-      .setTimestamp();
+      .setImage(imageUrl);
   }
 
   static createFreezeButton(sessionId: string): ActionRowBuilder<ButtonBuilder> {
     const freezeBtn = new ButtonBuilder()
       .setCustomId(`ss_freeze_${sessionId}`)
       .setLabel('Freeze Player')
-      .setStyle(ButtonStyle.Danger)
-      .setEmoji('❄️');
+      .setStyle(ButtonStyle.Danger);
 
     const cancelBtn = new ButtonBuilder()
       .setCustomId(`ss_cancel_${sessionId}`)
       .setLabel('Cancel')
-      .setStyle(ButtonStyle.Secondary)
-      .setEmoji('❌');
+      .setStyle(ButtonStyle.Secondary);
 
     return new ActionRowBuilder<ButtonBuilder>().addComponents(freezeBtn, cancelBtn);
   }

@@ -17,9 +17,9 @@ export async function wipeeveryone(interaction: ChatInputCommandInteraction, _ws
 
   await executeWithConfirmation(interaction, {
     commandName: 'wipeeveryone',
-    confirmTitle: '⚠️ Confirm Wipe Everyone Operation',
-    confirmDescription: `Are you sure you want to wipe all stats for **${total}** users?\n\n**⚠️ WARNING: This action is irreversible!**`,
-    confirmLabel: '🗑️ Confirm Wipe',
+    confirmTitle: 'Confirm Wipe Everyone Operation',
+    confirmDescription: `Are you sure you want to wipe all stats for **${total}** users?\n\n**Warning: This action is irreversible.**`,
+    confirmLabel: 'Confirm Wipe',
     confirmStyle: ButtonStyle.Danger,
     fields: [
       { name: 'What will be wiped', value: '• ELO\n• Wins/Losses\n• Games played\n• MVPs\n• Kills/Deaths\n• Bed breaks/Final kills\n• Resource stats\n• Win/Lose streaks\n• KDR/WLR\n• Recent games\n• Daily ELO history', inline: false },

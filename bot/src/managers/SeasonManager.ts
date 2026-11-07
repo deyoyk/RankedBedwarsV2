@@ -7,7 +7,7 @@ import Game from '../models/Game';
 import { getLevelInfo } from '../utils/levelSystem';
 import { EmbedBuilder } from 'discord.js';
 import { computePagination, validatePageLimit, validatePositiveInt } from './validationHelpers';
-import { themedEmbed } from '../utils/betterembed';
+import { successEmbed, errorEmbed } from '../utils/betterembed';
 
 export interface SeasonStartOptions {
   seasonNumber: number;
@@ -222,13 +222,11 @@ export class SeasonManager {
 
       const activeSeason = await Season.findOne({ isActive: true });
       if (activeSeason) {
-        const embed = themedEmbed()
-          .setColor('#00AAAA')
-          .setTitle('❌ Error')
-          .setDescription(
-            `There is already an active season: **${activeSeason.name}** ` +
-            `(Season ${activeSeason.seasonNumber} Chapter ${activeSeason.chapterNumber})`
-          );
+        const embed = errorEmbed(
+          `There is already an active season: **${activeSeason.name}** ` +
+          `(Season ${activeSeason.seasonNumber} Chapter ${activeSeason.chapterNumber})`,
+          'Season Start Failed'
+        ).builder;
 
         return {
           success: false,
@@ -243,12 +241,10 @@ export class SeasonManager {
       });
 
       if (existingSeason) {
-        const embed = themedEmbed()
-          .setColor('#00AAAA')
-          .setTitle('❌ Error')
-          .setDescription(
-            `Season ${options.seasonNumber} Chapter ${options.chapterNumber} already exists!`
-          );
+        const embed = errorEmbed(
+          `Season ${options.seasonNumber} Chapter ${options.chapterNumber} already exists!`,
+          'Season Start Failed'
+        ).builder;
 
         return {
           success: false,
@@ -285,12 +281,10 @@ export class SeasonManager {
         await session.endSession();
       }
 
-      const embed = themedEmbed()
-        .setColor('#00ff00')
-        .setTitle('🎉 Season Started!')
-        .setDescription(
-          `**${options.name}** has been started as Season ${options.seasonNumber} Chapter ${options.chapterNumber}`
-        )
+      const embed = successEmbed(
+        `**${options.name}** has been started as Season ${options.seasonNumber} Chapter ${options.chapterNumber}`,
+        'Season Started'
+      ).builder
         .addFields(
           { name: 'Season', value: `${options.seasonNumber}`, inline: true },
           { name: 'Chapter', value: `${options.chapterNumber}`, inline: true },
@@ -316,10 +310,7 @@ export class SeasonManager {
     } catch (error) {
       console.error('Error starting season:', error);
 
-      const embed = themedEmbed()
-        .setColor('#00AAAA')
-        .setTitle('❌ Error')
-        .setDescription('An error occurred while starting the season.');
+      const embed = errorEmbed('An error occurred while starting the season.', 'Season Start Failed').builder;
 
       return {
         success: false,

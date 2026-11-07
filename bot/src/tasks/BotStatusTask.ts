@@ -7,7 +7,7 @@ import botPackage from '../../package.json';
 import { EMBED_THEME, themedEmbed } from '../utils/betterembed';
 
 export const STATUS_EMBED_TITLE = 'Bot Environment Status';
-const STATUS_WARNING_COLOR = 0xF1C40F;
+const STATUS_WARNING_COLOR = EMBED_THEME.warningColor;
 
 export class BotStatusTask {
   private client: Client;
@@ -98,7 +98,7 @@ export class BotStatusTask {
       if (!ownId) return null;
       const messages = await channel.messages.fetch({ limit: 10 });
       for (const message of messages.values()) {
-        if (message.author?.id === ownId && message.embeds?.some(embed => embed.title === STATUS_EMBED_TITLE)) {
+        if (message.author?.id === ownId && message.embeds?.some(embed => embed.title?.includes(STATUS_EMBED_TITLE))) {
           return message;
         }
       }
@@ -164,7 +164,11 @@ export class BotStatusTask {
 
       const embed = themedEmbed(color)
         .setTitle(STATUS_EMBED_TITLE)
-        .setTimestamp();
+        .setDescription(
+          healthy
+            ? 'All services are online.'
+            : (dbOnline || wsOnline ? 'One or more services are degraded.' : 'Core services are offline.')
+        );
 
       embed.addFields(
         {
@@ -232,10 +236,9 @@ export class BotStatusTask {
       return embed;
     } catch (error) {
       console.error('[BotStatusTask] Error creating embed fields:', error);
-      return themedEmbed(EMBED_THEME.errorColor)
+      return themedEmbed('error')
         .setTitle(STATUS_EMBED_TITLE)
-        .setDescription('**Status unavailable**\nThe bot could not collect environment metrics. It will retry on the next refresh.')
-        .setTimestamp();
+        .setDescription('**Status unavailable**\nThe bot could not collect environment metrics. It will retry on the next refresh.');
     }
   }
 

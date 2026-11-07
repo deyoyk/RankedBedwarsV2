@@ -171,6 +171,7 @@ interface Config {
     [key: string]: string;
   };
   serverip: string;
+  serverName: string;
   bot_stats_text: string;
 
   eloDecay: {
@@ -283,6 +284,7 @@ const configuration: Config = {
     default: clean(process.env.STRIKE_DEFAULT_DURATION) || '48h'
   },
   serverip: clean(process.env.SERVER_IP) || 'play.deyo.lol',
+  serverName: clean(process.env.SERVER_NAME) || 'deyo Ranked Bedwars',
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',
   eloDecay: {
     enabled: clean(process.env.ELO_DECAY_ENABLED) !== 'false',

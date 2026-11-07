@@ -3,7 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import Season from '../../models/Season';
-import { betterEmbed, themedEmbed } from '../../utils/betterembed';
+import { errorEmbed, warningEmbed } from '../../utils/betterembed';
 import { resolveTheme } from '../../assets/stats-theme';
 import { getLevelInfo } from '../../utils/levelSystem';
 import { resolveRecentGameResult } from '../../utils/recentGameResult';
@@ -20,7 +20,7 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
     .lean();
 
   if (!user) {
-    const notFoundEmbed = betterEmbed('User not found or not registered.', '#00AAAA', 'Stats Error');
+    const notFoundEmbed = errorEmbed('User not found or not registered.', 'Stats Error');
     await safeReply(interaction, { embeds: [notFoundEmbed.builder] });
     return;
   }
@@ -159,9 +159,8 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
     });
   } catch (error) {
     console.error('[Stats] Failed to generate stats image:', error);
-    const busyEmbed = betterEmbed(
+    const busyEmbed = warningEmbed(
       'Stats image generation is under heavy load right now. Please try again in a few seconds.',
-      '#ffcc00',
       'Stats Busy',
     );
     await safeReply(interaction, { embeds: [busyEmbed.builder] });
@@ -169,7 +168,6 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
   }
 
   await safeReply(interaction, {
-    embeds: [themedEmbed().setTitle('Player Stats').setImage(`attachment://${playerData.ign}_stats.png`)],
     files: [{ attachment: buffer, name: `${playerData.ign}_stats.png` }]
   });
 }

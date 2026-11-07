@@ -25,11 +25,9 @@ export class GuildJoinListener {
       if (user) {
         console.log(`[GuildJoinListener] User ${member.user.tag} exists in database, sending welcome back embed`);
         
-        const embed = themedEmbed()
-          .setTitle('Welcome Back!')
-          .setDescription(`Hey <@${member.id}>, it's not your first time being in this server, lemme fix your roles`)
-          .setColor('#00ff00')
-          .setTimestamp();
+        const embed = themedEmbed('success')
+          .setTitle('Welcome Back')
+          .setDescription(`<@${member.id}> is a returning member. Restoring roles now.`);
         
         try {
           const alertsChannel = member.guild.channels.cache.get(config.channels.alertsChannel);

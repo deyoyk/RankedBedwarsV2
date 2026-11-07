@@ -146,6 +146,11 @@ describe('QueueListener offline eviction', () => {
     expect(state.players).toEqual(['a']);
     expect(queuePlayers.get(QUEUE_ID)).toEqual(['a']);
     expect(workerMocks.moveMembers).toHaveBeenCalledWith(['b'], expect.anything(), expect.anything());
+    expect(workerMocks.sendMessage).toHaveBeenCalledWith(
+      'alerts1',
+      { content: expect.stringContaining('Join `localhost` and queue again.') },
+      7,
+    );
   });
 
   it('evicts the whole party when one member goes offline', async () => {

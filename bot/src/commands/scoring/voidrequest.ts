@@ -106,9 +106,9 @@ async function createVoidRequest(interaction: ChatInputCommandInteraction, data:
 }
 
 function createVoidRequestEmbed(data: VoidRequestData, game: IGame): EmbedBuilder {
-  return themedEmbed()
+  return themedEmbed('warning')
     .setTitle('Void Request')
-    .setDescription(`A void has been requested for Game ID: ${data.gameId}`)
+    .setDescription(`A void has been requested for Game ID ${data.gameId}.`)
     .addFields(
       { name: 'Reason', value: data.reason, inline: false },
       { name: 'Game ID', value: data.gameId, inline: true },
@@ -117,10 +117,7 @@ function createVoidRequestEmbed(data: VoidRequestData, game: IGame): EmbedBuilde
       { name: 'Map', value: game?.map || 'Unknown', inline: true },
       { name: 'Team 1', value: game?.team1?.map((id: string) => `<@${id}>`).join(', ') || 'None', inline: false },
       { name: 'Team 2', value: game?.team2?.map((id: string) => `<@${id}>`).join(', ') || 'None', inline: false }
-    )
-    .setColor('#ff6b6b')
-    .setTimestamp()
-    .setFooter({ text: `Game ID: ${data.gameId}` });
+    );
 }
 
 async function processVoteResults(message: Message, data: VoidRequestData, votes: VoteData, allPlayers: string[]) {
@@ -134,21 +131,21 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
     if (approved) {
       const freshGame = await Game.findOne({ gameId: data.gameId }).select('state').lean();
       if (!freshGame) {
-        resultEmbed.setDescription(`❌ Void request failed: game not found.`);
+        resultEmbed.setColor('error').setDescription('Void request failed: game not found.');
       } else if (freshGame.state === 'scored' || freshGame.state === 'voided' || freshGame.state === 'scoring') {
-        resultEmbed.setDescription(`❌ Void request not applied: game state changed to ${freshGame.state}.`);
+        resultEmbed.setColor('error').setDescription(`Void request not applied: game state changed to ${freshGame.state}.`);
       } else {
         const resolvedWs = (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
         if (!resolvedWs) {
-          resultEmbed.setDescription(`❌ Void request failed due to WebSocket manager not being available.`);
+          resultEmbed.setColor('error').setDescription('Void request failed because the WebSocket manager is not available.');
         } else {
           const gameManager = getSharedGameManager(message.client, resolvedWs!);
           await gameManager.voidGame(parseInt(data.gameId), data.reason);
-          resultEmbed.setDescription(`✅ Void approved and applied to Game ID: ${data.gameId}.`);
+          resultEmbed.setColor('success').setDescription(`Void approved and applied to Game ID ${data.gameId}.`);
         }
       }
     } else {
-      resultEmbed.setDescription(`❌ Void request rejected due to insufficient approval votes.`);
+      resultEmbed.setColor('warning').setDescription('Void request rejected due to insufficient approval votes.');
     }
 
     await message.edit({

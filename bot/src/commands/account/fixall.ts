@@ -27,9 +27,9 @@ export async function fixall(interaction: ChatInputCommandInteraction, _wsManage
 
   await executeWithConfirmation(interaction, {
     commandName: 'fixall',
-    confirmTitle: '⚠️ Confirm Fix All Operation',
+    confirmTitle: 'Confirm Fix All Operation',
     confirmDescription: `Are you sure you want to fix roles and nicknames for **${total}** users?\n\nThis operation will:`,
-    confirmLabel: '✅ Confirm',
+    confirmLabel: 'Confirm',
     confirmStyle: ButtonStyle.Success,
     fields: [
       { name: 'What it does', value: '• Update user roles based on ELO\n• Update user nicknames\n• Process all users in batches\n• Respect Discord rate limits', inline: false },
@@ -131,9 +131,8 @@ function createProgressEmbed(progress: FixAllProgress): EmbedBuilder {
   
   const progressBar = createProgressBar(progressPercent);
   
-  const embed = themedEmbed()
-    .setTitle('🔄 Fix All Progress')
-    .setColor('#FFA500')
+  const embed = themedEmbed('warning')
+    .setTitle('Fix All Progress')
     .setDescription(`Processing user roles and nicknames...`)
     .addFields(
       { name: 'Progress', value: progressBar, inline: false },
@@ -163,12 +162,11 @@ function createFinalEmbed(progress: FixAllProgress): EmbedBuilder {
   const elapsedSeconds = Math.floor(elapsed / 1000);
   const successRate = progress.total > 0 ? Math.round((progress.successful / progress.total) * 100) : 0;
   
-  const color = successRate >= 90 ? '#00FF00' : successRate >= 70 ? '#FFA500' : '#00AAAA';
-  const status = successRate >= 90 ? '✅ Completed Successfully' : successRate >= 70 ? '⚠️ Completed with Issues' : '❌ Completed with Errors';
-  
-  const embed = themedEmbed()
-    .setTitle(status)
-    .setColor(color)
+  const status = successRate >= 90 ? 'success' : successRate >= 70 ? 'warning' : 'error';
+  const statusText = successRate >= 90 ? 'Completed Successfully' : successRate >= 70 ? 'Completed with Issues' : 'Completed with Errors';
+
+  const embed = themedEmbed(status)
+    .setTitle(statusText)
     .setDescription(`Fix all operation completed!`)
     .addFields(
       { name: 'Total Users', value: `${progress.total}`, inline: true },

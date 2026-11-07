@@ -27,7 +27,7 @@ export async function forcerename(interaction: ChatInputCommandInteraction, _wsM
       { new: false }
     ).select('ign').lean();
     if (!updated) {
-      await safeReply(interaction, errorEmbed(`User <@${targetUser}> is not registered. Use \`forceregister\` instead.`, '❌ Force Rename Error'));
+      await safeReply(interaction, errorEmbed(`User <@${targetUser}> is not registered. Use \`forceregister\` instead.`, 'Force Rename Error'));
       return;
     }
 
@@ -35,7 +35,7 @@ export async function forcerename(interaction: ChatInputCommandInteraction, _wsM
 
     await safeFix(interaction.guild, targetUser);
 
-    const embed = successEmbed(`Successfully renamed <@${targetUser}>`, '✅ User Force Renamed');
+    const embed = successEmbed(`Successfully renamed <@${targetUser}>`, 'User Force Renamed');
     embed.builder.addFields(
       { name: 'User', value: `<@${targetUser}>`, inline: true },
       { name: 'Previous IGN', value: oldIgn || 'None', inline: true },

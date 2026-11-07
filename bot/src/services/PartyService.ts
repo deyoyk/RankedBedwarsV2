@@ -146,8 +146,7 @@ export class PartyService {
 
       await this.updatePartyActivity(party.partyId);
 
-      const embed = themedEmbed()
-        .setColor('#00ff00')
+      const embed = themedEmbed('success')
         .setTitle('Party Invitation')
         .setDescription(`<@${targetId}>, you have been invited to join the party!`)
         .addFields(
@@ -155,20 +154,17 @@ export class PartyService {
           { name: 'Leader', value: `<@${leaderId}>`, inline: true },
           { name: 'Members', value: party.members.map((id: string) => `<@${id}>`).join(', '), inline: false },
           { name: 'Description', value: party.description || 'No description', inline: false }
-        )
-        .setTimestamp();
+        );
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`party_accept_${party.partyId}_${targetId}`)
           .setLabel('Accept Invite')
-          .setStyle(ButtonStyle.Success)
-          .setEmoji('✅'),
+          .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId(`party_decline_${party.partyId}_${targetId}`)
           .setLabel('Decline')
           .setStyle(ButtonStyle.Danger)
-          .setEmoji('❌')
       );
 
       return { success: true, embed, components: [row] };

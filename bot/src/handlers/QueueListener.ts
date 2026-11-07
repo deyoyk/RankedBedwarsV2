@@ -23,6 +23,10 @@ async function updatePartyActivity(partyId: string) {
   }
 }
 
+function offlineQueueReason(): string {
+  return `You are not online on the Minecraft server. Join \`${config.serverip}\` and queue again.`;
+}
+
 interface QueueState {
   players: string[];
   parties: Map<string, string[]>;
@@ -592,7 +596,7 @@ export class QueueListener {
 
       const guild = this.client.guilds.cache.first();
       const waitingVcId = config.voicechannels.waitingvc;
-      const reason = 'you went offline on the Minecraft server, so you were removed from the queue. Rejoin the server and queue again!';
+      const reason = offlineQueueReason();
       const evictedIds = [...evicted];
       const moved: Array<{ id: string; username: string; channelId?: string | null }> = [];
       for (let i = 0; i < evictedIds.length; i += 5) {
@@ -990,7 +994,7 @@ export class QueueListener {
       const presence = PresenceService.evaluate(user.ign);
       if (presence === 'offline') {
         console.log(`[QueueListener] Join rejected for ${user.ign}: presence is offline`);
-        await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+        await this.moveToWaiting(state, offlineQueueReason());
         return;
       }
 
@@ -1005,7 +1009,7 @@ export class QueueListener {
           PresenceService.ingest(user.ign, liveStatus.online);
           if (!liveStatus.online) {
             console.log(`[QueueListener] Join rejected for ${user.ign}: online check returned offline`);
-            await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+            await this.moveToWaiting(state, offlineQueueReason());
             return;
           }
         } else {
@@ -1014,7 +1018,7 @@ export class QueueListener {
             if (onlineCheck.online !== true) {
               PresenceService.ingest(user.ign, false);
               console.log(`[QueueListener] Join rejected for ${user.ign}: online check returned ${onlineCheck.online === null ? 'no response' : 'offline'}`);
-              await this.moveToWaiting(state, `Player is not online, Please make sure to be on \`${config.serverip}\` Minecraft server before joining a queue!`);
+              await this.moveToWaiting(state, offlineQueueReason());
               return;
             }
             PresenceService.ingest(user.ign, true);

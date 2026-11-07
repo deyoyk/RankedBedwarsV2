@@ -30,9 +30,9 @@ export async function maps(
     const end = start + pageSize;
     const mapsForPage = allMapNames.slice(start, end);
     const embedObj = betterEmbed(
-      mapsForPage.length ? mapsForPage.map(m => `${m}`).join('\n') : 'No maps.',
-      '#00AAAA',
-      `Available Maps (Page ${page + 1}/${totalPages})`
+      `Page ${page + 1} of ${totalPages}.\n\n${mapsForPage.length ? mapsForPage.map(m => `- ${m}`).join('\n') : 'No maps.'}`,
+      'info',
+      'Available Maps'
     );
     return embedObj.builder;
   };

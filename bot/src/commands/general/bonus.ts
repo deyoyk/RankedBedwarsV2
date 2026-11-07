@@ -6,7 +6,7 @@ import config from '../../config/config';
 import { parseTiers, type ProgressionTier } from '../../utils/eloProgression';
 
 function statusLine(enabled: boolean): string {
-  return enabled ? 'Enabled · ✓' : 'Disabled';
+  return enabled ? 'Enabled' : 'Disabled';
 }
 
 function tierLines(tiers: ProgressionTier[]): string[] {

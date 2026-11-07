@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { safeReply } from '../../utils/safeReply';
 import Season from '../../models/Season';
-import { errorEmbed, themedEmbed } from '../../utils/betterembed';
+import { errorEmbed, infoEmbed } from '../../utils/betterembed';
 
 interface SeasonInfo {
   field1: string;
@@ -32,10 +32,7 @@ export async function seasoninfo(interaction: ChatInputCommandInteraction, _wsMa
 
     const currentSeason = await Season.findOne({ isActive: true });
     
-    const embed = themedEmbed()
-      .setTitle('Season Information')
-      .setColor('#00AAAA')
-      .setTimestamp();
+    const embed = infoEmbed('Current season and server information.', 'Season Information').builder;
 
     if (currentSeason) {
       embed.addFields({

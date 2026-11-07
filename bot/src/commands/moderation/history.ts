@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
-import { betterEmbed, errorEmbed, successEmbed, themedEmbed } from '../../utils/betterembed';
+import { betterEmbed, errorEmbed, infoEmbed } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 
 interface HistoryRecordView {
@@ -34,12 +34,9 @@ export async function history(interaction: ChatInputCommandInteraction, _wsManag
       : await User.findOne({ ign: userInput }).collation({ locale: 'en', strength: 2 }).select('discordId').lean();
 
     if (!idRow) {
-      const embed = themedEmbed()
-        .setColor('#00AAAA')
-        .setTitle('History Not Found')
-        .setDescription('No user found with the specified ID, mention, or IGN.')
-        .setTimestamp();
-      await safeReply(interaction, { embeds: [embed] });
+      await safeReply(interaction, {
+        embeds: [errorEmbed('No user found with the specified ID, mention, or IGN.', 'History Not Found').builder]
+      });
       return;
     }
 
@@ -71,7 +68,7 @@ export async function history(interaction: ChatInputCommandInteraction, _wsManag
     let currentPage = 0;
     let { items: pageItems, total: totalCount, totalPages } = await loadPage(0);
     if (totalCount === 0) {
-      await safeReply(interaction, successEmbed(`No ${historyType}s found for <@${discordId}>.`, 'No History Found'));
+      await safeReply(interaction, infoEmbed(`No ${historyType}s found for <@${discordId}>.`, 'No History Found'));
       return;
     }
 
@@ -89,12 +86,10 @@ Moderator: ${item.moderator}
         .join('\n\n');
 
       const embedObj = betterEmbed(
-        description,
-        '#00ff99',
+        `History for <@${discordId}>.\n\n${description}\n\n**Page:** ${page + 1}/${pages} (${count} total)`,
+        'info',
         `${historyType.charAt(0).toUpperCase() + historyType.slice(1)} History`
       );
-      embedObj.builder.setFooter({ text: `Page ${page + 1} of ${pages} (${count} total)` });
-      embedObj.builder.setTimestamp();
       return embedObj.builder;
     };
 

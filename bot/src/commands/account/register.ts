@@ -4,6 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
+import config from '../../config/config';
 
 export async function register(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
   let ign: string;
@@ -25,7 +26,7 @@ export async function register(interaction: ChatInputCommandInteraction, wsManag
     }
     const playerStatus = await wsManager.checkPlayerOnline(ign);
     if (!playerStatus.online) {
-      await safeReply(interaction, errorEmbed('Please get online on the server.', 'Register Error'));
+      await safeReply(interaction, errorEmbed(`Please get online on \`${config.serverip}\` before registering.`, 'Register Error'));
       return;
     }
     if (playerStatus.original_ign_case && playerStatus.original_ign_case !== ign) {

@@ -1,6 +1,6 @@
 jest.mock('../src/config/config', () => ({
   __esModule: true,
-  default: { bot_stats_text: 'Test Server' },
+  default: { bot_stats_text: 'Test Server', serverName: 'Test Server' },
 }));
 jest.mock('../src/utils/releaseVersion', () => ({
   getReleaseVersion: jest.fn().mockResolvedValue('v41'),
@@ -26,9 +26,11 @@ describe('help command version and server name', () => {
 
     const payload = target.reply.mock.calls[0][0];
     const embed = payload.embeds[0].toJSON();
-    expect(embed.title).toBe('Ranked Bedwars System v41');
+    expect(embed.title).toBe('Info: Ranked Bedwars System v41');
     expect(embed.description).toContain('Made by <@1526597163885527121> `Deyo` for `Test Server`');
-    expect(embed.description).toContain(':star2: Select a category to view commands and their required roles.');
+    expect(embed.description).toContain('Select a category to view commands and their required roles.');
+    expect(embed.description).not.toContain(':star2:');
     expect(embed.description).not.toContain('2.5.0');
+    expect(embed.footer?.text).toBe('Test Server');
   });
 });

@@ -1,6 +1,6 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, EmbedBuilder, Guild, Message } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, Guild, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
+import { betterEmbed, errorEmbed, successEmbed, themedFrom } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { type PartyDocument, PartyService } from '../../services/PartyService';
 import { PrivateGameService } from '../../services/PrivateGameService';
@@ -151,9 +151,9 @@ async function handleInviteToParty(interaction: ChatInputCommandInteraction, use
 
       if (acceptResult.success) {
         resolved = true;
-        const updatedEmbed = EmbedBuilder.from(result.embed!)
+        const updatedEmbed = themedFrom(result.embed!)
           .setDescription(`<@${targetUserId}> has joined the party!`)
-          .setColor('#00ff00');
+          .setColor('success');
 
         await buttonInteraction.update({
           embeds: [updatedEmbed],
@@ -168,9 +168,9 @@ async function handleInviteToParty(interaction: ChatInputCommandInteraction, use
       }
     } else if (partyAction === 'decline') {
       resolved = true;
-      const declinedEmbed = EmbedBuilder.from(result.embed!)
+      const declinedEmbed = themedFrom(result.embed!)
         .setDescription(`<@${targetUserId}> declined the invitation.`)
-        .setColor('#00AAAA');
+        .setColor('info');
       
       await buttonInteraction.update({ 
         embeds: [declinedEmbed], 
@@ -232,7 +232,7 @@ async function handlePartyInfo(interaction: ChatInputCommandInteraction, userId:
     return;
   }
   const party = result.party!;
-  const embedObj = betterEmbed('', '#00AAAA', 'Party Information');
+  const embedObj = betterEmbed(`Party information for <@${party.leader}>.`, 'info', 'Party Information');
   embedObj.builder.addFields(
     { name: 'Party ID', value: party.partyId, inline: true },
     { name: 'Leader', value: `<@${party.leader}>`, inline: true },
@@ -282,7 +282,7 @@ async function handlePartySettings(interaction: ChatInputCommandInteraction, use
     }
 
     const party = result.party!;
-    const embedObj = betterEmbed('', '#00AAAA', 'Party Settings');
+    const embedObj = betterEmbed(`Party settings for <@${party.leader}>.`, 'info', 'Party Settings');
     embedObj.builder.addFields(
       { name: 'Max Members', value: party.maxMembers.toString(), inline: true },
       { name: 'Private', value: party.isPrivate ? 'Yes' : 'No', inline: true },
@@ -325,7 +325,7 @@ async function handleListParties(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  const embedObj = betterEmbed('List of all public parties:', '#00AAAA', 'Public Parties');
+  const embedObj = betterEmbed('List of all public parties:', 'info', 'Public Parties');
   
   for (const party of result.parties) {
     embedObj.builder.addFields({
@@ -376,14 +376,14 @@ async function handleStartPrivateGame(
   const confirmId = `private_confirm_${userId}_${nonce}`;
   const cancelId = `private_cancel_${userId}_${nonce}`;
 
-  const confirmEmbed = betterEmbed('', '#00AAAA', 'Confirm Private Game');
+  const confirmEmbed = betterEmbed('Review the private game details below. Only the party leader can confirm this game.', 'warning', 'Confirm Private Game');
   confirmEmbed.builder.addFields(
     { name: 'Party ID', value: party.partyId, inline: true },
     { name: 'Leader', value: `<@${party.leader}>`, inline: true },
     { name: 'Members', value: party.members.map((id: string) => `<@${id}>`).join('\n'), inline: false },
     { name: 'Map', value: map || 'Random eligible map', inline: true },
     { name: 'Mode', value: 'Unranked private game', inline: true },
-  ).setFooter({ text: 'Only the party leader can confirm this game.' }).setTimestamp();
+  );
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()

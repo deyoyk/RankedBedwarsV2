@@ -26,15 +26,7 @@ export async function games(interaction: ChatInputCommandInteraction, _wsManager
             'Game History'
           );
 
-          const gamesList = games.map(game => {
-            let statusText: string;
-            switch (game.state) {
-              case 'scored': statusText = '``scored``'; break;
-              case 'voided': statusText = '``voided``'; break;
-              case 'pending': default: statusText = '``pending``'; break;
-            }
-            return `\n #${game.gameId} ${statusText} `;
-          }).join(' \u2022 ');
+          const gamesList = games.map(game => `- **Game #${game.gameId}** - ${game.state}`).join('\n');
 
           embed.builder.addFields({
             name: 'Games',

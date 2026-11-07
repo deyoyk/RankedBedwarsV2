@@ -1397,8 +1397,6 @@ export class WebSocketManager {
               { name: 'Game ID', value: `#${game.gameId}`, inline: true },
               { name: 'Granted by', value: `${requester}`, inline: true }
             );
-            embedObj.builder.setFooter({ text: 'The user can now join and speak in this voice channel.' });
-            embedObj.builder.setTimestamp();
             
             await gameChannel.send({ embeds: [embedObj.builder] });
           }

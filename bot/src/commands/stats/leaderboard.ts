@@ -94,19 +94,17 @@ export async function leaderboard(interaction: ChatInputCommandInteraction, _wsM
     }
 
     let leaderboardList = '';
-    const medals = [':first_place:', ':second_place:', ':third_place:'];
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
       const rank = page * usersPerPage + i + 1;
-      const prefix = rank <= 3 ? medals[rank - 1] : `#${rank}`;
       const rawValue: unknown = user[valueField as keyof IUser];
       const value = typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0;
-      leaderboardList += `${prefix} ${user.ign || user.discordId} » ${value}\n`;
+      leaderboardList += `#${rank} ${user.ign || user.discordId} » ${value}\n`;
     }
 
     const embedObj = betterEmbed(
       `Showing positions ${page * usersPerPage + 1}-${Math.min((page + 1) * usersPerPage, totalUsers)} of ${totalUsers}`,
-      0xFFD700,
+      'info',
       title
     );
     embedObj.builder.addFields({
@@ -121,24 +119,24 @@ export async function leaderboard(interaction: ChatInputCommandInteraction, _wsM
         .addComponents(
           new ButtonBuilder()
             .setCustomId('prev_page')
-            .setLabel('⬅️')
+            .setLabel('Previous')
             .setStyle(ButtonStyle.Primary)
             .setDisabled(page === 0),
           new ButtonBuilder()
             .setCustomId('next_page')
-            .setLabel('➡️')
+            .setLabel('Next')
             .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId('search_ign')
-            .setLabel('🔍')
+            .setLabel('Search IGN')
             .setStyle(ButtonStyle.Secondary),
           new ButtonBuilder()
             .setCustomId('search_pos')
-            .setLabel('#')
+            .setLabel('Search Position')
             .setStyle(ButtonStyle.Secondary),
           new ButtonBuilder()
             .setCustomId('reload')
-            .setLabel('🔃')
+            .setLabel('Refresh')
             .setStyle(ButtonStyle.Success)
         );
       await replyEmbed(embedObj, [row]);

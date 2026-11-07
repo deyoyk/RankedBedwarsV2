@@ -118,6 +118,9 @@ describe('stats ranks via single facet aggregation', () => {
     const msg = interaction();
     await stats(msg);
     expect(msg.reply).toHaveBeenCalled();
+    const payload = msg.reply.mock.calls[0][0];
+    expect(payload.embeds).toBeUndefined();
+    expect(payload.files).toHaveLength(1);
     expect(UserModel.aggregate).toHaveBeenCalledTimes(1);
     expect(UserModel.countDocuments).toBeUndefined();
     const byLabel: Record<string, string> = {};

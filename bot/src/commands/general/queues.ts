@@ -29,7 +29,7 @@ export async function queues(interaction: ChatInputCommandInteraction, _wsManage
         items,
         total: totalCount,
         buildEmbed: (queues, page, totalPages, totalQueues, skip) => {
-          const lines = [`Showing queues ${skip + 1}-${skip + queues.length} of ${totalQueues}`];
+          const lines = [`Showing queues ${skip + 1}-${skip + queues.length} of ${totalQueues}`, ''];
 
           for (const queue of queues) {
             lines.push(
@@ -38,9 +38,9 @@ export async function queues(interaction: ChatInputCommandInteraction, _wsManage
             );
           }
 
-          const embed = queueSystemEmbed(lines);
-          embed.setFooter({ text: `Page ${page}/${totalPages}` });
-          return embed;
+          lines.push('', `**Page:** ${page}/${totalPages}`);
+
+          return queueSystemEmbed(lines);
         }
       };
     }

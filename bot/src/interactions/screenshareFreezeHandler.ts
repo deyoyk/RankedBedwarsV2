@@ -1,6 +1,6 @@
-import { ButtonInteraction, EmbedBuilder } from 'discord.js';
+import { ButtonInteraction } from 'discord.js';
 import { ScreenshareService } from '../services/ScreenshareService';
-import { errorEmbed, successEmbed } from '../utils/betterembed';
+import { errorEmbed, successEmbed, themedFrom } from '../utils/betterembed';
 import config from '../config/config';
 
 export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
@@ -100,9 +100,9 @@ export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
       try {
         const originalMessage = interaction.message;
         if (originalMessage) {
-          const updatedEmbed = EmbedBuilder.from(originalMessage.embeds[0])
-            .setColor(0xff0000)
-            .setTitle('🔒 Screenshare Session - FROZEN')
+          const updatedEmbed = themedFrom(originalMessage.embeds[0].toJSON())
+            .setColor('error')
+            .setTitle('Screenshare Session - Frozen')
             .addFields({ 
               name: 'Status', 
               value: `Frozen by <@${user.id}> at <t:${Math.floor(Date.now() / 1000)}:T>`, 

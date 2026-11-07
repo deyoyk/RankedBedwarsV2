@@ -53,16 +53,17 @@ describe('computePagination guards', () => {
 });
 
 describe('betterEmbed guards', () => {
-  it('falls back for out-of-range numeric colors', () => {
-    expect(betterEmbed('t', 0xffffff + 1).builder.toJSON().color).toBe(0x5865f2);
-    expect(betterEmbed('t', -1).builder.toJSON().color).toBe(0x5865f2);
+  it('falls back to the info color for out-of-range numeric colors', () => {
+    expect(betterEmbed('t', 0xffffff + 1).builder.toJSON().color).toBe(EMBED_THEME.defaultColor);
+    expect(betterEmbed('t', -1).builder.toJSON().color).toBe(EMBED_THEME.defaultColor);
   });
-  it('keeps valid hex string colors', () => {
-    expect(betterEmbed('t', '#ff0000').builder.toJSON().color).toBe(0xff0000);
+  it('maps legacy colors to the shared palette', () => {
+    expect(betterEmbed('t', '#ff0000').builder.toJSON().color).toBe(EMBED_THEME.errorColor);
+    expect(betterEmbed('t', '#00ff00').builder.toJSON().color).toBe(EMBED_THEME.successColor);
   });
-  it('sets footer without iconURL', () => {
-    const json = betterEmbed('t', '#00ff00', 'Title', false, 'foot').builder.toJSON();
-    expect(json.footer?.text).toBe('foot');
+  it('always uses the configured footer without an iconURL', () => {
+    const json = betterEmbed('t', 'success', 'Title').builder.toJSON();
+    expect(json.footer?.text).toBe(EMBED_THEME.footer);
     expect(json.footer?.icon_url).toBeUndefined();
   });
   it('uses the shared theme defaults everywhere', () => {
@@ -75,6 +76,11 @@ describe('betterEmbed guards', () => {
     expect(errorEmbed('e').builder.toJSON().title).toBe(EMBED_THEME.errorTitle);
     expect(successEmbed('s').builder.toJSON().color).toBe(EMBED_THEME.successColor);
     expect(successEmbed('s').builder.toJSON().title).toBe(EMBED_THEME.successTitle);
+  });
+  it('formats titles and descriptions with one summary quote and no emoji', () => {
+    const json = betterEmbed('Done ✅', 'success', '✅ Game Scored').builder.toJSON();
+    expect(json.title).toBe('Success: Game Scored');
+    expect(json.description).toBe('> Done');
   });
   it('themed embeds always carry the standard footer', () => {
     const json = themedEmbed().toJSON();

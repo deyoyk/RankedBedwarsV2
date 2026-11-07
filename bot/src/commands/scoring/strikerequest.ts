@@ -113,18 +113,15 @@ async function createStrikeRequest(interaction: ChatInputCommandInteraction, dat
 }
 
 function createStrikeRequestEmbed(data: StrikeRequestData, game: IGame | null): EmbedBuilder {
-  return themedEmbed()
+  return themedEmbed('warning')
     .setTitle('Strike Request')
-    .setDescription(`A strike has been requested against <@${data.targetId}>`)
+    .setDescription(`A strike has been requested against <@${data.targetId}>.`)
     .addFields(
       { name: 'Reason', value: data.reason, inline: false },
       { name: 'Game ID', value: data.gameId, inline: true },
       { name: 'Requested by', value: `<@${data.requesterId}>`, inline: true },
       { name: 'Game State', value: game?.state || 'Unknown', inline: true }
-    )
-    .setColor('#ffcc00')
-    .setTimestamp()
-    .setFooter({ text: `Game ID: ${data.gameId} | Target: ${data.targetId}` });
+    );
 }
 
 async function processVoteResults(message: Message, data: StrikeRequestData, votes: VoteData, team: string[]) {
@@ -138,15 +135,15 @@ async function processVoteResults(message: Message, data: StrikeRequestData, vot
     if (approved) {
       const freshGame = await Game.findOne({ gameId: data.gameId }).select('state').lean();
       if (!freshGame) {
-        resultEmbed.setDescription(`❌ Strike request failed: game not found.`);
+        resultEmbed.setColor('error').setDescription('Strike request failed: game not found.');
       } else if (freshGame.state === 'scored' || freshGame.state === 'voided' || freshGame.state === 'scoring') {
-        resultEmbed.setDescription(`❌ Strike request not applied: game state changed to ${freshGame.state}.`);
+        resultEmbed.setColor('error').setDescription(`Strike request not applied: game state changed to ${freshGame.state}.`);
       } else {
         await StrikeManager.strike(message.guild!, data.targetId, data.requesterId, data.reason);
-        resultEmbed.setDescription(`✅ Strike approved and applied to <@${data.targetId}>.`);
+        resultEmbed.setColor('success').setDescription(`Strike approved and applied to <@${data.targetId}>.`);
       }
     } else {
-      resultEmbed.setDescription(`❌ Strike request rejected due to insufficient approval votes.`);
+      resultEmbed.setColor('warning').setDescription('Strike request rejected due to insufficient approval votes.');
     }
 
     await message.edit({

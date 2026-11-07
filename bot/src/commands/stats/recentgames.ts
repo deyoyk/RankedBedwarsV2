@@ -3,7 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
 import { IRecentGame } from '../../models/gameBase';
-import { errorEmbed, themedEmbed } from '../../utils/betterembed';
+import { errorEmbed, infoEmbed } from '../../utils/betterembed';
 import { RecentGameResult, resolveRecentGameResult } from '../../utils/recentGameResult';
 
 interface RecentGamesData {
@@ -82,21 +82,18 @@ async function displayRecentGames(interaction: ChatInputCommandInteraction, user
 }
 
 function createNoGamesEmbed(userFilter?: string): EmbedBuilder {
-  const embed = themedEmbed()
-    .setTitle('No Recent Games')
-    .setDescription(userFilter ? `No recent games found for user: ${userFilter}` : 'There are no recent games in the database.')
-    .setColor('#ff6b6b')
-    .setTimestamp();
-
-  return embed;
+  return infoEmbed(
+    userFilter ? `No recent games found for user: ${userFilter}` : 'There are no recent games in the database.',
+    'No Recent Games'
+  ).builder;
 }
 
 function createRecentGamesEmbed(user: RecentGamesUser, games: IRecentGame[], currentPage: number, totalPages: number, startIndex: number, endIndex: number): EmbedBuilder {
-  const embed = themedEmbed()
-    .setTitle(`Recent Games - ${user.ign || user.discordId}`)
-    .setDescription(`Showing games ${startIndex + 1}-${endIndex} of ${user.recentGames.length}`)
-    .setColor('#00AAAA')
-    .setTimestamp();
+  const pageLine = totalPages > 1 ? `\n\n**Page:** ${currentPage + 1}/${totalPages}` : '';
+  const embed = infoEmbed(
+    `Showing games ${startIndex + 1}-${endIndex} of ${user.recentGames.length}.${pageLine}`,
+    `Recent Games - ${user.ign || user.discordId}`
+  ).builder;
 
   const gamesList = formatGamesList(games);
   embed.addFields({
@@ -105,10 +102,6 @@ function createRecentGamesEmbed(user: RecentGamesUser, games: IRecentGame[], cur
     inline: false
   });
 
-  if (totalPages > 1) {
-    embed.setFooter({ text: `Page ${currentPage + 1} of ${totalPages}` });
-  }
-
   return embed;
 }
 
@@ -116,23 +109,8 @@ function formatGamesList(games: IRecentGame[]): string {
   return games.map(game => {
     const result = resolveRecentGameResult(game);
     const eloText = game.eloGain >= 0 ? `+${game.eloGain}` : `${game.eloGain}`;
-    return `${getResultEmoji(result)} **Game #${game.gameId}:** ${getResultText(result)} \`${eloText}\``;
+    return `- **Game #${game.gameId}** - ${getResultText(result)} \`${eloText}\``;
   }).join('\n');
-}
-
-function getResultEmoji(result: RecentGameResult): string {
-  switch (result) {
-    case 'win':
-      return '🟢';
-    case 'lose':
-      return '🔴';
-    case 'voided':
-      return '⚪';
-    case 'pending':
-      return '🟡';
-    default:
-      return '⚫';
-  }
 }
 
 function getResultText(result: RecentGameResult): string {
@@ -159,13 +137,11 @@ function createPaginationComponents(currentPage: number, totalPages: number): Ac
         .setCustomId('recentgames_prev')
         .setLabel('Previous')
         .setStyle(ButtonStyle.Primary)
-        .setEmoji('⬅️')
         .setDisabled(currentPage === 0),
       new ButtonBuilder()
         .setCustomId('recentgames_next')
         .setLabel('Next')
         .setStyle(ButtonStyle.Primary)
-        .setEmoji('➡️')
         .setDisabled(currentPage === totalPages - 1)
     );
 

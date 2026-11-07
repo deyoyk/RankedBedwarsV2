@@ -3,25 +3,22 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { EXPERIENCE_REWARDS, getLevelInfo } from '../../utils/levelSystem';
 import { safeReply } from '../../utils/safeReply';
-import { themedEmbed } from '../../utils/betterembed';
+import { errorEmbed, infoEmbed } from '../../utils/betterembed';
 
 export async function level(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
     void _wsManager;
     try {
         const targetUser = interaction.options.getUser('user') || interaction.user;
         const targetId = targetUser.id;
-        const targetAvatar = targetUser.displayAvatarURL();
         const targetUsername = targetUser.username;
 
         const user = await User.findOne({ discordId: targetId }).select('discordId ign experience').lean();
 
         if (!user) {
-            const embed = themedEmbed()
-                .setColor('#00AAAA')
-                .setTitle('\u274c User Not Found')
-                .setDescription('This user is not registered in the system.');
-
-            await safeReply(interaction, { embeds: [embed], ephemeral: true });
+            await safeReply(interaction, {
+                embeds: [errorEmbed('This user is not registered in the system.', 'User Not Found').builder],
+                ephemeral: true
+            });
             return;
         }
 
@@ -29,10 +26,10 @@ export async function level(interaction: ChatInputCommandInteraction, _wsManager
         const progressPercentage = ((levelInfo.experience - levelInfo.experienceForCurrentLevel) / levelInfo.totalExperienceForLevel * 100);
         const progressBar = '\u2588'.repeat(Math.floor(progressPercentage / 5)) + '\u2591'.repeat(20 - Math.floor(progressPercentage / 5));
 
-        const embed = themedEmbed()
-            .setColor('#00ff00')
-            .setTitle(`Level Information - ${user.ign || targetUsername || targetId}`)
-            .addFields(
+        const embed = infoEmbed(
+            `Level information for ${user.ign || targetUsername || targetId}.`,
+            'Level Information'
+        ).builder.addFields(
                 {
                     name: 'Current Level',
                     value: [
@@ -71,22 +68,15 @@ export async function level(interaction: ChatInputCommandInteraction, _wsManager
                     ].join('\n'),
                     inline: false
                 }
-            )
-            .setFooter({ text: 'Keep playing to level up!' })
-            .setTimestamp();
-        if (targetAvatar) embed.setThumbnail(targetAvatar);
-
+            );
         await safeReply(interaction, { embeds: [embed] });
 
     } catch (error) {
         console.error('Error in level command:', error);
-
-        const embed = themedEmbed()
-            .setColor('#00AAAA')
-            .setTitle('\u274c Error')
-            .setDescription('An error occurred while fetching level information.');
-
-        await safeReply(interaction, { embeds: [embed], ephemeral: true });
+        await safeReply(interaction, {
+            embeds: [errorEmbed('An error occurred while fetching level information.', 'Level Information Error').builder],
+            ephemeral: true
+        });
     }
 }
 

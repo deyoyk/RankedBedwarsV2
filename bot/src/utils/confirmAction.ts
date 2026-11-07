@@ -26,13 +26,10 @@ export async function executeWithConfirmation(
   const userId = interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 
   try {
-    const confirmEmbed = themedEmbed()
+    const confirmEmbed = themedEmbed('warning')
       .setTitle(config.confirmTitle)
-      .setColor('#FFA500')
-      .setDescription(config.confirmDescription)
-      .addFields(config.fields)
-      .setFooter({ text: 'This confirmation will expire in 30 seconds' })
-      .setTimestamp();
+      .setDescription(`${config.confirmDescription}\n\n**Expires:** 30 seconds`)
+      .addFields(config.fields);
 
     const confirmButton = new ButtonBuilder()
       .setCustomId(`${config.commandName}_confirm`)
@@ -41,7 +38,7 @@ export async function executeWithConfirmation(
 
     const denyButton = new ButtonBuilder()
       .setCustomId(`${config.commandName}_deny`)
-      .setLabel('❌ Cancel')
+      .setLabel('Cancel')
       .setStyle(ButtonStyle.Secondary);
 
     const row = new ActionRowBuilder<ButtonBuilder>()
@@ -82,11 +79,9 @@ export async function executeWithConfirmation(
       await config.onConfirm();
 
     } catch {
-      const timeoutEmbed = themedEmbed()
-        .setTitle('⏰ Confirmation Expired')
-        .setColor('#00AAAA')
-        .setDescription('The confirmation has expired. Please run the command again if you want to proceed.')
-        .setTimestamp();
+      const timeoutEmbed = themedEmbed('warning')
+        .setTitle('Confirmation Expired')
+        .setDescription('The confirmation has expired. Please run the command again if you want to proceed.');
 
       await message.edit({
         embeds: [timeoutEmbed],

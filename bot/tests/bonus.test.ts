@@ -39,11 +39,11 @@ describe('bonus command', () => {
     await bonus(target);
 
     const embed = embedJson(target);
-    expect(embed.title).toBe('Scoring System');
+    expect(embed.title).toBe('Info: Scoring System');
     expect(embed.description).toContain('Current bonus configuration used by scoring system.');
     expect(embed.description).toContain('[P] Winstreak Bonus');
     expect(embed.description).toContain('[T] Bounty Bonus | Winstreak');
-    expect(embed.description).toContain('Enabled · ✓');
+    expect(embed.description).toContain('Enabled');
     expect(embed.description).toContain('5+ winstreak → +5 ELO');
     expect(embed.description).toContain('10+ winstreak → +10 ELO');
     expect(embed.description).toContain('25+ winstreak → +20 ELO');

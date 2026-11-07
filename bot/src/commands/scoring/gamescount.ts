@@ -191,8 +191,8 @@ async function renderChart(keys: string[], counts: Record<string, Record<string,
   const chartBuffer = await getCachedChart(selectedDuration);
   const chartImage = `attachment://games_count_chart.png`;
   const embed = betterEmbed(
-    undefined,
-    '#00AAAA',
+    `Game count chart for the selected period.`,
+    'info',
     'Games Count Chart'
   );
   embed.builder.setImage(chartImage);
@@ -213,8 +213,8 @@ async function renderChart(keys: string[], counts: Record<string, Record<string,
       selectedDuration = i.values[0];
       const newChartBuffer = await getCachedChart(selectedDuration);
       const newEmbed = betterEmbed(
-        undefined,
-        '#00AAAA',
+        `Game count chart for the selected period.`,
+        'info',
         'Games Count Chart'
       );
       newEmbed.builder.setImage('attachment://games_count_chart.png');

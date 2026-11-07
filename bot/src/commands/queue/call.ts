@@ -31,7 +31,7 @@ export async function call(interaction: ChatInputCommandInteraction, _wsManager?
     const senderVoiceState = senderMember?.voice;
 
     if (!senderVoiceState?.channel) {
-      await safeReply(interaction, errorEmbed('You must be in a voice channel to use this command.', '❌ Not in Voice Channel'));
+      await safeReply(interaction, errorEmbed('You must be in a voice channel to use this command.', 'Not in Voice Channel'));
       return;
     }
 
@@ -46,17 +46,17 @@ export async function call(interaction: ChatInputCommandInteraction, _wsManager?
     }).select('gameId').lean();
 
     if (!game) {
-      await safeReply(interaction, errorEmbed('You must be in a game voice channel to use this command.', '❌ Invalid Voice Channel'));
+      await safeReply(interaction, errorEmbed('You must be in a game voice channel to use this command.', 'Invalid Voice Channel'));
       return;
     }
 
     if (!targetUserDoc) {
-      await safeReply(interaction, errorEmbed('The target user is not registered in the system.', '❌ User Not Found'));
+      await safeReply(interaction, errorEmbed('The target user is not registered in the system.', 'User Not Found'));
       return;
     }
 
     if (!targetMember) {
-      await safeReply(interaction, errorEmbed('The target user is not a member of this server.', '❌ User Not Found'));
+      await safeReply(interaction, errorEmbed('The target user is not a member of this server.', 'User Not Found'));
       return;
     }
     
@@ -79,17 +79,15 @@ export async function call(interaction: ChatInputCommandInteraction, _wsManager?
         { name: 'Game ID', value: `#${game.gameId}`, inline: true },
         { name: 'Granted by', value: `<@${senderId}>`, inline: true }
       );
-      embedObj.builder.setFooter({ text: 'The user can now join and speak in this voice channel.' });
-      embedObj.builder.setTimestamp();
       await safeReply(interaction, { embeds: [embedObj.builder] });
     } catch (permError) {
       console.error('Error granting voice channel permissions:', permError);
-      await safeReply(interaction, errorEmbed('Failed to grant voice channel permissions. Please try again or check my permissions.', '❌ Permission Error'));
+      await safeReply(interaction, errorEmbed('Failed to grant voice channel permissions. Please try again or check my permissions.', 'Permission Error'));
     }
 
   } catch (error) {
     console.error('Error in call command:', error);
     
-    await safeReply(interaction, errorEmbed('An error occurred while processing the call command.', '❌ Error'));
+    await safeReply(interaction, errorEmbed('An error occurred while processing the call command.', 'Call Error'));
   }
 }

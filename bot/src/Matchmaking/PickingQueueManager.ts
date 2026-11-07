@@ -264,8 +264,9 @@ export class PickingQueueManager {
     const team1Value = this.buildTeamValue(team1, captains[0], team1Avg, ignMap);
     const team2Value = this.buildTeamValue(team2, captains[1], team2Avg, ignMap);
     const statusField = `**Status:** ${status}`;
-    return themedEmbed()
+    return themedEmbed('info')
       .setTitle(`Game #${gameId} Started`)
+      .setDescription(`Game #${gameId} has started.`)
       .addFields(
         {
           name: '**TEAM GREEN**',
@@ -283,8 +284,7 @@ export class PickingQueueManager {
           inline: false
         }
       )
-      .setColor('#00aaaa')
-      .setTimestamp();
+      .setColor('info');
   }
 
   public async processQueue(
@@ -755,8 +755,9 @@ export class PickingQueueManager {
         `**Status:** Ongoing`,
         `**Auto-pick:** <t:${autoPickTimestamp}:R>`
       ].join('\n');
-      return themedEmbed()
-        .setTitle(`**Game #${session.gameId} Started**`)
+      return themedEmbed('info')
+        .setTitle(`Game #${session.gameId} Started`)
+        .setDescription(`Picking is now in progress for Game #${session.gameId}.`)
         .addFields(
           {
             name: '**TEAM GREEN**',
@@ -774,11 +775,10 @@ export class PickingQueueManager {
             inline: false
           }
         )
-        .setColor('#00aaaa')
-        .setTimestamp();
+        .setColor('info');
     } catch (error) {
       console.error('[PickingQueue] Error building picking embed:', error);
-      return themedEmbed().setTitle('Error').setDescription('Could not build picking embed');
+      return themedEmbed('error').setTitle('Picking Embed Error').setDescription('Could not build picking embed.');
     }
   }
 
@@ -937,7 +937,7 @@ export class PickingQueueManager {
           
           if (!this.isValidPick(session, pickedPlayer)) {
             await interaction.reply({
-              content: `❌ Invalid pick! <@${pickedPlayer}> is not available for selection.`,
+              content: `Invalid pick. <@${pickedPlayer}> is not available for selection.`,
               ephemeral: true
             });
             return;
@@ -1068,11 +1068,9 @@ export class PickingQueueManager {
 
   private async sendVoidNotice(channel: ThreadChannel): Promise<void> {
     try {
-      const embed = themedEmbed()
-        .setTitle('❌ Game Cancelled')
-        .setDescription('The picking process was cancelled due to timeout or other issues.')
-        .setColor('#00AAAA')
-        .setTimestamp();
+      const embed = themedEmbed('error')
+        .setTitle('Game Cancelled')
+        .setDescription('The picking process was cancelled due to timeout or other issues.');
 
       await this.workersManager.sendMessage(channel.id, { embeds: [embed] }, 8);
     } catch (error) {

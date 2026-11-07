@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Message, MessageComponentInteraction, ThreadAutoArchiveDuration } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Message, MessageComponentInteraction, ThreadAutoArchiveDuration } from 'discord.js';
 import VoteRequest from '../models/VoteRequest';
 import { themedEmbed } from './betterembed';
 
@@ -38,13 +38,11 @@ export function createVoteButtons(upLabel: string, downLabel: string, prefix: st
     new ButtonBuilder()
       .setCustomId(`${prefix}_upvote`)
       .setLabel(upLabel)
-      .setStyle(ButtonStyle.Success)
-      .setEmoji('✅'),
+      .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`${prefix}_downvote`)
       .setLabel(downLabel)
       .setStyle(ButtonStyle.Danger)
-      .setEmoji('❌')
   );
 }
 
@@ -88,14 +86,13 @@ export function buildResultEmbed(
   votes: VoteData,
   requiredVotes: number,
   approved: boolean
-): EmbedBuilder {
-  return themedEmbed()
+): ReturnType<typeof themedEmbed> {
+  return themedEmbed(approved ? 'success' : 'warning')
     .setTitle(title)
-    .setColor(approved ? '#00ff00' : '#00AAAA')
+    .setDescription(approved ? 'The request has been approved.' : 'The request did not receive enough votes.')
     .addFields(
       { name: 'Approval Votes', value: votes.upvote.size.toString(), inline: true },
       { name: 'Rejection Votes', value: votes.downvote.size.toString(), inline: true },
       { name: 'Required Votes', value: requiredVotes.toString(), inline: true }
-    )
-    .setTimestamp();
+    );
 }

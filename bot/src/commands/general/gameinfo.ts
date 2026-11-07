@@ -86,8 +86,8 @@ export async function gameinfo(interaction: ChatInputCommandInteraction, _wsMana
     lines.push(`**First Blood:** ${firstBlood ? `<@${firstBlood.player}>` : 'None'}`);
   }
   const embed = betterEmbed(
-    lines.join('\n'),
-    '#00AAAA',
+    `Game #${game.gameId} details.\n\n${lines.join('\n')}`,
+    'info',
     `Game #${game.gameId}`
   );
   await safeReply(interaction, { embeds: [embed.builder] });

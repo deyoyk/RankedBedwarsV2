@@ -78,7 +78,7 @@ export async function screenshare(interaction: ChatInputCommandInteraction, wsMa
     if (result.dontlogResult) {
       embed.addFields({
         name: 'Player Status',
-        value: `Online: ${result.dontlogResult.online ? '\u2705' : '\u274c'} | DontLog: ${result.dontlogResult.dontlog ? '\u2705' : '\u274c'}`,
+        value: `Online: ${result.dontlogResult.online ? 'Yes' : 'No'} | DontLog: ${result.dontlogResult.dontlog ? 'Yes' : 'No'}`,
         inline: true
       });
     }
@@ -147,7 +147,7 @@ export async function screenshare(interaction: ChatInputCommandInteraction, wsMa
     if (result.dontlogResult) {
       successEmbedObj.builder.addFields({
         name: 'Player Status',
-        value: `Online: ${result.dontlogResult.online ? '\u2705' : '\u274c'} | DontLog: ${result.dontlogResult.dontlog ? '\u2705' : '\u274c'}`,
+        value: `Online: ${result.dontlogResult.online ? 'Yes' : 'No'} | DontLog: ${result.dontlogResult.dontlog ? 'Yes' : 'No'}`,
         inline: true
       });
     }

@@ -37,7 +37,7 @@ export async function forceregister(interaction: ChatInputCommandInteraction, _w
     if (previous) {
       const oldIgn = previous.ign;
 
-      const embed = successEmbed(`Successfully updated registration for <@${targetUser}>`, '✅ User Force Registered');
+      const embed = successEmbed(`Successfully updated registration for <@${targetUser}>`, 'User Force Registered');
       embed.builder.addFields(
         { name: 'User', value: `<@${targetUser}>`, inline: true },
         { name: 'Previous IGN', value: oldIgn || 'None', inline: true },
@@ -85,7 +85,7 @@ export async function forceregister(interaction: ChatInputCommandInteraction, _w
       }
       await safeFix(interaction.guild, targetUser);
 
-      const embed = successEmbed(`Successfully force registered <@${targetUser}>`, '✅ User Force Registered');
+      const embed = successEmbed(`Successfully force registered <@${targetUser}>`, 'User Force Registered');
       embed.builder.addFields(
         { name: 'IGN', value: ign, inline: false },
         { name: 'Moderator', value: `<@${interaction.user.id}>`, inline: false }

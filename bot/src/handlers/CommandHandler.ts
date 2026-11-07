@@ -3,7 +3,7 @@ import { checkPermission } from '../utils/permissions';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 import type { BotCommandFn } from '../types/commands';
-import { errorEmbed, themedEmbed } from '../utils/betterembed';
+import { errorEmbed } from '../utils/betterembed';
 
 export type CommandFn = BotCommandFn;
 
@@ -29,15 +29,10 @@ export class CommandHandler {
     const requiredRoles = global._wsManager?.getPermission(commandName) ?? [];
 
     if (requiredRoles.length > 0 && !requiredRoles.includes('everyone')) {
-      const embed = themedEmbed()
-        .setColor('#00AAAA')
-        .setTitle('You do not have permission')
-        .setDescription(
-          `Roles required: ${requiredRoles
-            .map((roleId: string) => `<@&${roleId}>`)
-            .join(', ')}`
-        )
-        .setTimestamp();
+      const embed = errorEmbed(
+        `Roles required: ${requiredRoles.map((roleId: string) => `<@&${roleId}>`).join(', ')}`,
+        'Permission Denied'
+      ).builder;
 
       await safeReply(interaction, { embeds: [embed] });
     }
