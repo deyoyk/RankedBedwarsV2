@@ -90,7 +90,7 @@ export async function help(interaction: ChatInputCommandInteraction, _wsManager?
 
     const embed = themedEmbed()
       .setTitle(`Ranked Bedwars System ${releaseVersion}`)
-      .setDescription(`Made by <@1526597163885527121> \`Deyo\` for \`${config.bot_stats_text}\`\n\nSelect a category to view commands and their required roles.`)
+      .setDescription(`Made by <@1526597163885527121> \`Deyo\` for \`${config.bot_stats_text}\`\n\n:star2: Select a category to view commands and their required roles.`)
       .setColor('#00AAAA')
 
     const selectMenu = buildCategorySelectMenu(commandCategories);

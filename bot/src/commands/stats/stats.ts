@@ -6,6 +6,7 @@ import Season from '../../models/Season';
 import { betterEmbed, themedEmbed } from '../../utils/betterembed';
 import { resolveTheme } from '../../assets/stats-theme';
 import { getLevelInfo } from '../../utils/levelSystem';
+import { resolveRecentGameResult } from '../../utils/recentGameResult';
 
 export async function stats(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   const targetUserId = interaction.options.getUser('user')?.id || interaction.user.id;
@@ -137,13 +138,10 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
   };
 
   const sortedRecent = [...(user.recentGames || [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  const recentGames = sortedRecent.slice(0, 10).map(g => {
-    let result: string | undefined;
-    if (g.state === 'scored') result = g.won ? 'win' : 'lose';
-    else if (g.state === 'voided') result = 'voided';
-    else result = 'pending';
-    return { game_id: g.gameId, result };
-  });
+  const recentGames = sortedRecent.slice(0, 10).map(g => ({
+    game_id: g.gameId,
+    result: resolveRecentGameResult(g),
+  }));
 
   
   async function calculatePosition(_discordId: string): Promise<number> {

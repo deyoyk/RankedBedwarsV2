@@ -28,6 +28,7 @@ describe('help command version and server name', () => {
     const embed = payload.embeds[0].toJSON();
     expect(embed.title).toBe('Ranked Bedwars System v41');
     expect(embed.description).toContain('Made by <@1526597163885527121> `Deyo` for `Test Server`');
+    expect(embed.description).toContain(':star2: Select a category to view commands and their required roles.');
     expect(embed.description).not.toContain('2.5.0');
   });
 });

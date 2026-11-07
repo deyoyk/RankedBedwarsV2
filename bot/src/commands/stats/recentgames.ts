@@ -4,6 +4,7 @@ import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
 import { IRecentGame } from '../../models/gameBase';
 import { errorEmbed, themedEmbed } from '../../utils/betterembed';
+import { RecentGameResult, resolveRecentGameResult } from '../../utils/recentGameResult';
 
 interface RecentGamesData {
   page: number;
@@ -113,42 +114,36 @@ function createRecentGamesEmbed(user: RecentGamesUser, games: IRecentGame[], cur
 
 function formatGamesList(games: IRecentGame[]): string {
   return games.map(game => {
-    const stateEmoji = getStateEmoji(game.state);
+    const result = resolveRecentGameResult(game);
     const eloText = game.eloGain >= 0 ? `+${game.eloGain}` : `${game.eloGain}`;
-    return `${stateEmoji} **Game #${game.gameId}:** ${getStateText(game.state)} \`${eloText}\``;
+    return `${getResultEmoji(result)} **Game #${game.gameId}:** ${getResultText(result)} \`${eloText}\``;
   }).join('\n');
 }
 
-function getStateEmoji(state: string): string {
-  switch (state) {
+function getResultEmoji(result: RecentGameResult): string {
+  switch (result) {
     case 'win':
-    case 'scored':
       return '🟢';
     case 'lose':
-    case 'loss':
       return '🔴';
     case 'voided':
       return '⚪';
     case 'pending':
-    case 'active':
       return '🟡';
     default:
       return '⚫';
   }
 }
 
-function getStateText(state: string): string {
-  switch (state) {
+function getResultText(result: RecentGameResult): string {
+  switch (result) {
     case 'win':
-    case 'scored':
       return 'Won';
     case 'lose':
-    case 'loss':
       return 'Lost';
     case 'voided':
       return 'Voided';
     case 'pending':
-    case 'active':
       return 'Ongoing';
     default:
       return 'Unknown';

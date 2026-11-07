@@ -36,10 +36,11 @@ jest.mock('../src/models/Season', () => ({
   default: { findOne: jest.fn().mockImplementation(() => ({ lean: jest.fn().mockResolvedValue(null) })) },
 }));
 
-const captured: { playerData?: any; helpers?: any; bufferCalls: number } = { bufferCalls: 0 };
+const captured: { playerData?: any; recentGames?: any; helpers?: any; bufferCalls: number } = { bufferCalls: 0 };
 jest.mock('../src/assets/stats-theme', () => ({
   resolveTheme: jest.fn(() => async (playerData: any, recentGames: any, helpers: any) => {
     captured.playerData = playerData;
+    captured.recentGames = recentGames;
     captured.helpers = helpers;
     captured.bufferCalls += 1;
     return Buffer.from('img');
@@ -75,6 +76,7 @@ describe('stats ranks via single facet aggregation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     captured.playerData = undefined;
+    captured.recentGames = undefined;
     captured.helpers = undefined;
     captured.bufferCalls = 0;
     UserModel.findOne.mockImplementation(() => chainable(makeUser()));
@@ -145,5 +147,24 @@ describe('stats ranks via single facet aggregation', () => {
     const ranks = captured.playerData.tiles.map((t: any) => t.rank);
     expect(ranks.every((r: string) => r === '#1')).toBe(true);
     await expect(captured.helpers.calculatePosition('anyone')).resolves.toBe(1);
+  });
+
+  it('passes the won flag through to recent game results', async () => {
+    UserModel.aggregate.mockResolvedValue([{}]);
+    UserModel.findOne.mockImplementation(() => chainable({
+      ...makeUser(),
+      recentGames: [
+        { gameId: 3, state: 'scored', won: false, date: new Date('2026-01-03T00:00:00Z') },
+        { gameId: 2, state: 'scored', won: true, date: new Date('2026-01-02T00:00:00Z') },
+        { gameId: 1, state: 'voided', won: false, date: new Date('2026-01-01T00:00:00Z') },
+      ],
+    }));
+    const { stats } = await import('../src/commands/stats/stats');
+    await stats(interaction());
+    expect(captured.recentGames).toEqual([
+      { game_id: 3, result: 'lose' },
+      { game_id: 2, result: 'win' },
+      { game_id: 1, result: 'voided' },
+    ]);
   });
 });
