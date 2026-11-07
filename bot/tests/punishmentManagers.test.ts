@@ -283,14 +283,15 @@ describe('MuteManager.unmute', () => {
   });
 });
 
-describe('BanManager Discord hooks', () => {
-  it('Discord-bans on permanent bans only', async () => {
+describe('BanManager rank-only bans', () => {
+  it('does not Discord-ban on permanent or timed bans', async () => {
     const permanent = mockUser();
     UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(permanent));
     const guild = guildMock();
 
     await BanManager.ban(guild as any, '123', 'mod', '', 'Cheating');
-    expect(guild.members.ban).toHaveBeenCalledTimes(1);
+    expect(guild.members.ban).not.toHaveBeenCalled();
+    expect(permanent.isBanned).toBe(true);
 
     const timed = mockUser();
     UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(timed));
@@ -298,6 +299,26 @@ describe('BanManager Discord hooks', () => {
 
     await BanManager.ban(guild2 as any, '123', 'mod', '1h', 'Toxic');
     expect(guild2.members.ban).not.toHaveBeenCalled();
+    expect(timed.isBanned).toBe(true);
+  });
+
+  it('does not Discord-unban on unban', async () => {
+    const user = mockUser();
+    user.isBanned = true;
+    UserModel.findOneAndUpdate.mockImplementation((filter: any, update: any) => {
+      if (update.$set) {
+        for (const [path, value] of Object.entries(update.$set)) {
+          (user as any)[path] = value;
+        }
+      }
+      return chainable({ discordId: user.discordId, ign: user.ign });
+    });
+    const guild = guildMock();
+
+    await BanManager.unban(guild as any, '123', 'mod', 'Expired');
+
+    expect(guild.members.unban).not.toHaveBeenCalled();
+    expect(user.isBanned).toBe(false);
   });
 
   it('rejects durations over 1 year', async () => {

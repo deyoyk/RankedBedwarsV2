@@ -312,12 +312,12 @@ export class CommandManager {
   }
 
   private registerModerationCommands() {
-    this.reg('ban', 'Ban a user from the server', ban, [
+    this.reg('ban', 'Ban a user from ranked play', ban, [
       { name: 'user', description: 'User to ban (ID or mention)', type: 6, required: true },
       { name: 'duration', description: 'Ban duration (e.g. 1d, 1h)', type: 3, required: true },
       { name: 'reason', description: 'Reason for ban', type: 3, required: true }
     ]);
-    this.reg('unban', 'Unban a user from the server', unban, [
+    this.reg('unban', 'Remove a rank-ban from a user', unban, [
       { name: 'user_id', description: 'User ID to unban', type: 3, required: true }
     ]);
     this.reg('mute', 'Mute a user in the server', mute, [
