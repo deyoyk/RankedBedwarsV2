@@ -9,6 +9,28 @@ export function isSnowflake(v: string): boolean {
   return /^\d{17,20}$/.test(v);
 }
 
+export const DEFAULT_EMBED_THEME = {
+  defaultColor: 0x3498DB,
+  errorColor: 0xE74C3C,
+  successColor: 0x2ECC71,
+  footer: 'deyo Ranked Bedwars',
+  defaultTitle: 'Notice',
+  errorTitle: 'Error',
+  successTitle: 'Success',
+  errorText: 'An error occurred.',
+  successText: 'Success!',
+} as const;
+
+export function parseEmbedColor(raw: string | undefined, fallback: number): number {
+  const value = clean(raw);
+  if (!value) return fallback;
+  const hex = value.startsWith('#') ? value.slice(1) : value;
+  if (/^[0-9a-fA-F]{6}$/.test(hex)) return parseInt(hex, 16);
+  const decimal = Number(value);
+  if (Number.isInteger(decimal) && decimal >= 0 && decimal <= 0xffffff) return decimal;
+  return fallback;
+}
+
 export function parseStatResetRoles(raw: string | undefined): Record<string, number> {
   const roles: Record<string, number> = {};
   if (!raw) return roles;
@@ -175,6 +197,18 @@ interface Config {
   serverip: string;
   bot_stats_text: string;
 
+  embed: {
+    defaultColor: number;
+    errorColor: number;
+    successColor: number;
+    footer: string;
+    defaultTitle: string;
+    errorTitle: string;
+    successTitle: string;
+    errorText: string;
+    successText: string;
+  };
+
   eloDecay: {
     enabled: boolean;
     inactivityDays: number;
@@ -288,6 +322,17 @@ const configuration: Config = {
   },
   serverip: clean(process.env.SERVER_IP) || 'play.deyo.lol',
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',
+  embed: {
+    defaultColor: parseEmbedColor(process.env.EMBED_DEFAULT_COLOR, DEFAULT_EMBED_THEME.defaultColor),
+    errorColor: parseEmbedColor(process.env.EMBED_ERROR_COLOR, DEFAULT_EMBED_THEME.errorColor),
+    successColor: parseEmbedColor(process.env.EMBED_SUCCESS_COLOR, DEFAULT_EMBED_THEME.successColor),
+    footer: clean(process.env.EMBED_DEFAULT_FOOTER) || DEFAULT_EMBED_THEME.footer,
+    defaultTitle: clean(process.env.EMBED_DEFAULT_TITLE) || DEFAULT_EMBED_THEME.defaultTitle,
+    errorTitle: clean(process.env.EMBED_ERROR_TITLE) || DEFAULT_EMBED_THEME.errorTitle,
+    successTitle: clean(process.env.EMBED_SUCCESS_TITLE) || DEFAULT_EMBED_THEME.successTitle,
+    errorText: clean(process.env.EMBED_ERROR_TEXT) || DEFAULT_EMBED_THEME.errorText,
+    successText: clean(process.env.EMBED_SUCCESS_TEXT) || DEFAULT_EMBED_THEME.successText,
+  },
   eloDecay: {
     enabled: clean(process.env.ELO_DECAY_ENABLED) !== 'false',
     inactivityDays: parsedPositiveInt(process.env.ELO_DECAY_INACTIVITY_DAYS, 5),

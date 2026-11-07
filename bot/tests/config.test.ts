@@ -1,4 +1,4 @@
-import { isSnowflake, validateConfig } from '../src/config/config';
+import { isSnowflake, validateConfig, parseEmbedColor, DEFAULT_EMBED_THEME } from '../src/config/config';
 
 const base = {
   token: 'tok',
@@ -36,6 +36,34 @@ describe('isSnowflake', () => {
     expect(isSnowflake('13525875244757136199999168577543115594')).toBe(false);
     expect(isSnowflake('')).toBe(false);
     expect(isSnowflake('abc')).toBe(false);
+  });
+});
+
+describe('parseEmbedColor', () => {
+  it('parses hex strings with and without #', () => {
+    expect(parseEmbedColor('#3498DB', 0)).toBe(0x3498DB);
+    expect(parseEmbedColor('e74c3c', 0)).toBe(0xE74C3C);
+    expect(parseEmbedColor('  #2ECC71  ', 0)).toBe(0x2ECC71);
+  });
+
+  it('parses decimal values', () => {
+    expect(parseEmbedColor('3447003', 0)).toBe(3447003);
+    expect(parseEmbedColor('0x3498DB', 0)).toBe(0x3498DB);
+  });
+
+  it('falls back for empty or invalid colors', () => {
+    expect(parseEmbedColor('', 0x123456)).toBe(0x123456);
+    expect(parseEmbedColor(undefined, 0x123456)).toBe(0x123456);
+    expect(parseEmbedColor('#GGGGGG', 0x123456)).toBe(0x123456);
+    expect(parseEmbedColor('#1234567', 0x123456)).toBe(0x123456);
+    expect(parseEmbedColor('-1', 0x123456)).toBe(0x123456);
+  });
+
+  it('keeps the documented theme defaults', () => {
+    expect(DEFAULT_EMBED_THEME.defaultColor).toBe(0x3498DB);
+    expect(DEFAULT_EMBED_THEME.errorColor).toBe(0xE74C3C);
+    expect(DEFAULT_EMBED_THEME.successColor).toBe(0x2ECC71);
+    expect(DEFAULT_EMBED_THEME.footer).toBe('deyo Ranked Bedwars');
   });
 });
 
