@@ -56,6 +56,7 @@ import { listseasons } from '../commands/season/listseasons';
 import { level } from '../commands/stats/level';
 import { seasoninfo } from '../commands/season/seasoninfo';
 import { statreset } from '../commands/account/statreset';
+import { claimelo } from '../commands/account/claimelo';
 import { queuecontrol, queueControlData } from '../commands/queue/queuecontrol';
 
 
@@ -403,6 +404,7 @@ export class CommandManager {
     ]);
     this.reg('wipeeveryone', 'Wipe all stats for every user (except bans, mutes, strikes)', wipeeveryone);
     this.reg('statreset', 'Reset your own stats (limited by donator role)', statreset);
+    this.reg('claimelo', 'Claim your role-based starting ELO (once per season)', claimelo);
   }
 
   private registerStatsCommands() {

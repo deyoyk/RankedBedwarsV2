@@ -41,7 +41,11 @@ describe('isSnowflake', () => {
 
 describe('validateConfig', () => {
   const OLD = { ...process.env };
-  afterEach(() => { process.env.AUTH_KEY = OLD.AUTH_KEY; });
+  afterEach(() => {
+    process.env.AUTH_KEY = OLD.AUTH_KEY;
+    if (OLD.ELO_CLAIM_ROLES === undefined) delete process.env.ELO_CLAIM_ROLES;
+    else process.env.ELO_CLAIM_ROLES = OLD.ELO_CLAIM_ROLES;
+  });
   it('passes for valid config', () => {
     process.env.AUTH_KEY = 'secret';
     expect(validateConfig(base)).toEqual([]);
@@ -73,5 +77,21 @@ describe('validateConfig', () => {
       strikes: { 1: 'warn', 2: 'not-a-duration', default: 'warn' }
     });
     expect(errors.join('|')).toMatch(/STRIKE_2_DURATION/);
+  });
+
+  it('accepts valid ELO claim roles', () => {
+    process.env.AUTH_KEY = 'secret';
+    process.env.ELO_CLAIM_ROLES = '1341829830924046346:100,1396112212778684606:300';
+    expect(validateConfig(base)).toEqual([]);
+  });
+
+  it('flags invalid ELO claim roles', () => {
+    process.env.AUTH_KEY = 'secret';
+    process.env.ELO_CLAIM_ROLES = 'bad:100,1341829830924046346:0,justarole';
+    const errors = validateConfig(base);
+    expect(errors.join('|')).toMatch(/ELO_CLAIM_ROLES/);
+    expect(errors.join('|')).toMatch(/snowflake/);
+    expect(errors.join('|')).toMatch(/positive/);
+    expect(errors.join('|')).toMatch(/roleId:elo/);
   });
 });

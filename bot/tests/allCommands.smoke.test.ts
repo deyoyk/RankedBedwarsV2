@@ -127,6 +127,7 @@ jest.mock('../src/managers/SeasonManager', () => ({
   SeasonManager: {
     startSeason: jest.fn().mockResolvedValue({ success: true, message: 'started', embed: null }),
     endSeason: jest.fn().mockResolvedValue({ success: true, message: 'ended', usersMigrated: 1, gamesMigrated: 1, statsCreated: 1, seasonInfo: { name: 'S1', seasonNumber: 1, chapterNumber: 1 } }),
+    getCurrentSeason: jest.fn().mockResolvedValue({ seasonNumber: 1, chapterNumber: 1 }),
   },
 }));
 jest.mock('../src/Matchmaking/GameManager', () => ({
@@ -290,6 +291,8 @@ import { addelo } from '../src/commands/account/addelo';
 import { removeelo } from '../src/commands/account/removeelo';
 import { wipe } from '../src/commands/account/wipe';
 import { wipeeveryone } from '../src/commands/account/wipeeveryone';
+import { statreset } from '../src/commands/account/statreset';
+import { claimelo } from '../src/commands/account/claimelo';
 import { queues } from '../src/commands/general/queues';
 import { games } from '../src/commands/general/games';
 import { gameinfo } from '../src/commands/general/gameinfo';
@@ -347,6 +350,8 @@ const ROWS: Row[] = [
   { name: 'removeelo', fn: removeelo, slash: { role_id: CHAN19 }, prefix: [CHAN19] },
   { name: 'wipe', fn: wipe, slash: { user: discordUser }, prefix: [MENTION] },
   { name: 'wipeeveryone', fn: wipeeveryone, slash: {}, prefix: [] },
+  { name: 'statreset', fn: statreset, slash: {}, prefix: [] },
+  { name: 'claimelo', fn: claimelo, slash: {}, prefix: [] },
   { name: 'queues', fn: queues, slash: {}, prefix: [] },
   { name: 'games', fn: games, slash: {}, prefix: [] },
   { name: 'gameinfo', fn: gameinfo, slash: { game_id: 1 }, prefix: ['1'] },

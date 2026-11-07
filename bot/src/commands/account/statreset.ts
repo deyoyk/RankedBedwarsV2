@@ -1,4 +1,4 @@
-import { Message, ChatInputCommandInteraction, GuildMember } from 'discord.js';
+import { Message, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { errorEmbed, successEmbed } from '../../utils/betterembed';
@@ -6,6 +6,7 @@ import { safeFix } from '../../utils/fix';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
 import { countStatResetsInWindow, getStatResetAllowance } from '../../utils/statReset';
+import { getMemberRoleIds } from '../../utils/memberRoles';
 import { SeasonManager } from '../../managers/SeasonManager';
 import config from '../../config/config';
 
@@ -13,28 +14,10 @@ function actorId(interaction: Message | ChatInputCommandInteraction): string {
   return interaction instanceof ChatInputCommandInteraction ? interaction.user.id : interaction.author.id;
 }
 
-async function memberRoleIds(interaction: Message | ChatInputCommandInteraction, discordId: string): Promise<string[]> {
-  const member = interaction.member as GuildMember | null;
-  const fromCache = (m?: unknown): string[] | null => {
-    const cache = (m as { roles?: { cache?: unknown } })?.roles?.cache as unknown as { keys?: unknown } | null;
-    if (!cache) return null;
-    if (typeof cache.keys === 'function') return Array.from((cache as { keys: () => Iterable<string> }).keys());
-    return null;
-  };
-  const cached = fromCache(member);
-  if (cached) return cached;
-  if (interaction.guild) {
-    const fetched = await interaction.guild.members.fetch(discordId).catch(() => null) as unknown;
-    const ids = fromCache(fetched);
-    if (ids) return ids;
-  }
-  return [];
-}
-
 export async function statreset(interaction: Message | ChatInputCommandInteraction, _args?: string[], _wsManager?: WebSocketManager) {
   const discordId = actorId(interaction);
   try {
-    const roleIds = await memberRoleIds(interaction, discordId);
+    const roleIds = await getMemberRoleIds(interaction, discordId);
     const allowed = getStatResetAllowance(roleIds, config.statReset.roles);
     if (allowed <= 0) {
       await safeReply(interaction, errorEmbed('You do not have a donator role with stat resets.', 'Stat Reset Error'));

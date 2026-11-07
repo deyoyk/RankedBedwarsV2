@@ -29,6 +29,41 @@ export function parseStatResetScope(raw: string | undefined): 'season' | 'days' 
   return clean(raw).toLowerCase() === 'days' ? 'days' : 'season';
 }
 
+export function parseEloClaimRoles(raw: string | undefined): Record<string, number> {
+  const roles: Record<string, number> = {};
+  if (!raw) return roles;
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.lastIndexOf(':');
+    if (idx <= 0) continue;
+    const roleId = trimmed.slice(0, idx).trim();
+    const amount = parseInt(trimmed.slice(idx + 1).trim(), 10);
+    if (!isSnowflake(roleId) || !Number.isInteger(amount) || amount <= 0) continue;
+    roles[roleId] = amount;
+  }
+  return roles;
+}
+
+export function validateEloClaimRolesRaw(raw: string | undefined): string[] {
+  const errors: string[] = [];
+  if (!raw?.trim()) return errors;
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.lastIndexOf(':');
+    if (idx <= 0) {
+      errors.push(`ELO_CLAIM_ROLES entry "${trimmed}" must be roleId:elo`);
+      continue;
+    }
+    const roleId = trimmed.slice(0, idx).trim();
+    const amount = parseInt(trimmed.slice(idx + 1).trim(), 10);
+    if (!isSnowflake(roleId)) errors.push(`ELO_CLAIM_ROLES role "${roleId}" is not a valid Discord snowflake`);
+    if (!Number.isInteger(amount) || amount <= 0) errors.push(`ELO_CLAIM_ROLES entry "${trimmed}" must have a positive ELO amount`);
+  }
+  return errors;
+}
+
 export function validateStatResetRolesRaw(raw: string | undefined): string[] {
   const errors: string[] = [];
   if (!raw?.trim()) return errors;
@@ -64,6 +99,7 @@ export function validateConfig(cfg: Config): string[] {
     if (v && !isSnowflake(v)) errors.push(`Channel/category ${k} is not a valid Discord snowflake: ${v}`);
   }
   errors.push(...validateStatResetRolesRaw(process.env.STAT_RESET_ROLES));
+  errors.push(...validateEloClaimRolesRaw(process.env.ELO_CLAIM_ROLES));
   const scopeRaw = clean(process.env.STAT_RESET_SCOPE).toLowerCase();
   if (scopeRaw && scopeRaw !== 'season' && scopeRaw !== 'days') errors.push('STAT_RESET_SCOPE must be "season" or "days"');
   const daysRaw = clean(process.env.STAT_RESET_WINDOW_DAYS);
@@ -167,6 +203,9 @@ interface Config {
     roles: Record<string, number>;
     scope: 'season' | 'days';
     windowDays: number;
+  };
+  eloClaim: {
+    roles: Record<string, number>;
   };
 
 }
@@ -277,6 +316,9 @@ const configuration: Config = {
     roles: parseStatResetRoles(process.env.STAT_RESET_ROLES),
     scope: parseStatResetScope(process.env.STAT_RESET_SCOPE),
     windowDays: parsedPositiveInt(process.env.STAT_RESET_WINDOW_DAYS, 30),
+  },
+  eloClaim: {
+    roles: parseEloClaimRoles(process.env.ELO_CLAIM_ROLES),
   },
 };
 

@@ -52,6 +52,13 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
     seasonNumber?: number;
     chapterNumber?: number;
   }>;
+  eloClaims: Array<{
+    date: Date;
+    seasonNumber?: number;
+    chapterNumber?: number;
+    roleId?: string;
+    amount?: number;
+  }>;
 }
 
 const UserSchema: Schema = new Schema({
@@ -102,6 +109,13 @@ const UserSchema: Schema = new Schema({
     date: { type: Date, required: true },
     seasonNumber: { type: Number },
     chapterNumber: { type: Number },
+  }],
+  eloClaims: [{
+    date: { type: Date, required: true },
+    seasonNumber: { type: Number },
+    chapterNumber: { type: Number },
+    roleId: { type: String },
+    amount: { type: Number },
   }],
 }, { timestamps: true });
 
