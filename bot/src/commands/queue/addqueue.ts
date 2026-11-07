@@ -1,13 +1,9 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
-import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
+import { queueSystemEmbed } from '../../utils/queueEmbed';
 import Queue from '../../models/Queue';
 import config from '../../config/config';
-
-
-
-
 
 export async function addqueue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let channelId: string;
@@ -31,7 +27,7 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
     }
   } else {
     if (!args || args.length < 6) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <isPicking> [bypassRoles]`, 'Queue Creation Error'));
+      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}addqueue <channelId> <maxPlayers> <minElo> <maxElo> <isRanked> <isPicking> [bypassRoles]`, 'error')] });
       return;
     }
     channelId = args[0];
@@ -46,33 +42,40 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
   }
 
   if (!/^\d{17,20}$/.test(channelId)) {
-    await safeReply(interaction, errorEmbed('channelId must be a Discord voice channel ID (17-20 digits).', 'Queue Creation Error'));
+    await safeReply(interaction, { embeds: [queueSystemEmbed('channelId must be a Discord voice channel ID (17-20 digits).', 'error')] });
     return;
   }
   if (!Number.isInteger(maxPlayers) || maxPlayers < 2) {
-    await safeReply(interaction, errorEmbed('maxPlayers must be an integer of at least 2.', 'Queue Creation Error'));
+    await safeReply(interaction, { embeds: [queueSystemEmbed('maxPlayers must be an integer of at least 2.', 'error')] });
     return;
   }
   if (!Number.isInteger(minElo) || !Number.isInteger(maxElo) || minElo < 0 || maxElo < 0 || minElo > maxElo) {
-    await safeReply(interaction, errorEmbed('minElo and maxElo must be integers with minElo no greater than maxElo.', 'Queue Creation Error'));
+    await safeReply(interaction, { embeds: [queueSystemEmbed('minElo and maxElo must be integers with minElo no greater than maxElo.', 'error')] });
     return;
   }
   const badBypass = bypassRoles.find(id => !/^\d{17,20}$/.test(id));
   if (badBypass) {
-    await safeReply(interaction, errorEmbed(`Bypass role "${badBypass}" is not a valid Discord role ID.`, 'Queue Creation Error'));
+    await safeReply(interaction, { embeds: [queueSystemEmbed(`Bypass role "${badBypass}" is not a valid Discord role ID.`, 'error')] });
     return;
   }
+
+  const details = (queue: { maxPlayers: number; minElo: number; maxElo: number; isRanked?: boolean; isPicking?: boolean }) => [
+    `**Channel:** <#${channelId}>`,
+    `**Max Players:** ${queue.maxPlayers}`,
+    `**ELO Range:** ${queue.minElo}-${queue.maxElo}`,
+    `**Queue Type:** ${queue.isRanked ? 'Ranked' : 'Casual'}`,
+    `**Picking:** ${queue.isPicking ? 'Enabled' : 'Disabled'}`,
+  ];
 
   try {
     const existingQueue = await Queue.findOne({ channelId });
     if (existingQueue) {
-      const embed = betterEmbed('A queue already exists for this channel!', '#00AAAA', 'Queue Creation Error');
-      embed.builder.addFields(
-        { name: 'Channel ID', value: channelId, inline: true },
-        { name: 'Max Players', value: existingQueue.maxPlayers.toString(), inline: true },
-        { name: 'ELO Range', value: `${existingQueue.minElo}-${existingQueue.maxElo}`, inline: true }
-      );
-      await safeReply(interaction, embed);
+      await safeReply(interaction, {
+        embeds: [queueSystemEmbed([
+          'A queue already exists for this channel.',
+          ...details(existingQueue),
+        ], 'error')]
+      });
       return;
     }
 
@@ -95,31 +98,30 @@ export async function addqueue(interaction: Message | ChatInputCommandInteractio
     } catch (error: unknown) {
       const code = (error as { code?: unknown })?.code;
       if (code === 11000) {
-        const embed = betterEmbed('A queue already exists for this channel!', '#00AAAA', 'Queue Creation Error');
-        embed.builder.addFields(
-          { name: 'Channel ID', value: channelId, inline: true },
-          { name: 'Max Players', value: maxPlayers.toString(), inline: true },
-          { name: 'ELO Range', value: `${minElo}-${maxElo}`, inline: true }
-        );
-        await safeReply(interaction, embed);
+        await safeReply(interaction, {
+          embeds: [queueSystemEmbed([
+            'A queue already exists for this channel.',
+            `**Channel:** <#${channelId}>`,
+            `**Max Players:** ${maxPlayers}`,
+            `**ELO Range:** ${minElo}-${maxElo}`,
+          ], 'error')]
+        });
         return;
       }
       throw error;
     }
+
     if (created) {
-      const embed = successEmbed('A new queue has been created successfully!', 'Queue Created');
-    embed.builder.addFields(
-      { name: 'Channel ID', value: channelId, inline: true },
-      { name: 'Max Players', value: maxPlayers.toString(), inline: true },
-      { name: 'ELO Range', value: `${minElo}-${maxElo}`, inline: true },
-      { name: 'Queue Type', value: isRanked ? 'Ranked' : 'Casual', inline: true },
-      { name: 'Picking Enabled', value: isPicking ? 'Yes' : 'No', inline: true },
-      { name: 'Bypass Roles', value: bypassRoles.length > 0 ? bypassRoles.join(', ') : 'None', inline: true }
-    );
-    await safeReply(interaction, embed);
+      await safeReply(interaction, {
+        embeds: [queueSystemEmbed([
+          'A new queue has been created successfully!',
+          ...details(queue),
+          `**Bypass Roles:** ${bypassRoles.length > 0 ? bypassRoles.map(id => `<@&${id}>`).join(', ') : 'None'}`,
+        ], 'success')]
+      });
     }
   } catch (error) {
     console.error('Error in addqueue command:', error);
-    await safeReply(interaction, errorEmbed('There was an error creating the queue.', 'Queue Creation Error'));
+    await safeReply(interaction, { embeds: [queueSystemEmbed('There was an error creating the queue.', 'error')] });
   }
 }

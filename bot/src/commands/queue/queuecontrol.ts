@@ -2,7 +2,7 @@ import { SlashCommandBuilder, Message, ChatInputCommandInteraction, SlashCommand
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Queue from '../../models/Queue';
 import { safeReply } from '../../utils/safeReply';
-import { errorEmbed, themedEmbed } from '../../utils/betterembed';
+import { queueSystemEmbed } from '../../utils/queueEmbed';
 import config from '../../config/config';
 
 function addQueueOptions(sub: SlashCommandSubcommandBuilder) {
@@ -42,14 +42,14 @@ export async function queuecontrol(interaction: Message | ChatInputCommandIntera
     queueId = interaction.options.getString('queue_id') ?? undefined;
   } else {
     if (!args || args.length < 2) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'QueueControl Usage Error'));
+      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'error')] });
       return;
     }
     sub = args[0].toLowerCase();
     type = args[1].toLowerCase();
     queueId = args[2];
     if ((sub !== 'enable' && sub !== 'disable') || (type !== 'ranked' && type !== 'unranked' && type !== 'specific')) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'QueueControl Usage Error'));
+      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}queuecontrol <enable|disable> <ranked|unranked|specific> [queue_id]`, 'error')] });
       return;
     }
   }
@@ -59,7 +59,7 @@ export async function queuecontrol(interaction: Message | ChatInputCommandIntera
   else if (type === 'unranked') filter = { isRanked: false };
   else if (type === 'specific') {
     if (!queueId) {
-      await safeReply(interaction, { content: 'You must provide a queue_id for specific type.', ephemeral: true });
+      await safeReply(interaction, { embeds: [queueSystemEmbed('You must provide a queue_id for specific type.', 'error')] });
       return;
     }
     filter = { channelId: queueId };
@@ -67,13 +67,21 @@ export async function queuecontrol(interaction: Message | ChatInputCommandIntera
   try {
     const update = sub === 'enable' ? { isActive: true } : { isActive: false };
     const result = await Queue.updateMany(filter, update);
-    const embed = themedEmbed()
-      .setColor(sub === 'enable' ? '#00ff00' : '#00AAAA')
-      .setTitle(sub === 'enable' ? 'Queues Enabled' : 'Queues Disabled')
-      .setDescription(`Affected queues: ${result.modifiedCount}`);
-    await safeReply(interaction, { embeds: [embed] });
+    const label = type === 'specific'
+      ? `<#${queueId}>`
+      : `\`${type.charAt(0).toUpperCase()}${type.slice(1)}\``;
+    const noun = type === 'specific' ? 'queue' : 'queues';
+    const verb = sub === 'enable' ? 'opened' : 'closed';
+
+    const message = result.modifiedCount > 0
+      ? `Successfully ${verb} ${label} ${noun}`
+      : `No matching ${label} ${noun} were updated`;
+
+    await safeReply(interaction, {
+      embeds: [queueSystemEmbed(message, result.modifiedCount > 0 ? 'success' : 'info')]
+    });
   } catch {
-    await safeReply(interaction, { content: 'Error updating queues.', ephemeral: true });
+    await safeReply(interaction, { embeds: [queueSystemEmbed('Error updating queues.', 'error')] });
   }
 }
 

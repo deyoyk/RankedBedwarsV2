@@ -252,7 +252,7 @@ describe('scoreGame progression bonuses', () => {
 });
 
 describe('ranks command progression sections', () => {
-  it('lists decay, streak bonuses and bounties below the ranks', async () => {
+  it('shows only ranks and none of the bonus/decay sections', async () => {
     const { ranks } = await import('../src/commands/general/ranks');
     const { getEloRanks } = require('../src/utils/fix');
     getEloRanks.mockResolvedValue([{ roleId: '123456789012345678', startElo: 0, endElo: 999, winElo: 10, loseElo: 5, mvpElo: 2, bedElo: 1 }]);
@@ -260,11 +260,10 @@ describe('ranks command progression sections', () => {
     await ranks({ reply } as any, [], undefined);
     expect(reply).toHaveBeenCalled();
     const text = JSON.stringify(reply.mock.calls[0][0]);
-    expect(text).toMatch(/Decay/);
-    expect(text).toMatch(/Win Streak Bonuses/);
-    expect(text).toMatch(/Bounties/);
-    expect(text).toMatch(/800/);
-    expect(text).toMatch(/10 win streak/);
+    expect(text).toContain('123456789012345678');
+    expect(text).not.toMatch(/Decay/);
+    expect(text).not.toMatch(/Win Streak Bonuses/);
+    expect(text).not.toMatch(/Bounties/);
   });
 });
 

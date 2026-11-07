@@ -1,11 +1,10 @@
 import { Message, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { safeReply } from '../../utils/safeReply';
+import { queueSystemEmbed } from '../../utils/queueEmbed';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
-import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
-
 
 export async function removequeue(interaction: Message | ChatInputCommandInteraction, args?: string[], wsManager?: WebSocketManager) {
   let channelId: string;
@@ -14,7 +13,7 @@ export async function removequeue(interaction: Message | ChatInputCommandInterac
     channelId = interaction.options.getString('channel_id', true);
   } else {
     if (!args || args.length !== 1) {
-      await safeReply(interaction, errorEmbed(`Usage: ${config.prefix}removequeue <channelId>`, 'Queue Removal Error'));
+      await safeReply(interaction, { embeds: [queueSystemEmbed(`Usage: ${config.prefix}removequeue <channelId>`, 'error')] });
       return;
     }
     channelId = args[0];
@@ -24,23 +23,24 @@ export async function removequeue(interaction: Message | ChatInputCommandInterac
     const queue = await Queue.findOneAndDelete({ channelId });
 
     if (!queue) {
-      await safeReply(interaction, errorEmbed('No queue found with the specified channel ID.', 'Queue Removal Error'));
+      await safeReply(interaction, { embeds: [queueSystemEmbed('No queue found with the specified channel ID.', 'error')] });
       return;
     }
 
     queuePlayers.delete(channelId);
 
-    const embed = successEmbed('The queue has been successfully removed!', 'Queue Removed');
-    embed.builder.addFields(
-      { name: 'Channel ID', value: channelId, inline: true },
-      { name: 'Max Players', value: queue.maxPlayers.toString(), inline: true },
-      { name: 'ELO Range', value: `${queue.minElo}-${queue.maxElo}`, inline: true },
-      { name: 'Queue Type', value: queue.isRanked ? 'Ranked' : 'Casual', inline: true },
-      { name: 'Picking Enabled', value: queue.isPicking ? 'Yes' : 'No', inline: true }
-    );
-    await safeReply(interaction, embed);
+    await safeReply(interaction, {
+      embeds: [queueSystemEmbed([
+        'The queue has been successfully removed!',
+        `**Channel:** <#${channelId}>`,
+        `**Max Players:** ${queue.maxPlayers}`,
+        `**ELO Range:** ${queue.minElo}-${queue.maxElo}`,
+        `**Queue Type:** ${queue.isRanked ? 'Ranked' : 'Casual'}`,
+        `**Picking:** ${queue.isPicking ? 'Enabled' : 'Disabled'}`,
+      ], 'success')]
+    });
   } catch (error) {
     console.error('Error in removequeue command:', error);
-    await safeReply(interaction, errorEmbed('There was an error removing the queue.', 'Queue Removal Error'));
+    await safeReply(interaction, { embeds: [queueSystemEmbed('There was an error removing the queue.', 'error')] });
   }
 }

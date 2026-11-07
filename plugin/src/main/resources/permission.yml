@@ -91,5 +91,8 @@ leaderboard:
 ranks:
   - "everyone"
 
+bonus:
+  - "everyone"
+
 gamescount:
   - "everyone"

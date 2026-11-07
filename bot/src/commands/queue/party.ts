@@ -424,6 +424,7 @@ async function handleStartPrivateGame(
     embeds: [confirmEmbed.builder],
     components: [row],
   });
+  if (!message) return;
 
   let resolved = false;
   const collector = message.createMessageComponentCollector({

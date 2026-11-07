@@ -296,6 +296,7 @@ import { games } from '../src/commands/general/games';
 import { gameinfo } from '../src/commands/general/gameinfo';
 import { maps } from '../src/commands/general/maps';
 import { ranks } from '../src/commands/general/ranks';
+import { bonus } from '../src/commands/general/bonus';
 import { ban } from '../src/commands/moderation/ban';
 import { unban } from '../src/commands/moderation/unban';
 import { mute } from '../src/commands/moderation/mute';
@@ -355,6 +356,7 @@ const ROWS: Row[] = [
   { name: 'gameinfo', fn: gameinfo, slash: { game_id: 1 }, prefix: ['1'] },
   { name: 'maps', fn: maps, slash: {}, prefix: [] },
   { name: 'ranks', fn: ranks, slash: {}, prefix: [] },
+  { name: 'bonus', fn: bonus, slash: {}, prefix: [] },
   { name: 'ban', fn: ban, slash: { user: discordUser, duration: '1h', reason: 'test' }, prefix: [MENTION, '1h', 'test'] },
   { name: 'unban', fn: unban, slash: { user: discordUser, user_id: ID19 }, prefix: [ID19] },
   { name: 'mute', fn: mute, slash: { user: discordUser, duration: '1h', reason: 'test' }, prefix: [MENTION, '1h', 'test'] },

@@ -2,6 +2,7 @@ import { wipeeveryone } from '../commands/account/wipeeveryone';
 import { wipe } from '../commands/account/wipe';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
+import { bonus } from '../commands/general/bonus';
 import { Client, Collection, ButtonInteraction, SlashCommandBuilder, type ApplicationCommandDataResolvable, type ApplicationCommandOptionData } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
@@ -243,6 +244,7 @@ export class CommandManager {
     ]);
     this.reg('maps', 'Show available maps and select mode', maps);
     this.reg('ranks', 'Show the list of ELO ranks', ranks);
+    this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
   }
 
