@@ -4,7 +4,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import config from '../config/config';
 import os from 'os';
 import botPackage from '../../package.json';
-import { themedEmbed } from '../utils/betterembed';
+import { themedEmbed, EMBED_THEME } from '../utils/betterembed';
 
 export const STATUS_EMBED_TITLE = 'Bot Environment Status';
 const LEGACY_STATUS_EMBED_TITLES = ['Bot Environment Status ✌️'];
@@ -154,8 +154,8 @@ export class BotStatusTask {
       const wsOnline = wsStatus.connected;
       const healthy = dbOnline && wsOnline;
       const color = healthy
-        ? config.embed.successColor
-        : (dbOnline || wsOnline ? STATUS_WARNING_COLOR : config.embed.errorColor);
+        ? EMBED_THEME.successColor
+        : (dbOnline || wsOnline ? STATUS_WARNING_COLOR : EMBED_THEME.errorColor);
       const healthLine = healthy
         ? '**All systems operational**'
         : (dbOnline || wsOnline
@@ -236,7 +236,7 @@ export class BotStatusTask {
       return embed;
     } catch (error) {
       console.error('[BotStatusTask] Error creating embed fields:', error);
-      return themedEmbed(config.embed.errorColor)
+      return themedEmbed(EMBED_THEME.errorColor)
         .setTitle(STATUS_EMBED_TITLE)
         .setDescription('**Status unavailable**\nThe bot could not collect environment metrics. It will retry on the next refresh.')
         .setTimestamp();

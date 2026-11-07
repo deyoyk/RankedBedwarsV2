@@ -1,16 +1,18 @@
-import User from '../models/User';
 import config from '../config/config';
-import { Guild, TextChannel } from 'discord.js';
+import { Guild, MessageCreateOptions, TextChannel } from 'discord.js';
 import path from 'path';
 import fs from 'fs';
 import { themedEmbed } from './betterembed';
+
+type PunishmentType = 'ban' | 'unban' | 'mute' | 'unmute' | 'strike' | 'unstrike';
+type BasePunishmentType = 'ban' | 'mute' | 'strike';
 
 interface PunishmentEmbedOptions {
   guild: Guild;
   targetId: string;
   moderatorId: string;
   reason: string;
-  type: 'ban' | 'unban' | 'mute' | 'unmute' | 'strike' | 'unstrike';
+  type: PunishmentType;
   expires?: Date | null;
   extraFields?: Array<{ label: string; value: string }>;
   assetFileName?: string;
@@ -18,27 +20,83 @@ interface PunishmentEmbedOptions {
   color?: number;
 }
 
+interface PunishmentStyle {
+  title: string;
+  label: string;
+  color: number;
+  asset: string;
+  removalPhrase: string;
+}
+
+const TYPE_STYLES: Record<BasePunishmentType, PunishmentStyle> = {
+  ban: {
+    title: 'PLAYER PUNISHED',
+    label: 'Ranked Ban',
+    color: 0x71368A,
+    asset: 'ban.png',
+    removalPhrase: 'is no longer banned',
+  },
+  mute: {
+    title: 'PLAYER PUNISHED',
+    label: 'Mute',
+    color: 0x992D22,
+    asset: 'mute.png',
+    removalPhrase: 'is no longer muted',
+  },
+  strike: {
+    title: 'PLAYER PUNISHED',
+    label: 'Strike',
+    color: 0xC27C0E,
+    asset: 'strike.png',
+    removalPhrase: 'has had their strike removed',
+  },
+};
+
+const REMOVAL_TITLES: Record<BasePunishmentType, string> = {
+  ban: 'BAN REMOVED',
+  mute: 'MUTE DELETED',
+  strike: 'STRIKE REMOVED',
+};
+
+const REMOVAL_COLOR = 0x1ABC9C;
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+function baseTypeOf(type: PunishmentType): BasePunishmentType {
+  return (type.startsWith('un') ? type.slice(2) : type) as BasePunishmentType;
+}
+
 function formatDuration(expires: Date): string {
   const remainingMs = Math.max(0, expires.getTime() - Date.now());
-  const minutes = Math.ceil(remainingMs / 60000);
-  if (minutes < 60) return `${minutes}m`;
-  if (minutes < 1440) return `${Math.ceil(minutes / 60)}h`;
-  return `${Math.ceil(minutes / 1440)}d`;
+  const totalMinutes = Math.ceil(remainingMs / 60000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days} day${days === 1 ? '' : 's'}`);
+  if (hours > 0) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  if (days === 0 && minutes > 0) parts.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+  return parts.length > 0 ? parts.join(' ') : '0 minutes';
 }
 
 function formatExpiryDate(expires: Date): string {
   const d = new Date(expires);
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
 }
 
-const TYPE_CONFIG: Record<string, { title: string; color: number; asset: string }> = {
-  ban:     { title: 'Rank Banned',     color: 0x7b0606, asset: 'ban.png' },
-  unban:   { title: 'User Unbanned',   color: 0x2dd56b, asset: 'unbanunmute.png' },
-  mute:    { title: 'Muted',           color: 0xff9900, asset: 'ban.png' },
-  unmute:  { title: 'User Unmuted',    color: 0x2dd56b, asset: 'unbanunmute.png' },
-  strike:  { title: 'Strike Issued',   color: 0xcda12f, asset: 'strike.png' },
-  unstrike:{ title: 'Strike Removed',  color: 0x2dd56b, asset: 'unbanunmute.png' },
-};
+function formatProcessedDate(date: Date): string {
+  const d = new Date(date);
+  const weekday = WEEKDAYS[d.getDay()];
+  const month = MONTHS[d.getMonth()];
+  const hours = String(d.getHours()).padStart(2, '0');
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  return `${weekday}, ${d.getDate()} ${month}, ${d.getFullYear()} ${hours}:${minutes}`;
+}
 
 const assetPathCache = new Map<string, string | null>();
 
@@ -59,7 +117,7 @@ function resolveAssetPath(fileName: string): string | null {
 }
 
 export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Promise<void> {
-  const { guild, targetId, moderatorId, reason, type, expires, extraFields, assetFileName: customAsset, title: customTitle, color: customColor } = options;
+  const { guild, targetId, reason, type, expires, extraFields, assetFileName: customAsset, title: customTitle, color: customColor } = options;
 
   const channelId = config.channels.punishmentsChannel;
   if (!channelId) {
@@ -75,56 +133,47 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     setTimeout(() => reject(new Error('Channel fetch timeout')), 3000)
   );
 
-  const [channel, userDoc] = (await Promise.all([
-    Promise.race([channelPromise, timeoutPromise]).catch(() => null),
-    User.findOne({ discordId: targetId }).select('ign').lean().catch(() => null)
-  ])) as [TextChannel | null, { ign?: string } | null];
+  const channel = (await Promise.race([channelPromise, timeoutPromise]).catch(() => null)) as TextChannel | null;
   if (!channel || !channel.isTextBased()) {
     console.warn(`[PunishmentEmbed] Punishments channel ${channelId} not found or not text-based`);
     return;
   }
 
-  const config_ = TYPE_CONFIG[type] || TYPE_CONFIG.ban;
-  const isPositive = type.startsWith('un');
+  const baseType = baseTypeOf(type);
+  const style = TYPE_STYLES[baseType];
+  const isRemoval = type.startsWith('un');
   const userMention = `<@${targetId}>`;
-  const moderatorMention = moderatorId === 'system' ? 'System' :
-    moderatorId === 'auto' ? 'Auto-Moderation' : `<@${moderatorId}>`;
-  const reasonField = reason?.trim() || 'No reason provided';
-
-  const ign = userDoc?.ign;
+  const reasonText = reason?.trim() || 'No reason provided';
 
   const descriptionLines: string[] = [];
-  descriptionLines.push(`**User:** ${userMention}${ign ? ` (${ign})` : ''}`);
-  descriptionLines.push(`**Reason:** \`${reasonField}\``);
+
+  if (isRemoval) {
+    descriptionLines.push(`• ${userMention} ${style.removalPhrase}. Punishment Type: **${style.label}**.`);
+    descriptionLines.push(`• This punishment was deleted for the reason **${reasonText}**.`);
+    descriptionLines.push(`• Processed ${formatProcessedDate(new Date())}.`);
+  } else {
+    descriptionLines.push(`• ${userMention} has been issued a **${style.label}** punishment.`);
+    if (expires) {
+      descriptionLines.push(`• The punishment duration is **${formatDuration(expires)}**. Expiring ${formatExpiryDate(expires)}`);
+    }
+    descriptionLines.push(`• The punishment reason is **${reasonText}**`);
+    if (baseType === 'ban') {
+      descriptionLines.push('• Player is no longer able to queue. They can appeal by opening a support ticket.');
+    }
+  }
 
   if (extraFields) {
     for (const field of extraFields) {
-      descriptionLines.push(`**${field.label}:** \`${field.value}\``);
+      descriptionLines.push(`• ${field.label}: **${field.value}**`);
     }
   }
 
-  if (isPositive) {
-    const actionVerb = type.replace('un', '');
-    descriptionLines.push(`**${moderatorId === 'system' ? 'Expired' : `${actionVerb.charAt(0).toUpperCase() + actionVerb.slice(1)}ed by`}:** ${moderatorMention}`);
-    descriptionLines.push('\nIn future if you face another punishment, it will likely increase due to your punishment history.');
-  } else {
-    if (expires) {
-      const durationDisplay = formatDuration(expires);
-      const expiryDisplay = formatExpiryDate(expires);
-      descriptionLines.push(`**Duration:** \`${durationDisplay}\``);
-      descriptionLines.push(`**Expires at:** \`${expiryDisplay}\``);
-    }
-    descriptionLines.push(`**Staff:** ${moderatorMention}`);
-    descriptionLines.push('\nIf you wish to appeal this punishment, please create an appeal Support Channel and staff will be swift to help.');
-  }
-
-  const embed = themedEmbed()
-    .setTitle(customTitle || config_.title)
-    .setColor(customColor ?? config_.color)
+  const embed = themedEmbed(customColor ?? (isRemoval ? REMOVAL_COLOR : style.color))
+    .setTitle(customTitle || (isRemoval ? REMOVAL_TITLES[baseType] : style.title))
     .setDescription(descriptionLines.join('\n'))
     .setTimestamp();
 
-  const fileName = customAsset || config_.asset;
+  const fileName = customAsset || (isRemoval ? 'unbanunmute.png' : style.asset);
   const assetPath = resolveAssetPath(fileName);
   const files: { attachment: string; name: string }[] = [];
   if (assetPath) {
@@ -134,12 +183,15 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     console.warn(`[PunishmentEmbed] Asset not found for embed thumbnail: ${fileName}`);
   }
 
+  const payload: MessageCreateOptions = { embeds: [embed] };
+  if (files.length > 0) payload.files = files;
+
   try {
-    await channel.send({ content: userMention, embeds: [embed], files });
+    await channel.send(payload);
   } catch (error) {
     console.error(`[PunishmentEmbed] Failed to send ${type} embed, queueing one background retry:`, error);
     void channel
-      .send({ content: userMention, embeds: [embed], files })
+      .send(payload)
       .catch((retryError) => console.error(`[PunishmentEmbed] Background retry failed for ${type} embed:`, retryError));
   }
 }

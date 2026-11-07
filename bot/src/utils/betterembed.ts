@@ -1,17 +1,22 @@
 import { EmbedBuilder } from 'discord.js';
-import config, { DEFAULT_EMBED_THEME } from '../config/config';
 
 /**
  * Single source of truth for embed styling.
  *
- * Values are read from the environment through config (EMBED_* variables)
- * with the defaults defined in config.ts. All embed helpers and direct
- * embeds use the same palette and footer.
+ * These values are hardcoded. Edit this file to change the look of every bot
+ * embed; all embed helpers and direct embeds use the same palette and footer.
  */
 export const EMBED_THEME = {
-  ...DEFAULT_EMBED_THEME,
-  ...(config.embed ?? {}),
-};
+  defaultColor: 0x3498DB,
+  errorColor: 0xE74C3C,
+  successColor: 0x2ECC71,
+  footer: 'deyo Ranked Bedwars',
+  defaultTitle: 'Notice',
+  errorTitle: 'Error',
+  successTitle: 'Success',
+  errorText: 'An error occurred.',
+  successText: 'Success!',
+} as const;
 
 function cleanColor(color: string | number) {
   if (typeof color === 'string') {
