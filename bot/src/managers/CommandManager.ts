@@ -55,6 +55,7 @@ import { endseason } from '../commands/season/endseason';
 import { listseasons } from '../commands/season/listseasons';
 import { level } from '../commands/stats/level';
 import { seasoninfo } from '../commands/season/seasoninfo';
+import { statreset } from '../commands/account/statreset';
 import { queuecontrol, queueControlData } from '../commands/queue/queuecontrol';
 
 
@@ -401,6 +402,7 @@ export class CommandManager {
       { name: 'user', description: 'User to wipe stats for', type: 6, required: true }
     ]);
     this.reg('wipeeveryone', 'Wipe all stats for every user (except bans, mutes, strikes)', wipeeveryone);
+    this.reg('statreset', 'Reset your own stats (limited by donator role)', statreset);
   }
 
   private registerStatsCommands() {

@@ -8,6 +8,45 @@ export function isSnowflake(v: string): boolean {
   return /^\d{17,20}$/.test(v);
 }
 
+export function parseStatResetRoles(raw: string | undefined): Record<string, number> {
+  const roles: Record<string, number> = {};
+  if (!raw) return roles;
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.lastIndexOf(':');
+    if (idx <= 0) continue;
+    const roleId = trimmed.slice(0, idx).trim();
+    const count = parseInt(trimmed.slice(idx + 1).trim(), 10);
+    if (!isSnowflake(roleId) || !Number.isInteger(count) || count <= 0) continue;
+    roles[roleId] = count;
+  }
+  return roles;
+}
+
+export function parseStatResetScope(raw: string | undefined): 'season' | 'days' {
+  return clean(raw).toLowerCase() === 'days' ? 'days' : 'season';
+}
+
+export function validateStatResetRolesRaw(raw: string | undefined): string[] {
+  const errors: string[] = [];
+  if (!raw?.trim()) return errors;
+  for (const part of raw.split(',')) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const idx = trimmed.lastIndexOf(':');
+    if (idx <= 0) {
+      errors.push(`STAT_RESET_ROLES entry "${trimmed}" must be roleId:resets`);
+      continue;
+    }
+    const roleId = trimmed.slice(0, idx).trim();
+    const count = parseInt(trimmed.slice(idx + 1).trim(), 10);
+    if (!isSnowflake(roleId)) errors.push(`STAT_RESET_ROLES role "${roleId}" is not a valid Discord snowflake`);
+    if (!Number.isInteger(count) || count <= 0) errors.push(`STAT_RESET_ROLES entry "${trimmed}" must have a positive resets count`);
+  }
+  return errors;
+}
+
 export function validateConfig(cfg: Config): string[] {
   const errors: string[] = [];
   if (!cfg.token) errors.push('DISCORD_TOKEN is required');
@@ -22,6 +61,14 @@ export function validateConfig(cfg: Config): string[] {
   }
   for (const [k, v] of Object.entries({ ...cfg.channels, ...cfg.categories, waitingvc: cfg.voicechannels.waitingvc })) {
     if (v && !isSnowflake(v)) errors.push(`Channel/category ${k} is not a valid Discord snowflake: ${v}`);
+  }
+  errors.push(...validateStatResetRolesRaw(process.env.STAT_RESET_ROLES));
+  const scopeRaw = clean(process.env.STAT_RESET_SCOPE).toLowerCase();
+  if (scopeRaw && scopeRaw !== 'season' && scopeRaw !== 'days') errors.push('STAT_RESET_SCOPE must be "season" or "days"');
+  const daysRaw = clean(process.env.STAT_RESET_WINDOW_DAYS);
+  if (daysRaw) {
+    const days = parseInt(daysRaw, 10);
+    if (!Number.isInteger(days) || days <= 0) errors.push('STAT_RESET_WINDOW_DAYS must be a positive integer');
   }
   return errors;
 }
@@ -106,7 +153,12 @@ interface Config {
     historySize: number;
     globalWeight: number;
   };
-  
+  statReset: {
+    roles: Record<string, number>;
+    scope: 'season' | 'days';
+    windowDays: number;
+  };
+
 }
 
 
@@ -209,6 +261,11 @@ const configuration: Config = {
     lookbackGames: parsedPositiveInt(process.env.MAP_FREQUENCY_LOOKBACK_GAMES, 5),
     historySize: parsedPositiveInt(process.env.MAP_FREQUENCY_HISTORY_SIZE, 50),
     globalWeight: parsedPositiveInt(process.env.MAP_FREQUENCY_GLOBAL_WEIGHT, 1),
+  },
+  statReset: {
+    roles: parseStatResetRoles(process.env.STAT_RESET_ROLES),
+    scope: parseStatResetScope(process.env.STAT_RESET_SCOPE),
+    windowDays: parsedPositiveInt(process.env.STAT_RESET_WINDOW_DAYS, 30),
   },
 };
 
