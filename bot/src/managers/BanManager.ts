@@ -25,24 +25,6 @@ export class BanManager extends TimedPunishmentManager {
     return kind;
   }
 
-  protected discordApply(promises: Promise<unknown>[], guild: Guild, targetId: string, reason: string, moderatorId: string, duration: number | null): void {
-    if (!duration) {
-      promises.push(
-        guild.members.ban(targetId, { reason: `${reason} - By: ${moderatorId}` }).catch(error => {
-          console.warn(`[BanManager] Failed to Discord ban ${targetId}:`, error.message);
-        })
-      );
-    }
-  }
-
-  protected discordUndo(promises: Promise<unknown>[], guild: Guild, targetId: string, reason: string, moderatorId: string): void {
-    promises.push(
-      guild.members.unban(targetId, `${reason} - By: ${moderatorId}`).catch(error => {
-        console.warn(`[BanManager] Failed to Discord unban ${targetId}:`, error.message);
-      })
-    );
-  }
-
   private constructor() {
     super();
   }
