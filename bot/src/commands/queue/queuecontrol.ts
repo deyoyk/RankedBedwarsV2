@@ -77,5 +77,4 @@ export async function queuecontrol(interaction: Message | ChatInputCommandIntera
   }
 }
 
-// Backward-compatible alias (previous export name).
 export const executeQueueControl = queuecontrol;

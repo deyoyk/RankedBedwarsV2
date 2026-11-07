@@ -48,10 +48,10 @@ describe('private game websocket bridge', () => {
 
   afterAll(() => {
     for (const manager of managers) {
-      try { manager.shutdown?.(); } catch { /* test cleanup */ }
+      try { manager.shutdown?.(); } catch {  }
     }
     for (const server of servers) {
-      try { server.close(); } catch { /* test cleanup */ }
+      try { server.close(); } catch {  }
     }
   });
 

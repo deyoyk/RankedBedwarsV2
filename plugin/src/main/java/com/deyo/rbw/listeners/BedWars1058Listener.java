@@ -626,8 +626,6 @@ public class BedWars1058Listener implements Listener {
             
             Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
                 if (plugin.getWebSocketManager() != null) {
-                    // Persists a pending payload before sending, so a
-                    // disconnect at game end is retried on reconnect.
                     plugin.getWebSocketManager().sendGameScoring(game);
                     plugin.debug("Queued game scoring data for game #" + game.getGameId());
                 } else {

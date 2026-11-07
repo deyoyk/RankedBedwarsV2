@@ -291,7 +291,6 @@ public class PluginUpdaterTest {
         assertEquals(PluginUpdater.Status.STAGED, updater.checkForUpdates().status);
 
         if (!isWindows()) {
-            // checkForUpdates already replaced the jar immediately on Linux.
             assertArrayEquals(newJar, Files.readAllBytes(currentJar));
             assertFalse(Files.exists(dataDir.resolve("updates/pending-update.json")));
             assertTrue(Files.exists(dataDir.resolve("updates/last-update.json")));

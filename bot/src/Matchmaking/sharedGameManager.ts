@@ -36,7 +36,6 @@ export function getSharedGameManager(client: Client, wsManager: WebSocketManager
   try {
     wsManager.setGameManager(created);
   } catch {
-    // Older/mock WebSocket managers may not expose registration.
   }
   return created;
 }

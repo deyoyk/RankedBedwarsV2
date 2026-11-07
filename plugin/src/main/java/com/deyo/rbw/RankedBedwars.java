@@ -62,8 +62,6 @@ public class RankedBedwars extends JavaPlugin {
         saveDefaultConfig();
         migrateConfig();
 
-        // Check for a newer release in the background. The jar itself is
-        // swapped after this process exits, so the next restart runs it.
         pluginUpdater = new PluginUpdater(this);
         pluginUpdater.checkForUpdatesAsync();
         registerUpdateShutdownHook();
@@ -115,8 +113,6 @@ public class RankedBedwars extends JavaPlugin {
         
         if (getServer().getPluginManager().getPlugin("PlaceholderAPI") != null) {
             registerPlaceholderExpansion();
-            // External PlaceholderAPI expansions may load after this plugin.
-            // Re-check once the server has finished enabling everything.
             getServer().getScheduler().runTaskLater(this, this::registerPlaceholderExpansion, 40L);
         }
         

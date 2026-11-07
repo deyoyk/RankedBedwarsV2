@@ -108,7 +108,7 @@ describe('withPlayerLock self-healing', () => {
     await expect(withLock('u1', async () => 'recovered')).resolves.toBe('recovered');
     await new Promise(r => setImmediate(r));
     expect(locks.has('u1')).toBe(false);
-    try { (listener as any).cleanup?.(); } catch { /* ignore */ }
+    try { (listener as any).cleanup?.(); } catch {  }
   });
 });
 
@@ -215,7 +215,7 @@ describe('admission fuzz: invariants hold under random interleavings', () => {
   }
 
   afterEach(() => {
-    try { listener?.cleanup?.(); } catch { /* ignore */ }
+    try { listener?.cleanup?.(); } catch {  }
   });
 
   it('200 seeded random ops keep every invariant', async () => {
@@ -325,7 +325,7 @@ describe('party admission guards', () => {
       );
       expect(queuePlayers.get(Q1) || []).toHaveLength(0);
     } finally {
-      try { (listener as any).cleanup?.(); } catch { /* ignore */ }
+      try { (listener as any).cleanup?.(); } catch {  }
     }
   });
 });

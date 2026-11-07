@@ -481,9 +481,6 @@ export class GameManager {
     payload: Record<string, unknown>,
   ): Promise<void> {
     try {
-      // A stale unfinished journal from an older losing settlement must not
-      // keep the wrong type. The caller has already won the game claim, so
-      // its type is authoritative.
       const existingQuery = GameSettlement.findOne({ gameId }) as unknown as {
         select?: (fields: string) => { lean: () => Promise<unknown> };
       } & Promise<unknown>;
@@ -636,8 +633,6 @@ export class GameManager {
           }
           this.registerPlayersInGame(game.gameId, [...(game.team1 || []), ...(game.team2 || [])]);
 
-          // A journal written by a losing concurrent settlement must never
-          // undo the settlement that actually won.
           if (settlement.type === 'score' && game.state === GameState.VOIDED) {
             await this.markSettlementStatus(game.gameId, 'completed');
             continue;
@@ -876,8 +871,6 @@ export class GameManager {
 
       await this.updatePlayerStats(playerScoreData, context.game);
       await this.markSettlementStatus(gameResult.gameId, 'stats_applied');
-      // Stats are durable now; free the players for new queues even if the
-      // notification/cleanup work below is slow.
       this.releasePlayersInGame(gameResult.gameId);
 
       await this.sendScoreNotifications(context, playerScoreData);
@@ -1031,8 +1024,6 @@ export class GameManager {
         throw new Error(`Game ${gameId} not found in active games`);
       }
 
-      // Reserve the warp slot before awaiting DB lookups so two concurrent
-      // callers cannot both send a warp_players message.
       this.warpStarting.add(key);
       const game = resources.game;
       const [team1IGNs, team2IGNs] = await this.getTeamsIGNs(game.team1, game.team2);
@@ -1539,9 +1530,6 @@ export class GameManager {
       const warpData = this.warpRequests.get(gameId);
       if (!warpData) return;
 
-      // The plugin can emit more than one failure event for a single warp
-      // attempt (for example arena-not-found followed by a generic failure).
-      // Only the first failure for an attempt may consume a retry.
       const attempt = warpData.sentAttempt ?? 1;
       if (warpData.handledFailureAttempt === attempt) {
         console.log(`[GameManager] Duplicate warp failure for game ${gameId} attempt ${attempt}, ignoring`);
@@ -1753,8 +1741,6 @@ export class GameManager {
 
   private async loadGameContext(gameResult: GameResult): Promise<GameScoreContext> {
     try {
-      // A deleted account must not strand an otherwise finished game. The
-      // remaining players still receive their result.
       const { game, players } = await this.loadGameWithPlayers(gameResult.gameId, true);
 
 

@@ -12,7 +12,6 @@ export async function screenshare(interaction: Message | ChatInputCommandInterac
     await safeReply(interaction, errorEmbed('Use /screenshare <user> <reason> [image] (slash command) to request a screenshare.', 'Screenshare Error'));
     return;
   }
-  // Support both registered option names ('user'/'reason') and legacy names ('target'/image required).
   const target = interaction.options.getUser('user') ?? interaction.options.getUser('target');
   const reason = interaction.options.getString('reason', true);
   const image = interaction.options.getAttachment('image') ?? interaction.options.getAttachment('proof');

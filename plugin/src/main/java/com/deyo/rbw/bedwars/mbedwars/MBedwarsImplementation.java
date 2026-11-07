@@ -163,9 +163,6 @@ public class MBedwarsImplementation implements BedwarsAPI {
                 plugin.getMapManager().sendWarpSuccess(gameId);
             }, 20L);
 
-            // Do not force-start the arena here. The players are added to the
-            // lobby and MBedwars' normal lobby countdown starts the round,
-            // which keeps the configured wait time and bed setup intact.
             
             
 

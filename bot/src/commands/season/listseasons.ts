@@ -54,6 +54,5 @@ export async function listseasons(interaction: Message | ChatInputCommandInterac
     await safeReply(interaction, { embeds: [embed], ephemeral: true });  }
 }
 
-// Backward-compatible aliases (previous export names).
 export const executeListSeasons = listseasons;
 export const executeListseasons = listseasons;

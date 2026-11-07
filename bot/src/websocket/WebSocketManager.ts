@@ -646,8 +646,6 @@ export class WebSocketManager {
         this.lastQueueStatusHash = null;
         this.send({ type: 'auth_success', message: 'Authentication successful' });
         console.log('[WebSocketManager] Authentication successful');
-        // Give the plugin a moment to re-announce games that warped while
-        // the socket was down before retrying anything that is still pending.
         const resumeTimer = setTimeout(() => {
           void this.gameManager?.resumePendingWarps?.();
         }, 3000);

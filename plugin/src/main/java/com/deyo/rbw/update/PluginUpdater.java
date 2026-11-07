@@ -675,8 +675,6 @@ public class PluginUpdater {
                 : unixScript(pending, script, backup, appliedJson);
         byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         if (windows) {
-            // Windows PowerShell 5.1 needs a UTF-8 BOM to read non-ASCII paths
-            // correctly.
             byte[] bom = new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF};
             byte[] withBom = new byte[bom.length + bytes.length];
             System.arraycopy(bom, 0, withBom, 0, bom.length);
@@ -714,8 +712,6 @@ public class PluginUpdater {
         out.append("for ($i = 0; $i -lt 30; $i++) {\n");
         out.append("  try {\n");
         if (options.backup) {
-            // Backup is best-effort; a backup failure must never block the
-            // actual update.
             out.append("    if (Test-Path -LiteralPath $target) { Copy-Item -LiteralPath $target -Destination $backup -Force -ErrorAction SilentlyContinue }\n");
         }
         out.append("    Copy-Item -LiteralPath $source -Destination $target -Force -ErrorAction Stop\n");
@@ -891,8 +887,6 @@ public class PluginUpdater {
             }
         } catch (Exception ignored) {
         }
-        // Older jars do not contain build-info. Let those update normally
-        // instead of guessing from file mtimes (which change on download).
         return null;
     }
 

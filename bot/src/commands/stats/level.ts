@@ -101,5 +101,4 @@ export async function level(interaction: Message | ChatInputCommandInteraction, 
     }
 }
 
-// Backward-compatible alias (previous export name).
 export const execute = level;

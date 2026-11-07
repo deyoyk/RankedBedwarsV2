@@ -47,5 +47,4 @@ export async function endseason(interaction: Message | ChatInputCommandInteracti
     }
 }
 
-// Backward-compatible alias (previous export name).
 export const executeEndSeason = endseason;

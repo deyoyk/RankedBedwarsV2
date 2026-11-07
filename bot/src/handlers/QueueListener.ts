@@ -180,7 +180,6 @@ export class QueueListener {
         await workers.setChannelStatus(channelId, null);
         console.log(`[QueueListener] Queue status cleared for ${this.queueLabelById(channelId)}`);
       } catch {
-        // Queue channel may already be gone.
       }
       this.queueStatusCache.delete(channelId);
     }
@@ -649,9 +648,6 @@ export class QueueListener {
   ): Promise<void> {
     try {
       const inParty = new Set([...queueState.parties.values()].flat());
-      // Scan every non-party member, not only players missing from memory.
-      // A solo can form a party after joining, and a solo missing from memory
-      // must be re-added instead of being silently dropped during an await.
       const uncovered = [...playersInVC].filter(id => !inParty.has(id));
       if (uncovered.length === 0) {
         this.rescanKeys.delete(queueId);
@@ -931,10 +927,6 @@ export class QueueListener {
 
   private async handleQueueJoin(state: VoiceState): Promise<void> {
     if (!state.channelId) return;
-    // Deliberately not holding the per-queue validation lock here: the
-    // online check can take seconds and would serialize every join in the
-    // queue. Validation reconciles members from the live voice channel, so an
-    // in-flight join is recovered on the next tick if it is overwritten.
     await this.handleQueueJoinUnlocked(state);
   }
 
@@ -1257,9 +1249,6 @@ export class QueueListener {
       let partyId = user.partyId ?? null;
       let partyMembers = partyId ? queueState.parties.get(partyId) : undefined;
 
-      // The user's current party id can change while they are queued, and a
-      // stale solo join may not have a party entry at all. Find the party by
-      // membership as a fallback so the whole group leaves together.
       if (!partyMembers) {
         for (const [candidateId, members] of queueState.parties) {
           if (members.includes(userId)) {

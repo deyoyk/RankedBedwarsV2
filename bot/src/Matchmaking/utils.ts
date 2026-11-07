@@ -248,7 +248,7 @@ export async function selectRandomMap(
 
     const applyClaim = (name: string) => {
       claimMapPick(name);
-      try { svc.claimMap?.(name); } catch { /* ignore */ }
+      try { svc.claimMap?.(name); } catch {  }
     };
 
     const freqOpts = resolveMapFrequencyOptions(config.mapFrequency);

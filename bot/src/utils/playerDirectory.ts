@@ -23,7 +23,6 @@ function normalizeIds(ids: string[]): string[] {
 }
 
 function remember(key: string, ign: string, now: number): void {
-  // Re-insert so the Map stays in least-recently-used order.
   cache.delete(key);
   cache.set(key, { ign, expiresAt: now + IGN_TTL_MS });
 }

@@ -129,7 +129,7 @@ describe('QueueListener admission guards', () => {
   afterEach(() => {
     try {
       listener?.cleanup?.();
-    } catch { /* ignore */ }
+    } catch {  }
   });
 
   it('concurrent double join yields a single queue entry', async () => {
@@ -304,12 +304,12 @@ describe('WebSocket queuefromingame guards', () => {
     for (const manager of managers.splice(0)) {
       try {
         manager.shutdown?.();
-      } catch { /* ignore */ }
+      } catch {  }
     }
     for (const server of servers.splice(0)) {
       try {
         server.close();
-      } catch { /* ignore */ }
+      } catch {  }
     }
   });
 

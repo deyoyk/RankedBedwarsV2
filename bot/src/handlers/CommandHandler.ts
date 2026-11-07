@@ -213,7 +213,6 @@ export class CommandHandler {
           );
         }
       } catch {
-        // The interaction may no longer be available.
       }
     }
   }

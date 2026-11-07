@@ -257,9 +257,6 @@ export class CentralizedMatchmaker {
           if (state && state.isProcessing && now - state.lastProcessed > this.LOCK_TIMEOUT) {
             const run = this.activeRuns.get(queue.channelId);
             if (run && now - run.startedAt < this.HARD_STUCK_TIMEOUT) {
-              // The underlying processing promise is still alive. Resetting
-              // here used to allow a second run to draft the same players
-              // (picking sessions can legitimately take minutes).
               state.lastProcessed = now;
               return;
             }
@@ -495,8 +492,6 @@ export class CentralizedMatchmaker {
         ? this.pickingQueueManager.processQueue(runnable, queue, maxGamesForThisQueue, token)
         : this.randomQueueManager.processQueue(runnable, queue, maxGamesForThisQueue, token);
 
-      // Reconciliation must also run when the visible timeout fires but the
-      // underlying work finishes later; otherwise used players stay queued.
       const promise = rawPromise
         .then(async (result) => {
           await this.reconcileProcessedQueue(queueId, runnable, result);
@@ -543,9 +538,6 @@ export class CentralizedMatchmaker {
         metrics.errorCount++;
 
         if (timedOut) {
-          // Keep the processing lease until the real work settles. This is
-          // what prevents a second run from drafting the same players while
-          // the first run is still creating games.
           leaseTransferredToRun = true;
           void promise
             .then((result) => {

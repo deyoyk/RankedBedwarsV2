@@ -150,7 +150,6 @@ export class MapService {
     try {
       this.wsManager.requestMaps?.();
     } catch {
-      // The socket may be down.
     }
   }
 }

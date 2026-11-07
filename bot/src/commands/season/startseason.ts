@@ -53,5 +53,4 @@ export async function startseason(interaction: Message | ChatInputCommandInterac
   }
 }
 
-// Backward-compatible alias (previous export name).
 export const executeStartSeason = startseason;

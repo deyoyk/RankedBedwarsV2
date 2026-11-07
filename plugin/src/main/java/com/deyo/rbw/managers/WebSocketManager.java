@@ -462,9 +462,6 @@ public class WebSocketManager {
         JsonObject team2Json = json.getAsJsonObject("team2");
         plugin.getLogger().info("Received warp request for game #" + gameId + " on map " + map);
 
-        // Map cleanup and locking happen on the main thread inside
-        // MapManager.warpPlayersToGame; doing it here asynchronously raced the
-        // actual warp and could delete a game that had just been created.
 
         if (!com.deyo.rbw.bedwars.BedwarsAPIManager.isAvailable() || 
             !com.deyo.rbw.bedwars.BedwarsAPIManager.getImplementation().arenaExists(map)) {

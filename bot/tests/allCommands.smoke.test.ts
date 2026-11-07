@@ -188,7 +188,6 @@ jest.mock('../src/assets/stats-theme', () => ({
   themes: ['default'],
 }));
 
-// ---------- interaction doubles ----------
 const ID19 = '123456789012345678';
 const CHAN19 = '1352587524475713619';
 function sentMessageDouble() {
@@ -277,7 +276,6 @@ const wsManager: any = {
 };
 (global as any)._wsManager = wsManager;
 
-// ---------- command table ----------
 import { help } from '../src/commands/help';
 import { register } from '../src/commands/account/register';
 import { forceregister } from '../src/commands/account/forceregister';

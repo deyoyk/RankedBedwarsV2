@@ -242,8 +242,8 @@ describe('websocket queuefromingame flood', () => {
       expect(sent.filter((p: any) => p.type === 'queuefromingame_success')).toHaveLength(15);
       expect(sent.some((p: any) => p.type === 'queuefromingame_fail')).toBe(false);
     } finally {
-      try { (ws as any).shutdown?.(); } catch { /* ignore */ }
-      for (const s of servers) { try { s.close(); } catch { /* ignore */ } }
+      try { (ws as any).shutdown?.(); } catch {  }
+      for (const s of servers) { try { s.close(); } catch {  } }
     }
   });
 });
@@ -396,7 +396,7 @@ describe('admission fuzz across seeds', () => {
       const snapshot = JSON.stringify(QUEUES.map(q => queuePlayers.get(q) || []));
       return snapshot;
     } finally {
-      try { (listener as any).matchmaker?.cleanup?.(); } catch { /* ignore */ }
+      try { (listener as any).matchmaker?.cleanup?.(); } catch {  }
     }
   }
 
@@ -451,7 +451,7 @@ describe('perf and resource-leak guards', () => {
       expect(isClaimedByOther(ids[0], Q2)).toBe(false);
       expect(((listener as any).playerLocks as Map<string, unknown>).size).toBe(0);
     } finally {
-      try { (listener as any).matchmaker?.cleanup?.(); } catch { /* ignore */ }
+      try { (listener as any).matchmaker?.cleanup?.(); } catch {  }
     }
   });
 
@@ -581,8 +581,8 @@ describe('full lifecycle live simulation', () => {
   });
 
   afterEach(() => {
-    try { mm?.cleanup?.(); } catch { /* ignore */ }
-    try { listener?.cleanup?.(); } catch { /* ignore */ }
+    try { mm?.cleanup?.(); } catch {  }
+    try { listener?.cleanup?.(); } catch {  }
   });
 
   async function join(u: string) {

@@ -144,8 +144,6 @@ export class RandomQueueManager {
             await this.gameManager.voidGame(gameId, 'Warp could not be started after game creation').catch(() => undefined);
           }
 
-          // Announcements include image rendering and Discord API calls.
-          // They must not block creating the next game from a large queue.
           if (warpStarted && gameChannelId) {
             void this.announceGameStart(
               gameId,
