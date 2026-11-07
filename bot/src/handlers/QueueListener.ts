@@ -1371,7 +1371,7 @@ export class QueueListener {
       const member = state.member;
       if (!member) return;
 
-
+      const queueLabel = this.queueLabel(state);
       const waitingVcId = config.voicechannels.waitingvc;
       if (waitingVcId && member.voice.channelId !== waitingVcId) {
         await this.workersManager.moveMembers([member.id], waitingVcId, 8);
@@ -1402,7 +1402,7 @@ export class QueueListener {
         );
       }
 
-      console.warn(`[QueueListener] ${member.user.username} moved to waiting from ${this.queueLabel(state)} due to: ${reason}${duplicate ? ' (duplicate notice suppressed)' : ''}`);
+      console.warn(`[QueueListener] ${member.user.username} moved to waiting from ${queueLabel} due to: ${reason}${duplicate ? ' (duplicate notice suppressed)' : ''}`);
     } catch (error) {
       console.error('[QueueListener] Error moving to waiting:', error);
     }

@@ -7,7 +7,6 @@ import botPackage from '../../package.json';
 import { themedEmbed, EMBED_THEME } from '../utils/betterembed';
 
 export const STATUS_EMBED_TITLE = 'Bot Environment Status';
-const LEGACY_STATUS_TITLE_PREFIX = 'Bot Environment Status';
 const STATUS_WARNING_COLOR = 0xF1C40F;
 
 export class BotStatusTask {
@@ -99,10 +98,7 @@ export class BotStatusTask {
       if (!ownId) return null;
       const messages = await channel.messages.fetch({ limit: 10 });
       for (const message of messages.values()) {
-        if (message.author?.id === ownId && message.embeds?.some(embed => {
-          const title = embed.title;
-          return typeof title === 'string' && title.startsWith(LEGACY_STATUS_TITLE_PREFIX);
-        })) {
+        if (message.author?.id === ownId && message.embeds?.some(embed => embed.title === STATUS_EMBED_TITLE)) {
           return message;
         }
       }
@@ -165,18 +161,9 @@ export class BotStatusTask {
       const color = healthy
         ? EMBED_THEME.successColor
         : (dbOnline || wsOnline ? STATUS_WARNING_COLOR : EMBED_THEME.errorColor);
-      const healthLine = healthy
-        ? '**All systems operational**'
-        : (dbOnline || wsOnline
-          ? '**Degraded - one service is unavailable**'
-          : '**Service unavailable**');
 
       const embed = themedEmbed(color)
         .setTitle(STATUS_EMBED_TITLE)
-        .setDescription([
-          healthLine,
-          `\`${queueStatus.total}\` queues • \`${arenaStatus.enabled}\` arenas enabled • Ping \`${wsStatus.ping}\``,
-        ].join('\n'))
         .setTimestamp();
 
       embed.addFields(
@@ -211,8 +198,8 @@ export class BotStatusTask {
         {
           name: 'Host',
           value: [
-            `CPU • \`${this.progressBar(botStatus.cpuPercent)}\``,
-            `Memory • \`${this.progressBar(botStatus.memoryPercent)}\``,
+            `CPU • \`${botStatus.cpuUsage}%\``,
+            `Memory • \`${botStatus.memoryPercent.toFixed(0)}%\``,
             `RAM • \`${botStatus.memoryUse} / ${botStatus.memoryMax} GB\``,
             `Cores • \`${botStatus.cpuCores}\``,
             `Uptime • \`${botStatus.uptime}\``,
@@ -250,12 +237,6 @@ export class BotStatusTask {
         .setDescription('**Status unavailable**\nThe bot could not collect environment metrics. It will retry on the next refresh.')
         .setTimestamp();
     }
-  }
-
-  private progressBar(percent: number): string {
-    const clamped = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
-    const filled = Math.round((clamped / 100) * 8);
-    return `${'█'.repeat(filled)}${'░'.repeat(8 - filled)} ${clamped.toFixed(0)}%`;
   }
 
   private async getQueueStatus() {
@@ -323,7 +304,6 @@ export class BotStatusTask {
     
     return {
       cpuCores,
-      cpuPercent,
       cpuUsage: cpuPercent.toFixed(2), 
       memoryMax: (totalMemory / (1024 * 1024 * 1024)).toFixed(2),
       memoryUse: (usedMemory / (1024 * 1024 * 1024)).toFixed(2),

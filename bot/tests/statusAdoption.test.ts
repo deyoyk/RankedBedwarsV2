@@ -1,5 +1,12 @@
 import { BotStatusTask, STATUS_EMBED_TITLE } from '../src/tasks/BotStatusTask';
 
+jest.mock('../src/config/config', () => ({
+  __esModule: true,
+  default: {
+    channels: { botstatusChannel: 'status-channel' },
+  },
+}));
+
 jest.mock('../src/models/Queue', () => ({
   __esModule: true,
   default: { find: jest.fn().mockResolvedValue([]) }
@@ -66,7 +73,7 @@ describe('BotStatusTask message adoption', () => {
     expect(payload.files).toBeUndefined();
     expect(embed.image).toBeUndefined();
     expect(embed.title).toBe(STATUS_EMBED_TITLE);
-    expect(embed.description).toMatch(/service|systems/i);
+    expect(embed.description).toBeUndefined();
     expect(embed.fields).toHaveLength(6);
     expect(embed.fields?.map((field: any) => field.name)).toEqual([
       'Queues',
@@ -76,6 +83,10 @@ describe('BotStatusTask message adoption', () => {
       'Runtime',
       'Database',
     ]);
+    const host = embed.fields?.find((field: any) => field.name === 'Host')?.value ?? '';
+    expect(host).toMatch(/CPU • `\d+(\.\d+)?%`/);
+    expect(host).toMatch(/Memory • `\d+%`/);
+    expect(host).not.toContain('█');
     expect(embed.timestamp).toBeDefined();
     task.stop();
   });
