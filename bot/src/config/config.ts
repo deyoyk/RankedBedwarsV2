@@ -1,4 +1,5 @@
 import { config as dotenvConfig } from 'dotenv';
+import { parseDuration } from '../utils/parseDuration';
 
 dotenvConfig();
 
@@ -69,6 +70,14 @@ export function validateConfig(cfg: Config): string[] {
   if (daysRaw) {
     const days = parseInt(daysRaw, 10);
     if (!Number.isInteger(days) || days <= 0) errors.push('STAT_RESET_WINDOW_DAYS must be a positive integer');
+  }
+  for (const [strike, action] of Object.entries(cfg.strikes ?? {})) {
+    if (!action || action === 'warn') continue;
+    try {
+      parseDuration(action);
+    } catch {
+      errors.push(`STRIKE_${strike}_DURATION must be "warn", a permanent keyword, or a duration like 2h/12h/48h: ${action}`);
+    }
   }
   return errors;
 }
@@ -230,11 +239,11 @@ const configuration: Config = {
   maxMvpsPerGame: parsedPositiveInt(process.env.MAX_MVPS_PER_GAME, 1),
   maxBedBreakersPerGame: parsedPositiveInt(process.env.MAX_BED_BREAKERS_PER_GAME, 1),
   strikes: {
-    1: 'warn',
-    2: '10h',
-    3: '1d',
-    4: '7d',
-    default: 'warn'
+    1: clean(process.env.STRIKE_1_DURATION) || 'warn',
+    2: clean(process.env.STRIKE_2_DURATION) || '2h',
+    3: clean(process.env.STRIKE_3_DURATION) || '12h',
+    4: clean(process.env.STRIKE_4_DURATION) || '48h',
+    default: clean(process.env.STRIKE_DEFAULT_DURATION) || '48h'
   },
   serverip: clean(process.env.SERVER_IP) || 'play.deyo.lol',
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',

@@ -57,4 +57,21 @@ describe('validateConfig', () => {
     expect(errors.join('|')).toMatch(/WEBSOCKETPORT/);
     expect(errors.join('|')).toMatch(/muted/);
   });
+
+  it('accepts warn, permanent and duration strike actions', () => {
+    process.env.AUTH_KEY = 'secret';
+    expect(validateConfig({
+      ...base,
+      strikes: { 1: 'warn', 2: '2h', 3: '12h', 4: '48h', default: 'perm' }
+    })).toEqual([]);
+  });
+
+  it('flags invalid strike durations', () => {
+    process.env.AUTH_KEY = 'secret';
+    const errors = validateConfig({
+      ...base,
+      strikes: { 1: 'warn', 2: 'not-a-duration', default: 'warn' }
+    });
+    expect(errors.join('|')).toMatch(/STRIKE_2_DURATION/);
+  });
 });
