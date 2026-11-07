@@ -54,6 +54,32 @@ describe('BotStatusTask message adoption', () => {
     task.stop();
   });
 
+  it('renders the status overview without the removed gif attachment', async () => {
+    const channel = channelMock();
+    const task = taskWith(channel);
+
+    await task.start();
+
+    const payload = channel.send.mock.calls[0][0];
+    const embed = payload.embeds[0].toJSON();
+
+    expect(payload.files).toBeUndefined();
+    expect(embed.image).toBeUndefined();
+    expect(embed.title).toBe(STATUS_EMBED_TITLE);
+    expect(embed.description).toMatch(/service|systems/i);
+    expect(embed.fields).toHaveLength(6);
+    expect(embed.fields?.map((field: any) => field.name)).toEqual([
+      '📊 Queues',
+      '🔌 Connection',
+      '🗺️ Arenas',
+      '💻 Host',
+      '🧩 Runtime',
+      '🗄️ Database',
+    ]);
+    expect(embed.timestamp).toBeDefined();
+    task.stop();
+  });
+
   it('does not adopt a command reply embed', async () => {
     const reply: any = {
       id: 'cmd-reply',

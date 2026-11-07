@@ -3,11 +3,11 @@ import mongoose from 'mongoose';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import config from '../config/config';
 import os from 'os';
-import path from 'path';
 import botPackage from '../../package.json';
 import { themedEmbed } from '../utils/betterembed';
 
 export const STATUS_EMBED_TITLE = 'Bot Environment Status ✌️';
+const STATUS_WARNING_COLOR = 0xF1C40F;
 
 export class BotStatusTask {
   private client: Client;
@@ -15,8 +15,6 @@ export class BotStatusTask {
   private statusMessage: Message | null = null;
   private updateInterval: NodeJS.Timeout | null = null;
   private startTime: Date;
-  private statusImagePath: string;
-  private statusImageCdnUrl: string | null = null;
   private lastCpuSample: { idle: number; total: number } | null = null;
   private isUpdating = false;
   private mongoStatusCache: { at: number; value: { status: string; connection: string; collections: string; dataSize: string; indexSize: string } } | null = null;
@@ -26,7 +24,6 @@ export class BotStatusTask {
     this.client = client;
     this.wsManager = wsManager;
     this.startTime = new Date();
-    this.statusImagePath = path.resolve(process.cwd(), 'src', 'assets', 'status', 'rbw.gif');
   }
 
   public async start() {
@@ -80,8 +77,7 @@ export class BotStatusTask {
         await adopted.edit({ embeds: [embed] });
         return;
       }
-      this.statusMessage = await channel.send({ embeds: [embed], files: [{ attachment: this.statusImagePath, name: 'rbw.gif' }] });
-      this.statusImageCdnUrl = this.statusMessage.attachments?.first()?.url || null;
+      this.statusMessage = await channel.send({ embeds: [embed] });
     } catch (error) {
       console.error('[BotStatusTask] Error sending status embed:', error);
     }
@@ -140,99 +136,117 @@ export class BotStatusTask {
   }
 
   private async createStatusEmbed(): Promise<EmbedBuilder> {
-    const embed = themedEmbed()
-      .setTitle(STATUS_EMBED_TITLE)
-      .setColor(0x00AAAA)
-      .setImage(this.statusImageCdnUrl || 'attachment://rbw.gif');
-
     try {
-      
       const [queueStatus, wsStatus, arenaStatus, mongoStatus] = await Promise.all([
         this.getQueueStatus(),
         this.getWebSocketStatus(),
         this.getArenaStatus(),
         this.getMongoDBStatus()
       ]);
-      embed.addFields({
-        name: '  Queue Status',
-        value: [
-          `Total • \`${queueStatus.total}\``,
-          `Ranked • \`${queueStatus.ranked}\``,
-          `Unranked • \`${queueStatus.unranked}\``
-        ].join('\n'),
-        inline: true
-      });
-
-      
-      embed.addFields({
-        name: '  Websocket',
-        value: [
-          `Ping • \`${wsStatus.ping}\``,
-          `Plugin • \`${wsStatus.plugin}\``,
-          `Socket • \`${wsStatus.socket}\``,
-          `Handshake • \`${wsStatus.handshake}\``
-        ].join('\n'),
-        inline: true
-      });
-
-      
-      embed.addFields({
-        name: '  Arena Status',
-        value: [
-          `Enabled • \`${arenaStatus.enabled}\``,
-          `Disabled • \`${arenaStatus.disabled}\``,
-          `Reserved • \`${arenaStatus.reserved}\``,
-          `Locked • \`${arenaStatus.locked}\``
-        ].join('\n'),
-        inline: true
-      });
-
-      
       const botStatus = this.getBotStatus();
-      embed.addFields({
-        name: '  Bot Status',
-        value: [
-          `CPU Cores • \`${botStatus.cpuCores} cores\``,
-          `CPU Usage • \`${botStatus.cpuUsage}%\``,
-          `Memory Max • \`${botStatus.memoryMax} GB\``,
-          `Memory Use • \`${botStatus.memoryUse} GB\``,
-          `Uptime • \`${botStatus.uptime}\``
-        ].join('\n'),
-        inline: true
-      });
-
-      
       const envStatus = this.getEnvironmentStatus();
-      embed.addFields({
-        name: '  Environment',
-        value: [
-          `Node JS • \`${envStatus.nodeVersion}\``,
-          `TypeScript • \`${envStatus.typescript}\``,
-          `Discord JS • \`${envStatus.discordJs}\``,
-          `Bot • \`${envStatus.botVersion}\``
-        ].join('\n'),
-        inline: true
-      });
 
-      
-      embed.addFields({
-        name: '  Database',
-        value: [
-          `MongoDB • \`${mongoStatus.status}\``,
-          `Connection • \`${mongoStatus.connection}\``,
-          `Collections • \`${mongoStatus.collections}\``,
-          `Data Size • \`${mongoStatus.dataSize}\``,
-          `Index Size • \`${mongoStatus.indexSize}\``
-        ].join('\n'),
-        inline: true
-      });
+      const dbOnline = mongoStatus.status === 'online';
+      const wsOnline = wsStatus.connected;
+      const healthy = dbOnline && wsOnline;
+      const color = healthy
+        ? config.embed.successColor
+        : (dbOnline || wsOnline ? STATUS_WARNING_COLOR : config.embed.errorColor);
+      const healthLine = healthy
+        ? '🟢 **All systems operational**'
+        : dbOnline || wsOnline
+          ? '🟡 **Degraded — one service is unavailable**'
+          : '🔴 **Service unavailable**';
 
+      const embed = themedEmbed(color)
+        .setTitle(STATUS_EMBED_TITLE)
+        .setDescription([
+          healthLine,
+          `\`${queueStatus.total}\` queues • \`${arenaStatus.enabled}\` arenas enabled • Ping \`${wsStatus.ping}\``,
+        ].join('\n'))
+        .setTimestamp();
+
+      embed.addFields(
+        {
+          name: '📊 Queues',
+          value: [
+            `Total • \`${queueStatus.total}\``,
+            `Ranked • \`${queueStatus.ranked}\``,
+            `Unranked • \`${queueStatus.unranked}\``,
+          ].join('\n'),
+          inline: true,
+        },
+        {
+          name: '🔌 Connection',
+          value: [
+            `Ping • \`${wsStatus.ping}\``,
+            `Plugin • \`${this.statusIcon(wsOnline)} ${wsOnline ? 'online' : 'offline'}\``,
+            `Handshake • \`${this.statusIcon(wsOnline)} ${wsOnline ? 'ok' : 'failed'}\``,
+          ].join('\n'),
+          inline: true,
+        },
+        {
+          name: '🗺️ Arenas',
+          value: [
+            `Enabled • \`${arenaStatus.enabled}\``,
+            `Disabled • \`${arenaStatus.disabled}\``,
+            `Reserved • \`${arenaStatus.reserved}\``,
+            `Locked • \`${arenaStatus.locked}\``,
+          ].join('\n'),
+          inline: true,
+        },
+        {
+          name: '💻 Host',
+          value: [
+            `CPU • \`${this.progressBar(botStatus.cpuPercent)}\``,
+            `Memory • \`${this.progressBar(botStatus.memoryPercent)}\``,
+            `RAM • \`${botStatus.memoryUse} / ${botStatus.memoryMax} GB\``,
+            `Cores • \`${botStatus.cpuCores}\``,
+            `Uptime • \`${botStatus.uptime}\``,
+          ].join('\n'),
+          inline: true,
+        },
+        {
+          name: '🧩 Runtime',
+          value: [
+            `Node.js • \`${envStatus.nodeVersion}\``,
+            `TypeScript • \`${envStatus.typescript}\``,
+            `discord.js • \`${envStatus.discordJs}\``,
+            `Bot • \`${envStatus.botVersion}\``,
+          ].join('\n'),
+          inline: true,
+        },
+        {
+          name: '🗄️ Database',
+          value: [
+            `MongoDB • \`${this.statusIcon(dbOnline)} ${mongoStatus.status}\``,
+            `Connection • \`${this.statusIcon(dbOnline)} ${mongoStatus.connection}\``,
+            `Collections • \`${mongoStatus.collections}\``,
+            `Data • \`${mongoStatus.dataSize}\``,
+            `Indexes • \`${mongoStatus.indexSize}\``,
+          ].join('\n'),
+          inline: true,
+        },
+      );
+
+      return embed;
     } catch (error) {
       console.error('[BotStatusTask] Error creating embed fields:', error);
-      embed.setDescription('❌ Error retrieving status information');
+      return themedEmbed(config.embed.errorColor)
+        .setTitle(STATUS_EMBED_TITLE)
+        .setDescription('❌ **Status unavailable**\nThe bot could not collect environment metrics. It will retry on the next refresh.')
+        .setTimestamp();
     }
+  }
 
-    return embed;
+  private statusIcon(ok: boolean): string {
+    return ok ? '🟢' : '🔴';
+  }
+
+  private progressBar(percent: number): string {
+    const clamped = Math.max(0, Math.min(100, Number.isFinite(percent) ? percent : 0));
+    const filled = Math.round((clamped / 100) * 8);
+    return `${'█'.repeat(filled)}${'░'.repeat(8 - filled)} ${clamped.toFixed(0)}%`;
   }
 
   private async getQueueStatus() {
@@ -252,13 +266,12 @@ export class BotStatusTask {
 
   private async getWebSocketStatus() {
     const cachedPing = this.wsManager.getLastPing?.() ?? null;
-    const wsPing = cachedPing ?? await this.wsManager.getPing().catch(() => null);
-    const isConnected = wsPing !== null;
+    const ping = cachedPing ?? (typeof this.wsManager.getPing === 'function'
+      ? await this.wsManager.getPing().catch(() => null)
+      : null);
     return {
-      ping: isConnected ? `${wsPing}ms` : 'offline',
-      plugin: isConnected ? 'true' : 'false',
-      socket: isConnected ? 'true' : 'false',
-      handshake: isConnected ? 'true' : 'false'
+      ping: ping !== null ? `${ping}ms` : 'offline',
+      connected: ping !== null,
     };
   }
 
@@ -275,7 +288,7 @@ export class BotStatusTask {
       const reserved = reservedMaps.length;
       const disabled = disabledMaps.length;
       const locked = lockedMaps.length;
-      enabled = allMaps.length - disabled;
+      enabled = Math.max(0, allMaps.length - disabled);
 
       return { enabled, disabled, reserved, locked };
     } catch (error) {
@@ -291,7 +304,7 @@ export class BotStatusTask {
     const usedMemory = totalMemory - freeMemory;
     
     
-    const cpuUsage = this.getCPUUsage();
+    const cpuPercent = this.getCPUUsage();
     
     
     const uptimeMs = Date.now() - this.startTime.getTime();
@@ -301,9 +314,11 @@ export class BotStatusTask {
     
     return {
       cpuCores,
-      cpuUsage: cpuUsage.toFixed(2), 
+      cpuPercent,
+      cpuUsage: cpuPercent.toFixed(2), 
       memoryMax: (totalMemory / (1024 * 1024 * 1024)).toFixed(2),
       memoryUse: (usedMemory / (1024 * 1024 * 1024)).toFixed(2),
+      memoryPercent: totalMemory > 0 ? (usedMemory / totalMemory) * 100 : 0,
       uptime: `${uptimeHours}h ${uptimeMinutes}m ${uptimeSeconds}s`
     };
   }
@@ -343,11 +358,12 @@ export class BotStatusTask {
     
     
     const botVersion = `${botPackage.version}`;
+    const discordJsVersion = botPackage.dependencies?.['discord.js']?.replace('^', '') || 'unknown';
     
     return {
       nodeVersion: `v${process.version.slice(1)}`,
       typescript: tsVersion,
-      discordJs: botPackage.dependencies['discord.js'].replace('^', ''),
+      discordJs: discordJsVersion,
       botVersion: botVersion
       };
   }
