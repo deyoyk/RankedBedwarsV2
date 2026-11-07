@@ -6,7 +6,8 @@ import os from 'os';
 import botPackage from '../../package.json';
 import { themedEmbed } from '../utils/betterembed';
 
-export const STATUS_EMBED_TITLE = 'Bot Environment Status ✌️';
+export const STATUS_EMBED_TITLE = 'Bot Environment Status';
+const LEGACY_STATUS_EMBED_TITLES = ['Bot Environment Status ✌️'];
 const STATUS_WARNING_COLOR = 0xF1C40F;
 
 export class BotStatusTask {
@@ -89,7 +90,10 @@ export class BotStatusTask {
       if (!ownId) return null;
       const messages = await channel.messages.fetch({ limit: 10 });
       for (const message of messages.values()) {
-        if (message.author?.id === ownId && message.embeds?.some(embed => embed.title === STATUS_EMBED_TITLE)) {
+        if (message.author?.id === ownId && message.embeds?.some(embed =>
+          embed.title === STATUS_EMBED_TITLE
+          || (embed.title !== null && LEGACY_STATUS_EMBED_TITLES.includes(embed.title))
+        )) {
           return message;
         }
       }
@@ -153,10 +157,10 @@ export class BotStatusTask {
         ? config.embed.successColor
         : (dbOnline || wsOnline ? STATUS_WARNING_COLOR : config.embed.errorColor);
       const healthLine = healthy
-        ? '🟢 **All systems operational**'
-        : dbOnline || wsOnline
-          ? '🟡 **Degraded — one service is unavailable**'
-          : '🔴 **Service unavailable**';
+        ? '**All systems operational**'
+        : (dbOnline || wsOnline
+          ? '**Degraded - one service is unavailable**'
+          : '**Service unavailable**');
 
       const embed = themedEmbed(color)
         .setTitle(STATUS_EMBED_TITLE)
@@ -168,7 +172,7 @@ export class BotStatusTask {
 
       embed.addFields(
         {
-          name: '📊 Queues',
+          name: 'Queues',
           value: [
             `Total • \`${queueStatus.total}\``,
             `Ranked • \`${queueStatus.ranked}\``,
@@ -177,16 +181,16 @@ export class BotStatusTask {
           inline: true,
         },
         {
-          name: '🔌 Connection',
+          name: 'Connection',
           value: [
             `Ping • \`${wsStatus.ping}\``,
-            `Plugin • \`${this.statusIcon(wsOnline)} ${wsOnline ? 'online' : 'offline'}\``,
-            `Handshake • \`${this.statusIcon(wsOnline)} ${wsOnline ? 'ok' : 'failed'}\``,
+            `Plugin • \`${wsOnline ? 'online' : 'offline'}\``,
+            `Handshake • \`${wsOnline ? 'ok' : 'failed'}\``,
           ].join('\n'),
           inline: true,
         },
         {
-          name: '🗺️ Arenas',
+          name: 'Arenas',
           value: [
             `Enabled • \`${arenaStatus.enabled}\``,
             `Disabled • \`${arenaStatus.disabled}\``,
@@ -196,7 +200,7 @@ export class BotStatusTask {
           inline: true,
         },
         {
-          name: '💻 Host',
+          name: 'Host',
           value: [
             `CPU • \`${this.progressBar(botStatus.cpuPercent)}\``,
             `Memory • \`${this.progressBar(botStatus.memoryPercent)}\``,
@@ -207,7 +211,7 @@ export class BotStatusTask {
           inline: true,
         },
         {
-          name: '🧩 Runtime',
+          name: 'Runtime',
           value: [
             `Node.js • \`${envStatus.nodeVersion}\``,
             `TypeScript • \`${envStatus.typescript}\``,
@@ -217,10 +221,10 @@ export class BotStatusTask {
           inline: true,
         },
         {
-          name: '🗄️ Database',
+          name: 'Database',
           value: [
-            `MongoDB • \`${this.statusIcon(dbOnline)} ${mongoStatus.status}\``,
-            `Connection • \`${this.statusIcon(dbOnline)} ${mongoStatus.connection}\``,
+            `MongoDB • \`${mongoStatus.status}\``,
+            `Connection • \`${mongoStatus.connection}\``,
             `Collections • \`${mongoStatus.collections}\``,
             `Data • \`${mongoStatus.dataSize}\``,
             `Indexes • \`${mongoStatus.indexSize}\``,
@@ -234,13 +238,9 @@ export class BotStatusTask {
       console.error('[BotStatusTask] Error creating embed fields:', error);
       return themedEmbed(config.embed.errorColor)
         .setTitle(STATUS_EMBED_TITLE)
-        .setDescription('❌ **Status unavailable**\nThe bot could not collect environment metrics. It will retry on the next refresh.')
+        .setDescription('**Status unavailable**\nThe bot could not collect environment metrics. It will retry on the next refresh.')
         .setTimestamp();
     }
-  }
-
-  private statusIcon(ok: boolean): string {
-    return ok ? '🟢' : '🔴';
   }
 
   private progressBar(percent: number): string {

@@ -69,12 +69,12 @@ describe('BotStatusTask message adoption', () => {
     expect(embed.description).toMatch(/service|systems/i);
     expect(embed.fields).toHaveLength(6);
     expect(embed.fields?.map((field: any) => field.name)).toEqual([
-      '📊 Queues',
-      '🔌 Connection',
-      '🗺️ Arenas',
-      '💻 Host',
-      '🧩 Runtime',
-      '🗄️ Database',
+      'Queues',
+      'Connection',
+      'Arenas',
+      'Host',
+      'Runtime',
+      'Database',
     ]);
     expect(embed.timestamp).toBeDefined();
     task.stop();
