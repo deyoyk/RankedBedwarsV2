@@ -51,9 +51,9 @@ function header(input: ScoreTemplateInput): VNode[] {
 
   return [
     text(X, 34, 420, 32, `GAME #${input.gameId}`, 32, COLORS.muted, MEDIUM, 'left', 0.8),
-    text(WIDTH - X - 420, ranked ? 24 : 32, 420, 26, ranked ? 'Ranked' : 'Unranked', 20, COLORS.muted, MEDIUM, 'right', 1.2),
+    text(WIDTH - X - 420, ranked ? 18 : 24, 420, 34, ranked ? 'Ranked' : 'Unranked', 28, COLORS.muted, MEDIUM, 'right', 1.1),
     ranked
-      ? text(WIDTH - X - 420, 52, 420, 22, `Queue ${input.minElo ?? 0} - ${input.maxElo ?? 0}`, 16, COLORS.faint, MEDIUM, 'right', 0.8)
+      ? text(WIDTH - X - 420, 50, 420, 28, `Queue ${input.minElo ?? 0} - ${input.maxElo ?? 0}`, 24, COLORS.faint, MEDIUM, 'right', 0.7)
       : null,
     text(X, 84, 1300, 78, 'MATCH RESULT', 72, COLORS.text, MEDIUM, 'left', 0.5),
     text(X, 164, 900, 26, 'FINAL SCOREBOARD', 18, COLORS.muted, MEDIUM, 'left', 1.6),
