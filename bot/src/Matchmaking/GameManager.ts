@@ -2,6 +2,7 @@ import { ChannelType, Client, EmbedBuilder, Guild, type MessageCreateOptions, Pe
 import Game, { IGame } from '../models/Game';
 import GameSettlement from '../models/GameSettlement';
 import User, { IUser } from '../models/User';
+import Queue from '../models/Queue';
 import EloRank, { IEloRank } from '../models/EloRank';
 import { Counter, getNextSequence } from '../models/Counter';
 import config from '../config/config';
@@ -2400,7 +2401,15 @@ export class GameManager {
 
       let imageBuffer: Buffer | null = null;
       try {
-        imageBuffer = await generateScoreImageBuffer(context.game.gameId, winners, losers);
+        const queue = await Queue.findOne({ channelId: context.game.queueId })
+          .select('isRanked minElo maxElo')
+          .lean()
+          .catch(() => null);
+        imageBuffer = await generateScoreImageBuffer(context.game.gameId, winners, losers, {
+          isRanked: queue?.isRanked ?? context.game.isRanked === true,
+          minElo: queue?.minElo ?? 0,
+          maxElo: queue?.maxElo ?? 0,
+        });
       } catch (e) {
         console.error('[GameManager] Failed generating score image, sending embed only:', e);
       }

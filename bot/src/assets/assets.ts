@@ -207,6 +207,17 @@ export async function loadAvatarDataUrl(username: string): Promise<string> {
   return staticImageDataUrl('fallbacks', 'steve.png');
 }
 
+export async function loadBustDataUrl(username: string): Promise<string> {
+  const key = `bust:${username.toLowerCase()}`;
+  const img = await loadCachedImage(key, async () => {
+    const remote = await fetchImageDataUrl(`https://nmsr.nickac.dev/bust/${encodeURIComponent(username)}`, 4000);
+    if (remote) return { dataUrl: remote, ok: true };
+    return { dataUrl: null, ok: false, negativeCache: staticImageDataUrl('fallbacks', 'steve-bust.png') };
+  });
+  if (img) return img;
+  return staticImageDataUrl('fallbacks', 'steve-bust.png');
+}
+
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {
   const key = `skin:${ign.toLowerCase()}`;
   return loadCachedImage(key, async () => {

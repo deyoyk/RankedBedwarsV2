@@ -1,5 +1,5 @@
 import { h, VNode } from '../renderer';
-import { avatar, badge, COLORS, decor, divider, FONT, gameFooter, MEDIUM, panel, rootStyle, text } from '../theme';
+import { avatar, COLORS, divider, FONT, gameFooter, MEDIUM, rootStyle, text } from '../theme';
 
 export type ScoreTemplatePlayer = {
   username: string;
@@ -16,254 +16,136 @@ export type ScoreTemplateInput = {
   gameId: number;
   winners: ScoreTemplatePlayer[];
   losers: ScoreTemplatePlayer[];
+  isRanked?: boolean;
+  minElo?: number;
+  maxElo?: number;
   serverName: string;
   inviteLink: string;
 };
 
 const WIDTH = 1920;
 const HEIGHT = 1080;
+const X = 72;
+const W = WIDTH - X * 2;
+const WINNER_TOP = 224;
+const LOSER_TOP = 620;
+const SECTION_H = 372;
+const ROWS_TOP_OFFSET = 80;
+const ROWS_BOTTOM_PAD = 16;
+const FOOTER_Y = 1008;
 
-const CARD_W = 850;
-const CARD_XS = [80, 990];
-const CARD_TOP = 236;
-const CARD_BOTTOM = 944;
-const HEADER_H = 64;
-const COLUMNS_H = 32;
-const SUMMARY_H = 64;
-const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
-
-const NAME_X = 86;
-const NAME_W = 240;
-const MVP_X = 334;
-const MVP_W = 62;
-const BED_X = 402;
-const BED_W = 62;
-const DELTA_X = 470;
-const DELTA_W = 120;
-const BEFORE_X = 610;
-const BEFORE_W = 80;
-const ARROW_X = 696;
-const ARROW_W = 24;
-const AFTER_X = 726;
-const AFTER_W = 100;
-
-function beforeElo(p: ScoreTemplatePlayer): number {
-  return p.elo_before ?? p.oldElo ?? 0;
+function beforeElo(player: ScoreTemplatePlayer): number {
+  return player.elo_before ?? player.oldElo ?? 0;
 }
 
-function afterElo(p: ScoreTemplatePlayer): number {
-  return p.elo_after ?? p.newElo ?? 0;
-}
-
-function eloDelta(p: ScoreTemplatePlayer): number {
-  return afterElo(p) - beforeElo(p);
+function afterElo(player: ScoreTemplatePlayer): number {
+  return player.elo_after ?? player.newElo ?? 0;
 }
 
 function signed(value: number): string {
   return value > 0 ? `+${value}` : String(value);
 }
 
-function header(input: ScoreTemplateInput): VNode {
-  const playerCount = input.winners.length + input.losers.length;
+function header(input: ScoreTemplateInput): VNode[] {
+  const ranked = input.isRanked === true;
 
-  return h('div', {},
-    badge((WIDTH - 200) / 2, 26, 200, `GAME #${input.gameId}`, {
-      color: COLORS.text,
-      background: 'rgba(21,31,45,0.9)',
-      border: COLORS.line,
-      height: 42,
-      size: 17,
-      letterSpacing: 1,
-    }),
-
-    text(0, 76, WIDTH, 82, 'MATCH RESULTS', 68, COLORS.text, MEDIUM, 'center', 2.4),
-
-    text(
-      0, 164, WIDTH, 28,
-      `${playerCount} PLAYERS · FINAL SCOREBOARD`,
-      18, COLORS.muted, MEDIUM, 'center', 1.6,
-    ),
-
-    divider((WIDTH - 120) / 2, 210, 120, COLORS.cyan, 2),
-  );
+  return [
+    text(X, 34, 420, 32, `GAME #${input.gameId}`, 32, COLORS.muted, MEDIUM, 'left', 0.8),
+    text(WIDTH - X - 420, ranked ? 24 : 32, 420, 26, ranked ? 'Ranked' : 'Unranked', 20, COLORS.muted, MEDIUM, 'right', 1.2),
+    ranked
+      ? text(WIDTH - X - 420, 52, 420, 22, `Queue ${input.minElo ?? 0} - ${input.maxElo ?? 0}`, 16, COLORS.faint, MEDIUM, 'right', 0.8)
+      : null,
+    text(X, 84, 1300, 78, 'MATCH RESULT', 72, COLORS.text, MEDIUM, 'left', 0.5),
+    text(X, 164, 900, 26, 'FINAL SCOREBOARD', 18, COLORS.muted, MEDIUM, 'left', 1.6),
+    divider(X, 198, W, COLORS.line, 1),
+  ].filter(Boolean) as VNode[];
 }
 
 function playerRow(
-  p: ScoreTemplatePlayer,
-  cardX: number,
-  rowTop: number,
+  player: ScoreTemplatePlayer,
+  top: number,
   rowH: number,
-  index: number,
-): (VNode | null)[] {
-  const avatarSize = Math.max(24, Math.min(48, rowH - 18));
-  const nameSize = Math.max(
-    15,
-    Math.min(42, rowH - 16, Math.floor(410 / Math.max(6, p.username.length))),
-  );
-  const eloSize = Math.max(14, Math.min(30, rowH - 24));
-  const deltaSize = Math.max(15, Math.min(36, rowH - 20));
-  const mvpH = Math.max(24, Math.min(34, rowH - 18));
-  const mvpSize = Math.max(12, Math.min(17, rowH - 24));
-  const delta = eloDelta(p);
+): VNode[] {
+  const avatarSize = Math.max(24, Math.min(44, rowH - 8));
+  const nameSize = Math.max(20, Math.min(38, rowH - 6));
+  const eloSize = Math.max(18, Math.min(28, rowH - 8));
+  const deltaSize = Math.max(20, Math.min(34, rowH - 4));
+  const tagSize = Math.max(22, Math.min(28, rowH - 6));
+  const rowY = top + (rowH - avatarSize) / 2;
+  const before = beforeElo(player);
+  const after = afterElo(player);
+  const delta = after - before;
   const deltaColor = delta > 0 ? COLORS.green : delta < 0 ? COLORS.red : COLORS.muted;
-  const rowY = rowTop + (rowH - avatarSize) / 2;
 
   return [
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: cardX,
-        top: rowTop,
-        width: CARD_W,
-        height: rowH,
-        backgroundColor: index % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.10)',
-      },
-    }),
+    avatar(player.avatar, X, rowY, avatarSize, 8),
 
-    avatar(p.avatar, cardX + 24, rowY, avatarSize, 10),
+    text(X + 56, top, 720, rowH, player.username, nameSize, COLORS.text, MEDIUM),
 
-    text(
-      cardX + NAME_X, rowTop, NAME_W, rowH,
-      p.username,
-      nameSize, COLORS.text, MEDIUM,
-    ),
-
-    p.mvp
-      ? badge(cardX + MVP_X, rowTop + (rowH - mvpH) / 2, MVP_W, 'MVP', {
-          color: COLORS.gold,
-          background: 'rgba(251,191,36,0.12)',
-          border: 'rgba(251,191,36,0.36)',
-          height: mvpH,
-          size: mvpSize,
-          letterSpacing: 0.8,
-        })
+    player.mvp
+      ? text(X + 786, top, 100, rowH, 'MVP', tagSize, COLORS.gold, MEDIUM, 'left', 1)
       : null,
 
-    p.bedbreaker
-      ? badge(cardX + BED_X, rowTop + (rowH - mvpH) / 2, BED_W, 'BED', {
-          color: COLORS.cyan,
-          background: 'rgba(77,225,242,0.10)',
-          border: 'rgba(77,225,242,0.32)',
-          height: mvpH,
-          size: mvpSize,
-          letterSpacing: 0.8,
-        })
+    player.bedbreaker
+      ? text(X + 886, top, 100, rowH, 'BED', tagSize, COLORS.cyan, MEDIUM, 'left', 1)
       : null,
 
     text(
-      cardX + DELTA_X, rowTop, DELTA_W, rowH,
-      signed(delta),
-      deltaSize, deltaColor, MEDIUM, 'center',
-    ),
-
-    text(
-      cardX + BEFORE_X, rowTop, BEFORE_W, rowH,
-      String(beforeElo(p)),
+      X + 1080, top, 360, rowH,
+      `${before}  ->  ${after}`,
       eloSize, COLORS.muted, FONT, 'right',
     ),
 
     text(
-      cardX + ARROW_X, rowTop, ARROW_W, rowH,
-      '›',
-      eloSize, COLORS.faint, FONT, 'center',
+      X + W - 280, top, 280, rowH,
+      signed(delta),
+      deltaSize, deltaColor, MEDIUM, 'right',
     ),
-
-    text(
-      cardX + AFTER_X, rowTop, AFTER_W, rowH,
-      String(afterElo(p)),
-      eloSize, COLORS.text, MEDIUM, 'right',
-    ),
-
-    divider(cardX + 24, rowTop + rowH - 1, CARD_W - 48, COLORS.lineSoft, 1),
-  ];
+  ].filter(Boolean) as VNode[];
 }
 
-function teamCard(
+function teamSection(
   players: ScoreTemplatePlayer[],
-  cardX: number,
   top: number,
-  cardH: number,
-  rowH: number,
-  maxRows: number,
   title: string,
-  subtitle: string,
   color: string,
-): (VNode | null)[] {
-  const summaryTop = top + cardH - SUMMARY_H;
-  const rowsTop = top + HEADER_H + COLUMNS_H;
-  const playerCount = players.length;
+): VNode[] {
+  const rowsTop = top + ROWS_TOP_OFFSET;
+  const rowsAvailable = SECTION_H - ROWS_TOP_OFFSET - ROWS_BOTTOM_PAD;
+  const maxRows = Math.max(1, players.length);
+  const rowH = Math.max(32, Math.min(84, Math.floor(rowsAvailable / maxRows)));
 
-  const totalBefore = players.reduce((sum, p) => sum + beforeElo(p), 0);
-  const totalAfter = players.reduce((sum, p) => sum + afterElo(p), 0);
+  const totalBefore = players.reduce((sum, player) => sum + beforeElo(player), 0);
+  const totalAfter = players.reduce((sum, player) => sum + afterElo(player), 0);
   const totalDelta = totalAfter - totalBefore;
-  const avgAfter = playerCount > 0 ? Math.round(totalAfter / playerCount) : 0;
   const deltaColor = totalDelta > 0 ? COLORS.green : totalDelta < 0 ? COLORS.red : COLORS.muted;
 
-  const rows = players.flatMap((p, i) =>
-    playerRow(p, cardX, rowsTop + i * rowH, rowH, i),
+  const rows = players.flatMap((player, index) =>
+    playerRow(player, rowsTop + index * rowH, rowH),
   );
 
-  const empty = playerCount === 0
-    ? text(
-        cardX + 24, rowsTop, CARD_W - 48, maxRows * rowH,
-        'NO PLAYERS RECORDED',
-        15, COLORS.faint, MEDIUM, 'center', 1.6,
-      )
-    : null;
+  const empty = players.length === 0
+    ? [text(X, rowsTop, W, rowH, 'NO PLAYERS RECORDED', 22, COLORS.faint, MEDIUM, 'left', 1.2)]
+    : [];
 
   return [
-    panel(cardX, top, CARD_W, cardH, 20),
-
-    text(cardX + 28, top + 13, 340, 26, title, 19, color, MEDIUM, 'left', 1.6),
-    text(cardX + 28, top + 37, 340, 18, subtitle, 12, COLORS.muted, MEDIUM, 'left', 1.4),
+    text(X, top, 700, 64, title, 54, color, MEDIUM, 'left', 0.4),
     text(
-      cardX + CARD_W - 228, top + 21, 200, 26,
-      `${playerCount} ${playerCount === 1 ? 'PLAYER' : 'PLAYERS'}`,
-      16, COLORS.muted, MEDIUM, 'right', 1,
+      X + W - 520, top + 8, 520, 30,
+      `TOTAL ${signed(totalDelta)} ELO`,
+      24, deltaColor, MEDIUM, 'right',
     ),
-
-    divider(cardX + 24, top + HEADER_H, CARD_W - 48, COLORS.line, 1),
-
-    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 13, COLORS.muted, MEDIUM, 'left', 1.4),
-    text(cardX + DELTA_X, top + HEADER_H, DELTA_W, COLUMNS_H, 'ELO CHANGE', 13, COLORS.muted, MEDIUM, 'center', 1.2),
-    text(cardX + BEFORE_X, top + HEADER_H, BEFORE_W, COLUMNS_H, 'BEFORE', 13, COLORS.muted, MEDIUM, 'right', 1),
-    text(cardX + AFTER_X, top + HEADER_H, AFTER_W, COLUMNS_H, 'AFTER', 13, COLORS.muted, MEDIUM, 'right', 1),
-
     ...rows,
-    empty,
-
-    divider(cardX + 24, summaryTop, CARD_W - 48, COLORS.line, 1),
-
-    text(cardX + 28, summaryTop + 12, 300, 18, 'TOTAL ELO CHANGE', 13, COLORS.muted, MEDIUM, 'left', 1.2),
-    text(cardX + 28, summaryTop + 29, 300, 32, `${signed(totalDelta)} RR`, 30, deltaColor, MEDIUM),
-
-    text(cardX + CARD_W - 288, summaryTop + 12, 260, 18, 'AVERAGE ELO', 13, COLORS.muted, MEDIUM, 'right', 1.2),
-    text(cardX + CARD_W - 288, summaryTop + 29, 260, 32, String(avgAfter), 30, COLORS.text, MEDIUM, 'right'),
+    ...empty,
   ];
 }
 
 export function scoreTemplate(input: ScoreTemplateInput): { root: VNode; width: number; height: number } {
-  const maxRows = Math.max(1, input.winners.length, input.losers.length);
-  const available = CARD_BOTTOM - CARD_TOP;
-  const rowH = Math.max(34, Math.min(104, Math.floor((available - CARD_CHROME) / maxRows)));
-  const cardH = CARD_CHROME + maxRows * rowH;
-  const cardTop = CARD_TOP + Math.max(0, Math.floor((available - cardH) / 2));
-
   const root = h('div', { style: rootStyle(WIDTH, HEIGHT) },
-    decor(WIDTH, HEIGHT, 'score'),
-
-    header(input),
-
-    ...teamCard(
-      input.winners, CARD_XS[0], cardTop, cardH, rowH, maxRows,
-      'WINNERS', 'WINNING TEAM', COLORS.green,
-    ),
-    ...teamCard(
-      input.losers, CARD_XS[1], cardTop, cardH, rowH, maxRows,
-      'LOSERS', 'LOSING TEAM', COLORS.red,
-    ),
-
-    gameFooter(WIDTH, input.serverName, input.inviteLink),
+    ...header(input),
+    ...teamSection(input.winners, WINNER_TOP, 'WINNERS', COLORS.green),
+    ...teamSection(input.losers, LOSER_TOP, 'LOSERS', COLORS.red),
+    gameFooter(WIDTH, input.serverName, input.inviteLink, FOOTER_Y),
   );
 
   return { root, width: WIDTH, height: HEIGHT };

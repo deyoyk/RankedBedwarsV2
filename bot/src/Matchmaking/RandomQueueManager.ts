@@ -387,6 +387,9 @@ export class RandomQueueManager {
           const buffer = await generateGameStartImageBuffer(gameId, toTeam(team1), toTeam(team2), {
             mapName: selectedMap,
             modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
+            isRanked: queueData.isRanked === true,
+            minElo: queueData.minElo,
+            maxElo: queueData.maxElo,
           });
           startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
         }

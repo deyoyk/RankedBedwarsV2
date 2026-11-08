@@ -56,7 +56,7 @@ export async function generateScoreImageBuffer(
   gameId: number,
   winners: PlayerLine[],
   losers: PlayerLine[],
-  options?: { serverName?: string; inviteLink?: string }
+  options?: { serverName?: string; inviteLink?: string; isRanked?: boolean; minElo?: number; maxElo?: number }
 ): Promise<Buffer> {
   const [winnerRows, loserRows] = await Promise.all([
     Promise.allSettled(winners.map(toTemplatePlayer)),
@@ -83,6 +83,9 @@ export async function generateScoreImageBuffer(
     gameId,
     winners: winnerRows,
     losers: loserRows,
+    isRanked: options?.isRanked === true,
+    minElo: options?.minElo ?? 0,
+    maxElo: options?.maxElo ?? 0,
     serverName,
     inviteLink,
   });
@@ -129,7 +132,7 @@ export async function generateGameStartImageBuffer(
   gameId: number,
   team1: GameStartPlayerInput[],
   team2: GameStartPlayerInput[],
-  options: { mapName: string; modeLabel: string; serverName?: string; inviteLink?: string }
+  options: { mapName: string; modeLabel: string; serverName?: string; inviteLink?: string; isRanked?: boolean; minElo?: number; maxElo?: number }
 ): Promise<Buffer> {
   const toStartPlayer = async (p: GameStartPlayerInput): Promise<StartTemplatePlayer> => ({
     username: p.username,
@@ -155,6 +158,9 @@ export async function generateGameStartImageBuffer(
     team2: team2Rows,
     team1Avg: avg(team1Rows),
     team2Avg: avg(team2Rows),
+    isRanked: options?.isRanked === true,
+    minElo: options?.minElo ?? 0,
+    maxElo: options?.maxElo ?? 0,
     serverName,
     inviteLink,
   });

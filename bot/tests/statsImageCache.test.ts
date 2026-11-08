@@ -7,7 +7,7 @@ jest.mock('../src/assets/renderer', () => {
 });
 
 jest.mock('../src/assets/assets', () => ({
-  loadSkinDataUrl: jest.fn().mockResolvedValue(null),
+  loadBustDataUrl: jest.fn().mockResolvedValue(null),
 }));
 
 import { generateThemeImage } from '../src/assets/stats-theme/base';

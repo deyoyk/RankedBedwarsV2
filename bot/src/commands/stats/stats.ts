@@ -16,7 +16,7 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
   
 
   const user = await User.findOne({ discordId: targetUserId })
-    .select('discordId ign wins losses games kills deaths mvps elo winStreak loseStreak wlr kdr finalKills bedBroken finalDeaths playtimeSeconds experience recentGames createdAt')
+    .select('discordId ign wins losses games kills deaths mvps elo winStreak loseStreak wlr kdr finalKills bedBroken finalDeaths diamonds emeralds blocksPlaced playtimeSeconds experience recentGames createdAt')
     .lean();
 
   if (!user) {
@@ -132,6 +132,9 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
       { value: String(user.finalKills || 0), label: 'Final Kills', accent: '#8b5cf6', rank: finalKillsRank },
       { value: String(user.bedBroken || 0), label: 'Beds Broken', accent: '#8b5cf6', rank: bedsRank },
       { value: String(user.finalDeaths || 0), label: 'Final Deaths', accent: '#8b5cf6', rank: finalDeathsRank },
+      { value: String(user.blocksPlaced || 0), label: 'Blocks Placed', accent: '#00e5ff', rank: '' },
+      { value: String(user.diamonds || 0), label: 'Diamonds', accent: '#00e5ff', rank: '' },
+      { value: String(user.emeralds || 0), label: 'Emeralds', accent: '#00e676', rank: '' },
     ],
     seasonLine1: season ? (season.name || `SEASON ${season.seasonNumber} CHAPTER ${season.chapterNumber}`).toUpperCase() : '',
     seasonLine2: season?.startDate ? new Date(season.startDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : '',

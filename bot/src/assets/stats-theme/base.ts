@@ -1,4 +1,4 @@
-import { loadSkinDataUrl } from '../assets';
+import { loadBustDataUrl } from '../assets';
 import { renderPng } from '../renderer';
 import { defaultTemplate, DefaultTile } from './default';
 
@@ -120,7 +120,7 @@ export async function generateThemeImage(
 
   const task = (async (): Promise<Buffer> => {
     const skin = await withTimeout(
-      loadSkinDataUrl(playerData.ign || ''),
+      loadBustDataUrl(playerData.ign || ''),
       SKIN_TIMEOUT_MS,
       null,
     );
@@ -139,7 +139,7 @@ export async function generateThemeImage(
       winRate,
       winCaption: enriched.winCaption || `${(winRate * 100).toFixed(1)}% win rate · ${games} games`,
       tiles: enriched.tiles && enriched.tiles.length === 8 ? enriched.tiles : FALLBACK_TILES,
-      combat: enriched.combat && enriched.combat.length === 3 ? enriched.combat : FALLBACK_COMBAT,
+      combat: enriched.combat && enriched.combat.length >= 3 ? enriched.combat : FALLBACK_COMBAT,
       seasonLine1: enriched.seasonLine1 || '',
       seasonLine2: enriched.seasonLine2 || '',
       footerBrand,

@@ -9,15 +9,15 @@
 
 ### Player Stats
 
-![Player stats card](images/default.png)
+![Player stats card](images/previews/stats-preview.png)
 
 ### Match Results
 
-![Match results card](images/score.png)
+![Match results card](images/previews/score-preview.png)
 
 ### Match Start
 
-![Match start card](images/start.png)
+![Match start card](images/previews/start-preview.png)
 
 ## Features
 

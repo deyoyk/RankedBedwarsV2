@@ -1,5 +1,5 @@
 import { h, VNode } from '../renderer';
-import { avatar, badge, COLORS, decor, divider, gameFooter, MEDIUM, panel, rootStyle, text } from '../theme';
+import { avatar, COLORS, divider, FONT, gameFooter, MEDIUM, rootStyle, text } from '../theme';
 
 export type StartTemplatePlayer = {
   username: string;
@@ -16,217 +16,101 @@ export type StartTemplateInput = {
   team2: StartTemplatePlayer[];
   team1Avg: number;
   team2Avg: number;
+  isRanked?: boolean;
+  minElo?: number;
+  maxElo?: number;
   serverName: string;
   inviteLink: string;
 };
 
 const WIDTH = 1920;
 const HEIGHT = 1080;
+const X = 72;
+const W = WIDTH - X * 2;
+const TEAM1_TOP = 224;
+const TEAM2_TOP = 620;
+const SECTION_H = 372;
+const ROWS_TOP_OFFSET = 80;
+const ROWS_BOTTOM_PAD = 16;
+const FOOTER_Y = 1008;
 
-const CARD_W = 800;
-const CARD_X1 = 80;
-const CARD_X2 = 1040;
-const CARD_TOP = 240;
-const CARD_BOTTOM = 936;
-const HEADER_H = 64;
-const COLUMNS_H = 32;
-const SUMMARY_H = 60;
-const CARD_CHROME = HEADER_H + COLUMNS_H + SUMMARY_H;
+function header(input: StartTemplateInput): VNode[] {
+  const ranked = input.isRanked === true;
 
-const NAME_X = 86;
-const NAME_W = 490;
-const CPT_X = 584;
-const CPT_W = 68;
-const ELO_X = 666;
-const ELO_W = 110;
-
-function header(input: StartTemplateInput): VNode {
-  return h('div', {},
-    badge((WIDTH - 200) / 2, 26, 200, `GAME #${input.gameId}`, {
-      color: COLORS.text,
-      background: 'rgba(21,31,45,0.9)',
-      border: COLORS.line,
-      height: 42,
-      size: 17,
-      letterSpacing: 1,
-    }),
-
-    text(0, 76, WIDTH, 82, 'MATCH START', 68, COLORS.text, MEDIUM, 'center', 2.4),
-
-    text(
-      0, 164, WIDTH, 28,
-      `${input.mapName} · ${input.modeLabel}`,
-      28, COLORS.cyan, MEDIUM, 'center', 1,
-    ),
-
-    divider((WIDTH - 120) / 2, 210, 120, COLORS.cyan, 2),
-  );
+  return [
+    text(X, 34, 420, 32, `GAME #${input.gameId}`, 32, COLORS.muted, MEDIUM, 'left', 0.8),
+    text(WIDTH - X - 420, ranked ? 24 : 32, 420, 26, ranked ? 'Ranked' : 'Unranked', 20, COLORS.muted, MEDIUM, 'right', 1.2),
+    ranked
+      ? text(WIDTH - X - 420, 52, 420, 22, `Queue ${input.minElo ?? 0} - ${input.maxElo ?? 0}`, 16, COLORS.faint, MEDIUM, 'right', 0.8)
+      : null,
+    text(X, 84, 1300, 78, 'MATCH START', 72, COLORS.text, MEDIUM, 'left', 0.5),
+    text(X, 164, 1100, 30, `${input.mapName} · ${input.modeLabel}`, 24, COLORS.cyan, MEDIUM, 'left', 0.8),
+    divider(X, 198, W, COLORS.line, 1),
+  ].filter(Boolean) as VNode[];
 }
 
 function playerRow(
-  p: StartTemplatePlayer,
-  cardX: number,
-  rowTop: number,
+  player: StartTemplatePlayer,
+  top: number,
   rowH: number,
-  index: number,
-): (VNode | null)[] {
-  const avatarSize = Math.max(24, Math.min(48, rowH - 18));
-  const nameSize = Math.max(
-    15,
-    Math.min(44, rowH - 16, Math.floor(760 / Math.max(6, p.username.length))),
-  );
-  const eloSize = Math.max(14, Math.min(36, rowH - 24));
-  const cptH = Math.max(24, Math.min(34, rowH - 18));
-  const cptSize = Math.max(12, Math.min(17, rowH - 24));
-  const rowY = rowTop + (rowH - avatarSize) / 2;
+): VNode[] {
+  const avatarSize = Math.max(24, Math.min(44, rowH - 8));
+  const nameSize = Math.max(20, Math.min(38, rowH - 6));
+  const eloSize = Math.max(20, Math.min(34, rowH - 4));
+  const tagSize = Math.max(22, Math.min(28, rowH - 6));
+  const rowY = top + (rowH - avatarSize) / 2;
 
   return [
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: cardX,
-        top: rowTop,
-        width: CARD_W,
-        height: rowH,
-        backgroundColor: index % 2 === 0 ? 'rgba(255,255,255,0.018)' : 'rgba(0,0,0,0.10)',
-      },
-    }),
+    avatar(player.avatar, X, rowY, avatarSize, 8),
 
-    avatar(p.avatar, cardX + 24, rowY, avatarSize, 10),
+    text(X + 56, top, 860, rowH, player.username, nameSize, COLORS.text, MEDIUM),
 
-    text(
-      cardX + NAME_X, rowTop, NAME_W, rowH,
-      p.username,
-      nameSize, COLORS.text, MEDIUM,
-    ),
-
-    p.isCaptain
-      ? badge(cardX + CPT_X, rowTop + (rowH - cptH) / 2, CPT_W, 'CPT', {
-          color: COLORS.gold,
-          background: 'rgba(251,191,36,0.12)',
-          border: 'rgba(251,191,36,0.36)',
-          height: cptH,
-          size: cptSize,
-          letterSpacing: 0.8,
-        })
+    player.isCaptain
+      ? text(X + 940, top, 100, rowH, 'CPT', tagSize, COLORS.gold, MEDIUM, 'left', 1)
       : null,
 
     text(
-      cardX + ELO_X, rowTop, ELO_W, rowH,
-      String(p.elo),
+      X + W - 280, top, 280, rowH,
+      String(player.elo),
       eloSize, COLORS.text, MEDIUM, 'right',
     ),
-
-    divider(cardX + 24, rowTop + rowH - 1, CARD_W - 48, COLORS.lineSoft, 1),
-  ];
+  ].filter(Boolean) as VNode[];
 }
 
-function teamCard(
+function teamSection(
   players: StartTemplatePlayer[],
-  cardX: number,
   top: number,
-  cardH: number,
-  rowH: number,
-  maxRows: number,
   title: string,
   avg: number,
   color: string,
-): (VNode | null)[] {
-  const summaryTop = top + cardH - SUMMARY_H;
-  const rowsTop = top + HEADER_H + COLUMNS_H;
-  const playerCount = players.length;
-  const totalElo = players.reduce((sum, p) => sum + (p.elo || 0), 0);
-  const spread = players.length > 0
-    ? Math.max(...players.map(p => p.elo || 0)) - Math.min(...players.map(p => p.elo || 0))
-    : 0;
+): VNode[] {
+  const rowsTop = top + ROWS_TOP_OFFSET;
+  const rowsAvailable = SECTION_H - ROWS_TOP_OFFSET - ROWS_BOTTOM_PAD;
+  const maxRows = Math.max(1, players.length);
+  const rowH = Math.max(32, Math.min(84, Math.floor(rowsAvailable / maxRows)));
 
-  const rows = players.flatMap((p, i) =>
-    playerRow(p, cardX, rowsTop + i * rowH, rowH, i),
+  const rows = players.flatMap((player, index) =>
+    playerRow(player, rowsTop + index * rowH, rowH),
   );
 
-  const empty = playerCount === 0
-    ? text(
-        cardX + 24, rowsTop, CARD_W - 48, maxRows * rowH,
-        'NO PLAYERS',
-        15, COLORS.faint, MEDIUM, 'center', 1.8,
-      )
-    : null;
+  const empty = players.length === 0
+    ? [text(X, rowsTop, W, rowH, 'NO PLAYERS', 22, COLORS.faint, MEDIUM, 'left', 1.2)]
+    : [];
 
   return [
-    panel(cardX, top, CARD_W, cardH, 20),
-
-    text(cardX + 28, top + 13, 340, 26, title, 20, color, MEDIUM, 'left', 1.6),
-    text(
-      cardX + 28, top + 37, 340, 18,
-      `${playerCount} ${playerCount === 1 ? 'PLAYER' : 'PLAYERS'}`,
-      15, COLORS.muted, MEDIUM, 'left', 1.4,
-    ),
-    text(
-      cardX + CARD_W - 328, top + 18, 300, 30,
-      `AVG ${avg}`,
-      30, COLORS.text, MEDIUM, 'right', 0.4,
-    ),
-
-    divider(cardX + 24, top + HEADER_H, CARD_W - 48, COLORS.line, 1),
-
-    text(cardX + 24, top + HEADER_H, 200, COLUMNS_H, 'PLAYER', 13, COLORS.muted, MEDIUM, 'left', 1.4),
-    text(cardX + ELO_X, top + HEADER_H, ELO_W, COLUMNS_H, 'ELO', 13, COLORS.muted, MEDIUM, 'right', 1.2),
-
+    text(X, top, 700, 64, title, 54, color, MEDIUM, 'left', 0.4),
+    text(X + W - 420, top + 8, 420, 36, `AVG ${avg}`, 32, COLORS.text, MEDIUM, 'right', 0.4),
     ...rows,
-    empty,
-
-    divider(cardX + 24, summaryTop, CARD_W - 48, COLORS.line, 1),
-
-    text(cardX + 28, summaryTop + 11, 300, 18, 'TOTAL ELO', 13, COLORS.muted, MEDIUM, 'left', 1.2),
-    text(cardX + 28, summaryTop + 28, 300, 32, String(totalElo), 30, COLORS.text, MEDIUM),
-
-    text(cardX + CARD_W - 288, summaryTop + 11, 260, 18, 'ELO SPREAD', 13, COLORS.muted, MEDIUM, 'right', 1.2),
-    text(cardX + CARD_W - 288, summaryTop + 28, 260, 32, String(spread), 30, COLORS.text, MEDIUM, 'right'),
+    ...empty,
   ];
 }
 
-function versus(top: number, cardH: number): VNode {
-  return h('div', {
-    style: {
-      position: 'absolute',
-      left: WIDTH / 2 - 36,
-      top: top + cardH / 2 - 36,
-      width: 72,
-      height: 72,
-      borderRadius: 36,
-      backgroundColor: '#0a1018',
-      borderWidth: 1,
-      borderStyle: 'solid',
-      borderColor: COLORS.line,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: MEDIUM,
-      fontSize: 22,
-      letterSpacing: 1.4,
-      color: COLORS.text,
-    },
-  }, 'VS');
-}
-
 export function startTemplate(input: StartTemplateInput): { root: VNode; width: number; height: number } {
-  const maxRows = Math.max(1, input.team1.length, input.team2.length);
-  const available = CARD_BOTTOM - CARD_TOP;
-  const rowH = Math.max(32, Math.min(108, Math.floor((available - CARD_CHROME) / maxRows)));
-  const cardH = CARD_CHROME + maxRows * rowH;
-  const cardTop = CARD_TOP + Math.max(0, Math.floor((available - cardH) / 2));
-
   const root = h('div', { style: rootStyle(WIDTH, HEIGHT) },
-    decor(WIDTH, HEIGHT, 'start'),
-
-    header(input),
-
-    ...teamCard(input.team1, CARD_X1, cardTop, cardH, rowH, maxRows, 'TEAM GREEN', input.team1Avg, COLORS.green),
-    ...teamCard(input.team2, CARD_X2, cardTop, cardH, rowH, maxRows, 'TEAM RED', input.team2Avg, COLORS.red),
-
-    versus(cardTop, cardH),
-
-    gameFooter(WIDTH, input.serverName, input.inviteLink),
+    ...header(input),
+    ...teamSection(input.team1, TEAM1_TOP, 'TEAM GREEN', input.team1Avg, COLORS.green),
+    ...teamSection(input.team2, TEAM2_TOP, 'TEAM RED', input.team2Avg, COLORS.red),
+    gameFooter(WIDTH, input.serverName, input.inviteLink, FOOTER_Y),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
