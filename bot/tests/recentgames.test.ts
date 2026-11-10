@@ -82,11 +82,68 @@ describe('recentgames command', () => {
     const embed = msg.reply.mock.calls[0][0].embeds[0].toJSON();
     const games = embed.fields[0].value;
 
-    expect(games).toContain('- **Game #9** - Lost');
-    expect(games).toContain('- **Game #8** - Won');
-    expect(games).toContain('- **Game #7** - Voided');
-    expect(games).toContain('- **Game #6** - Ongoing');
-    expect(games).not.toContain('**Game #9** - Won');
+    expect(games).toContain('[#9] Lectus1v1 - [Loss]');
+    expect(games).toContain('[#8] Lectus1v1 - [Win]');
+    expect(games).toContain('[#7] Lectus1v1 - [Voided]');
+    expect(games).toContain('[#6] Lectus1v1 - [Ongoing]');
+    expect(games).not.toContain('[#9] Lectus1v1 - [Win]');
     expect(embed.title).toBe('Info: Recent Games - LoveDeyo');
+  });
+
+  it('shows signed elo changes, relative time, result and bed stats', async () => {
+    UserModel.findOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({
+          discordId: '1526597163885527121',
+          ign: 'LoveDeyo',
+          recentGames: [
+            recentGame({
+              gameId: 101,
+              state: 'scored',
+              won: true,
+              eloGain: 15,
+              map: 'Archway',
+              kills: 11,
+              bedBroken: 1,
+              finalKills: 16,
+              date: new Date('2026-01-01T06:00:00Z'),
+            }),
+            recentGame({
+              gameId: 102,
+              state: 'scored',
+              won: true,
+              eloGain: 0,
+              map: 'Urban',
+              kills: 3,
+              bedBroken: 0,
+              finalKills: 9,
+              date: new Date('2026-01-01T06:00:00Z'),
+            }),
+            recentGame({
+              gameId: 103,
+              state: 'scored',
+              won: false,
+              eloGain: -30,
+              map: 'Antenna',
+              kills: 4,
+              bedBroken: 0,
+              finalKills: 6,
+              date: new Date('2026-01-01T06:00:00Z'),
+            }),
+          ],
+        }),
+      }),
+    });
+
+    const msg = interaction();
+    await recentgames(msg);
+
+    const games = msg.reply.mock.calls[0][0].embeds[0].toJSON().fields[0].value;
+    expect(games).toContain('[+15] - <t:');
+    expect(games).toContain('[#101] Archway - [Win] - 11/1/16 - 1 bed');
+    expect(games).toContain('[—]');
+    expect(games).toContain('[#102] Urban - [Win] - 3/0/9');
+    expect(games).toContain('[-30]');
+    expect(games).toContain('[#103] Antenna - [Loss] - 4/0/6');
   });
 });

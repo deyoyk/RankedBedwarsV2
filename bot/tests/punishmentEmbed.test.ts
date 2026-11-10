@@ -52,11 +52,12 @@ describe('punishment embeds', () => {
     const payload = sent(channel);
     const embed = payload.embeds[0].toJSON();
 
-    expect(payload.content).toBeUndefined();
+    expect(payload.content).toBe('<@123456789012345678>');
     expect(payload.files).toBeUndefined();
     expect(embed.title).toBe('Warning: Mute');
     expect(embed.color).toBe(EMBED_THEME.warningColor);
     expect(embed.description).toContain('has been issued a Mute punishment.');
+    expect(embed.description).not.toContain('<@');
     expect(embed.description).toContain('**Duration:**');
     expect(embed.description).toContain('**Expires:** 13-11-2026');
     expect(embed.description).toContain('**Reason:** Racism, Slurs or Hate Speech');
@@ -78,9 +79,11 @@ describe('punishment embeds', () => {
     const payload = sent(channel);
     const embed = payload.embeds[0].toJSON();
 
+    expect(payload.content).toBe('<@123456789012345678>');
     expect(embed.title).toBe('Punishment: Ranked Ban');
     expect(embed.color).toBe(EMBED_THEME.punishmentColor);
     expect(embed.description).toContain('has been issued a Ranked Ban punishment.');
+    expect(embed.description).not.toContain('<@');
     expect(embed.description).toContain('Player is no longer able to queue.');
     expect(embed.thumbnail).toBeUndefined();
   });
@@ -99,9 +102,11 @@ describe('punishment embeds', () => {
     const payload = sent(channel);
     const embed = payload.embeds[0].toJSON();
 
+    expect(payload.content).toBe('<@123456789012345678>');
     expect(embed.title).toBe('Warning: Strike');
     expect(embed.color).toBe(EMBED_THEME.warningColor);
     expect(embed.description).toContain('has been issued a Strike punishment.');
+    expect(embed.description).not.toContain('<@');
     expect(embed.description).not.toContain('**Duration:**');
     expect(embed.thumbnail).toBeUndefined();
   });
@@ -120,9 +125,11 @@ describe('punishment embeds', () => {
     const payload = sent(channel);
     const embed = payload.embeds[0].toJSON();
 
+    expect(payload.content).toBe('<@123456789012345678>');
     expect(embed.title).toBe('Success: Mute Removed');
     expect(embed.color).toBe(EMBED_THEME.successColor);
     expect(embed.description).toContain('is no longer muted.');
+    expect(embed.description).not.toContain('<@');
     expect(embed.description).toContain('**Type:** Mute');
     expect(embed.description).toContain('**Reason:** mistake');
     expect(embed.description).toMatch(/\*\*Processed:\*\* \w+, \d+ \w+, \d{4} \d{2}:\d{2}/);
@@ -143,10 +150,13 @@ describe('punishment embeds', () => {
       type: type as any,
     });
 
-    const embed = sent(channel).embeds[0].toJSON();
+    const payload = sent(channel);
+    const embed = payload.embeds[0].toJSON();
+    expect(payload.content).toBe('<@123456789012345678>');
     expect(embed.title).toBe(title);
     expect(embed.description).toContain(`${phrase}.`);
     expect(embed.description).toContain(`**Type:** ${label}`);
+    expect(embed.description).not.toContain('<@');
     expect(embed.color).toBe(EMBED_THEME.successColor);
   });
 

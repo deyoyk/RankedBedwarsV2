@@ -113,13 +113,13 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
   const lines: string[] = [];
 
   if (isRemoval) {
-    lines.push(`${userMention} ${style.removalPhrase}.`);
+    lines.push(`The player ${style.removalPhrase}.`);
     lines.push('');
     lines.push(`**Type:** ${style.label}`);
     lines.push(`**Reason:** ${reasonText}`);
     lines.push(`**Processed:** ${formatProcessedDate(new Date())}`);
   } else {
-    lines.push(`${userMention} has been issued a ${style.label} punishment.`);
+    lines.push(`The player has been issued a ${style.label} punishment.`);
     lines.push('');
     if (expires) {
       lines.push(`**Duration:** ${formatDuration(expires)}`);
@@ -141,7 +141,7 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     .setTitle(isRemoval ? style.removalTitle : style.label)
     .setDescription(lines.join('\n'));
 
-  const payload: MessageCreateOptions = { embeds: [embed] };
+  const payload: MessageCreateOptions = { content: userMention, embeds: [embed] };
 
   try {
     await channel.send(payload);

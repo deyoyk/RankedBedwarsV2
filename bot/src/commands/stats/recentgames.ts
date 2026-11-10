@@ -108,17 +108,31 @@ function createRecentGamesEmbed(user: RecentGamesUser, games: IRecentGame[], cur
 function formatGamesList(games: IRecentGame[]): string {
   return games.map(game => {
     const result = resolveRecentGameResult(game);
-    const eloText = game.eloGain >= 0 ? `+${game.eloGain}` : `${game.eloGain}`;
-    return `- **Game #${game.gameId}** - ${getResultText(result)} \`${eloText}\``;
+    const bedBroken = game.bedBroken || 0;
+    const bedSuffix = bedBroken > 0 ? ` - ${bedBroken} ${bedBroken === 1 ? 'bed' : 'beds'}` : '';
+    const stats = `${game.kills || 0}/${bedBroken}/${game.finalKills || 0}`;
+    return `${formatElo(game, result)} - ${formatGameTime(game)} - [#${game.gameId}] ${game.map || 'Unknown Map'} - [${getResultText(result)}] - ${stats}${bedSuffix}`;
   }).join('\n');
+}
+
+function formatElo(game: IRecentGame, result: RecentGameResult): string {
+  const elo = Number.isFinite(game.eloGain) ? game.eloGain : 0;
+  if (elo === 0 || (result !== 'win' && result !== 'lose')) return '[—]';
+  return elo > 0 ? `[+${elo}]` : `[${elo}]`;
+}
+
+function formatGameTime(game: IRecentGame): string {
+  const timestamp = new Date(game.endTime ?? game.date ?? game.startTime).getTime();
+  if (!Number.isFinite(timestamp)) return 'Unknown time';
+  return `<t:${Math.floor(timestamp / 1000)}:R>`;
 }
 
 function getResultText(result: RecentGameResult): string {
   switch (result) {
     case 'win':
-      return 'Won';
+      return 'Win';
     case 'lose':
-      return 'Lost';
+      return 'Loss';
     case 'voided':
       return 'Voided';
     case 'pending':

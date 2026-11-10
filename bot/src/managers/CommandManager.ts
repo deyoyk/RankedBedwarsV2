@@ -29,7 +29,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import type { BotCommandFn } from '../types/commands';
 import { strikerequest } from '../commands/scoring/strikerequest';
 import { voidrequest } from '../commands/scoring/voidrequest';
-import { stats } from '../commands/stats/stats';
+import { info } from '../commands/stats/info';
 import { call } from '../commands/queue/call';
 import { nick } from '../commands/account/nick';
 import { settings } from '../commands/account/settings';
@@ -397,8 +397,8 @@ export class CommandManager {
   }
 
   private registerStatsCommands() {
-    this.reg('stats', 'View player stats', stats, [
-      { name: 'user', description: 'Target user to view stats for', type: 6, required: false }
+    this.reg('info', 'View full player information and statistics', info, [
+      { name: 'user', description: 'Target user to view info for', type: 6, required: false }
     ]);
     this.reg('leaderboard', 'Show the leaderboard for a stat', leaderboard, [
       { name: 'mode', description: 'Stat to rank by', type: 3, required: false, choices: [
