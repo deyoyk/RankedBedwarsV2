@@ -207,6 +207,7 @@ function channelDouble() {
   return {
     id: 'chan1',
     type: 0,
+    isTextBased: () => true,
     send: jest.fn().mockResolvedValue(sentMessageDouble()),
     createMessageComponentCollector: jest.fn().mockReturnValue({ on: jest.fn(), stop: jest.fn() }),
   };

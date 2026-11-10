@@ -249,7 +249,7 @@ export class CommandManager {
       { name: 'party_id', description: 'Party ID to join (only for join action)', type: 3, required: false },
       { name: 'args', description: 'Additional arguments for settings or other actions', type: 3, required: false }
     ]);
-    this.reg('call', 'Grant voice channel access to a user in game channels', call, [
+    this.reg('call', 'Grant voice channel access to a user in game voice channels', call, [
       { name: 'user', description: 'The user to grant voice channel access to', type: 6, required: true }
     ]);
     this.reg('retry', 'Retry a game', retry);

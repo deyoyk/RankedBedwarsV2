@@ -8,8 +8,8 @@ import { safeReply } from '../../utils/safeReply';
 export async function forcevoid(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
   
   const channel = interaction.channel;
-  if (!channel || channel.type !== 0) { 
-    await safeReply(interaction, errorEmbed('This command can only be used in a game text channel.', 'Error'));
+  if (!channel || !channel.isTextBased()) {
+    await safeReply(interaction, errorEmbed('This command can only be used in a game thread.', 'Error'));
     return;
   }
 
@@ -42,7 +42,7 @@ export async function forcevoid(interaction: ChatInputCommandInteraction, wsMana
     
     
       await safeReply(interaction, successEmbed(
-        `Game ${game.gameId} has been force voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game channels will be deleted in 30 seconds.`,
+        `Game ${game.gameId} has been force voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game threads will be archived in 30 seconds.`,
         'Game Force Voided',
         true
       ));

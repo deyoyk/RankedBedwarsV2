@@ -32,7 +32,7 @@ export async function voidGame(interaction: ChatInputCommandInteraction, wsManag
     const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
     await gameManager.voidGame(gameId, reason);
     
-    await safeReply(interaction, successEmbed(`Game ${gameId} has been voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game channels will be deleted in 30 seconds.`, 'Game Voided'));
+    await safeReply(interaction, successEmbed(`Game ${gameId} has been voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game threads will be archived in 30 seconds.`, 'Game Voided'));
   } catch (error) {
     console.error('Error in void command:', error);
     await safeReply(interaction, errorEmbed('There was an error voiding the game.', 'Void Command Error'));
