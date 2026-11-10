@@ -10,10 +10,13 @@ jest.mock('../src/models/User', () => ({
 jest.mock('../src/Matchmaking/utils', () => ({
   calculateTeamAverageElo: jest.fn().mockResolvedValue(0),
   selectRandomMap: jest.fn().mockResolvedValue('Aquarius'),
+  selectMapVoteCandidates: jest.fn().mockResolvedValue([]),
   getPlayerIGNs: jest.fn().mockResolvedValue(new Map())
 }));
 
 const UserModel = require('../src/models/User').default;
+const { selectMapVoteCandidates } = require('../src/Matchmaking/utils');
+const config = require('../src/config/config').default;
 
 function mockUserFind(users: any[]) {
   UserModel.find.mockReturnValue({
@@ -65,6 +68,68 @@ describe('RandomQueueManager.selectBalancedTeams', () => {
     expect(gameManager.voidGame).toHaveBeenCalledWith(7, 'Warp could not be started after game creation');
     expect(result.gamesCreated).toBe(1);
     expect(result.usedPlayers.sort()).toEqual(['s1', 's2', 's3', 's4']);
+  });
+
+  it('runs map voting after the game thread exists and updates the stored map', async () => {
+    mockUserFind([
+      { discordId: 's1', partyId: null, elo: 1200 },
+      { discordId: 's2', partyId: null, elo: 1600 },
+      { discordId: 's3', partyId: null, elo: 1400 },
+      { discordId: 's4', partyId: null, elo: 1300 }
+    ]);
+    selectMapVoteCandidates.mockResolvedValueOnce(['MapOne', 'MapTwo', 'MapThree']);
+    config.mapSelection.enabled = true;
+
+    const gameManager = {
+      getNextGameId: jest.fn().mockResolvedValue(8),
+      createGame: jest.fn().mockResolvedValue({ gameId: 8, gameChannel: { id: 'thread-8' } }),
+      updateGameMap: jest.fn().mockResolvedValue(undefined),
+      initiateGameWarp: jest.fn().mockResolvedValue(undefined),
+      voidGame: jest.fn().mockResolvedValue(undefined),
+    };
+    const manager: any = new RandomQueueManager(
+      { guilds: { cache: { first: () => null } } } as any,
+      gameManager as any,
+      {} as any,
+    );
+    jest.spyOn(manager, 'selectBalancedTeams').mockResolvedValue({
+      team1: ['s2', 's4'],
+      team2: ['s1', 's3'],
+      usedPlayers: new Set(['s1', 's2', 's3', 's4']),
+      averageEloDiff: 0,
+    });
+    jest.spyOn(manager, 'revalidateDraftedPlayers').mockResolvedValue(['s1', 's2', 's3', 's4']);
+    jest.spyOn(manager, 'announceGameStart').mockResolvedValue(undefined);
+    manager.mapVoteService.run = jest.fn().mockResolvedValue('MapTwo');
+    manager.mapService.claimMap = jest.fn();
+
+    try {
+      const result = await manager.processQueue(
+        ['s1', 's2', 's3', 's4'],
+        { channelId: 'q', maxPlayers: 4, minElo: 0, maxElo: 9999, bypassRoles: [] },
+        1,
+      );
+
+      expect(result.gamesCreated).toBe(1);
+      expect(gameManager.createGame).toHaveBeenCalledWith(
+        8,
+        expect.anything(),
+        ['s2', 's4'],
+        ['s1', 's3'],
+        'MapOne',
+      );
+      expect(manager.mapVoteService.run).toHaveBeenCalledWith(
+        8,
+        'thread-8',
+        ['s2', 's4', 's1', 's3'],
+        ['MapOne', 'MapTwo', 'MapThree'],
+      );
+      expect(gameManager.updateGameMap).toHaveBeenCalledWith(8, 'MapTwo');
+      expect(gameManager.initiateGameWarp).toHaveBeenCalledWith(8);
+      expect(manager.mapService.claimMap).toHaveBeenCalledWith('MapTwo');
+    } finally {
+      config.mapSelection.enabled = false;
+    }
   });
 
   it('keeps parties together on the same team', async () => {

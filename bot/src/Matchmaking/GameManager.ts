@@ -278,6 +278,20 @@ export class GameManager {
     }
   }
 
+  public async updateGameMap(gameId: number, map: string): Promise<void> {
+    const normalized = (map ?? '').trim();
+    if (!normalized) throw new Error('Map name is required');
+    const update = await Game.updateOne({ gameId }, { $set: { map: normalized } });
+    if (!update.matchedCount) throw new Error(`Game ${gameId} not found`);
+    await User.updateMany(
+      { 'recentGames.gameId': gameId },
+      { $set: { 'recentGames.$.map': normalized } },
+    );
+    const resources = this.activeGames.get(gameId);
+    if (resources?.game) resources.game.map = normalized;
+    console.log(`[GameManager] Game ${gameId} map set to ${normalized}`);
+  }
+
   private reservePlayersForGame(gameId: number, playerIds: string[]): void {
     const conflicts: string[] = [];
     for (const playerId of new Set(playerIds)) {

@@ -43,6 +43,8 @@ describe('validateConfig', () => {
     process.env.AUTH_KEY = OLD.AUTH_KEY;
     if (OLD.ELO_CLAIM_ROLES === undefined) delete process.env.ELO_CLAIM_ROLES;
     else process.env.ELO_CLAIM_ROLES = OLD.ELO_CLAIM_ROLES;
+    if (OLD.MAP_SELECTION_TIMEOUT_SECONDS === undefined) delete process.env.MAP_SELECTION_TIMEOUT_SECONDS;
+    else process.env.MAP_SELECTION_TIMEOUT_SECONDS = OLD.MAP_SELECTION_TIMEOUT_SECONDS;
   });
   it('passes for valid config', () => {
     process.env.AUTH_KEY = 'secret';
@@ -75,6 +77,15 @@ describe('validateConfig', () => {
       strikes: { 1: 'warn', 2: 'not-a-duration', default: 'warn' }
     });
     expect(errors.join('|')).toMatch(/STRIKE_2_DURATION/);
+  });
+
+  it('validates the map selection timeout', () => {
+    process.env.AUTH_KEY = 'secret';
+    process.env.MAP_SELECTION_TIMEOUT_SECONDS = '0';
+    expect(validateConfig(base).join('|')).toMatch(/MAP_SELECTION_TIMEOUT_SECONDS/);
+
+    process.env.MAP_SELECTION_TIMEOUT_SECONDS = '45';
+    expect(validateConfig(base)).toEqual([]);
   });
 
   it('accepts valid ELO claim roles', () => {

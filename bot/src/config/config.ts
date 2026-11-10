@@ -107,6 +107,11 @@ export function validateConfig(cfg: Config): string[] {
     const days = parseInt(daysRaw, 10);
     if (!Number.isInteger(days) || days <= 0) errors.push('STAT_RESET_WINDOW_DAYS must be a positive integer');
   }
+  const mapVoteTimeoutRaw = clean(process.env.MAP_SELECTION_TIMEOUT_SECONDS);
+  if (mapVoteTimeoutRaw) {
+    const seconds = parseInt(mapVoteTimeoutRaw, 10);
+    if (!Number.isInteger(seconds) || seconds <= 0) errors.push('MAP_SELECTION_TIMEOUT_SECONDS must be a positive integer');
+  }
   for (const [strike, action] of Object.entries(cfg.strikes ?? {})) {
     if (!action || action === 'warn') continue;
     try {
@@ -197,6 +202,10 @@ interface Config {
     lookbackGames: number;
     historySize: number;
     globalWeight: number;
+  };
+  mapSelection: {
+    enabled: boolean;
+    timeoutSeconds: number;
   };
   statReset: {
     roles: Record<string, number>;
@@ -309,6 +318,10 @@ const configuration: Config = {
     lookbackGames: parsedPositiveInt(process.env.MAP_FREQUENCY_LOOKBACK_GAMES, 5),
     historySize: parsedPositiveInt(process.env.MAP_FREQUENCY_HISTORY_SIZE, 50),
     globalWeight: parsedPositiveInt(process.env.MAP_FREQUENCY_GLOBAL_WEIGHT, 1),
+  },
+  mapSelection: {
+    enabled: clean(process.env.MAP_SELECTION_ENABLED) === 'true',
+    timeoutSeconds: parsedPositiveInt(process.env.MAP_SELECTION_TIMEOUT_SECONDS, 60),
   },
   statReset: {
     roles: parseStatResetRoles(process.env.STAT_RESET_ROLES),

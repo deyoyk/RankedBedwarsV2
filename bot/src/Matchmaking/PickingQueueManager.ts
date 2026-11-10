@@ -10,7 +10,8 @@ import { MapService } from '../managers/MapManager';
 import PickingSessionState from '../models/PickingSessionState';
 import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
-import { calculateTeamAverageElo, getPlayerIGNs as getPlayerIGNsUtil, selectRandomMap as selectRandomMapUtil } from './utils';
+import { MapVoteService } from '../services/MapVoteService';
+import { calculateTeamAverageElo, getPlayerIGNs as getPlayerIGNsUtil, selectMapVoteCandidates, selectRandomMap as selectRandomMapUtil } from './utils';
 import { themedEmbed } from '../utils/betterembed';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 
@@ -31,6 +32,7 @@ export class PickingQueueManager {
   private gameManager: GameManager;
   private wsManager: WebSocketManager;
   private mapService: MapService;
+  private mapVoteService: MapVoteService;
   private workersManager: WorkersManager;
   private activeSessions: Map<number, PickingSession> = new Map();
   private readonly PICK_TIMEOUT = 120000;
@@ -41,6 +43,7 @@ export class PickingQueueManager {
     this.gameManager = gameManager;
     this.wsManager = wsManager;
     this.mapService = new MapService(wsManager);
+    this.mapVoteService = new MapVoteService(client);
     this.workersManager = WorkersManager.getInstance();
   }
 
@@ -311,7 +314,10 @@ export class PickingQueueManager {
           
           
           const gameId = await this.gameManager.getNextGameId();
-          const selectedMap = await this.selectRandomMap(queueData, selectedPlayers);
+          const mapCandidates = config.mapSelection.enabled
+            ? await selectMapVoteCandidates(this.mapService, queueData, selectedPlayers)
+            : [];
+          const selectedMap = mapCandidates[0] ?? await this.selectRandomMap(queueData, selectedPlayers);
 
           
           const pickingResult = await this.runCaptainPicking(
@@ -319,6 +325,7 @@ export class PickingQueueManager {
             queueData,
             gameId,
             selectedMap,
+            mapCandidates,
             token
           );
 
@@ -358,6 +365,7 @@ export class PickingQueueManager {
     queueData: QueueLike,
     gameId: number,
     selectedMap: string,
+    mapCandidates: string[] = [],
     token?: { cancelled: boolean }
   ): Promise<{ success: boolean }> {
     let resources: { gameId: number; gameChannel: ThreadChannel; pickingChannel: VoiceChannel } | null = null;
@@ -428,7 +436,7 @@ export class PickingQueueManager {
       }
 
       await this.persistPickingSession(session, queueData, selectedMap);
-      return await this.completePicking(session, finalTeams, resources!, queueData, selectedMap);
+      return await this.completePicking(session, finalTeams, resources!, queueData, selectedMap, mapCandidates);
 
     } catch (error) {
       console.error(`[PickingQueue] Error in captain picking for game ${gameId}:`, error);
@@ -451,6 +459,7 @@ export class PickingQueueManager {
     resources: { gameId: number; gameChannel: ThreadChannel; pickingChannel: VoiceChannel },
     queueData: QueueLike,
     selectedMap: string,
+    mapCandidates: string[] = [],
   ): Promise<{ success: boolean }> {
     const gameId = session.gameId;
     if (!session.active || this.activeSessions.get(gameId) !== session) {
@@ -476,6 +485,27 @@ export class PickingQueueManager {
       selectedMap
     );
 
+    let finalSelectedMap = selectedMap;
+    if (mapCandidates.length > 0) {
+      try {
+        const votedMap = mapCandidates.length > 1 && gameResources?.gameChannel?.id
+          ? await this.mapVoteService.run(
+            gameId,
+            gameResources.gameChannel.id,
+            [...verifiedFinalTeams.team1, ...verifiedFinalTeams.team2],
+            mapCandidates,
+          )
+          : mapCandidates[0];
+        if (votedMap && votedMap !== finalSelectedMap) {
+          await this.gameManager.updateGameMap(gameId, votedMap);
+          finalSelectedMap = votedMap;
+        }
+      } catch (voteError) {
+        console.error(`[PickingQueue] Map vote failed for game ${gameId}; keeping ${finalSelectedMap}:`, voteError);
+      }
+      this.mapService.claimMap(finalSelectedMap);
+    }
+
     let warpStarted = true;
     try {
       await this.gameManager.initiateGameWarp(gameId);
@@ -492,7 +522,7 @@ export class PickingQueueManager {
           finalTeams,
           gameResources?.gameChannel?.id,
           queueData,
-          selectedMap,
+          finalSelectedMap,
         );
       } catch (announceError) {
         console.error(`[PickingQueue] Game ${gameId} created but start announcement failed:`, announceError);
@@ -1431,7 +1461,19 @@ export class PickingQueueManager {
       if (!finalTeams) {
         throw new Error('Picking process failed or was cancelled');
       }
-      await this.completePicking(session, finalTeams, resources, queueData, selectedMap);
+      let mapCandidates: string[] = [];
+      if (config.mapSelection.enabled) {
+        try {
+          mapCandidates = await selectMapVoteCandidates(
+            this.mapService,
+            queueData,
+            [...session.team1, ...session.team2, ...session.remainingPlayers],
+          );
+        } catch (mapError) {
+          console.error(`[PickingQueue] Could not rebuild map choices for recovered game ${session.gameId}:`, mapError);
+        }
+      }
+      await this.completePicking(session, finalTeams, resources, queueData, selectedMap, mapCandidates);
     } catch (error) {
       console.error(`[PickingQueue] Error resuming picking session ${session.gameId}:`, error);
       await this.abortRecoveredPickingSession(session.gameId, resources);

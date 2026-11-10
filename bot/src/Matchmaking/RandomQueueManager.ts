@@ -7,7 +7,8 @@ import { GameManager } from './GameManager';
 import config from '../config/config';
 import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
-import { calculateTeamAverageElo, selectRandomMap as selectRandomMapUtil } from './utils';
+import { MapVoteService } from '../services/MapVoteService';
+import { calculateTeamAverageElo, selectMapVoteCandidates, selectRandomMap as selectRandomMapUtil } from './utils';
 import { themedEmbed } from '../utils/betterembed';
 
 interface QueueLike {
@@ -27,6 +28,7 @@ export class RandomQueueManager {
   private gameManager: GameManager;
   private wsManager: WebSocketManager;
   private mapService: MapService;
+  private mapVoteService: MapVoteService;
   private workersManager: WorkersManager;
 
 
@@ -36,6 +38,7 @@ export class RandomQueueManager {
     this.gameManager = gameManager;
     this.wsManager = wsManager;
     this.mapService = new MapService(wsManager);
+    this.mapVoteService = new MapVoteService(client);
     this.workersManager = WorkersManager.getInstance();
   }
 
@@ -115,7 +118,11 @@ export class RandomQueueManager {
           }
 
           const gameId = await this.gameManager.getNextGameId();
-          const selectedMap = await this.selectRandomMap(queueData, [...teamResult.team1, ...teamResult.team2]);
+          const playerIds = [...teamResult.team1, ...teamResult.team2];
+          const mapCandidates = config.mapSelection.enabled
+            ? await selectMapVoteCandidates(this.mapService, queueData, playerIds)
+            : [];
+          let selectedMap = mapCandidates[0] ?? await this.selectRandomMap(queueData, playerIds);
 
           if (token?.cancelled) {
             console.warn(`[RandomQueue] Processing cancelled during map selection`);
@@ -129,6 +136,21 @@ export class RandomQueueManager {
             teamResult.team2,
             selectedMap
           );
+
+          if (mapCandidates.length > 0) {
+            try {
+              const votedMap = mapCandidates.length > 1 && resources?.gameChannel?.id
+                ? await this.mapVoteService.run(gameId, resources.gameChannel.id, playerIds, mapCandidates)
+                : mapCandidates[0];
+              if (votedMap && votedMap !== selectedMap) {
+                await this.gameManager.updateGameMap(gameId, votedMap);
+                selectedMap = votedMap;
+              }
+            } catch (voteError) {
+              console.error(`[RandomQueue] Map vote failed for game ${gameId}; keeping ${selectedMap}:`, voteError);
+            }
+            this.mapService.claimMap(selectedMap);
+          }
 
           availablePlayers = availablePlayers.filter(p => !teamResult.usedPlayers.has(p));
           usedPlayers.push(...Array.from(teamResult.usedPlayers));

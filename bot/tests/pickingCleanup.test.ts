@@ -1,4 +1,5 @@
 import { PickingQueueManager } from '../src/Matchmaking/PickingQueueManager';
+import config from '../src/config/config';
 
 const mockCloseGameTextChannel = jest.fn().mockResolvedValue('archived');
 
@@ -73,6 +74,78 @@ describe('PickingQueueManager channel cleanup', () => {
     expect(manager.activeSessions.has(7)).toBe(false);
     expect(deleteChannel).toHaveBeenCalledTimes(1);
     expect(mockCloseGameTextChannel).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs map voting on the new game thread before warping', async () => {
+    const deleteChannel = jest.fn().mockResolvedValue(undefined);
+    const manager = makeManager(deleteChannel);
+    const session: any = {
+      gameId: 12,
+      captains: ['a', 'b'],
+      remainingPlayers: [],
+      currentPicker: 'a',
+      pickCount: 2,
+      team1: ['a', 'c'],
+      team2: ['b', 'd'],
+      timeout: setTimeout(() => {}, 100000),
+      active: true,
+      pickingResources: resources(),
+    };
+    const gameManager = {
+      createGame: jest.fn().mockResolvedValue({ gameId: 12, gameChannel: { id: 'game-thread-12' } }),
+      updateGameMap: jest.fn().mockResolvedValue(undefined),
+      initiateGameWarp: jest.fn().mockResolvedValue(undefined),
+      voidGame: jest.fn().mockResolvedValue(undefined),
+    };
+    manager.gameManager = gameManager;
+    manager.activeSessions.set(12, session);
+    manager.mapVoteService = { run: jest.fn().mockResolvedValue('VotedMap') };
+    manager.mapService = { claimMap: jest.fn() };
+    manager.announcePickedGame = jest.fn().mockResolvedValue(undefined);
+    const revalidateFinalTeams = jest.spyOn(manager, 'revalidateFinalTeams')
+      .mockResolvedValue({ team1: ['a', 'c'], team2: ['b', 'd'] });
+    config.mapSelection.enabled = true;
+
+    try {
+      const result = await manager.completePicking(
+        session,
+        { team1: ['a', 'c'], team2: ['b', 'd'] },
+        resources(),
+        { channelId: 'q', maxPlayers: 4, minElo: 0, maxElo: 9999, bypassRoles: [] },
+        'InitialMap',
+        ['InitialMap', 'VotedMap', 'ThirdMap'],
+      );
+
+      expect(result.success).toBe(true);
+      expect(gameManager.createGame).toHaveBeenCalledWith(
+        12,
+        expect.anything(),
+        ['a', 'c'],
+        ['b', 'd'],
+        'InitialMap',
+      );
+      expect(revalidateFinalTeams.mock.invocationCallOrder[0])
+        .toBeLessThan(manager.mapVoteService.run.mock.invocationCallOrder[0]);
+      expect(manager.mapVoteService.run).toHaveBeenCalledWith(
+        12,
+        'game-thread-12',
+        ['a', 'c', 'b', 'd'],
+        ['InitialMap', 'VotedMap', 'ThirdMap'],
+      );
+      expect(gameManager.updateGameMap).toHaveBeenCalledWith(12, 'VotedMap');
+      expect(gameManager.initiateGameWarp).toHaveBeenCalledWith(12);
+      expect(manager.announcePickedGame).toHaveBeenCalledWith(
+        session,
+        { team1: ['a', 'c'], team2: ['b', 'd'] },
+        'game-thread-12',
+        expect.anything(),
+        'VotedMap',
+      );
+      expect(manager.mapService.claimMap).toHaveBeenCalledWith('VotedMap');
+    } finally {
+      config.mapSelection.enabled = false;
+      clearTimeout(session.timeout);
+    }
   });
 
   it('does not create a game when the session ends during final revalidation', async () => {
