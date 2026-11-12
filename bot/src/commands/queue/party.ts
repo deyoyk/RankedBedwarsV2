@@ -8,11 +8,8 @@ import { PrivateGameService } from '../../services/PrivateGameService';
 const { betterEmbed, errorEmbed, successEmbed, themedFrom } = embedsFor('Party');
 
 export async function party(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
-  const action = interaction.options.getString('action', true);
+  const action = interaction.options.getSubcommand();
   const targetUser = interaction.options.getUser('user') || undefined;
-  const partyId = interaction.options.getString('party_id');
-  const argsString = interaction.options.getString('args');
-  const extraArgs = partyId ? ['join', partyId] : argsString ? argsString.split(/\s+/) : undefined;
 
   const userId = interaction.user.id;
   const guild = interaction.guild;
@@ -23,71 +20,67 @@ export async function party(interaction: ChatInputCommandInteraction, wsManager?
   }
 
   try {
-    switch (action.toLowerCase()) {
+    switch (action) {
       case 'create':
         await handleCreateParty(interaction, userId);
         break;
       case 'invite':
         if (!targetUser) {
-          await safeReply(interaction, errorEmbed('Please specify a user to invite!', 'Party Error'));
+          await safeReply(interaction, errorEmbed('Specify a player to invite.', 'Party Error'));
           return;
         }
         if (targetUser.id === userId) {
-          await safeReply(interaction, errorEmbed('You cannot invite yourself.', 'Party Error'));
+          await safeReply(interaction, errorEmbed("You can't invite yourself.", 'Party Error'));
           return;
         }
         if (targetUser.bot) {
-          await safeReply(interaction, errorEmbed('You cannot invite a bot.', 'Party Error'));
+          await safeReply(interaction, errorEmbed("You can't invite a bot.", 'Party Error'));
           return;
         }
-        await handleInviteToParty(interaction, userId, targetUser.id, guild);
+        await handleInvite(interaction, userId, targetUser.id, guild);
+        break;
+      case 'list':
+        await handlePartyList(interaction, userId, targetUser?.id);
         break;
       case 'leave':
         await handleLeaveParty(interaction, userId, guild);
-        break;
-      case 'info':
-        await handlePartyInfo(interaction, userId);
         break;
       case 'disband':
         await handleDisbandParty(interaction, userId, guild);
         break;
       case 'kick':
         if (!targetUser) {
-          await safeReply(interaction, errorEmbed('Please specify a user to kick!', 'Party Error'));
+          await safeReply(interaction, errorEmbed('Specify a player to kick.', 'Party Error'));
           return;
         }
         await handleKickFromParty(interaction, userId, targetUser.id, guild);
         break;
       case 'promote':
         if (!targetUser) {
-          await safeReply(interaction, errorEmbed('Please specify a user to promote!', 'Party Error'));
+          await safeReply(interaction, errorEmbed('Specify a player to promote.', 'Party Error'));
           return;
         }
         await handlePromoteToLeader(interaction, userId, targetUser.id);
         break;
-      case 'settings':
-        await handlePartySettings(interaction, userId, extraArgs);
+      case 'settings': {
+        const setting = interaction.options.getString('setting');
+        const value = interaction.options.getString('value');
+        await handlePartySettings(interaction, userId, setting ? [setting, ...(value ? value.split(/\s+/) : [])] : undefined);
         break;
-      case 'private':
-        await handleStartPrivateGame(interaction, userId, guild, wsManager, extraArgs);
+      }
+      case 'private': {
+        const map = interaction.options.getString('map');
+        await handleStartPrivateGame(interaction, userId, guild, wsManager, map ? map.split(/\s+/) : undefined);
         break;
+      }
       case 'cancel':
         await handleCancelPrivateGame(interaction, userId, wsManager);
         break;
-      case 'list':
-        await handleListParties(interaction);
+      case 'join':
+        await handleJoinParty(interaction, userId, interaction.options.getString('party', true).trim(), guild);
         break;
-      case 'join': {
-        const partyIdToJoin = interaction.options.getString('party_id') ?? extraArgs?.[0];
-        if (!partyIdToJoin) {
-          await safeReply(interaction, errorEmbed(`Usage: /party join <partyId>`, 'Party Usage Error'));
-          return;
-        }
-        await handleJoinParty(interaction, userId, partyIdToJoin, guild);
-        break;
-      }
       default:
-        await safeReply(interaction, errorEmbed('Invalid action! Use: create, invite, leave, info, disband, kick, promote, settings, list, join, private, or cancel', 'Party Error'));
+        await safeReply(interaction, errorEmbed('Unknown party command.', 'Party Error'));
     }
   } catch (error) {
     console.error('Error in party command:', error);
@@ -95,31 +88,53 @@ export async function party(interaction: ChatInputCommandInteraction, wsManager?
   }
 }
 
+// /party invite: makes a party first when the inviter has none (or theirs no longer exists).
+// If that fresh party's invite then fails, it's removed again so no empty party is left behind.
+async function handleInvite(interaction: ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
+  let created = false;
+  const access = await PartyService.validatePartyAccess(userId);
+  if (!access.isValid) {
+    if (access.error !== 'Not in a party' && access.error !== 'Party not found') {
+      await safeReply(interaction, errorEmbed(access.error || 'Failed to check your party.', 'Party Error'));
+      return;
+    }
+    const createResult = await PartyService.createParty(userId);
+    if (!createResult.success) {
+      await safeReply(interaction, errorEmbed(createResult.error || 'Failed to create party.', 'Party Error'));
+      return;
+    }
+    created = true;
+  }
+
+  const invited = await handleInviteToParty(interaction, userId, targetId, guild);
+  if (!invited && created) {
+    await PartyService.disbandParty(userId, guild).catch(() => undefined);
+  }
+}
+
 async function handleCreateParty(interaction: ChatInputCommandInteraction, userId: string) {
   const result = await PartyService.createParty(userId);
-  
+
   if (!result.success) {
     await safeReply(interaction, errorEmbed(result.error!, 'Party Error'));
     return;
   }
 
-  const embedObj = successEmbed('Your party has been created successfully!', 'Party Created');
+  const embedObj = successEmbed(`You have created party \`${result.party!.partyId}\`.\n-# ➡ Invite players with \`/party invite <player>\``);
   embedObj.builder.addFields(
-    { name: 'Party ID', value: result.party!.partyId, inline: true },
     { name: 'Leader', value: `<@${userId}>`, inline: true },
-    { name: 'Members', value: `<@${userId}>`, inline: true },
-    { name: 'Max Members', value: result.party!.maxMembers.toString(), inline: true }
+    { name: 'Members', value: `\`1/${result.party!.maxMembers}\``, inline: true }
   ).setTimestamp();
-  
+
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 
-async function handleInviteToParty(interaction: ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
+async function handleInviteToParty(interaction: ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild): Promise<boolean> {
   const result = await PartyService.inviteToParty(userId, targetId, guild);
-  
+
   if (!result.success) {
     await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
-    return;
+    return false;
   }
 
   const message = (await safeReply(interaction, {
@@ -127,7 +142,7 @@ async function handleInviteToParty(interaction: ChatInputCommandInteraction, use
     components: result.components!,
     fetchReply: true
   })) as unknown as Message | undefined;
-  if (!message || typeof message.createMessageComponentCollector !== 'function') return;
+  if (!message || typeof message.createMessageComponentCollector !== 'function') return true;
 
   const collector = message.createMessageComponentCollector({
     componentType: ComponentType.Button,
@@ -173,13 +188,13 @@ async function handleInviteToParty(interaction: ChatInputCommandInteraction, use
       const declinedEmbed = themedFrom(result.embed!)
         .setDescription(`<@${targetUserId}> declined the invitation.`)
         .setColor('info');
-      
-      await buttonInteraction.update({ 
-        embeds: [declinedEmbed], 
-        components: [] 
+
+      await buttonInteraction.update({
+        embeds: [declinedEmbed],
+        components: []
       });
     }
-    
+
     collector.stop();
   });
 
@@ -191,6 +206,7 @@ async function handleInviteToParty(interaction: ChatInputCommandInteraction, use
       components: []
     }).catch(() => undefined);
   });
+  return true;
 }
 
 function buildPartyEmbed(party: PartyDocument, description: string, color: string, title: string, extraFields?: Array<{ name: string; value: string; inline: boolean }>) {
@@ -227,23 +243,33 @@ async function handleLeaveParty(interaction: ChatInputCommandInteraction, userId
   );
 }
 
-async function handlePartyInfo(interaction: ChatInputCommandInteraction, userId: string) {
-  const result = await PartyService.getPartyInfo(userId);
-  if (!result.success) {
-    await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
+function renderPartyList(party: PartyDocument, viewerId: string) {
+  const members: string[] = party.members || [];
+  const ordered = [party.leader, ...members.filter((id) => id !== party.leader)].filter((id) => members.includes(id));
+  const roster = ordered.length
+    ? ordered.map((id, i) => `\`${i + 1}.\` <@${id}>${id === party.leader ? ' 👑' : ''}${id === viewerId ? ' *(you)*' : ''}`).join('\n')
+    : '*No players*';
+
+  const embedObj = betterEmbed(`-# ➡ Party \`${party.partyId}\`\n${roster}`, 'info');
+  embedObj.builder.addFields(
+    { name: 'Players', value: `\`${members.length}/${party.maxMembers}\``, inline: true },
+    { name: 'Privacy', value: party.isPrivate ? '`Private`' : '`Public`', inline: true },
+  ).setTimestamp();
+  if (party.description) embedObj.builder.addFields({ name: 'Description', value: party.description, inline: false });
+  return embedObj.builder;
+}
+
+async function handlePartyList(interaction: ChatInputCommandInteraction, userId: string, targetId?: string) {
+  const viewingOther = Boolean(targetId && targetId !== userId);
+  const result = await PartyService.getPartyInfo(viewingOther ? targetId! : userId);
+  if (!result.success || !result.party) {
+    const text = viewingOther
+      ? `<@${targetId}> isn't in a party.`
+      : "You're not in a party.\n-# ➡ Start one with `/party invite <player>`";
+    await safeReply(interaction, errorEmbed(text, 'Party Error'));
     return;
   }
-  const party = result.party!;
-  const embedObj = betterEmbed(`Party information for <@${party.leader}>.`, 'info', 'Party Information');
-  embedObj.builder.addFields(
-    { name: 'Party ID', value: party.partyId, inline: true },
-    { name: 'Leader', value: `<@${party.leader}>`, inline: true },
-    { name: 'Members', value: party.members.map((id: string) => `<@${id}>`).join('\n'), inline: false },
-    { name: 'Max Members', value: party.maxMembers.toString(), inline: true },
-    { name: 'Private', value: party.isPrivate ? 'Yes' : 'No', inline: true },
-    { name: 'Description', value: party.description || 'No description', inline: false }
-  );
-  await safeReply(interaction, { embeds: [embedObj.builder] });
+  await safeReply(interaction, { embeds: [renderPartyList(result.party, userId)] });
 }
 
 async function handleDisbandParty(interaction: ChatInputCommandInteraction, userId: string, guild: Guild) {
@@ -277,7 +303,7 @@ async function handlePromoteToLeader(interaction: ChatInputCommandInteraction, u
 async function handlePartySettings(interaction: ChatInputCommandInteraction, userId: string, args?: string[]) {
   if (!args || args.length === 0) {
     const result = await PartyService.getPartyInfo(userId);
-    
+
     if (!result.success) {
       await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
       return;
@@ -290,7 +316,7 @@ async function handlePartySettings(interaction: ChatInputCommandInteraction, use
       { name: 'Private', value: party.isPrivate ? 'Yes' : 'No', inline: true },
       { name: 'Description', value: party.description || 'No description set', inline: false }
     ).setTimestamp();
-    
+
     await safeReply(interaction, { embeds: [embedObj.builder] });
     return;
   }
@@ -299,7 +325,7 @@ async function handlePartySettings(interaction: ChatInputCommandInteraction, use
   const value = values.join(' ');
 
   const result = await PartyService.updatePartySettings(userId, setting, value);
-  
+
   if (!result.success) {
     await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
     return;
@@ -310,34 +336,7 @@ async function handlePartySettings(interaction: ChatInputCommandInteraction, use
     { name: 'Setting Changed', value: setting, inline: true },
     { name: 'New Value', value: value, inline: true }
   ).setTimestamp();
-  
-  await safeReply(interaction, { embeds: [embedObj.builder] });
-}
 
-async function handleListParties(interaction: ChatInputCommandInteraction) {
-  const result = await PartyService.listPublicParties();
-  
-  if (!result.success) {
-    await safeReply(interaction, errorEmbed(result.message!, 'Party Error'));
-    return;
-  }
-
-  if (!result.parties || result.parties.length === 0) {
-    await safeReply(interaction, errorEmbed('There are no public parties at the moment.', 'No Public Parties'));
-    return;
-  }
-
-  const embedObj = betterEmbed('List of all public parties:', 'info', 'Public Parties');
-  
-  for (const party of result.parties) {
-    embedObj.builder.addFields({
-      name: `Party ID: ${party.partyId}`,
-      value: `Leader: <@${party.leader}>\nMembers: ${party.members.length}/${party.maxMembers}\nDescription: ${party.description || 'No description'}`,
-      inline: false
-    });
-  }
-  
-  embedObj.builder.setTimestamp();
   await safeReply(interaction, { embeds: [embedObj.builder] });
 }
 

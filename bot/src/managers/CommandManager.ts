@@ -257,16 +257,32 @@ export class CommandManager {
   private registerQueueCommands() {
     this.reg('queuecontrol', 'Enable or disable queues by type or specific queue', queuecontrol, [], queueControlData.toJSON());
     this.reg('queue', 'Show information about players in the current queue', queue);
+    // Each party action is its own subcommand: /party invite, /party list, ...
+    const sub = (name: string, description: string, options: ApplicationCommandOptionData[] = []) =>
+      ({ name, description, type: 1, options }) as unknown as ApplicationCommandOptionData;
+    const userOpt = (description: string, required = true) =>
+      ({ name: 'user', description, type: 6, required }) as ApplicationCommandOptionData;
     this.reg('party', 'Party management', party, [
-      { name: 'action', description: 'Party action to perform', type: 3, required: true, choices: [
-        { name: 'create', value: 'create' }, { name: 'invite', value: 'invite' }, { name: 'leave', value: 'leave' },
-        { name: 'info', value: 'info' }, { name: 'disband', value: 'disband' }, { name: 'kick', value: 'kick' },
-        { name: 'promote', value: 'promote' }, { name: 'settings', value: 'settings' }, { name: 'list', value: 'list' },
-        { name: 'join', value: 'join' }, { name: 'private', value: 'private' }, { name: 'cancel', value: 'cancel' }
-      ]},
-      { name: 'user', description: 'User to invite, kick, or promote (only for relevant actions)', type: 6, required: false },
-      { name: 'party_id', description: 'Party ID to join (only for join action)', type: 3, required: false },
-      { name: 'args', description: 'Additional arguments for settings or other actions', type: 3, required: false }
+      sub('create', 'Create a party'),
+      sub('invite', 'Invite a player (creates a party if you have none)', [userOpt('Player to invite')]),
+      sub('list', 'Show the players in your party', [userOpt("Show another player's party instead", false)]),
+      sub('leave', 'Leave your party'),
+      sub('disband', 'Disband your party (leader only)'),
+      sub('kick', 'Kick a player from your party', [userOpt('Player to kick')]),
+      sub('promote', 'Make a player the party leader', [userOpt('Player to promote')]),
+      sub('join', 'Join a public party', [
+        { name: 'party', description: 'Party ID', type: 3, required: true } as ApplicationCommandOptionData
+      ]),
+      sub('settings', 'View or change party settings', [
+        { name: 'setting', description: 'Setting to change (leave empty to view all)', type: 3, required: false, choices: [
+          { name: 'Max members', value: 'maxmembers' }, { name: 'Private', value: 'private' }, { name: 'Description', value: 'description' }
+        ]} as ApplicationCommandOptionData,
+        { name: 'value', description: 'New value', type: 3, required: false } as ApplicationCommandOptionData
+      ]),
+      sub('private', 'Start an unranked private game with your party', [
+        { name: 'map', description: 'Map to play (leave empty for a random one)', type: 3, required: false } as ApplicationCommandOptionData
+      ]),
+      sub('cancel', 'Cancel your party\'s private game')
     ]);
     this.reg('call', 'Grant voice channel access to a user in game voice channels', call, [
       { name: 'user', description: 'The user to grant voice channel access to', type: 6, required: true }
