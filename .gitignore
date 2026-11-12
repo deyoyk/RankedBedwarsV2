@@ -22,3 +22,14 @@ web/tsconfig.tsbuildinfo
 .vscode/
 *.iml
 .DS_Store
+
+# Logs & test output
+*.log
+coverage/
+
+# Local tooling
+.claude/
+
+# Windows / OneDrive
+Thumbs.db
+desktop.ini
