@@ -4,6 +4,7 @@ import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
 import { errorEmbed, successEmbed } from '../utils/betterembed';
+import config from '../config/config';
 import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, SlashCommandBuilder } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
@@ -468,8 +469,29 @@ export class CommandManager {
       console.log(`[Command Manager] Registering ${commands.length} commands`);
 
 
-      await this.client.application?.commands.set(commands);
-      console.log('[Command Manager] Slash commands registered successfully');
+      // Register on the server itself (shows up instantly) and clear the global set. Having both,
+      // for example global from this bot and guild-level from an earlier one on the same token,
+      // makes Discord list every command twice.
+      const guildIds = new Set<string>(this.client.guilds?.cache?.keys() ?? []);
+      if (config.guildId) guildIds.add(config.guildId);
+      let registered = 0;
+      for (const id of guildIds) {
+        try {
+          const guild = this.client.guilds?.cache?.get(id) ?? await this.client.guilds.fetch(id);
+          await guild.commands.set(commands);
+          registered++;
+          console.log(`[Command Manager] Slash commands registered for ${guild.name} (${id})`);
+        } catch (guildError) {
+          console.warn(`[Command Manager] Could not register slash commands for guild ${id}:`, guildError instanceof Error ? guildError.message : guildError);
+        }
+      }
+      if (registered > 0) {
+        await this.client.application?.commands.set([]);
+        console.log('[Command Manager] Cleared global slash commands (server commands are in use)');
+      } else {
+        await this.client.application?.commands.set(commands);
+        console.log('[Command Manager] Slash commands registered globally (no server could be registered)');
+      }
     } catch (error) {
       console.error('[Command Manager] Error registering slash commands:', error);
 
