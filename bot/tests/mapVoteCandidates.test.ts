@@ -95,3 +95,5 @@ describe('selectMapVoteCandidates', () => {
     await expect(selectMapVoteCandidates(svc as any, { maxPlayers: 4 })).rejects.toThrow(/No maps available/);
   });
 });
+
+export {};
