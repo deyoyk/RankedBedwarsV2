@@ -1,3 +1,4 @@
+import { PermissionService } from '../src/services/PermissionService';
 import { ChatInputCommandInteraction } from 'discord.js';
 import { CommandHandler } from '../src/handlers/CommandHandler';
 
@@ -19,7 +20,7 @@ function interactionDouble(overrides: Record<string, unknown> = {}) {
 
 describe('CommandHandler expired interaction guard', () => {
   beforeEach(() => {
-    (global as any)._wsManager = { getPermission: () => ['everyone'] };
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['everyone']);
   });
 
   afterEach(() => {

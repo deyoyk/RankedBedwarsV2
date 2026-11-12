@@ -499,8 +499,6 @@ export class WebSocketManager {
     delete activeScreenshareThreads[String(ign).toLowerCase()];
   }
   
-  private permissions: Record<string, string[]> = {};
-  
   public server: http.Server;
   public app: express.Application;
 
@@ -920,15 +918,8 @@ export class WebSocketManager {
     this.send({ type: 'stats_data', request_id: requestId, data });
   }
 
-  private handlePermission(msg: PermissionPayload) {
-    console.log('[WebSocketManager] Received permission settings');
-    const permissionsUpdate: Record<string, string[] | string> = { ...msg };
-    delete permissionsUpdate.type;
-    for (const [cmd, roles] of Object.entries(permissionsUpdate)) {
-      if (Array.isArray(roles)) {
-        this.permissions[cmd] = roles;
-      }
-    }
+  private handlePermission(_msg: PermissionPayload) {
+    console.log('[WebSocketManager] Ignored command permissions from the plugin; they are set with /rbwconfig');
   }
 
   private determineWinningTeam(msg: ScoringPayload): number | undefined {
@@ -1221,10 +1212,6 @@ export class WebSocketManager {
 
       this.send({ type: 'check_bedwars_players', request_id: requestId, igns: batch });
     });
-  }
-
-  public getPermission(command: string): string[] {
-    return this.permissions[command] || [];
   }
 
   public async getPing(): Promise<number | null> {

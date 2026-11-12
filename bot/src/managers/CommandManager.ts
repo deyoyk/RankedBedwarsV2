@@ -37,6 +37,7 @@ import { settings } from '../commands/account/settings';
 import { forcevoid } from '../commands/scoring/forcevoid';
 import { refresh } from '../commands/account/refresh';
 import { gameinfo, handleGameInfoButton, handleGameInfoVoidModal } from '../commands/general/gameinfo';
+import { rbwconfig, rbwconfigData } from '../commands/general/rbwconfig';
 import { handlePunishmentDetails } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
@@ -252,6 +253,7 @@ export class CommandManager {
     this.reg('ranks', 'Show the list of ELO ranks', ranks);
     this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
+    this.reg('rbwconfig', 'Choose which roles can use which commands', rbwconfig, [], rbwconfigData);
   }
 
   private registerQueueCommands() {

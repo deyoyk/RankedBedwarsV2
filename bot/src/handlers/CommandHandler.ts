@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction, Client } from 'discord.js';
 import { checkPermission } from '../utils/permissions';
+import { PermissionService } from '../services/PermissionService';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 import type { BotCommandFn } from '../types/commands';
@@ -28,7 +29,7 @@ export class CommandHandler {
     interaction: ChatInputCommandInteraction,
     commandName: string
   ): Promise<void> {
-    const requiredRoles = global._wsManager?.getPermission(commandName) ?? [];
+    const requiredRoles = PermissionService.rolesFor(commandName);
 
     if (requiredRoles.length > 0 && !requiredRoles.includes('everyone')) {
       const embed = errorEmbed(
@@ -67,6 +68,7 @@ export class CommandHandler {
     try {
       if (
         commandName !== 'screenshare' &&
+        commandName !== 'rbwconfig' &&
         !interaction.deferred &&
         !interaction.replied
       ) {

@@ -6,6 +6,7 @@ import path from 'path';
 import config from '../config/config';
 import { getReleaseVersion } from '../utils/releaseVersion';
 import { embedsFor } from '../utils/betterembed';
+import { PermissionService } from '../services/PermissionService';
 
 const { errorEmbed, themedEmbed } = embedsFor('Help');
 
@@ -64,14 +65,7 @@ function buildCategorySelectMenu(commandCategories: Record<string, string[]>): S
 
 function getCommandRoles(cmd: string): string {
 
-  let roles: string[] = [];
-
-  if (global._wsManager && typeof global._wsManager.getPermission === 'function') {
-    roles = global._wsManager.getPermission(cmd);
-  }
-
-
-
+  const roles = PermissionService.rolesFor(cmd);
   if (roles.length) {
     if (roles.includes('everyone')) {
       return '@everyone';
@@ -79,7 +73,7 @@ function getCommandRoles(cmd: string): string {
       return roles.map((r: string) => `<@&${r}>`).join(', ');
     }
   } else {
-    return 'Not set yet';
+    return 'Server administrators only';
   }
 }
 

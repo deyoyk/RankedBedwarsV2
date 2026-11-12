@@ -1,3 +1,4 @@
+import { PermissionService } from '../src/services/PermissionService';
 import { getLevelInfo } from '../src/utils/levelSystem';
 import { computePagination, validatePositiveInt } from '../src/managers/validationHelpers';
 import { betterEmbed, embedsFor, errorEmbed, successEmbed, themedEmbed, EMBED_THEME } from '../src/utils/betterembed';
@@ -102,38 +103,41 @@ function messageInteraction(member: any) {
 }
 
 describe('checkPermission', () => {
-  afterEach(() => {
-    delete (global as any)._wsManager;
-  });
-  it('denies when permissions are not configured', async () => {
+  afterEach(() => jest.restoreAllMocks());
+  const admin = { has: () => true };
+
+  it('denies and explains when only server administrators may use the command', async () => {
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue([]);
     const interaction = messageInteraction(null);
     await expect(checkPermission(interaction, 'score')).resolves.toBe(false);
     expect(interaction.reply).toHaveBeenCalled();
   });
   it('allows everyone', async () => {
-    (global as any)._wsManager = { getPermission: () => ['everyone'] };
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['everyone']);
     const interaction = messageInteraction(null);
     await expect(checkPermission(interaction, 'stats')).resolves.toBe(true);
     expect(interaction.reply).not.toHaveBeenCalled();
   });
   it('allows matching role and denies others', async () => {
-    (global as any)._wsManager = { getPermission: () => ['role1'] };
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['role1']);
     const withRole = messageInteraction({ roles: { cache: { has: (id: string) => id === 'role1' } } });
     const withoutRole = messageInteraction({ roles: { cache: { has: () => false } } });
     await expect(checkPermission(withRole, 'ban')).resolves.toBe(true);
     await expect(checkPermission(withoutRole, 'ban')).resolves.toBe(false);
   });
   it('denies when member is missing', async () => {
-    (global as any)._wsManager = { getPermission: () => ['role1'] };
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['role1']);
     await expect(checkPermission(messageInteraction(null), 'ban')).resolves.toBe(false);
   });
-  it('bypasses permission checks for the hardcoded user id', async () => {
-    const interaction = {
-      author: { id: '1526597163885527121' },
-      member: null,
-      reply: jest.fn().mockResolvedValue({})
-    } as any;
-    await expect(checkPermission(interaction, 'score')).resolves.toBe(true);
+  it('always lets server administrators through', async () => {
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue([]);
+    const interaction: any = { user: { id: 'u1' }, memberPermissions: admin, member: null, reply: jest.fn() };
+    await expect(checkPermission(interaction, 'wipeeveryone')).resolves.toBe(true);
     expect(interaction.reply).not.toHaveBeenCalled();
+  });
+  it('gives no user a built-in bypass', async () => {
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue([]);
+    const interaction = { author: { id: '1526597163885527121' }, member: null, reply: jest.fn().mockResolvedValue({}) } as any;
+    await expect(checkPermission(interaction, 'score')).resolves.toBe(false);
   });
 });

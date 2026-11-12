@@ -15,6 +15,7 @@ import { WorkersManager } from './managers/WorkersManager';
 import { GuildJoinListener } from './handlers/GuildJoinListener';
 import type { GameManager } from './Matchmaking/GameManager';
 import { setBrandIcon } from './utils/betterembed';
+import { PermissionService } from './services/PermissionService';
 
 declare global {
   
@@ -97,7 +98,7 @@ client.once('ready', async () => {
     });
     
     console.log('[MongoDB] Connected to MongoDB');
-    
+    await PermissionService.load(config.guildId);
 
     workersManager = WorkersManager.getInstance(client);
     await workersManager.initialize();

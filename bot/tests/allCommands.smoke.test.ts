@@ -5,6 +5,7 @@
  * without throwing,
  * asserting a reply was sent.
  */
+import { PermissionService } from '../src/services/PermissionService';
 import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
 
 // ---------- heavy module mocks ----------
@@ -276,10 +277,10 @@ function replied(interaction: any) {
 const wsManager: any = {
   send: jest.fn(),
   checkPlayerOnline: jest.fn().mockResolvedValue({ online: true, original_ign_case: 'Steve' }),
-  getPermission: jest.fn().mockReturnValue(['everyone']),
   registerScreenshareThread: jest.fn(),
 };
 (global as any)._wsManager = wsManager;
+jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['everyone']);
 
 import { help } from '../src/commands/help';
 import { register } from '../src/commands/account/register';
@@ -468,7 +469,7 @@ describe.each(ROWS.map(r => [r.name, r.fn, r.slash]))(
 describe('CommandHandler routing, permissions, errors', () => {
   it('denies without permission and defers slash', async () => {
     const { CommandHandler } = await import('../src/handlers/CommandHandler');
-    (global as any)._wsManager = { getPermission: () => ['999'] };
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['999']);
     const handler = new CommandHandler({} as any, wsManager);
     handler.registerCommand('ban', jest.fn().mockResolvedValue(undefined));
     const denied = mockSlash({});
@@ -476,6 +477,6 @@ describe('CommandHandler routing, permissions, errors', () => {
     denied.member = { roles: { cache: { has: () => false } } };
     await handler.handleInteraction(denied);
     expect(denied.deferReply).toHaveBeenCalled();
-    (global as any)._wsManager = wsManager;
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['everyone']);
   });
 });

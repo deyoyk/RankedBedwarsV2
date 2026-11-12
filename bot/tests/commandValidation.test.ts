@@ -1,3 +1,4 @@
+import { PermissionService } from '../src/services/PermissionService';
 import { ChatInputCommandInteraction } from 'discord.js';
 import { edit } from '../src/commands/scoring/edit';
 import { forceregister } from '../src/commands/account/forceregister';
@@ -197,7 +198,7 @@ describe('CommandHandler slash failure replies', () => {
   });
 
   it('edits the deferred reply when a command throws', async () => {
-    (global as any)._wsManager = { getPermission: () => ['everyone'] };
+    jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['everyone']);
     const handler = new CommandHandler({} as any, {} as any);
     handler.registerCommand('boom', async () => { throw new Error('kaboom'); });
     const interaction: any = Object.create(ChatInputCommandInteraction.prototype);
