@@ -123,7 +123,7 @@ describe('/rbwconfig panel', () => {
 
   it('lists every category in the overview', () => {
     const { embed } = json(overviewView());
-    expect(embed.fields.map((f: any) => f.name)).toEqual(['Admin (18)', 'Staff (12)', 'Player (25)']);
+    expect(embed.fields.map((f: any) => f.name)).toEqual(['Admin (19)', 'Staff (12)', 'Player (27)']);
     expect(embed.fields[2].value).toContain('Everyone');
   });
 

@@ -8,7 +8,7 @@ export const CATEGORY_LABELS: Record<CommandCategory, string> = {
 
 const CATEGORY_COMMANDS: Record<CommandCategory, string[]> = {
   admin: [
-    'rbwconfig', 'queuecontrol', 'addqueue', 'removequeue', 'edit', 'unregister', 'fixall', 'addelo', 'removeelo',
+    'rbwconfig', 'thememanage', 'queuecontrol', 'addqueue', 'removequeue', 'edit', 'unregister', 'fixall', 'addelo', 'removeelo',
     'wipe', 'wipeeveryone', 'startseason', 'endseason', 'forceregister', 'forcerename', 'gamescount', 'win', 'lose',
   ],
   staff: [
@@ -16,7 +16,7 @@ const CATEGORY_COMMANDS: Record<CommandCategory, string[]> = {
   ],
   player: [
     'help', 'register', 'queues', 'queue', 'games', 'gameinfo', 'maps', 'ranks', 'bonus', 'party', 'call', 'nick',
-    'refresh', 'settings', 'statreset', 'claimelo', 'info', 'leaderboard', 'recentgames', 'level', 'listseasons',
+    'refresh', 'settings', 'statreset', 'claimelo', 'stats', 'themes', 'changetheme', 'leaderboard', 'recentgames', 'level', 'listseasons',
     'seasoninfo', 'strikerequest', 'voidrequest', 'screenshare',
   ],
 };

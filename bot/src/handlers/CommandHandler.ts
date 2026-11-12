@@ -10,6 +10,9 @@ const { errorEmbed } = embedsFor('Error');
 
 export type CommandFn = BotCommandFn;
 
+// These answer privately themselves, so they aren't deferred publicly first
+const REPLIES_ITSELF = new Set(['screenshare', 'rbwconfig', 'themes', 'changetheme', 'thememanage']);
+
 export class CommandHandler {
   private commands: Map<string, CommandFn>;
   private wsManager: WebSocketManager;
@@ -67,8 +70,7 @@ export class CommandHandler {
 
     try {
       if (
-        commandName !== 'screenshare' &&
-        commandName !== 'rbwconfig' &&
+        !REPLIES_ITSELF.has(commandName) &&
         !interaction.deferred &&
         !interaction.replied
       ) {

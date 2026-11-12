@@ -328,7 +328,7 @@ import { edit } from '../src/commands/scoring/edit';
 import { gamescount } from '../src/commands/scoring/gamescount';
 import { strikerequest } from '../src/commands/scoring/strikerequest';
 import { voidrequest } from '../src/commands/scoring/voidrequest';
-import { info } from '../src/commands/stats/info';
+import { stats } from '../src/commands/stats/stats';
 import { leaderboard } from '../src/commands/stats/leaderboard';
 import { recentgames } from '../src/commands/stats/recentgames';
 import { level } from '../src/commands/stats/level';
@@ -388,7 +388,7 @@ const ROWS: Row[] = [
   { name: 'gamescount', fn: gamescount, slash: {} },
   { name: 'strikerequest', fn: strikerequest, slash: { game_id: '1', target: discordUser, reason: 'test' } },
   { name: 'voidrequest', fn: voidrequest, slash: { game_id: '1', reason: 'test' } },
-  { name: 'info', fn: info, slash: { user: discordUser } },
+  { name: 'stats', fn: stats, slash: { user: discordUser } },
   { name: 'leaderboard', fn: leaderboard, slash: { mode: 'elo', page: 1 } },
   { name: 'recentgames', fn: recentgames, slash: { page: 1 } },
   { name: 'level', fn: level, slash: { user: discordUser } },
