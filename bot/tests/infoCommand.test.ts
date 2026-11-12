@@ -184,3 +184,5 @@ describe('info command', () => {
     expect(fields.Combat).toContain('**Kills:** 30 (#1)');
   });
 });
+
+export {};
