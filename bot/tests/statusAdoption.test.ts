@@ -72,7 +72,7 @@ describe('BotStatusTask message adoption', () => {
 
     expect(payload.files).toBeUndefined();
     expect(embed.image).toBeUndefined();
-    expect(embed.title).toMatch(/^(Info|Warning|Error): Bot Environment Status$/);
+    expect(embed.description).toContain('-# ➡ Bot Environment Status');
     expect(embed.description).toBeTruthy();
     expect(embed.fields).toHaveLength(6);
     expect(embed.fields?.map((field: any) => field.name)).toEqual([

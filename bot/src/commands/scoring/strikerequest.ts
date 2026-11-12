@@ -5,7 +5,9 @@ import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
 import { safeReply } from '../../utils/safeReply';
 import { buildResultEmbed, claimVoteRequest, createDiscussionThread, createVoteButtons, releaseVoteRequest, setupVoteCollector, VoteData } from '../../utils/voteRequest';
-import { errorEmbed, successEmbed, themedEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
+
+const { errorEmbed, successEmbed, themedEmbed } = embedsFor('Punishment');
 
 interface StrikeRequestData {
   gameId: string;

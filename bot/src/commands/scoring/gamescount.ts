@@ -2,8 +2,10 @@ import { safeReply } from '../../utils/safeReply';
 import { ActionRowBuilder, ChatInputCommandInteraction, ComponentType, Message, StringSelectMenuBuilder } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
-import { betterEmbed, errorEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
+
+const { betterEmbed, errorEmbed } = embedsFor('Admin');
 
 const DURATIONS = [
   { label: '1 Day', value: '1d', days: 1 },

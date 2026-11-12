@@ -1,8 +1,10 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { fix } from '../../utils/fix';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+
+const { errorEmbed, successEmbed } = embedsFor('Player');
 
 export async function refresh(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   const userId = interaction.user.id;

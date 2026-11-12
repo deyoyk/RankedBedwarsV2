@@ -5,7 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import config from '../config/config';
 import { getReleaseVersion } from '../utils/releaseVersion';
-import { errorEmbed, themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
+
+const { errorEmbed, themedEmbed } = embedsFor('Help');
 
 async function getCommandCategories() {
   const candidates = [

@@ -1,8 +1,10 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User, { IUser } from '../../models/User';
-import { betterEmbed, errorEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+
+const { betterEmbed, errorEmbed } = embedsFor('Leaderboard');
 
 const LEADERBOARD_MODES: Record<string, { title: string; field: string }> = {
   elo: { title: 'Elo Leaderboard', field: 'elo' },

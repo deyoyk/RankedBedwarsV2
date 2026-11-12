@@ -1,13 +1,15 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';
 import { safeReply } from '../../utils/safeReply';
 import { getEloClaimEligibility, getEloClaimGrant } from '../../utils/eloClaim';
 import { getMemberRoleIds } from '../../utils/memberRoles';
 import { SeasonManager } from '../../managers/SeasonManager';
 import config from '../../config/config';
+
+const { errorEmbed, successEmbed } = embedsFor('Player');
 
 function actorId(interaction: ChatInputCommandInteraction): string {
   return interaction.user.id;

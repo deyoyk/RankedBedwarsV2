@@ -1,5 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
-import { themedEmbed } from './betterembed';
+import { embedsFor } from './betterembed';
+
+const { themedEmbed } = embedsFor('Queue');
 
 export const QUEUE_SYSTEM_TITLE = 'Queue System';
 
@@ -13,6 +15,5 @@ export function queueSystemEmbed(
   const description = input.flatMap(line => String(line).split('\n')).join('\n');
 
   return themedEmbed(status)
-    .setTitle(QUEUE_SYSTEM_TITLE)
     .setDescription(description);
 }

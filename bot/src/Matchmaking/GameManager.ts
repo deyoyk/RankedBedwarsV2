@@ -11,6 +11,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import { fix } from '../utils/fix';
 import { normalizeTeams } from './utils';
 import { generateScoreImageBuffer } from '../utils/scoreImage';
+import { formatMapName } from '../utils/mapName';
 import { NumericSnapshot, clampEloOp, snapshotCounters, toAtomicUpdate } from '../utils/atomicStats';
 import { checkLevelUp, EXPERIENCE_REWARDS } from '../utils/levelSystem';
 import { WorkersManager } from '../managers/WorkersManager';
@@ -19,9 +20,11 @@ import type { IRecentGame } from '../models/gameBase';
 import type { ICombatEntry } from '../models/gameTypes';
 import { bountyForOpponentStreak, parseTiers, type ProgressionTier, streakBonusFor } from '../utils/eloProgression';
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
-import { themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
+
+const { themedEmbed } = embedsFor('Scoring');
 
 interface PlayerScoreData {
   player: IUser;
@@ -2856,20 +2859,19 @@ export class GameManager {
       const formatPlayer = (voidData: PlayerVoidData): string => {
         const eloChangeStr = voidData.eloChange >= 0 ? `+${voidData.eloChange}` : `${voidData.eloChange}`;
         const expChangeStr = voidData.experienceToRevert > 0 ? ` (-${voidData.experienceToRevert} XP)` : '';
-        const levelChangeStr = voidData.level_before !== voidData.level_after ? ` (Lv.${voidData.level_before}â†’${voidData.level_after})` : '';
-        return `<@${voidData.player.discordId}>: ${voidData.elo_before} â†’ ${voidData.elo_after} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
+        const levelChangeStr = voidData.level_before !== voidData.level_after ? ` (Lv.${voidData.level_before}→${voidData.level_after})` : '';
+        return `<@${voidData.player.discordId}>: ${voidData.elo_before} → ${voidData.elo_after} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
       };
 
       const voidedSummary = playerVoidData.map(formatPlayer).join('\n');
-      const rawMap = context.game.map; 
-      const versionMatch = rawMap.match(/(\d+v\d+)/);
-      const mapName = versionMatch ? rawMap.slice(0, versionMatch.index).trim() || rawMap : rawMap;
-      return themedEmbed('warning')
-        .setTitle(`Game #${context.game.gameId} Voided`)
-        .setDescription(`Game #${context.game.gameId} has been voided.\n\n**Reason:** ${context.reason}\n**Map:** ${mapName}`)
-        .addFields([
-          { name: 'Stats Reverted', value: voidedSummary || 'None', inline: false }
-        ]);
+      return themedEmbed('error')
+        .setTitle(`Game #${context.game.gameId} — Match Voided`)
+        .addFields(
+          { name: 'Reason', value: `\`${context.reason}\``, inline: true },
+          { name: 'Arena', value: formatMapName(context.game.map), inline: true },
+          { name: 'Stats Reverted', value: voidedSummary || '*None*', inline: false }
+        )
+        .setTimestamp();
     } catch (error) {
       console.error('[GameManager] Error creating void embed:', error);
       return themedEmbed('error').setTitle('Void Embed Error').setDescription('Could not create void embed.');

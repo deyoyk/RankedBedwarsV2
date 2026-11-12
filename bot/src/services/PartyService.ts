@@ -2,7 +2,9 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Guild } fro
 import Party from '../models/Party';
 import UserModel from '../models/User';
 import config from '../config/config';
-import { themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
+
+const { themedEmbed } = embedsFor('Party');
 
 export type PartyDocument = ReturnType<typeof Party.hydrate>;
 export type PartyUserDocument = ReturnType<typeof UserModel.hydrate>;

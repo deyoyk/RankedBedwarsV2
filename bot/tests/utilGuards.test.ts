@@ -1,6 +1,6 @@
 import { getLevelInfo } from '../src/utils/levelSystem';
 import { computePagination, validatePositiveInt } from '../src/managers/validationHelpers';
-import { betterEmbed, errorEmbed, successEmbed, themedEmbed, EMBED_THEME } from '../src/utils/betterembed';
+import { betterEmbed, embedsFor, errorEmbed, successEmbed, themedEmbed, EMBED_THEME } from '../src/utils/betterembed';
 import { checkPermission } from '../src/utils/permissions';
 
 function bruteTotal(level: number): number {
@@ -57,35 +57,39 @@ describe('betterEmbed guards', () => {
     expect(betterEmbed('t', 0xffffff + 1).builder.toJSON().color).toBe(EMBED_THEME.defaultColor);
     expect(betterEmbed('t', -1).builder.toJSON().color).toBe(EMBED_THEME.defaultColor);
   });
-  it('maps legacy colors to the shared palette', () => {
-    expect(betterEmbed('t', '#ff0000').builder.toJSON().color).toBe(EMBED_THEME.errorColor);
+  it('keeps reds and ambers, turns everything else into the brand teal', () => {
+    expect(betterEmbed('t', '#ff0000').builder.toJSON().color).toBe(0xff0000);
+    expect(betterEmbed('t', '#ff9900').builder.toJSON().color).toBe(0xff9900);
     expect(betterEmbed('t', '#00ff00').builder.toJSON().color).toBe(EMBED_THEME.successColor);
+    expect(betterEmbed('t', '#3498db').builder.toJSON().color).toBe(EMBED_THEME.defaultColor);
   });
-  it('always uses the configured footer without an iconURL', () => {
-    const json = betterEmbed('t', 'success', 'Title').builder.toJSON();
-    expect(json.footer?.text).toBe(EMBED_THEME.footer);
-    expect(json.footer?.icon_url).toBeUndefined();
+  it('drops footers that only repeat the brand', () => {
+    const json = themedEmbed().setFooter({ text: 'Veltrix Ranked Bedwars' }).toJSON();
+    expect(json.footer).toBeUndefined();
+    expect(themedEmbed().setFooter({ text: 'Started' }).toJSON().footer?.text).toBe('Started');
   });
-  it('uses the shared theme defaults everywhere', () => {
+  it('opens every embed with the brand author line instead of a title', () => {
     const json = betterEmbed('t').builder.toJSON();
+    expect(json.author?.name).toBe(EMBED_THEME.brandName);
     expect(json.color).toBe(EMBED_THEME.defaultColor);
-    expect(json.title).toBe(EMBED_THEME.defaultTitle);
-    expect(json.footer?.text).toBe(EMBED_THEME.footer);
+    expect(json.title).toBeUndefined();
+    expect(json.footer).toBeUndefined();
 
-    expect(errorEmbed('e').builder.toJSON().color).toBe(EMBED_THEME.errorColor);
-    expect(errorEmbed('e').builder.toJSON().title).toBe(EMBED_THEME.errorTitle);
-    expect(successEmbed('s').builder.toJSON().color).toBe(EMBED_THEME.successColor);
-    expect(successEmbed('s').builder.toJSON().title).toBe(EMBED_THEME.successTitle);
+    const error = errorEmbed('e', 'Party Error').builder.toJSON();
+    expect(error.color).toBe(EMBED_THEME.errorColor);
+    expect(error.title).toBeUndefined();
+    expect(error.description).toBe('e');
+    expect(successEmbed('s', 'Done').builder.toJSON().color).toBe(EMBED_THEME.successColor);
   });
-  it('formats titles and descriptions with one summary quote and no emoji', () => {
+  it('turns titles into a subtitle line and drops generic ones', () => {
     const json = betterEmbed('Done ✅', 'success', '✅ Game Scored').builder.toJSON();
-    expect(json.title).toBe('Success: Game Scored');
-    expect(json.description).toBe('> Done');
+    expect(json.title).toBeUndefined();
+    expect(json.description).toBe('-# ➡ Game Scored\nDone ✅');
+    expect(betterEmbed('x', 'info', 'Error').builder.toJSON().description).toBe('x');
   });
-  it('themed embeds always carry the standard footer', () => {
-    const json = themedEmbed().toJSON();
-    expect(json.color).toBe(EMBED_THEME.defaultColor);
-    expect(json.footer?.text).toBe(EMBED_THEME.footer);
+  it('embedsFor puts the header in the author line', () => {
+    const { themedEmbed: partyEmbed } = embedsFor('Party');
+    expect(partyEmbed().toJSON().author?.name).toBe(`${EMBED_THEME.brandName} · Party`);
   });
 });
 

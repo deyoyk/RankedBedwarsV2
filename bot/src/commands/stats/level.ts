@@ -3,7 +3,9 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { EXPERIENCE_REWARDS, getLevelInfo } from '../../utils/levelSystem';
 import { safeReply } from '../../utils/safeReply';
-import { errorEmbed, infoEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
+
+const { errorEmbed, infoEmbed } = embedsFor('Player');
 
 export async function level(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
     void _wsManager;

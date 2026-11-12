@@ -3,9 +3,11 @@ import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
 import User from '../../models/User';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { bedBreakerLimitMessage, getMaxBedBreakersPerGame, getMaxMvpsPerGame, mvpLimitMessage, uniquePlayers } from '../../utils/scoringLimits';
+
+const { errorEmbed, successEmbed } = embedsFor('Scoring');
 
 interface ScoreParams {
   gameId: number;

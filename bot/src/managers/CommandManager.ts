@@ -3,7 +3,7 @@ import { wipe } from '../commands/account/wipe';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
-import { errorEmbed, successEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
 import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, SlashCommandBuilder } from 'discord.js';
 import { register } from '../commands/account/register';
@@ -61,6 +61,8 @@ import { seasoninfo } from '../commands/season/seasoninfo';
 import { statreset } from '../commands/account/statreset';
 import { claimelo } from '../commands/account/claimelo';
 import { queuecontrol, queueControlData } from '../commands/queue/queuecontrol';
+
+const { errorEmbed, successEmbed } = embedsFor('Command');
 
 interface Command {
   name: string;

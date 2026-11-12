@@ -1,8 +1,10 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import UserModel, { type IUser } from '../../models/User';
+
+const { errorEmbed, successEmbed } = embedsFor('Admin');
 
 const EDITABLE_STATS = {
   'elo': 'number',

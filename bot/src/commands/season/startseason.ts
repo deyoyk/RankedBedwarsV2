@@ -2,7 +2,9 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
 import { safeReply } from '../../utils/safeReply';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
+
+const { errorEmbed, successEmbed } = embedsFor('Season');
 
 export async function startseason(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
   void _wsManager;

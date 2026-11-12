@@ -1,11 +1,13 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
 import { computeWlr, ensureUserStats } from '../../utils/userStats';
+
+const { errorEmbed, successEmbed } = embedsFor('Scoring');
 
 export async function lose(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetId: string;

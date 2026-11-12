@@ -1,8 +1,10 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { safeReply } from '../../utils/safeReply';
+
+const { errorEmbed, successEmbed } = embedsFor('Rank');
 
 export async function addelo(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let roleId: string;

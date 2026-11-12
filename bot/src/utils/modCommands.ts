@@ -1,8 +1,10 @@
 import { ChatInputCommandInteraction, Guild } from 'discord.js';
 import { safeReply } from './safeReply';
-import { errorEmbed, successEmbed } from './betterembed';
+import { embedsFor } from './betterembed';
 import { parseDuration } from './parseDuration';
 import { parseDiscordId } from './inputValidation';
+
+const { errorEmbed, successEmbed } = embedsFor('Punishment');
 
 interface ParsedTarget {
   targetId: string;

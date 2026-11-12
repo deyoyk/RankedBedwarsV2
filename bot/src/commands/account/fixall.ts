@@ -4,7 +4,9 @@ import { safeReply } from '../../utils/safeReply';
 import { fix } from '../../utils/fix';
 import User from '../../models/User';
 import { executeWithConfirmation } from '../../utils/confirmAction';
-import { themedEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
+
+const { themedEmbed } = embedsFor('Admin');
 
 interface FixAllProgress {
   total: number;
@@ -20,7 +22,7 @@ export async function fixall(interaction: ChatInputCommandInteraction, _wsManage
   const total = await User.countDocuments();
   if (!total) {
     const { safeReply } = await import('../../utils/safeReply');
-    const { errorEmbed } = await import('../../utils/betterembed');
+    const { errorEmbed } = (await import('../../utils/betterembed')).embedsFor('Admin');
     await safeReply(interaction, errorEmbed('No users found in the database.', 'Fix All Error'));
     return;
   }

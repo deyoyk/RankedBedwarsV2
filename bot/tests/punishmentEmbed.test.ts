@@ -54,7 +54,7 @@ describe('punishment embeds', () => {
 
     expect(payload.content).toBe('<@123456789012345678>');
     expect(payload.files).toBeUndefined();
-    expect(embed.title).toBe('Warning: Mute');
+    expect(embed.description).toContain('-# ➡ Mute');
     expect(embed.color).toBe(EMBED_THEME.warningColor);
     expect(embed.description).toContain('has been issued a Mute punishment.');
     expect(embed.description).not.toContain('<@');
@@ -80,7 +80,7 @@ describe('punishment embeds', () => {
     const embed = payload.embeds[0].toJSON();
 
     expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.title).toBe('Punishment: Ranked Ban');
+    expect(embed.description).toContain('-# ➡ Ranked Ban');
     expect(embed.color).toBe(EMBED_THEME.punishmentColor);
     expect(embed.description).toContain('has been issued a Ranked Ban punishment.');
     expect(embed.description).not.toContain('<@');
@@ -103,7 +103,7 @@ describe('punishment embeds', () => {
     const embed = payload.embeds[0].toJSON();
 
     expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.title).toBe('Warning: Strike');
+    expect(embed.description).toContain('-# ➡ Strike');
     expect(embed.color).toBe(EMBED_THEME.warningColor);
     expect(embed.description).toContain('has been issued a Strike punishment.');
     expect(embed.description).not.toContain('<@');
@@ -126,7 +126,7 @@ describe('punishment embeds', () => {
     const embed = payload.embeds[0].toJSON();
 
     expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.title).toBe('Success: Mute Removed');
+    expect(embed.description).toContain('-# ➡ Mute Removed');
     expect(embed.color).toBe(EMBED_THEME.successColor);
     expect(embed.description).toContain('is no longer muted.');
     expect(embed.description).not.toContain('<@');
@@ -153,7 +153,7 @@ describe('punishment embeds', () => {
     const payload = sent(channel);
     const embed = payload.embeds[0].toJSON();
     expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.title).toBe(title);
+    expect(embed.description).toContain(`-# ➡ ${title.replace(/^\w+: /, '')}`);
     expect(embed.description).toContain(`${phrase}.`);
     expect(embed.description).toContain(`**Type:** ${label}`);
     expect(embed.description).not.toContain('<@');

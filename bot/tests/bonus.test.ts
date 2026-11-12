@@ -39,7 +39,7 @@ describe('bonus command', () => {
     await bonus(target);
 
     const embed = embedJson(target);
-    expect(embed.title).toBe('Info: Scoring System');
+    expect(embed.description).toContain('-# ➡ Scoring System');
     expect(embed.description).toContain('Current bonus configuration used by scoring system.');
     expect(embed.description).toContain('[P] Winstreak Bonus');
     expect(embed.description).toContain('[T] Bounty Bonus | Winstreak');

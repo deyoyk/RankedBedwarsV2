@@ -3,8 +3,10 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import Season from '../../models/Season';
-import { errorEmbed, themedEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { getLevelInfo } from '../../utils/levelSystem';
+
+const { errorEmbed, themedEmbed } = embedsFor('Player');
 
 function number(value: number | undefined | null): string {
   return (Number.isFinite(value) ? Number(value) : 0).toLocaleString('en-US');

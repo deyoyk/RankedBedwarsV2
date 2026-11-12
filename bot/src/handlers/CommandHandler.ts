@@ -3,7 +3,9 @@ import { checkPermission } from '../utils/permissions';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
 import type { BotCommandFn } from '../types/commands';
-import { errorEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
+
+const { errorEmbed } = embedsFor('Error');
 
 export type CommandFn = BotCommandFn;
 
@@ -30,7 +32,7 @@ export class CommandHandler {
 
     if (requiredRoles.length > 0 && !requiredRoles.includes('everyone')) {
       const embed = errorEmbed(
-        `Roles required: ${requiredRoles.map((roleId: string) => `<@&${roleId}>`).join(', ')}`,
+        `You can't use \`/${commandName}\`.\n> **Missing:** ${requiredRoles.map((roleId: string) => `<@&${roleId}>`).join(' ')}`,
         'Permission Denied'
       ).builder;
 

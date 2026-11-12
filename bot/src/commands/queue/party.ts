@@ -1,9 +1,11 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, Guild, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { betterEmbed, errorEmbed, successEmbed, themedFrom } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { type PartyDocument, PartyService } from '../../services/PartyService';
 import { PrivateGameService } from '../../services/PrivateGameService';
+
+const { betterEmbed, errorEmbed, successEmbed, themedFrom } = embedsFor('Party');
 
 export async function party(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
   const action = interaction.options.getString('action', true);

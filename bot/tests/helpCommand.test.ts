@@ -26,11 +26,12 @@ describe('help command version and server name', () => {
 
     const payload = target.reply.mock.calls[0][0];
     const embed = payload.embeds[0].toJSON();
-    expect(embed.title).toBe('Info: Ranked Bedwars System v41');
+    expect(embed.description).toContain('-# ➡ Ranked Bedwars System v41');
     expect(embed.description).toContain('Made by <@1526597163885527121> `Deyo` for `Test Server`');
     expect(embed.description).toContain('Select a category to view commands and their required roles.');
     expect(embed.description).not.toContain(':star2:');
     expect(embed.description).not.toContain('2.5.0');
-    expect(embed.footer?.text).toBe('Test Server');
+    // House style: no footer that only repeats the server name (it's in the description)
+    expect(embed.footer).toBeUndefined();
   });
 });

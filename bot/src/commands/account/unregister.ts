@@ -1,9 +1,11 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
+
+const { errorEmbed, successEmbed } = embedsFor('Admin');
 
 export async function unregister(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetUserId: string;

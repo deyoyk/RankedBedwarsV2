@@ -1,9 +1,11 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, themedEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
 import { parseTiers, type ProgressionTier } from '../../utils/eloProgression';
+
+const { errorEmbed, themedEmbed } = embedsFor('Rank');
 
 function statusLine(enabled: boolean): string {
   return enabled ? 'Enabled' : 'Disabled';

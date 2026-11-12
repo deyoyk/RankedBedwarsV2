@@ -3,9 +3,11 @@ import ScreenshareSession, { IScreenshareSession } from '../models/ScreenshareSe
 import User from '../models/User';
 import config from '../config/config';
 import { v4 as uuidv4 } from 'uuid';
-import { themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreenshareSessionResult, ScreenshareValidationResult } from '../types/screenshare';
+
+const { themedEmbed } = embedsFor('Screenshare');
 
 export class ScreenshareService {
   private static readonly SESSION_TIMEOUT = 15 * 60 * 1000; 

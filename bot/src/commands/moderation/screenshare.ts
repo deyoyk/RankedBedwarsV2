@@ -1,9 +1,11 @@
 import { ChatInputCommandInteraction, TextChannel } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
+
+const { errorEmbed, successEmbed } = embedsFor('Screenshare');
 
 export async function screenshare(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager): Promise<void> {
   const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;

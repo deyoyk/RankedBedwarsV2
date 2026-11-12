@@ -3,8 +3,10 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
 import { IRecentGame } from '../../models/gameBase';
-import { errorEmbed, infoEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { RecentGameResult, resolveRecentGameResult } from '../../utils/recentGameResult';
+
+const { errorEmbed, infoEmbed } = embedsFor('Player');
 
 interface RecentGamesData {
   page: number;

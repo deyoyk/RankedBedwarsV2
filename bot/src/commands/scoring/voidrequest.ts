@@ -5,7 +5,8 @@ import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { buildResultEmbed, claimVoteRequest, createDiscussionThread, createVoteButtons, releaseVoteRequest, setupVoteCollector, VoteData } from '../../utils/voteRequest';
-import { errorEmbed, successEmbed, themedEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
+const { errorEmbed, successEmbed, themedEmbed } = embedsFor('Scoring');
 
 interface VoidRequestData {
   gameId: string;

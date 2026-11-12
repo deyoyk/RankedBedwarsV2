@@ -87,7 +87,7 @@ describe('recentgames command', () => {
     expect(games).toContain('[#7] Lectus1v1 - [Voided]');
     expect(games).toContain('[#6] Lectus1v1 - [Ongoing]');
     expect(games).not.toContain('[#9] Lectus1v1 - [Win]');
-    expect(embed.title).toBe('Info: Recent Games - LoveDeyo');
+    expect(embed.description).toContain('-# ➡ Recent Games - LoveDeyo');
   });
 
   it('shows signed elo changes, relative time, result and bed stats', async () => {

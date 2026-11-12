@@ -3,14 +3,16 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
 import { executeWithConfirmation } from '../../utils/confirmAction';
-import { successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
+
+const { successEmbed } = embedsFor('Admin');
 
 export async function wipeeveryone(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   const total = await User.countDocuments();
   if (!total) {
-    const { errorEmbed } = await import('../../utils/betterembed');
+    const { errorEmbed } = (await import('../../utils/betterembed')).embedsFor('Admin');
     await safeReply(interaction, errorEmbed('No users found in the database.', 'Wipe Everyone Error'));
     return;
   }

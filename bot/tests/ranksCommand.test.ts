@@ -35,7 +35,7 @@ describe('ranks command', () => {
     await ranks(target);
 
     const embed = embedJson(target);
-    expect(embed.title).toBe('Info: Rank List');
+    expect(embed.description).toContain('-# ➡ Rank List');
     expect(embed.description).toContain('<@&111111111111111111>');
     expect(embed.description).toContain('Win: `10`');
     expect(embed.description).toContain('<@&222222222222222222>');

@@ -1,6 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, EmbedBuilder, Message } from 'discord.js';
 import { safeReply } from './safeReply';
-import { errorEmbed } from './betterembed';
+import { embedsFor } from './betterembed';
+
+const { errorEmbed } = embedsFor('Command');
 
 export interface PaginationConfig<T> {
   commandName: string;
@@ -126,18 +128,18 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
 
 function buildPaginationRow(commandName: string, page: number, totalPages: number): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${commandName}_first_${page}`).setLabel('First').setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
-    new ButtonBuilder().setCustomId(`${commandName}_prev_${page}`).setLabel('Previous').setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
-    new ButtonBuilder().setCustomId(`${commandName}_next_${page}`).setLabel('Next').setStyle(ButtonStyle.Secondary).setDisabled(page === totalPages),
-    new ButtonBuilder().setCustomId(`${commandName}_last_${page}`).setLabel('Last').setStyle(ButtonStyle.Secondary).setDisabled(page === totalPages)
+    new ButtonBuilder().setCustomId(`${commandName}_first_${page}`).setLabel('«').setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
+    new ButtonBuilder().setCustomId(`${commandName}_prev_${page}`).setLabel('←').setStyle(ButtonStyle.Secondary).setDisabled(page === 1),
+    new ButtonBuilder().setCustomId(`${commandName}_next_${page}`).setLabel('→').setStyle(ButtonStyle.Secondary).setDisabled(page === totalPages),
+    new ButtonBuilder().setCustomId(`${commandName}_last_${page}`).setLabel('»').setStyle(ButtonStyle.Secondary).setDisabled(page === totalPages)
   );
 }
 
 function buildDisabledPaginationRow(commandName: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(`${commandName}_first_disabled`).setLabel('First').setStyle(ButtonStyle.Secondary).setDisabled(true),
-    new ButtonBuilder().setCustomId(`${commandName}_prev_disabled`).setLabel('Previous').setStyle(ButtonStyle.Secondary).setDisabled(true),
-    new ButtonBuilder().setCustomId(`${commandName}_next_disabled`).setLabel('Next').setStyle(ButtonStyle.Secondary).setDisabled(true),
-    new ButtonBuilder().setCustomId(`${commandName}_last_disabled`).setLabel('Last').setStyle(ButtonStyle.Secondary).setDisabled(true)
+    new ButtonBuilder().setCustomId(`${commandName}_first_disabled`).setLabel('«').setStyle(ButtonStyle.Secondary).setDisabled(true),
+    new ButtonBuilder().setCustomId(`${commandName}_prev_disabled`).setLabel('←').setStyle(ButtonStyle.Secondary).setDisabled(true),
+    new ButtonBuilder().setCustomId(`${commandName}_next_disabled`).setLabel('→').setStyle(ButtonStyle.Secondary).setDisabled(true),
+    new ButtonBuilder().setCustomId(`${commandName}_last_disabled`).setLabel('»').setStyle(ButtonStyle.Secondary).setDisabled(true)
   );
 }

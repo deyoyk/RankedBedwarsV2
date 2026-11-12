@@ -1,9 +1,11 @@
 import { ChatInputCommandInteraction, VoiceChannel } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import Game from '../../models/Game';
 import User from '../../models/User';
+
+const { errorEmbed, successEmbed } = embedsFor('VC Access');
 
 export async function call(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetUser: string;

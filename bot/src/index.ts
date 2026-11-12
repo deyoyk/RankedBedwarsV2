@@ -14,6 +14,7 @@ import { EloDecayTask } from './tasks/EloDecayTask';
 import { WorkersManager } from './managers/WorkersManager';
 import { GuildJoinListener } from './handlers/GuildJoinListener';
 import type { GameManager } from './Matchmaking/GameManager';
+import { setBrandIcon } from './utils/betterembed';
 
 declare global {
   
@@ -72,6 +73,7 @@ let workersManager: WorkersManager;
 
 client.once('ready', async () => {
   console.log(`[Bot] Logged in as ${client.user?.tag}`);
+  setBrandIcon(client.user?.displayAvatarURL({ size: 64 }));
   try {
     const mongouri = config.mongoUri;
     const dbname = config.dbname;

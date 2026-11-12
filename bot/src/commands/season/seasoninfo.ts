@@ -5,7 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import { safeReply } from '../../utils/safeReply';
 import Season from '../../models/Season';
-import { errorEmbed, infoEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
+
+const { errorEmbed, infoEmbed } = embedsFor('Season');
 
 interface SeasonInfo {
   field1: string;
