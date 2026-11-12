@@ -1,10 +1,11 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import User, { IUser } from '../../models/User';
+import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import { generateLeaderboardImage, LeaderboardEntry } from '../../utils/leaderboardImage';
 
-const { betterEmbed, errorEmbed } = embedsFor('Leaderboard');
+const { errorEmbed } = embedsFor('Leaderboard');
 
 const LEADERBOARD_MODES: Record<string, { title: string; field: string }> = {
   elo: { title: 'Elo Leaderboard', field: 'elo' },
@@ -32,8 +33,21 @@ const LEADERBOARD_MODES: Record<string, { title: string; field: string }> = {
   firstBloods: { title: 'First Bloods Leaderboard', field: 'firstBloods' },
 };
 
+// Short column heading on the leaderboard image
+const VALUE_LABELS: Record<string, string> = {
+  bedBroken: 'BEDS', finalKills: 'FINALS', diamonds: 'DIAS', emeralds: 'EMS', blocksPlaced: 'BLOCKS',
+  winStreak: 'STREAK', loseStreak: 'STREAK', damageDealt: 'DMG', damageTaken: 'TAKEN', bestStreak: 'BEST', firstBloods: 'FB',
+};
+
 function getModeConfig(mode: string) {
   return LEADERBOARD_MODES[mode] || LEADERBOARD_MODES.elo;
+}
+
+const labelFor = (field: string) => VALUE_LABELS[field] ?? field.toUpperCase().slice(0, 8);
+
+function displayValue(raw: unknown): string | number {
+  if (typeof raw === 'number') return Number.isInteger(raw) ? raw : raw.toFixed(2);
+  return typeof raw === 'string' ? raw : 0;
 }
 
 const totalCache = new Map<string, { at: number; total: number }>();
@@ -84,7 +98,7 @@ export async function leaderboard(interaction: ChatInputCommandInteraction, _wsM
       .sort({ [valueField]: -1 })
       .skip(page * usersPerPage)
       .limit(usersPerPage)
-      .select(`ign discordId ${valueField}`)
+      .select(`ign discordId elo ${valueField}`)
       .lean();
     const totalUsers = await getCachedTotal(valueField);
 
@@ -95,70 +109,41 @@ export async function leaderboard(interaction: ChatInputCommandInteraction, _wsM
       return;
     }
 
-    let leaderboardList = '';
-    for (let i = 0; i < users.length; i++) {
-      const user = users[i];
-      const rank = page * usersPerPage + i + 1;
-      const rawValue: unknown = user[valueField as keyof IUser];
-      const value = typeof rawValue === 'number' || typeof rawValue === 'string' ? rawValue : 0;
-      leaderboardList += `#${rank} ${user.ign || user.discordId} » ${value}\n`;
-    }
+    const entries: LeaderboardEntry[] = users.map((user, i) => ({
+      rank: page * usersPerPage + i + 1,
+      ign: user.ign || user.discordId,
+      value: displayValue((user as Record<string, unknown>)[valueField]),
+      elo: user.elo,
+    }));
+    const totalPages = Math.max(1, Math.ceil(totalUsers / usersPerPage));
+    const image = await generateLeaderboardImage(title, labelFor(valueField), entries, page, totalPages);
 
-    const embedObj = betterEmbed(
-      `Showing positions ${page * usersPerPage + 1}-${Math.min((page + 1) * usersPerPage, totalUsers)} of ${totalUsers}`,
-      'info',
-      title
-    );
-    embedObj.builder.addFields({
-      name: 'Leaderboard',
-      value: leaderboardList || 'No users found',
-      inline: false
-    });
-
-    
+    const components: ActionRowBuilder<ButtonBuilder>[] = [];
     if (totalUsers > usersPerPage) {
-      const row = new ActionRowBuilder<ButtonBuilder>()
-        .addComponents(
-          new ButtonBuilder()
-            .setCustomId('prev_page')
-            .setLabel('Previous')
-            .setStyle(ButtonStyle.Primary)
-            .setDisabled(page === 0),
-          new ButtonBuilder()
-            .setCustomId('next_page')
-            .setLabel('Next')
-            .setStyle(ButtonStyle.Primary),
-          new ButtonBuilder()
-            .setCustomId('search_ign')
-            .setLabel('Search IGN')
-            .setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder()
-            .setCustomId('search_pos')
-            .setLabel('Search Position')
-            .setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder()
-            .setCustomId('reload')
-            .setLabel('Refresh')
-            .setStyle(ButtonStyle.Success)
-        );
-      await replyEmbed(embedObj, [row]);
-    } else {
-      await replyEmbed(embedObj);
+      components.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId('prev_page').setLabel('⬅️').setStyle(ButtonStyle.Primary).setDisabled(page === 0),
+        new ButtonBuilder().setCustomId('next_page').setLabel('➡️').setStyle(ButtonStyle.Primary).setDisabled(page >= totalPages - 1),
+        new ButtonBuilder().setCustomId('search_ign').setLabel('🔍').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('search_pos').setLabel('#').setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder().setCustomId('reload').setLabel('🔃').setStyle(ButtonStyle.Success),
+      ));
     }
+    await send({ files: [new AttachmentBuilder(image, { name: 'leaderboard.png' })], embeds: [], components });
   }
 
   let replyMsg: Message | undefined;
 
-  async function replyEmbed(embedObj: ReturnType<typeof betterEmbed>, components?: ActionRowBuilder<ButtonBuilder>[]) {
-    const payload = { embeds: [embedObj.builder], components: components || [] };
-    
+  async function send(payload: { embeds: ReturnType<typeof errorEmbed>['builder'][]; files?: AttachmentBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] }) {
       if (replyMsg) {
         await safeReply(interaction, payload).catch(() => {});
         return;
       }
       const msg = await safeReply(interaction, { ...payload, fetchReply: true });
       replyMsg = msg as unknown as Message | undefined;
-    
+  }
+
+  async function replyEmbed(embedObj: ReturnType<typeof errorEmbed>) {
+    await send({ embeds: [embedObj.builder], files: [], components: [] });
   }
 
   await renderPage(page);
