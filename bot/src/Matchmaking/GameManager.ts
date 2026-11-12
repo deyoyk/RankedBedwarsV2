@@ -1054,7 +1054,7 @@ export class GameManager {
         console.warn(`[GameManager] Game ${gameId} warping with ${actual}/${expected} players resolved (some IGNs missing, game will start short-handed)`);
       }
 
-      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs);
+      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs, Boolean(game.isPrivate));
 
       console.log(`[GameManager] Initiated warp request for game ${gameId} with map ${game.map}`);
     } catch (error) {
@@ -1135,6 +1135,7 @@ export class GameManager {
       game_id: key,
       map: warpData.map,
       is_ranked: warpData.isRanked,
+      is_private: warpData.isPrivate === true,
       team1: {
         players: warpData.team1IGNs
       },
@@ -1445,7 +1446,8 @@ export class GameManager {
     map: string,
     isRanked: boolean,
     team1IGNs: string[],
-    team2IGNs: string[]
+    team2IGNs: string[],
+    isPrivate: boolean = false
   ): void {
     try {
       const warpData: WarpRequestData = {
@@ -1458,6 +1460,7 @@ export class GameManager {
         team2IGNs,
         map,
         isRanked,
+        isPrivate,
         timestamp: Date.now()
       };
 

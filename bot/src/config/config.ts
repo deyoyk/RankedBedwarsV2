@@ -148,6 +148,10 @@ interface Config {
     voidrequestsChannel: string;
     screensharerequestsChannel?: string;
     botstatusChannel: string;
+    /** Party invites for players who aren't in game, duel requests. */
+    botCommandsChannel: string;
+    /** "@user has been given access to VC" after /call (defaults to the bot commands channel). */
+    callNotifyChannel: string;
   };
   voicechannels: {
     waitingvc: string;
@@ -263,6 +267,8 @@ const configuration: Config = {
     voidrequestsChannel: clean(process.env.VOID_REQUESTS_CHANNEL_ID),
     screensharerequestsChannel: clean(process.env.SCREEN_SHARE_REQUESTS_CHANNEL_ID),
     botstatusChannel: clean(process.env.BOT_STATUS_CHANNEL_ID),
+    botCommandsChannel: clean(process.env.BOT_COMMANDS_CHANNEL_ID),
+    callNotifyChannel: clean(process.env.CALL_NOTIFY_CHANNEL_ID),
   },
   voicechannels: {
     waitingvc: clean(process.env.WAITING_ROOM_ID),

@@ -82,6 +82,8 @@ export async function call(interaction: ChatInputCommandInteraction, _wsManager?
         { name: 'Granted by', value: `<@${senderId}>`, inline: true }
       );
       await safeReply(interaction, { embeds: [embedObj.builder] });
+      const { CallBridge } = await import('../../services/CallBridge');
+      await CallBridge.announce(interaction.client, targetUser, voiceChannel.id, true);
     } catch (permError) {
       console.error('Error granting voice channel permissions:', permError);
       await safeReply(interaction, errorEmbed('Failed to grant voice channel permissions. Please try again or check my permissions.', 'Permission Error'));

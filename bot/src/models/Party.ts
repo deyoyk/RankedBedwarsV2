@@ -8,6 +8,8 @@ interface IParty extends Document {
   lastActiveTime: Date;
   maxMembers: number;
   isPrivate: boolean;
+  /** /party private: the party's /party queue starts private games (and it can duel other parties). */
+  privateGames: boolean;
   description: string;
 }
 
@@ -19,6 +21,7 @@ const PartySchema: Schema = new Schema({
   lastActiveTime: { type: Date, default: Date.now },
   maxMembers: { type: Number, default: 8 },
   isPrivate: { type: Boolean, default: false },
+  privateGames: { type: Boolean, default: false },
   description: { type: String, default: '' }
 });
 

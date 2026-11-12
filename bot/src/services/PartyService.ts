@@ -23,8 +23,70 @@ export interface PartyInviteResult {
   components?: ActionRowBuilder<ButtonBuilder>[];
 }
 
+/** Something happened to a party: the in-game side (PartyBridge) tells the members who are online. */
+export interface PartyEvent {
+  type: 'invite' | 'join' | 'leave' | 'kick' | 'disband' | 'promote';
+  partyId: string;
+  /** Who it happened to (invited, joined, left, kicked, promoted). */
+  userId: string;
+  /** Who did it (the leader for invite, kick, promote, disband). */
+  actorId?: string;
+  /** The party's members afterwards (before, for disband), plus whoever left or was kicked. */
+  members: string[];
+  /** 'game' when it came from an in-game /party command (that side tells everyone itself). */
+  source?: string;
+}
+
 export class PartyService {
   public static readonly INVITE_TIMEOUT = 5 * 60 * 1000;
+  /** Set by PartyBridge. */
+  public static listener: ((event: PartyEvent) => void) | null = null;
+  /** userId -> partyId -> when the invite runs out. */
+  private static invites = new Map<string, Map<string, number>>();
+
+  private static emit(event: PartyEvent): void {
+    try {
+      this.listener?.(event);
+    } catch (error) {
+      console.error('[PartyService] Party event listener failed:', error);
+    }
+  }
+
+  /** Remembers an invite so it can be accepted in game too (/party accept). */
+  static recordInvite(partyId: string, userId: string): void {
+    const now = Date.now();
+    const mine = this.invites.get(userId) ?? new Map<string, number>();
+    for (const [id, until] of mine) {
+      if (until < now) mine.delete(id);
+    }
+    mine.set(partyId, now + this.INVITE_TIMEOUT);
+    this.invites.set(userId, mine);
+  }
+
+  /** The parties that invited this user and haven't run out, newest first. */
+  static pendingInvites(userId: string): string[] {
+    const now = Date.now();
+    const mine = this.invites.get(userId);
+    if (!mine) return [];
+    return [...mine.entries()].filter(([, until]) => until >= now).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  }
+
+  static clearInvite(partyId: string, userId: string): void {
+    this.invites.get(userId)?.delete(partyId);
+  }
+
+  /** /party private: turns the party's private games on or off (leader only). */
+  static async setPrivateGames(leaderId: string, value: boolean): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+    const validation = await this.validatePartyAccess(leaderId, true);
+    if (!validation.isValid) {
+      return { success: false, message: validation.error };
+    }
+    const party = validation.party!;
+    await Party.updateOne({ partyId: party.partyId, leader: leaderId }, { $set: { privateGames: value } });
+    party.privateGames = value;
+    await this.updatePartyActivity(party.partyId);
+    return { success: true, party };
+  }
   private static readonly MAX_MEMBERS = 8;
   private static readonly MIN_MEMBERS = 2;
 
@@ -62,7 +124,7 @@ export class PartyService {
     }
   }
 
-  static async createParty(userId: string): Promise<{ success: boolean; party?: PartyDocument; error?: string }> {
+  static async createParty(userId: string, options: { isPrivate?: boolean } = {}): Promise<{ success: boolean; party?: PartyDocument; error?: string }> {
     try {
       const user = await UserModel.findOne({ discordId: userId });
       if (!user) {
@@ -80,7 +142,7 @@ export class PartyService {
         members: [userId],
         lastActiveTime: new Date(),
         maxMembers: this.MAX_MEMBERS,
-        isPrivate: false,
+        isPrivate: options.isPrivate ?? false,
         description: ''
       });
 
@@ -117,7 +179,7 @@ export class PartyService {
     }
   }
 
-  static async inviteToParty(leaderId: string, targetId: string, _guild: Guild): Promise<PartyInviteResult> {
+  static async inviteToParty(leaderId: string, targetId: string, _guild: Guild, source?: string): Promise<PartyInviteResult> {
     try {
       const leaderValidation = await this.validatePartyAccess(leaderId, true);
       if (!leaderValidation.isValid) {
@@ -169,6 +231,9 @@ export class PartyService {
           .setStyle(ButtonStyle.Danger)
       );
 
+      this.recordInvite(party.partyId, targetId);
+      this.emit({ type: 'invite', partyId: party.partyId, userId: targetId, actorId: leaderId, members: [...party.members], source });
+
       return { success: true, embed, components: [row] };
     } catch (error) {
       console.error('[PartyService] Error inviting to party:', error);
@@ -176,14 +241,19 @@ export class PartyService {
     }
   }
 
-  static async acceptInvite(partyId: string, userId: string, guild: Guild): Promise<{ success: boolean; message?: string }> {
+  static async acceptInvite(partyId: string, userId: string, guild: Guild, source?: string): Promise<{ success: boolean; message?: string }> {
     try {
       const party = await Party.findOne({ partyId });
       if (!party) {
         return { success: false, message: 'Party not found' };
       }
 
-      return this.addMemberToParty(party, userId, guild);
+      const result = await this.addMemberToParty(party, userId, guild);
+      if (result.success) {
+        this.clearInvite(partyId, userId);
+        this.emit({ type: 'join', partyId, userId, members: [...party.members], source });
+      }
+      return result;
     } catch (error) {
       console.error('[PartyService] Error accepting invite:', error);
       return { success: false, message: 'Failed to accept invite' };
@@ -292,7 +362,7 @@ export class PartyService {
     return { success: true };
   }
 
-  static async leaveParty(userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+  static async leaveParty(userId: string, guild: Guild, source?: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(userId);
       if (!validation.isValid) {
@@ -303,14 +373,18 @@ export class PartyService {
         return { success: false, message: 'Use disband to dissolve party' };
       }
 
-      return this.removeMemberFromParty(validation.party!, userId, guild);
+      const left = await this.removeMemberFromParty(validation.party!, userId, guild);
+      if (left.success) {
+        this.emit({ type: 'leave', partyId: validation.party!.partyId, userId, members: [...(left.party?.members ?? []), userId], source });
+      }
+      return left;
     } catch (error) {
       console.error('[PartyService] Error leaving party:', error);
       return { success: false, message: 'Failed to leave party' };
     }
   }
 
-  static async disbandParty(userId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+  static async disbandParty(userId: string, guild: Guild, source?: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(userId, true);
       if (!validation.isValid) {
@@ -330,6 +404,7 @@ export class PartyService {
       );
 
       await this.removePartyRoles(guild, party.members);
+      this.emit({ type: 'disband', partyId: party.partyId, userId, actorId: userId, members: [...party.members], source });
 
       return { success: true, party };
     } catch (error) {
@@ -338,7 +413,7 @@ export class PartyService {
     }
   }
 
-  static async kickFromParty(leaderId: string, targetId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+  static async kickFromParty(leaderId: string, targetId: string, guild: Guild, source?: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(leaderId, true);
       if (!validation.isValid) {
@@ -354,14 +429,18 @@ export class PartyService {
         return { success: false, message: 'Cannot kick yourself' };
       }
 
-      return this.removeMemberFromParty(party, targetId, guild);
+      const kicked = await this.removeMemberFromParty(party, targetId, guild);
+      if (kicked.success) {
+        this.emit({ type: 'kick', partyId: party.partyId, userId: targetId, actorId: leaderId, members: [...(kicked.party?.members ?? []), targetId], source });
+      }
+      return kicked;
     } catch (error) {
       console.error('[PartyService] Error kicking from party:', error);
       return { success: false, message: 'Failed to kick user' };
     }
   }
 
-  static async promoteToLeader(leaderId: string, targetId: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+  static async promoteToLeader(leaderId: string, targetId: string, source?: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const validation = await this.validatePartyAccess(leaderId, true);
       if (!validation.isValid) {
@@ -386,6 +465,7 @@ export class PartyService {
       }
       party.leader = targetId;
       await this.updatePartyActivity(party.partyId);
+      this.emit({ type: 'promote', partyId: party.partyId, userId: targetId, actorId: leaderId, members: [...party.members], source });
 
       return { success: true, party };
     } catch (error) {
@@ -457,7 +537,7 @@ export class PartyService {
     }
   }
 
-  static async joinParty(userId: string, partyId: string, guild: Guild): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+  static async joinParty(userId: string, partyId: string, guild: Guild, source?: string): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     try {
       const party = await Party.findOne({ partyId });
       if (!party) {
@@ -469,6 +549,9 @@ export class PartyService {
       }
 
       const result = await this.addMemberToParty(party, userId, guild);
+      if (result.success) {
+        this.emit({ type: 'join', partyId, userId, members: [...party.members], source });
+      }
       return { ...result, party: result.success ? party : undefined };
     } catch (error) {
       console.error('[PartyService] Error joining party:', error);

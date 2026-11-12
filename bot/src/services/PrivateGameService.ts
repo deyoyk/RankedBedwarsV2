@@ -19,6 +19,8 @@ export interface PrivateGamePlayer {
 
 export interface PrivateGameStartOptions {
   map?: string;
+  /** A duel: these exact teams instead of splitting the party by ELO. */
+  teams?: { team1: string[]; team2: string[] };
 }
 
 export interface PrivateGameStartResult {
@@ -132,10 +134,12 @@ export class PrivateGameService {
       return { success: false, message: 'Private games need an even number of players (2, 4, 6, or 8)' };
     }
 
-    const maxSize = Math.min(
-      this.maxPartySize(),
-      Number.isInteger(partyMaxMembers) && partyMaxMembers > 0 ? partyMaxMembers : this.maxPartySize(),
-    );
+    const maxSize = options.teams
+      ? Math.max(2, partyMaxMembers)
+      : Math.min(
+        this.maxPartySize(),
+        Number.isInteger(partyMaxMembers) && partyMaxMembers > 0 ? partyMaxMembers : this.maxPartySize(),
+      );
     if (memberIds.length > maxSize) {
       return { success: false, message: `Party size ${memberIds.length} exceeds the private game limit of ${maxSize}` };
     }
@@ -258,7 +262,7 @@ export class PrivateGameService {
       ign: usersById.get(id)!.ign!,
       elo: typeof usersById.get(id)!.elo === 'number' ? usersById.get(id)!.elo! : 0,
     }));
-    const { team1, team2 } = this.splitTeams(players);
+    const { team1, team2 } = options.teams ?? this.splitTeams(players);
 
     let gameId: number;
     const claimOwner = `private:${partyId}`;
@@ -300,6 +304,44 @@ export class PrivateGameService {
       team1,
       team2,
     };
+  }
+
+  /**
+   * /party duel: the challenger's party (team 1) against the other party (team 2). Both parties
+   * must be the same size; the leaders are checked by the caller.
+   */
+  public static async startDuel(
+    challengerPartyId: string,
+    targetPartyId: string,
+    guild: Guild,
+    wsManager: WebSocketManager,
+    options: PrivateGameStartOptions = {},
+  ): Promise<PrivateGameStartResult> {
+    const Party = (await import('../models/Party')).default;
+    const [a, b] = await Promise.all([
+      Party.findOne({ partyId: challengerPartyId }).lean(),
+      Party.findOne({ partyId: targetPartyId }).lean(),
+    ]);
+    if (!a || !b) {
+      return { success: false, message: 'One of the parties no longer exists' };
+    }
+    if (a.members.length !== b.members.length) {
+      return { success: false, message: `The parties are different sizes (${a.members.length} and ${b.members.length})` };
+    }
+    if (this.inFlightParties.has(a.partyId) || this.inFlightParties.has(b.partyId)) {
+      return { success: false, message: 'A game is already being created for one of the parties' };
+    }
+    this.inFlightParties.add(a.partyId);
+    this.inFlightParties.add(b.partyId);
+    try {
+      return await this.createPrivateGame(a.partyId, [...a.members, ...b.members], a.members.length * 2, guild, wsManager, {
+        ...options,
+        teams: { team1: [...a.members], team2: [...b.members] },
+      });
+    } finally {
+      this.inFlightParties.delete(a.partyId);
+      this.inFlightParties.delete(b.partyId);
+    }
   }
 
   public static async cancelPrivateGame(
@@ -374,10 +416,11 @@ export class PrivateGameService {
         if (target.locked) {
           return { error: `Map "${requestedName}" is currently locked` };
         }
+        // Private games may leave slots empty: any map with room for everyone.
         const capacity = this.mapCapacity(target);
-        if (capacity !== undefined && capacity !== playerCount) {
+        if (capacity !== undefined && capacity < playerCount) {
           return {
-            error: `Map "${requestedName}" supports ${capacity} players, but this party has ${playerCount}`,
+            error: `Map "${requestedName}" fits ${capacity} players, but this game has ${playerCount}`,
           };
         }
         const map = this.mapKey(target);
@@ -387,15 +430,19 @@ export class PrivateGameService {
       }
 
       const eligible = maps.filter(map =>
-        !map.locked && (this.mapCapacity(map) === undefined || this.mapCapacity(map) === playerCount),
+        !map.locked && (this.mapCapacity(map) === undefined || this.mapCapacity(map)! >= playerCount),
       );
       if (!eligible.length) {
         return { error: `No available map supports ${playerCount} players` };
       }
 
+      // The closest fit first: maps made for exactly this many players, else the smallest with room.
+      const sizeOf = (map: MapInfo) => this.mapCapacity(map) ?? playerCount;
+      const bestSize = Math.min(...eligible.map(sizeOf));
+      const fitting = eligible.filter(map => sizeOf(map) === bestSize);
       const recent = getRecentMapPicks();
-      const open = eligible.filter(map => !recent.has(this.mapKey(map)));
-      const pool = open.length > 0 ? open : eligible;
+      const open = fitting.filter(map => !recent.has(this.mapKey(map)));
+      const pool = open.length > 0 ? open : fitting;
       const chosen = pool[Math.floor(Math.random() * pool.length)];
       const map = this.mapKey(chosen);
       mapService.claimMap(map);

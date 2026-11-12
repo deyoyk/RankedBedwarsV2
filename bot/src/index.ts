@@ -124,6 +124,14 @@ client.once('ready', async () => {
     
     wsManager.setGameManager(gameManager);
 
+    // The Minecraft server's /party, /call and the game VC chat link.
+    const { PartyBridge } = await import('./services/PartyBridge');
+    new PartyBridge(client, wsManager).start();
+    const { CallBridge } = await import('./services/CallBridge');
+    new CallBridge(client, wsManager).start();
+    const { VcChatRelay } = await import('./services/VcChatRelay');
+    new VcChatRelay(client, wsManager).start();
+
     await gameManager.recoverActiveGames();
     await gameManager.recoverPendingSettlements();
     gameManager.startSettlementRecoveryLoop();

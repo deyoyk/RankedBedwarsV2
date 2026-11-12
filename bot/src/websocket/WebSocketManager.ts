@@ -1424,7 +1424,7 @@ export class WebSocketManager {
     }
   }
 
-  private async handleQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
+  public async handleQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
     const key = (msg?.ign || '').toLowerCase();
     if (!key) {
       await this.processQueueFromInGame(msg);

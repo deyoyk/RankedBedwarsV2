@@ -34,6 +34,8 @@ export interface WarpRequestData {
   team2IGNs: string[];
   map: string;
   isRanked: boolean;
+  /** A party's private game: the server lets players pick their teams in the waiting room. */
+  isPrivate?: boolean;
   timestamp: number;
 }
 
