@@ -1,6 +1,5 @@
 import { loadAvatarDataUrl, staticImageDataUrl } from '../assets/assets';
 import { renderPng } from '../assets/renderer';
-import { scoreTemplate, ScoreTemplatePlayer } from '../assets/games/score';
 import { startTemplate, StartTemplatePlayer } from '../assets/games/start';
 import User from '../models/User';
 
@@ -11,18 +10,6 @@ const GAME_IMAGE_TIMEOUT_MS = Math.max(
     Number.parseInt(process.env.IMAGE_GAME_TIMEOUT_MS ?? '', 10) || 8000,
   ),
 );
-
-type PlayerLine = {
-  discordId: string;
-  username: string;
-  team: 'winning' | 'losing';
-  elo_before: number;
-  elo_after: number;
-  oldElo?: number;
-  newElo?: number;
-  mvp: boolean;
-  bedbreaker?: boolean;
-};
 
 async function resolveAvatar(username: string): Promise<string> {
   let timer: NodeJS.Timeout | undefined;
@@ -36,63 +23,6 @@ async function resolveAvatar(username: string): Promise<string> {
   } finally {
     if (timer !== undefined) clearTimeout(timer);
   }
-}
-
-async function toTemplatePlayer(player: PlayerLine): Promise<ScoreTemplatePlayer> {
-  const avatar = await resolveAvatar(player.username);
-  return {
-    username: player.username,
-    elo_before: player.elo_before ?? player.oldElo ?? 0,
-    elo_after: player.elo_after ?? player.newElo ?? 0,
-    oldElo: player.elo_before ?? player.oldElo ?? 0,
-    newElo: player.elo_after ?? player.newElo ?? 0,
-    mvp: player.mvp,
-    bedbreaker: player.bedbreaker ?? false,
-    avatar,
-  };
-}
-
-export async function generateScoreImageBuffer(
-  gameId: number,
-  winners: PlayerLine[],
-  losers: PlayerLine[],
-  options?: { serverName?: string; inviteLink?: string; isRanked?: boolean; minElo?: number; maxElo?: number }
-): Promise<Buffer> {
-  const [winnerRows, loserRows] = await Promise.all([
-    Promise.allSettled(winners.map(toTemplatePlayer)),
-    Promise.allSettled(losers.map(toTemplatePlayer)),
-  ]).then(([winnersSettled, losersSettled]) => {
-    const fallback = (username: string): ScoreTemplatePlayer => ({
-      username,
-      elo_before: 0,
-      elo_after: 0,
-      oldElo: 0,
-      newElo: 0,
-      mvp: false,
-      bedbreaker: false,
-      avatar: staticImageDataUrl('fallbacks', 'steve.png'),
-    });
-    return [
-      winnersSettled.map((r, i) => (r.status === 'fulfilled' ? r.value : fallback(winners[i].username))),
-      losersSettled.map((r, i) => (r.status === 'fulfilled' ? r.value : fallback(losers[i].username))),
-    ];
-  });
-  const serverName = options?.serverName || process.env.SERVER_NAME || '';
-  const inviteLink = options?.inviteLink || process.env.INVITE_LINK || '';
-  const tpl = scoreTemplate({
-    gameId,
-    winners: winnerRows,
-    losers: loserRows,
-    isRanked: options?.isRanked === true,
-    minElo: options?.minElo ?? 0,
-    maxElo: options?.maxElo ?? 0,
-    serverName,
-    inviteLink,
-  });
-  return renderPng(tpl.root, tpl.width, tpl.height, {
-    timeoutMs: GAME_IMAGE_TIMEOUT_MS,
-    priority: 'high',
-  });
 }
 
 export type GameStartPlayerInput = {
@@ -170,4 +100,3 @@ export async function generateGameStartImageBuffer(
   });
 }
 
-export type { PlayerLine };

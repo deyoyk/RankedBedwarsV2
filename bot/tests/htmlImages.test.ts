@@ -1,6 +1,4 @@
-import { generateScoreImageBuffer } from '../src/utils/scoreImage';
 import { generateThemeImage } from '../src/assets/stats-theme/base';
-import { scoreTemplate } from '../src/assets/games/score';
 import { defaultTemplate } from '../src/assets/stats-theme/default';
 import { staticImageDataUrl } from '../src/assets/assets';
 import { themes, resolveTheme } from '../src/assets/stats-theme';
@@ -80,33 +78,7 @@ describe('single default theme', () => {
   });
 });
 
-describe('score template', () => {
-  it('keeps user input as text and marks only the mvp', () => {
-    const tpl = scoreTemplate({
-      gameId: 7,
-      winners: [{ ...player('<Bob>', true, true), avatar }],
-      losers: [{ ...player('Eve'), avatar }],
-      serverName: 'Test',
-      inviteLink: 'discord.gg/test',
-    });
-    const all = texts(tpl.root);
-    expect(all).toContain('GAME #7');
-    expect(all).toContain('<Bob>');
-    expect(countText(tpl.root, 'MVP')).toBe(1);
-    expect(countText(tpl.root, 'BED')).toBe(1);
-  });
-});
-
 describe('html image rendering', () => {
-  it('renders the score image at 1920x1080', async () => {
-    const t0 = Date.now();
-    const buf = await generateScoreImageBuffer(7, [player('Alice', true), player('Bob')], [player('Cara'), player('Dan')]);
-    const ms = Date.now() - t0;
-    expect(pngSize(buf)).toEqual({ width: 1920, height: 1080 });
-    expect(buf.length).toBeGreaterThan(20000);
-    expect(ms).toBeLessThan(15000);
-  }, 20000);
-
   it('renders the default card at 1400x940 with all sections', async () => {
     const t0 = Date.now();
     const buf = await generateThemeImage(enrichedPlayer(), [], {

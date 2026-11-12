@@ -2,7 +2,6 @@ import { ChannelType, Client, EmbedBuilder, Guild, type MessageCreateOptions, Pe
 import Game, { IGame } from '../models/Game';
 import GameSettlement from '../models/GameSettlement';
 import User, { IUser } from '../models/User';
-import Queue from '../models/Queue';
 import EloRank, { IEloRank } from '../models/EloRank';
 import { Counter, getNextSequence } from '../models/Counter';
 import config from '../config/config';
@@ -10,7 +9,7 @@ import { GameResources, GameResult, GameState, PlayerData, VoidResult, WarpReque
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { fix } from '../utils/fix';
 import { normalizeTeams } from './utils';
-import { generateScoreImageBuffer } from '../utils/scoreImage';
+import { renderScoredGame, ScoredPlayer } from '../utils/scoredGameImage';
 import { formatMapName } from '../utils/mapName';
 import { NumericSnapshot, clampEloOp, snapshotCounters, toAtomicUpdate } from '../utils/atomicStats';
 import { checkLevelUp, EXPERIENCE_REWARDS } from '../utils/levelSystem';
@@ -2397,53 +2396,36 @@ export class GameManager {
       const notificationContent = bonusLines ? `${mentions}\n${bonusLines}` : mentions;
 
       const winnersIds = new Set<string>(context.winningTeam === 1 ? context.game.team1 : context.game.team2);
-      const losersIds = new Set<string>(context.winningTeam === 1 ? context.game.team2 : context.game.team1);
-
-      const winners = playerScoreData
-        .filter(p => winnersIds.has(p.player.discordId))
-        .map(p => ({
-          discordId: p.player.discordId,
-          username: context.idToIgn[p.player.discordId] || 'Unknown',
-          team: 'winning' as const,
-          elo_before: p.elo_before,
-          elo_after: p.elo_after,
-          oldElo: p.elo_before,
-          newElo: p.elo_after,
-          mvp: p.isMvp,
-          bedbreaker: p.isBedBreaker
-        }));
-
-      const losers = playerScoreData
-        .filter(p => losersIds.has(p.player.discordId))
-        .map(p => ({
-          discordId: p.player.discordId,
-          username: context.idToIgn[p.player.discordId] || 'Unknown',
-          team: 'losing' as const,
-          elo_before: p.elo_before,
-          elo_after: p.elo_after,
-          oldElo: p.elo_before,
-          newElo: p.elo_after,
-          mvp: p.isMvp,
-          bedbreaker: p.isBedBreaker
-        }));
+      const toScored = (p: PlayerScoreData): ScoredPlayer => ({
+        discordId: p.player.discordId,
+        ign: context.idToIgn[p.player.discordId] || 'Unknown',
+        eloBefore: p.elo_before,
+        eloAfter: p.elo_after,
+        kills: p.stats.kills || 0,
+        deaths: p.stats.deaths || 0,
+        diamonds: p.stats.diamonds || 0,
+        mvp: p.isMvp,
+        bedBreaker: p.isBedBreaker,
+      });
+      const winnerData = playerScoreData.filter(p => winnersIds.has(p.player.discordId));
+      const loserData = playerScoreData.filter(p => !winnersIds.has(p.player.discordId));
 
       let imageBuffer: Buffer | null = null;
       try {
-        const queue = await Queue.findOne({ channelId: context.game.queueId })
-          .select('isRanked minElo maxElo')
-          .lean()
-          .catch(() => null);
-        imageBuffer = await generateScoreImageBuffer(context.game.gameId, winners, losers, {
-          isRanked: queue?.isRanked ?? context.game.isRanked === true,
-          minElo: queue?.minElo ?? 0,
-          maxElo: queue?.maxElo ?? 0,
-        });
+        imageBuffer = await renderScoredGame({
+          gameId: context.game.gameId,
+          map: context.game.map,
+          startTime: context.game.startTime,
+          endTime: context.game.endTime,
+          winners: winnerData.map(toScored),
+          losers: loserData.map(toScored),
+        }, context.eloRanks, guild);
       } catch (e) {
-        console.error('[GameManager] Failed generating score image, sending embed only:', e);
+        console.error('[GameManager] Failed generating score image, sending without it:', e);
       }
 
       await this.sendToScoringChannel(guild, notificationContent, imageBuffer);
-      await this.sendToGameChannel(guild, context.game, null, notificationContent, imageBuffer);
+      await this.sendToGameChannel(guild, context.game, this.createScoreEmbed(guild, context, winnerData, loserData, Boolean(imageBuffer)), notificationContent, imageBuffer);
 
     } catch (error) {
       console.error('[GameManager] Error sending score notifications:', error);
@@ -2451,6 +2433,32 @@ export class GameManager {
   }
 
 
+
+  private createScoreEmbed(guild: Guild, context: GameScoreContext, winners: PlayerScoreData[], losers: PlayerScoreData[], withImage: boolean): EmbedBuilder {
+    const emoji = (name: string, fallback: string) => {
+      const found = guild.emojis.cache.find(e => e.name === name);
+      return found ? `<:${name}:${found.id}>` : fallback;
+    };
+    const sword = emoji('sword', '⚔️');
+    const diamond = emoji('diamond', '💎');
+    const emerald = emoji('emerald', '🟢');
+    const line = (p: PlayerScoreData) =>
+      `<@${p.player.discordId}> → (${sword} ${p.stats.kills || 0}/${p.stats.deaths || 0}) (${diamond} ${p.stats.diamonds || 0}) (${emerald} ${p.stats.emeralds || 0})`;
+    const time = (d?: Date) => (d ? `<t:${Math.floor(new Date(d).getTime() / 1000)}:t>` : '??');
+    const game = context.game;
+
+    const embed = themedEmbed('info')
+      .setTitle(`Game #${game.gameId} — Scored`)
+      .addFields(
+        { name: 'Arena', value: formatMapName(game.map), inline: true },
+        { name: 'Match Time', value: `${time(game.startTime)} → ${time(game.endTime)}`, inline: true },
+        { name: '(▲) Winners', value: winners.map(line).join('\n') || 'None', inline: false },
+        { name: '(▼) Losers', value: losers.map(line).join('\n') || 'None', inline: false },
+      )
+      .setTimestamp();
+    if (withImage) embed.setImage(`attachment://game_${game.gameId}_results.png`);
+    return embed;
+  }
 
   private getMentionString(discordIds: string[]): string {
     try {

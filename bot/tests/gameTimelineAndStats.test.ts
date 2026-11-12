@@ -74,8 +74,8 @@ jest.mock('../src/models/Counter', () => ({
   getNextSequence: jest.fn().mockResolvedValue(100),
   Counter: {}
 }));
-jest.mock('../src/utils/scoreImage', () => ({
-  generateScoreImageBuffer: jest.fn().mockResolvedValue(null)
+jest.mock('../src/utils/scoredGameImage', () => ({
+  renderScoredGame: jest.fn().mockResolvedValue(null),
 }));
 jest.mock('../src/utils/fix', () => ({
   fix: jest.fn().mockResolvedValue(undefined),
