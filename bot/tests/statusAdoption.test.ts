@@ -181,4 +181,27 @@ describe('BotStatusTask message adoption', () => {
     warn.mockRestore();
     task.stop();
   });
+
+  it('stays off with a single warning when no status channel is set', async () => {
+    const config = require('../src/config/config').default;
+    const configured = config.channels.botstatusChannel;
+    config.channels.botstatusChannel = '';
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const channel = channelMock();
+    const task = taskWith(channel);
+    try {
+      await task.start();
+
+      expect(task.updateInterval).toBeNull();
+      expect(channel.send).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      config.channels.botstatusChannel = configured;
+      warn.mockRestore();
+      error.mockRestore();
+      task.stop();
+    }
+  });
 });

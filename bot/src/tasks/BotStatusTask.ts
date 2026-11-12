@@ -33,6 +33,10 @@ export class BotStatusTask {
       if (this.updateInterval) {
         return;
       }
+      if (!config.channels.botstatusChannel) {
+        console.warn('[BotStatusTask] BOT_STATUS_CHANNEL_ID is not set; status updates are off');
+        return;
+      }
 
       await this.sendStatusEmbed();
 
