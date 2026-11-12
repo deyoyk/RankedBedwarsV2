@@ -86,7 +86,7 @@ export class StrikeManager {
         if (banDuration === null) {
           const promises: Promise<unknown>[] = [];
           sendPunishmentNotification(promises, {
-            guild, targetId, moderatorId, reason, type: 'strike'
+            guild, targetId, moderatorId, reason, type: 'strike', caseId: strikeId
           });
           await Promise.allSettled(promises);
           actionTaken = `Warning issued (Strike ${strikeCount})`;
@@ -99,7 +99,7 @@ export class StrikeManager {
             console.error(`[StrikeManager] Failed to escalate strike to ban for ${targetId}:`, banError);
             const promises: Promise<unknown>[] = [];
             sendPunishmentNotification(promises, {
-              guild, targetId, moderatorId, reason, type: 'strike'
+              guild, targetId, moderatorId, reason, type: 'strike', caseId: strikeId
             });
             await Promise.allSettled(promises);
             actionTaken = `Warning issued - Ban escalation failed (Strike ${strikeCount})`;
@@ -168,7 +168,7 @@ export class StrikeManager {
       try {
         const promises: Promise<unknown>[] = [];
         sendPunishmentNotification(promises, {
-          guild, targetId, moderatorId, reason, type: 'unstrike'
+          guild, targetId, moderatorId, reason, type: 'unstrike', caseId: removedStrike?.id
         });
         await Promise.allSettled(promises);
       } catch (embedError) {

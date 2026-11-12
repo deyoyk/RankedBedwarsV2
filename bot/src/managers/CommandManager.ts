@@ -37,6 +37,7 @@ import { settings } from '../commands/account/settings';
 import { forcevoid } from '../commands/scoring/forcevoid';
 import { refresh } from '../commands/account/refresh';
 import { gameinfo } from '../commands/general/gameinfo';
+import { handlePunishmentDetails } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
 import { lose } from '../commands/scoring/lose';
@@ -117,6 +118,10 @@ export class CommandManager {
 
         if (interaction.isButton() && interaction.customId.startsWith('ss_cancel_')) {
           await this.handleScreenshareCancel(interaction);
+          return;
+        }
+        if (interaction.isButton() && interaction.customId.startsWith('punishment:details:')) {
+          await handlePunishmentDetails(interaction);
           return;
         }
       } catch (error) {

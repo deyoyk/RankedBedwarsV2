@@ -11,6 +11,7 @@ jest.mock('../src/config/config', () => ({
 interface SentPayload {
   content?: unknown;
   embeds: any[];
+  components?: any[];
   files?: Array<{ attachment: string; name: string }>;
 }
 
@@ -34,130 +35,106 @@ function sent(channel: ReturnType<typeof channelMock>): SentPayload {
   return channel.send.mock.calls[0][0] as SentPayload;
 }
 
-const EXPIRY = new Date(2026, 10, 13, 12, 0, 0);
+const fieldsOf = (embed: any) => Object.fromEntries((embed.fields || []).map((f: any) => [f.name, f.value]));
+const EXPIRY = new Date(Date.now() + 7 * 86400000);
+const TARGET = '123456789012345678';
 
 describe('punishment embeds', () => {
-  it('renders an issued mute with duration and reason', async () => {
+  it('renders an issued mute with duration, expiry, staff and the Details button', async () => {
     const channel = channelMock();
 
     await sendPunishmentEmbed({
       guild: guildWith(channel),
-      targetId: '123456789012345678',
+      targetId: TARGET,
       moderatorId: 'mod-1',
       reason: 'Racism, Slurs or Hate Speech',
       type: 'mute',
       expires: EXPIRY,
+      caseId: 'A1B2C',
     });
 
     const payload = sent(channel);
     const embed = payload.embeds[0].toJSON();
+    const fields = fieldsOf(embed);
 
-    expect(payload.content).toBe('<@123456789012345678>');
+    expect(payload.content).toBe(`<@${TARGET}>`);
     expect(payload.files).toBeUndefined();
-    expect(embed.description).toContain('-# ➡ Mute');
-    expect(embed.color).toBe(EMBED_THEME.warningColor);
-    expect(embed.description).toContain('has been issued a Mute punishment.');
-    expect(embed.description).not.toContain('<@');
-    expect(embed.description).toContain('**Duration:**');
-    expect(embed.description).toContain('**Expires:** 13-11-2026');
-    expect(embed.description).toContain('**Reason:** Racism, Slurs or Hate Speech');
-    expect(embed.thumbnail).toBeUndefined();
+    expect(embed.author?.name).toBe(`${EMBED_THEME.brandName} · Punishment`);
+    expect(embed.title).toBeUndefined();
+    expect(embed.color).toBe(0xff9900);
+    expect(embed.description).toContain(`<@${TARGET}> has been 🔇 muted.`);
+    expect(embed.description).toContain('> **Reason:** Racism, Slurs or Hate Speech `#A1B2C`');
+    expect(fields.Duration).toBe('`7d`');
+    expect(fields.Expires).toBe(`<t:${Math.floor(EXPIRY.getTime() / 1000)}:R>`);
+    expect(fields.Staff).toBe('> <@mod-1>');
+    expect(embed.footer?.text).toContain('appeal');
+
+    const button = payload.components?.[0]?.toJSON().components[0];
+    expect(button.custom_id).toBe(`punishment:details:mute:${TARGET}:A1B2C`);
+    expect(button.label).toBe('Details');
   });
 
-  it('renders a ranked ban with the queue restriction line', async () => {
+  it('renders a ranked ban in dark red, permanent when there is no expiry', async () => {
     const channel = channelMock();
 
     await sendPunishmentEmbed({
       guild: guildWith(channel),
-      targetId: '123456789012345678',
+      targetId: TARGET,
       moderatorId: 'mod-1',
-      reason: '[SS] Refusing to Screenshare',
+      reason: 'Cheating',
       type: 'ban',
-      expires: EXPIRY,
     });
 
-    const payload = sent(channel);
-    const embed = payload.embeds[0].toJSON();
-
-    expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.description).toContain('-# ➡ Ranked Ban');
-    expect(embed.color).toBe(EMBED_THEME.punishmentColor);
-    expect(embed.description).toContain('has been issued a Ranked Ban punishment.');
-    expect(embed.description).not.toContain('<@');
-    expect(embed.description).toContain('Player is no longer able to queue.');
-    expect(embed.thumbnail).toBeUndefined();
+    const embed = sent(channel).embeds[0].toJSON();
+    const fields = fieldsOf(embed);
+    expect(embed.color).toBe(0x7b0606);
+    expect(embed.description).toContain('has been 🔨 rank banned.');
+    expect(fields.Duration).toBe('`Permanent`');
+    expect(fields.Expires).toBe('`Never`');
+    // No record ID, so no Details button
+    expect(sent(channel).components).toEqual([]);
   });
 
-  it('renders a strike without a duration line', async () => {
+  it('renders a strike without duration fields', async () => {
     const channel = channelMock();
 
     await sendPunishmentEmbed({
       guild: guildWith(channel),
-      targetId: '123456789012345678',
+      targetId: TARGET,
       moderatorId: 'mod-1',
-      reason: 'Teaming',
+      reason: 'Toxicity',
       type: 'strike',
+      caseId: '4840E',
     });
 
-    const payload = sent(channel);
-    const embed = payload.embeds[0].toJSON();
-
-    expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.description).toContain('-# ➡ Strike');
-    expect(embed.color).toBe(EMBED_THEME.warningColor);
-    expect(embed.description).toContain('has been issued a Strike punishment.');
-    expect(embed.description).not.toContain('<@');
-    expect(embed.description).not.toContain('**Duration:**');
-    expect(embed.thumbnail).toBeUndefined();
-  });
-
-  it('renders a mute removal', async () => {
-    const channel = channelMock();
-
-    await sendPunishmentEmbed({
-      guild: guildWith(channel),
-      targetId: '123456789012345678',
-      moderatorId: 'mod-1',
-      reason: 'mistake',
-      type: 'unmute',
-    });
-
-    const payload = sent(channel);
-    const embed = payload.embeds[0].toJSON();
-
-    expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.description).toContain('-# ➡ Mute Removed');
-    expect(embed.color).toBe(EMBED_THEME.successColor);
-    expect(embed.description).toContain('is no longer muted.');
-    expect(embed.description).not.toContain('<@');
-    expect(embed.description).toContain('**Type:** Mute');
-    expect(embed.description).toContain('**Reason:** mistake');
-    expect(embed.description).toMatch(/\*\*Processed:\*\* \w+, \d+ \w+, \d{4} \d{2}:\d{2}/);
-    expect(embed.thumbnail).toBeUndefined();
+    const embed = sent(channel).embeds[0].toJSON();
+    const fields = fieldsOf(embed);
+    expect(embed.color).toBe(0xcda12f);
+    expect(embed.description).toContain('has been issued a ⭐ strike.');
+    expect(fields.Duration).toBeUndefined();
+    expect(fields.Expires).toBeUndefined();
   });
 
   it.each([
-    ['unban', 'Success: Ban Removed', 'is no longer banned', 'Ranked Ban'],
-    ['unstrike', 'Success: Strike Removed', 'has had their strike removed', 'Strike'],
-  ])('renders %s removals with the right title and wording', async (type, title, phrase, label) => {
+    ['unmute', 'has been 🔊 unmuted'],
+    ['unban', 'has been ✅ unbanned'],
+    ['unstrike', 'had a ⭐ strike removed'],
+  ] as const)('renders a %s in the brand colour without the appeal footer', async (type, phrase) => {
     const channel = channelMock();
 
     await sendPunishmentEmbed({
       guild: guildWith(channel),
-      targetId: '123456789012345678',
-      moderatorId: 'mod-1',
-      reason: 'appeal accepted',
-      type: type as any,
+      targetId: TARGET,
+      moderatorId: 'system',
+      reason: 'mistake',
+      type,
     });
 
-    const payload = sent(channel);
-    const embed = payload.embeds[0].toJSON();
-    expect(payload.content).toBe('<@123456789012345678>');
-    expect(embed.description).toContain(`-# ➡ ${title.replace(/^\w+: /, '')}`);
+    const embed = sent(channel).embeds[0].toJSON();
     expect(embed.description).toContain(`${phrase}.`);
-    expect(embed.description).toContain(`**Type:** ${label}`);
-    expect(embed.description).not.toContain('<@');
     expect(embed.color).toBe(EMBED_THEME.successColor);
+    expect(embed.footer).toBeUndefined();
+    expect(fieldsOf(embed).Expired).toBe('> System');
   });
 
   it('does not throw when the punishments channel is missing', async () => {
@@ -171,7 +148,7 @@ describe('punishment embeds', () => {
 
     await expect(sendPunishmentEmbed({
       guild,
-      targetId: '123456789012345678',
+      targetId: TARGET,
       moderatorId: 'mod-1',
       reason: 'test',
       type: 'mute',
