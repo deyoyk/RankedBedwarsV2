@@ -127,10 +127,10 @@ describe('party private game command', () => {
   it('starts the private game after the leader confirms', async () => {
     startPrivateGame.mockResolvedValue({
       success: true,
-      gameId: 7,
+      message: 'Private game on Quad is starting.',
       map: 'Quad',
-      team1: ['a', 'b'],
-      team2: ['c', 'd'],
+      players: ['Alpha', 'Bravo', 'Charlie'],
+      missing: ['Delta'],
     });
     const manager = ws();
     const { target, collector } = interaction('private', 'Quad');
@@ -140,12 +140,14 @@ describe('party private game command', () => {
     const button = click(confirmId);
     await collector.handlers.collect(button);
 
-    expect(startPrivateGame).toHaveBeenCalledWith(UID, target.guild, manager, { map: 'Quad' });
+    expect(startPrivateGame).toHaveBeenCalledWith(UID, manager, { map: 'Quad' });
     expect(button.update).toHaveBeenCalled();
     const text = JSON.stringify(button.editReply.mock.calls);
-    expect(text).toContain('Private game #7');
-    expect(text).toContain('<@a>');
-    expect(text).toContain('<@d>');
+    expect(text).toContain('Private game on Quad is starting.');
+    expect(text).toContain('Alpha, Bravo, Charlie');
+    expect(text).toContain('Not on the server');
+    expect(text).toContain('Delta');
+    expect(text).not.toMatch(/#\d/);
     expect(collector.stop).toHaveBeenCalledWith('started');
   });
 

@@ -235,7 +235,7 @@ interface PrivateFromInGamePayload {
 interface PrivateFromInGameSuccessPayload {
   type: 'privatefromingame_success';
   uuid: string;
-  game_id: number;
+  game_id?: number;
   map: string;
 }
 
@@ -323,6 +323,30 @@ interface PlayerStatusPayload {
   original_ign_case?: string;
 }
 
+interface HostPrivateGameResultPayload {
+  type: 'host_private_game_result';
+  request_id?: string;
+  ok?: boolean;
+  message?: string;
+  map?: string;
+  players?: string[];
+  missing?: string[];
+}
+
+export interface HostPrivateGameRequest {
+  map?: string;
+  players?: string[];
+  teams?: string[][];
+}
+
+export interface HostPrivateGameResult {
+  ok: boolean;
+  message: string;
+  map?: string;
+  players: string[];
+  missing: string[];
+}
+
 interface BedwarsPlayersStatusPayload {
   type: 'bedwars_players_status';
   request_id?: string;
@@ -390,6 +414,7 @@ type IncomingPayload =
   | MapsInfoPayload
   | PlayerStatusPayload
   | BedwarsPlayersStatusPayload
+  | HostPrivateGameResultPayload
   | LeaderboardRequestPayload
   | StatsRequestPayload
   | PermissionPayload
@@ -452,6 +477,7 @@ export class WebSocketManager {
   
   private checkPlayerCallbacks: Map<string, Set<(online: boolean, original_ign_case?: string) => void>> = new Map();
   private bedwarsCheckCallbacks: Map<string, (players: Record<string, boolean>, online: Record<string, boolean>) => void> = new Map();
+  private hostPrivateCallbacks: Map<string, (result: HostPrivateGameResult) => void> = new Map();
   private listeners: { [type: string]: Set<(msg: IncomingPayload) => void> } = {};
   private globalHandlers: { [type: string]: ((msg: IncomingPayload) => void) | undefined } = {};
   private queueFromInGameLocks: Map<string, Promise<void>> = new Map();
@@ -579,6 +605,7 @@ export class WebSocketManager {
           this.client = null;
           this.stopQueueStatusBroadcast();
           this.bedwarsCheckCallbacks.clear();
+          this.failHostPrivateRequests();
           PresenceService.setConnected(false);
         }
       });
@@ -602,6 +629,7 @@ export class WebSocketManager {
         console.warn('[WebSocketManager] Client heartbeat failed, closing dead connection');
         this.client = null;
         this.bedwarsCheckCallbacks.clear();
+        this.failHostPrivateRequests();
         PresenceService.setConnected(false);
         try {
           client.removeAllListeners('close');
@@ -703,6 +731,9 @@ export class WebSocketManager {
         break;
       case 'bedwars_players_status':
         this.handleBedwarsPlayersStatus(msg);
+        break;
+      case 'host_private_game_result':
+        this.handleHostPrivateGameResult(msg);
         break;
       case 'leaderboard_request':
         await this.handleLeaderboardRequest(msg);
@@ -1094,6 +1125,54 @@ export class WebSocketManager {
   
   
 
+  private handleHostPrivateGameResult(msg: HostPrivateGameResultPayload) {
+    const requestId = typeof msg.request_id === 'string' ? msg.request_id : '';
+    const callback = requestId ? this.hostPrivateCallbacks.get(requestId) : undefined;
+    if (!callback) return;
+    this.hostPrivateCallbacks.delete(requestId);
+    const names = (list: unknown) => Array.isArray(list) ? list.filter((n): n is string => typeof n === 'string') : [];
+    callback({
+      ok: msg.ok === true,
+      message: typeof msg.message === 'string' ? msg.message : '',
+      map: typeof msg.map === 'string' && msg.map ? msg.map : undefined,
+      players: names(msg.players),
+      missing: names(msg.missing),
+    });
+  }
+
+  private failHostPrivateRequests() {
+    const pending = [...this.hostPrivateCallbacks.values()];
+    this.hostPrivateCallbacks.clear();
+    for (const callback of pending) {
+      callback({ ok: false, message: 'The Minecraft server disconnected.', players: [], missing: [] });
+    }
+  }
+
+  /** Private games are hosted by the Minecraft server itself: no game number, no VCs, no scoring. */
+  public hostPrivateGame(request: HostPrivateGameRequest, timeoutMs = 15000): Promise<HostPrivateGameResult> {
+    if (!this.isConnected()) {
+      return Promise.resolve({ ok: false, message: 'The Minecraft server is offline.', players: [], missing: [] });
+    }
+    const requestId = `pg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.hostPrivateCallbacks.delete(requestId);
+        resolve({ ok: false, message: "The Minecraft server didn't answer. Try again.", players: [], missing: [] });
+      }, timeoutMs);
+      timeout.unref?.();
+      this.hostPrivateCallbacks.set(requestId, (result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      });
+      this.send({
+        type: 'host_private_game',
+        request_id: requestId,
+        map: request.map?.trim() || 'random',
+        ...(request.teams ? { teams: request.teams } : { players: request.players ?? [] }),
+      });
+    });
+  }
+
   public send(payload: object) {
     if (this.client && this.client.readyState === this.client.OPEN) {
       try {
@@ -1466,15 +1545,9 @@ export class WebSocketManager {
         return;
       }
 
-      const guild = this.discordClient?.guilds.cache.first();
-      if (!guild) {
-        fail('Discord guild not available');
-        return;
-      }
-
       const { PrivateGameService } = await import('../services/PrivateGameService');
       const map = typeof msg.map === 'string' ? msg.map.trim() : '';
-      const result = await PrivateGameService.startPrivateGame(user.discordId, guild, this, {
+      const result = await PrivateGameService.startPrivateGame(user.discordId, this, {
         ...(map ? { map } : {}),
       });
 
@@ -1486,7 +1559,6 @@ export class WebSocketManager {
       this.send({
         type: 'privatefromingame_success',
         uuid,
-        game_id: result.gameId!,
         map: result.map || '',
       } as PrivateFromInGameSuccessPayload);
     } catch (error) {

@@ -1,6 +1,5 @@
 const mockValidatePartyAccess = jest.fn();
-const mockGetSharedInstance = jest.fn();
-const mockEvaluatePresence = jest.fn();
+const mockPartyFindOne = jest.fn();
 
 jest.mock('../src/models/Game', () => ({
   __esModule: true,
@@ -10,423 +9,137 @@ jest.mock('../src/models/User', () => ({
   __esModule: true,
   default: { find: jest.fn() },
 }));
+jest.mock('../src/models/Party', () => ({
+  __esModule: true,
+  default: { findOne: (...args: unknown[]) => ({ lean: () => mockPartyFindOne(...args) }) },
+}));
 jest.mock('../src/services/PartyService', () => ({
   __esModule: true,
   PartyService: { validatePartyAccess: (...args: unknown[]) => mockValidatePartyAccess(...args) },
-}));
-jest.mock('../src/managers/MapManager', () => ({
-  __esModule: true,
-  MapService: { getSharedInstance: (...args: unknown[]) => mockGetSharedInstance(...args) },
-}));
-jest.mock('../src/services/PresenceService', () => ({
-  __esModule: true,
-  PresenceService: { evaluate: (...args: unknown[]) => mockEvaluatePresence(...args) },
-}));
-jest.mock('../src/Matchmaking/utils', () => ({
-  __esModule: true,
-  claimMapPick: jest.fn(),
-  getRecentMapPicks: jest.fn(() => new Set()),
 }));
 
 import Game from '../src/models/Game';
 import User from '../src/models/User';
 import { PrivateGameService } from '../src/services/PrivateGameService';
 import { queuePlayers } from '../src/types/queuePlayersMemory';
-import { claimPlayers, clearAllDraftClaims } from '../src/Matchmaking/draftClaims';
 
 const GameModel = Game as unknown as { findOne: jest.Mock };
 const UserModel = User as unknown as { find: jest.Mock };
-const validatePartyAccess = mockValidatePartyAccess;
-const getSharedInstance = mockGetSharedInstance;
-const evaluatePresence = mockEvaluatePresence;
 
-function chain(value: any) {
-  return {
-    select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(value) }),
-    lean: jest.fn().mockResolvedValue(value),
-  };
+function party(members: string[]) {
+  return { isValid: true, party: { partyId: 'PARTY1', leader: members[0], members, maxMembers: 8 } } as any;
 }
 
-function party(members: string[], maxMembers = 8) {
-  return {
-    isValid: true,
-    party: {
-      partyId: 'PARTY1',
-      leader: members[0],
-      members,
-      maxMembers,
-      isPrivate: true,
-    },
-  } as any;
-}
-
-function user(id: string, elo: number, overrides: Record<string, unknown> = {}) {
-  return {
-    discordId: id,
-    ign: id.toUpperCase(),
-    elo,
-    isBanned: false,
-    isFrozen: false,
-    ...overrides,
-  };
-}
-
-function guildFor(ids: string[], missing: string[] = []) {
-  return {
-    members: {
-      cache: new Map(ids.filter(id => !missing.includes(id)).map(id => [id, { id }])),
-      fetch: jest.fn(async (id: string) => {
-        if (missing.includes(id)) throw new Error('missing');
-        return { id };
-      }),
-    },
-  } as any;
-}
-
-function mapService(maps: any[]) {
-  return {
-    getAllMaps: jest.fn().mockResolvedValue(maps),
-    claimMap: jest.fn(),
-  };
-}
-
-function gameManager(overrides: Record<string, jest.Mock> = {}) {
-  return {
-    createPrivateGame: jest.fn().mockResolvedValue({ gameId: 42 }),
-    initiateGameWarp: jest.fn().mockResolvedValue(undefined),
-    abortGame: jest.fn().mockResolvedValue(undefined),
-    voidGame: jest.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
-
-function wsFor(manager: any) {
-  return { getGameManager: () => manager } as any;
+function user(id: string, overrides: Record<string, unknown> = {}) {
+  return { discordId: id, ign: id.toUpperCase(), isBanned: false, isFrozen: false, ...overrides };
 }
 
 function usersQuery(users: any[]) {
   return { select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(users) }) };
 }
 
-const maps = [
-  { name: 'Duo', physical_name: 'Duo', maxplayers: 2, heightlimit: 100 },
-  { name: 'Quad', physical_name: 'Quad', maxplayers: 4, heightlimit: 100 },
-  { name: 'Octo', physical_name: 'Octo', maxplayers: 8, heightlimit: 100 },
-];
+function wsWith(answer: Record<string, unknown> = { ok: true, message: 'Hosting', map: 'Quad', players: [], missing: [] }) {
+  const voidGame = jest.fn().mockResolvedValue(undefined);
+  return {
+    hostPrivateGame: jest.fn().mockResolvedValue(answer),
+    getGameManager: () => ({ voidGame }),
+    voidGame,
+  } as any;
+}
 
 describe('PrivateGameService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    clearAllDraftClaims();
     queuePlayers.clear();
-    validatePartyAccess.mockResolvedValue(party(['a', 'b', 'c', 'd']));
-    evaluatePresence.mockReturnValue('online');
-    getSharedInstance.mockReturnValue(mapService(maps));
-    UserModel.find.mockReturnValue(usersQuery([
-      user('a', 1600),
-      user('b', 1400),
-      user('c', 1200),
-      user('d', 1000),
-    ]));
-    GameModel.findOne.mockReturnValue(chain(null));
+    mockValidatePartyAccess.mockResolvedValue(party(['a', 'b', 'c']));
+    UserModel.find.mockReturnValue(usersQuery([user('a'), user('b'), user('c')]));
   });
 
-  it('creates an even, ELO-balanced private game and starts the warp', async () => {
-    const manager = gameManager();
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(manager),
-    );
+  it("asks the server to host the party's game and creates nothing on the bot", async () => {
+    const ws = wsWith({ ok: true, message: 'Hosting on Quad', map: 'Quad', players: ['A', 'B'], missing: ['C'] });
+    const result = await PrivateGameService.startPrivateGame('a', ws, { map: 'Quad' });
 
+    expect(ws.hostPrivateGame).toHaveBeenCalledWith({ map: 'Quad', players: ['A', 'B', 'C'] });
+    expect(result).toEqual({ success: true, message: 'Hosting on Quad', map: 'Quad', players: ['A', 'B'], missing: ['C'] });
+    expect(GameModel.findOne).not.toHaveBeenCalled();
+  });
+
+  it('leaves the map to the server when none is picked', async () => {
+    const ws = wsWith();
+    await PrivateGameService.startPrivateGame('a', ws);
+    expect(ws.hostPrivateGame).toHaveBeenCalledWith({ map: undefined, players: ['A', 'B', 'C'] });
+  });
+
+  it("passes on the server's reason when it can't host", async () => {
+    const ws = wsWith({ ok: false, message: 'Only 1 player is on the server', players: [], missing: ['B', 'C'] });
+    await expect(PrivateGameService.startPrivateGame('a', ws)).resolves.toEqual({ success: false, message: 'Only 1 player is on the server' });
+  });
+
+  it('needs at least 2 players', async () => {
+    mockValidatePartyAccess.mockResolvedValue(party(['a']));
+    const ws = wsWith();
+    const result = await PrivateGameService.startPrivateGame('a', ws);
+    expect(result).toEqual({ success: false, message: 'A private game needs at least 2 players' });
+    expect(ws.hostPrivateGame).not.toHaveBeenCalled();
+  });
+
+  it('rejects unregistered, banned and queued members before asking the server', async () => {
+    const ws = wsWith();
+
+    UserModel.find.mockReturnValue(usersQuery([user('a'), user('b')]));
+    expect((await PrivateGameService.startPrivateGame('a', ws)).message).toBe('Some party members are not registered');
+
+    UserModel.find.mockReturnValue(usersQuery([user('a'), user('b', { isBanned: true }), user('c')]));
+    expect((await PrivateGameService.startPrivateGame('a', ws)).message).toBe('Banned or frozen party members: B');
+
+    UserModel.find.mockReturnValue(usersQuery([user('a'), user('b'), user('c')]));
+    queuePlayers.set('queue-1', ['c']);
+    expect((await PrivateGameService.startPrivateGame('a', ws)).message).toBe('Party members already in a queue: C');
+
+    expect(ws.hostPrivateGame).not.toHaveBeenCalled();
+  });
+
+  it('returns the party check error', async () => {
+    mockValidatePartyAccess.mockResolvedValue({ isValid: false, error: 'Only the party leader can do this' });
+    await expect(PrivateGameService.startPrivateGame('b', wsWith())).resolves.toEqual({ success: false, message: 'Only the party leader can do this' });
+  });
+
+  it('only starts one game at a time per party', async () => {
+    let answer!: (value: unknown) => void;
+    const ws = wsWith();
+    ws.hostPrivateGame.mockReturnValue(new Promise(resolve => { answer = resolve; }));
+
+    const first = PrivateGameService.startPrivateGame('a', ws);
+    await new Promise(resolve => setImmediate(resolve));
+    const second = await PrivateGameService.startPrivateGame('a', ws);
+    expect(second).toEqual({ success: false, message: 'A private game is already being started for your party' });
+
+    answer({ ok: true, message: '', players: [], missing: [] });
+    await expect(first).resolves.toMatchObject({ success: true });
+  });
+
+  it('sends a duel as one team per party', async () => {
+    mockPartyFindOne.mockImplementation(({ partyId }: { partyId: string }) => Promise.resolve(
+      partyId === 'P1' ? { partyId: 'P1', members: ['a', 'b'] } : { partyId: 'P2', members: ['c', 'd'] },
+    ));
+    UserModel.find.mockReturnValue(usersQuery([user('a'), user('b'), user('c'), user('d')]));
+    const ws = wsWith();
+
+    const result = await PrivateGameService.startDuel('P1', 'P2', ws, { map: 'Quad' });
+
+    expect(ws.hostPrivateGame).toHaveBeenCalledWith({ map: 'Quad', teams: [['A', 'B'], ['C', 'D']] });
     expect(result.success).toBe(true);
-    expect(result.gameId).toBe(42);
-    expect(result.map).toBe('Quad');
-    expect(result.team1).toHaveLength(2);
-    expect(result.team2).toHaveLength(2);
-    expect(manager.createPrivateGame).toHaveBeenCalledWith(expect.objectContaining({
-      partyId: 'PARTY1',
-      map: 'Quad',
-    }));
-    expect(manager.initiateGameWarp).toHaveBeenCalledWith(42);
   });
 
-  it('rejects the party when a member is already in a public queue', async () => {
-    queuePlayers.set('public-queue', ['a', 'stranger']);
-    const manager = gameManager();
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(manager),
-    );
-
-    expect(result).toEqual({ success: false, message: 'Party members already in a queue: A' });
-    expect(manager.createPrivateGame).not.toHaveBeenCalled();
+  it("can't duel a party that no longer exists", async () => {
+    mockPartyFindOne.mockResolvedValue(null);
+    await expect(PrivateGameService.startDuel('P1', 'P2', wsWith())).resolves.toEqual({ success: false, message: 'One of the parties no longer exists' });
   });
 
-  it('rejects the party when matchmaking is already drafting a member', async () => {
-    claimPlayers(['a'], 'public-queue');
-    const manager = gameManager();
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(manager),
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.message).toMatch(/currently being processed by matchmaking/);
-    expect(manager.createPrivateGame).not.toHaveBeenCalled();
-  });
-
-  it('honors an explicit map and claims it', async () => {
-    validatePartyAccess.mockResolvedValue(party(['a', 'b']));
-    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1100)]));
-    const service = mapService(maps);
-    getSharedInstance.mockReturnValue(service);
-    const manager = gameManager();
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b']),
-      wsFor(manager),
-      { map: 'duo' },
-    );
-
-    expect(result.success).toBe(true);
-    expect(result.map).toBe('Duo');
-    expect(service.claimMap).toHaveBeenCalledWith('Duo');
-  });
-
-  it('rejects a map too small for the party, and allows a bigger one', async () => {
-    validatePartyAccess.mockResolvedValue(party(['a', 'b', 'c', 'd']));
-    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1100), user('c', 1200), user('d', 1300)]));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(gameManager()),
-      { map: 'Duo' },
-    );
-
-    expect(result).toEqual({
-      success: false,
-      message: 'Map "Duo" fits 2 players, but this game has 4',
-    });
-
-    validatePartyAccess.mockResolvedValue(party(['a', 'b']));
-    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1100)]));
-    const bigger = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b']),
-      wsFor(gameManager()),
-      { map: 'Quad' },
-    );
-    expect(bigger.success).toBe(true);
-  });
-
-  it('rejects unknown maps instead of silently using a fallback', async () => {
-    validatePartyAccess.mockResolvedValue(party(['a', 'b']));
-    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1100)]));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b']),
-      wsFor(gameManager()),
-      { map: 'Unknown' },
-    );
-
-    expect(result).toEqual({ success: false, message: 'Map "Unknown" was not found' });
-  });
-
-  it('reports when no map supports the party size', async () => {
-    getSharedInstance.mockReturnValue(mapService([
-      { name: 'Duo', physical_name: 'Duo', maxplayers: 2, heightlimit: 100 },
-    ]));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'No available map supports 4 players' });
-  });
-
-  it('surfaces database failures while loading party members', async () => {
-    UserModel.find.mockImplementation(() => {
-      throw new Error('db down');
-    });
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'Could not load party members from the database' });
-  });
-
-  it('rejects parties without an even number of players', async () => {
-    validatePartyAccess.mockResolvedValue(party(['a', 'b', 'c']));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({
-      success: false,
-      message: 'Private games need an even number of players (2, 4, 6, or 8)',
-    });
-    expect(UserModel.find).not.toHaveBeenCalled();
-  });
-
-  it('rejects parties above the configured private game limit', async () => {
-    const members = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
-    validatePartyAccess.mockResolvedValue(party(members, 8));
-    UserModel.find.mockReturnValue(usersQuery(members.map((id, index) => user(id, 1000 + index))));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(members),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({
-      success: false,
-      message: 'Party size 10 exceeds the private game limit of 8',
-    });
-  });
-
-  it('rejects banned or frozen party members', async () => {
-    validatePartyAccess.mockResolvedValue(party(['a', 'b']));
-    UserModel.find.mockReturnValue(usersQuery([
-      user('a', 1000),
-      user('b', 1000, { isFrozen: true }),
-    ]));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'Banned or frozen party members: B' });
-  });
-
-  it('rejects party members who are offline in Minecraft', async () => {
-    validatePartyAccess.mockResolvedValue(party(['a', 'b']));
-    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1000)]));
-    evaluatePresence.mockImplementation((ign: string) => (ign === 'B' ? 'offline' : 'online'));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'Party members offline in Minecraft: B' });
-  });
-
-  it('rejects party members who are already in a game', async () => {
-    GameModel.findOne.mockReturnValue(chain({ gameId: 9, isPrivate: false }));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'A party member is already in game #9' });
-  });
-
-  it('reports an existing private game for the same party', async () => {
-    GameModel.findOne.mockReturnValue(chain({ gameId: 9, isPrivate: true, privatePartyId: 'PARTY1' }));
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'Your party already has an active private game #9' });
-  });
-
-  it('rejects members who are not in the Discord server', async () => {
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd'], ['b']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'Not in the Discord server: B' });
-  });
-
-  it('requires a party leader', async () => {
-    validatePartyAccess.mockResolvedValue({ isValid: false, error: 'Not party leader' });
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(gameManager()),
-    );
-
-    expect(result).toEqual({ success: false, message: 'Not party leader' });
-  });
-
-  it('tears down a game when warp initiation fails', async () => {
-    const manager = gameManager({
-      initiateGameWarp: jest.fn().mockRejectedValue(new Error('warp down')),
-    });
-
-    const result = await PrivateGameService.startPrivateGame(
-      'a',
-      guildFor(['a', 'b', 'c', 'd']),
-      wsFor(manager),
-    );
-
-    expect(result).toEqual({
-      success: false,
-      message: 'The private game could not be started and has been cancelled',
-    });
-    expect(manager.abortGame).toHaveBeenCalledWith(42, 'Private game warp failed');
-  });
-
-  it('prevents concurrent private game creation for the same party', async () => {
-    let release!: (value: { gameId: number }) => void;
-    const pending = new Promise<{ gameId: number }>(resolve => { release = resolve; });
-    const manager = gameManager({ createPrivateGame: jest.fn().mockReturnValue(pending) });
-    const ws = wsFor(manager);
-
-    const first = PrivateGameService.startPrivateGame('a', guildFor(['a', 'b', 'c', 'd']), ws);
-    const second = await PrivateGameService.startPrivateGame('a', guildFor(['a', 'b', 'c', 'd']), ws);
-
-    expect(second.success).toBe(false);
-    expect(second.message).toMatch(/already being created/);
-
-    release({ gameId: 42 });
-    await expect(first).resolves.toMatchObject({ success: true, gameId: 42 });
-  });
-
-  it('cancels the active private game for the party leader', async () => {
-    GameModel.findOne.mockReturnValue(chain({ gameId: 12 }));
-    const manager = gameManager();
-
-    const result = await PrivateGameService.cancelPrivateGame('a', wsFor(manager));
-
-    expect(result).toEqual({ success: true, gameId: 12 });
-    expect(manager.voidGame).toHaveBeenCalledWith(12, 'Private game cancelled by party leader');
-  });
-
-  it('rejects cancellation when the party has no active private game', async () => {
-    const manager = gameManager();
-
-    const result = await PrivateGameService.cancelPrivateGame('a', wsFor(manager));
-
-    expect(result).toEqual({ success: false, message: 'Your party does not have an active private game' });
-    expect(manager.voidGame).not.toHaveBeenCalled();
+  it('still cancels a private game left over from before', async () => {
+    GameModel.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ gameId: 12 }) }) });
+    const ws = wsWith();
+    await expect(PrivateGameService.cancelPrivateGame('a', ws)).resolves.toEqual({ success: true, gameId: 12 });
+    expect(ws.voidGame).toHaveBeenCalledWith(12, 'Private game cancelled by party leader');
   });
 });

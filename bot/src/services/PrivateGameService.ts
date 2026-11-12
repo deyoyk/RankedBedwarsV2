@@ -1,83 +1,38 @@
-import type { Guild } from 'discord.js';
 import Game from '../models/Game';
 import User from '../models/User';
-import config from '../config/config';
-import { MapService } from '../managers/MapManager';
-import { claimMapPick, getRecentMapPicks } from '../Matchmaking/utils';
 import { PartyService } from './PartyService';
-import { PresenceService } from './PresenceService';
 import { queuePlayers } from '../types/queuePlayersMemory';
-import { claimPlayers, releasePlayers } from '../Matchmaking/draftClaims';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
-import type { MapInfo } from '../types/MapInfoMemory';
-
-export interface PrivateGamePlayer {
-  discordId: string;
-  ign: string;
-  elo: number;
-}
 
 export interface PrivateGameStartOptions {
   map?: string;
-  /** A duel: these exact teams instead of splitting the party by ELO. */
-  teams?: { team1: string[]; team2: string[] };
 }
 
 export interface PrivateGameStartResult {
   success: boolean;
   message?: string;
-  gameId?: number;
   map?: string;
-  team1?: string[];
-  team2?: string[];
+  /** IGNs that joined the game on the server. */
+  players?: string[];
+  /** IGNs that weren't on the server or were already in a game. */
+  missing?: string[];
 }
 
 const ACTIVE_GAME_STATES = ['pending', 'active', 'scoring'];
 
+interface MemberUser {
+  discordId: string;
+  ign?: string;
+  isBanned?: boolean;
+  isFrozen?: boolean;
+}
+
+/**
+ * Private games are hosted by the Minecraft server (BW-RBW's host_private_game): they get no game
+ * number, no VCs and no scoring, so they never count as real games.
+ */
 export class PrivateGameService {
   private static inFlightParties = new Set<string>();
-
-  public static maxPartySize(): number {
-    const configured = Number.isInteger(config.CommonPartySize) && config.CommonPartySize > 0
-      ? config.CommonPartySize
-      : 8;
-    return Math.max(2, configured);
-  }
-
-  public static splitTeams(players: PrivateGamePlayer[]): { team1: string[]; team2: string[] } {
-    const sorted = [...players].sort((a, b) => {
-      const eloDiff = (b.elo || 0) - (a.elo || 0);
-      return eloDiff !== 0 ? eloDiff : a.discordId.localeCompare(b.discordId);
-    });
-    const perTeam = Math.floor(sorted.length / 2);
-    const team1: string[] = [];
-    const team2: string[] = [];
-    let team1Elo = 0;
-    let team2Elo = 0;
-
-    for (const player of sorted) {
-      const elo = Number.isFinite(player.elo) ? player.elo : 0;
-      if (team1.length >= perTeam) {
-        team2.push(player.discordId);
-        team2Elo += elo;
-        continue;
-      }
-      if (team2.length >= perTeam) {
-        team1.push(player.discordId);
-        team1Elo += elo;
-        continue;
-      }
-      if (team1Elo <= team2Elo) {
-        team1.push(player.discordId);
-        team1Elo += elo;
-      } else {
-        team2.push(player.discordId);
-        team2Elo += elo;
-      }
-    }
-
-    return { team1, team2 };
-  }
 
   public static async getActivePrivateGame(partyId: string): Promise<{ gameId: number } | null> {
     if (!partyId) return null;
@@ -95,7 +50,6 @@ export class PrivateGameService {
 
   public static async startPrivateGame(
     leaderId: string,
-    guild: Guild,
     wsManager: WebSocketManager,
     options: PrivateGameStartOptions = {},
   ): Promise<PrivateGameStartResult> {
@@ -105,215 +59,23 @@ export class PrivateGameService {
     }
 
     const party = validation.party;
-    const partyId = party.partyId;
-    if (this.inFlightParties.has(partyId)) {
-      return { success: false, message: 'A private game is already being created for your party' };
+    if (this.inFlightParties.has(party.partyId)) {
+      return { success: false, message: 'A private game is already being started for your party' };
     }
-    this.inFlightParties.add(partyId);
-
+    this.inFlightParties.add(party.partyId);
     try {
-      return await this.createPrivateGame(partyId, party.members, party.maxMembers, guild, wsManager, options);
+      const members = await this.loadMembers([party.members]);
+      if (typeof members === 'string') return { success: false, message: members };
+      return await this.host(wsManager, { map: options.map, players: members[0] });
     } finally {
-      this.inFlightParties.delete(partyId);
+      this.inFlightParties.delete(party.partyId);
     }
   }
 
-  private static async createPrivateGame(
-    partyId: string,
-    rawMembers: string[],
-    partyMaxMembers: number,
-    guild: Guild,
-    wsManager: WebSocketManager,
-    options: PrivateGameStartOptions,
-  ): Promise<PrivateGameStartResult> {
-    const memberIds = [...new Set((rawMembers ?? []).map(id => (id ?? '').trim()).filter(Boolean))];
-    if (memberIds.length < 2) {
-      return { success: false, message: 'A private game needs at least 2 party members' };
-    }
-    if (memberIds.length % 2 !== 0) {
-      return { success: false, message: 'Private games need an even number of players (2, 4, 6, or 8)' };
-    }
-
-    const maxSize = options.teams
-      ? Math.max(2, partyMaxMembers)
-      : Math.min(
-        this.maxPartySize(),
-        Number.isInteger(partyMaxMembers) && partyMaxMembers > 0 ? partyMaxMembers : this.maxPartySize(),
-      );
-    if (memberIds.length > maxSize) {
-      return { success: false, message: `Party size ${memberIds.length} exceeds the private game limit of ${maxSize}` };
-    }
-
-    const users = await (async () => {
-      try {
-        return await User.find({ discordId: { $in: memberIds } })
-          .select('discordId ign elo isBanned isFrozen')
-          .lean() as Array<{
-            discordId: string;
-            ign?: string;
-            elo?: number;
-            isBanned?: boolean;
-            isFrozen?: boolean;
-          }>;
-      } catch (error) {
-        console.error('[PrivateGameService] Error loading party members:', error);
-        return null;
-      }
-    })();
-
-    if (!users) {
-      return { success: false, message: 'Could not load party members from the database' };
-    }
-
-    if (users.length !== memberIds.length) {
-      return { success: false, message: 'Some party members are not registered' };
-    }
-
-    const usersById = new Map(users.map(user => [user.discordId, user]));
-    const missingIgn = memberIds.filter(id => !usersById.get(id)?.ign);
-    if (missingIgn.length > 0) {
-      return { success: false, message: 'Some party members do not have a valid IGN' };
-    }
-
-    const blocked = users.filter(user => user.isBanned || user.isFrozen);
-    if (blocked.length > 0) {
-      return {
-        success: false,
-        message: `Banned or frozen party members: ${blocked.map(user => user.ign || user.discordId).join(', ')}`,
-      };
-    }
-
-    const offline = users.filter(user => PresenceService.evaluate(user.ign) === 'offline');
-    if (offline.length > 0) {
-      return {
-        success: false,
-        message: `Party members offline in Minecraft: ${offline.map(user => user.ign || user.discordId).join(', ')}`,
-      };
-    }
-
-    const queuedIds = this.findQueuedMembers(memberIds);
-    if (queuedIds.length > 0) {
-      return {
-        success: false,
-        message: `Party members already in a queue: ${queuedIds.map(id => usersById.get(id)?.ign || id).join(', ')}`,
-      };
-    }
-
-    let activeGame: { gameId: number; isPrivate?: boolean; privatePartyId?: string } | null;
-    try {
-      activeGame = await Game.findOne({
-        $or: [
-          { team1: { $in: memberIds } },
-          { team2: { $in: memberIds } },
-        ],
-        state: { $in: ACTIVE_GAME_STATES },
-      }).select('gameId isPrivate privatePartyId').lean() as {
-        gameId: number;
-        isPrivate?: boolean;
-        privatePartyId?: string;
-      } | null;
-    } catch (error) {
-      console.error('[PrivateGameService] Error checking active games:', error);
-      return { success: false, message: 'Could not verify whether party members are already in a game' };
-    }
-
-    if (activeGame) {
-      return {
-        success: false,
-        message: activeGame.privatePartyId === partyId
-          ? `Your party already has an active private game #${activeGame.gameId}`
-          : `A party member is already in game #${activeGame.gameId}`,
-      };
-    }
-
-    if (!guild) {
-      return { success: false, message: 'Discord guild not available' };
-    }
-
-    const guildMembers = await Promise.all(memberIds.map(async (id) => {
-      const cached = guild.members.cache?.get(id);
-      if (cached) return cached;
-      if (typeof guild.members.fetch !== 'function') return null;
-      return guild.members.fetch(id).catch(() => null);
-    }));
-    const missingMembers = memberIds
-      .filter((_, index) => !guildMembers[index])
-      .map(id => usersById.get(id)?.ign || id);
-    if (missingMembers.length > 0) {
-      return { success: false, message: `Not in the Discord server: ${missingMembers.join(', ')}` };
-    }
-
-    const gameManager = wsManager.getGameManager();
-    if (!gameManager) {
-      return { success: false, message: 'Game manager is not available yet' };
-    }
-
-    const mapResult = await this.resolveMap(
-      MapService.getSharedInstance(wsManager),
-      options.map,
-      memberIds.length,
-    );
-    if (!mapResult.map) {
-      return { success: false, message: mapResult.error || 'No map is available for this private game' };
-    }
-
-    const players: PrivateGamePlayer[] = memberIds.map(id => ({
-      discordId: id,
-      ign: usersById.get(id)!.ign!,
-      elo: typeof usersById.get(id)!.elo === 'number' ? usersById.get(id)!.elo! : 0,
-    }));
-    const { team1, team2 } = options.teams ?? this.splitTeams(players);
-
-    let gameId: number;
-    const claimOwner = `private:${partyId}`;
-    const claimed = claimPlayers(memberIds, claimOwner);
-    if (claimed.length !== memberIds.length) {
-      releasePlayers(memberIds, claimOwner);
-      return { success: false, message: 'A party member is currently being processed by matchmaking. Try again in a moment' };
-    }
-
-    try {
-      try {
-        const resources = await gameManager.createPrivateGame({
-          partyId,
-          map: mapResult.map,
-          team1,
-          team2,
-        });
-        gameId = resources.gameId;
-      } catch (error) {
-        console.error('[PrivateGameService] Error creating private game:', error);
-        return { success: false, message: 'Failed to create the private game' };
-      }
-    } finally {
-      releasePlayers(memberIds, claimOwner);
-    }
-
-    try {
-      await gameManager.initiateGameWarp(gameId);
-    } catch (error) {
-      console.error(`[PrivateGameService] Error starting private game ${gameId}:`, error);
-      await gameManager.abortGame(gameId, 'Private game warp failed').catch(() => undefined);
-      return { success: false, message: 'The private game could not be started and has been cancelled' };
-    }
-
-    return {
-      success: true,
-      gameId,
-      map: mapResult.map,
-      team1,
-      team2,
-    };
-  }
-
-  /**
-   * /party duel: the challenger's party (team 1) against the other party (team 2). Both parties
-   * must be the same size; the leaders are checked by the caller.
-   */
+  /** /party duel: the challenger's party against the other party, each on its own team. */
   public static async startDuel(
     challengerPartyId: string,
     targetPartyId: string,
-    guild: Guild,
     wsManager: WebSocketManager,
     options: PrivateGameStartOptions = {},
   ): Promise<PrivateGameStartResult> {
@@ -325,25 +87,22 @@ export class PrivateGameService {
     if (!a || !b) {
       return { success: false, message: 'One of the parties no longer exists' };
     }
-    if (a.members.length !== b.members.length) {
-      return { success: false, message: `The parties are different sizes (${a.members.length} and ${b.members.length})` };
-    }
     if (this.inFlightParties.has(a.partyId) || this.inFlightParties.has(b.partyId)) {
-      return { success: false, message: 'A game is already being created for one of the parties' };
+      return { success: false, message: 'A game is already being started for one of the parties' };
     }
     this.inFlightParties.add(a.partyId);
     this.inFlightParties.add(b.partyId);
     try {
-      return await this.createPrivateGame(a.partyId, [...a.members, ...b.members], a.members.length * 2, guild, wsManager, {
-        ...options,
-        teams: { team1: [...a.members], team2: [...b.members] },
-      });
+      const teams = await this.loadMembers([a.members, b.members]);
+      if (typeof teams === 'string') return { success: false, message: teams };
+      return await this.host(wsManager, { map: options.map, teams });
     } finally {
       this.inFlightParties.delete(a.partyId);
       this.inFlightParties.delete(b.partyId);
     }
   }
 
+  /** Ends a private game left over from before they were hosted by the server. */
   public static async cancelPrivateGame(
     leaderId: string,
     wsManager: WebSocketManager,
@@ -372,8 +131,46 @@ export class PrivateGameService {
     }
   }
 
-  private static mapCapacity(map: MapInfo): number | undefined {
-    return typeof map.maxplayers === 'number' ? map.maxplayers : undefined;
+  private static async host(
+    wsManager: WebSocketManager,
+    request: { map?: string; players?: string[]; teams?: string[][] },
+  ): Promise<PrivateGameStartResult> {
+    const result = await wsManager.hostPrivateGame({
+      map: request.map?.trim() || undefined,
+      ...(request.teams ? { teams: request.teams } : { players: request.players }),
+    });
+    if (!result.ok) {
+      return { success: false, message: result.message || 'The Minecraft server could not start the private game' };
+    }
+    return { success: true, message: result.message, map: result.map, players: result.players, missing: result.missing };
+  }
+
+  /** Each group's IGNs, or why the game can't start. */
+  private static async loadMembers(groups: string[][]): Promise<string[][] | string> {
+    const cleaned = groups.map(g => [...new Set((g ?? []).map(id => (id ?? '').trim()).filter(Boolean))]);
+    const ids = cleaned.flat();
+    if (ids.length < 2) return 'A private game needs at least 2 players';
+
+    let users: MemberUser[];
+    try {
+      users = await User.find({ discordId: { $in: ids } })
+        .select('discordId ign isBanned isFrozen')
+        .lean() as MemberUser[];
+    } catch (error) {
+      console.error('[PrivateGameService] Error loading party members:', error);
+      return 'Could not load party members from the database';
+    }
+
+    const byId = new Map(users.map(u => [u.discordId, u]));
+    if (ids.some(id => !byId.get(id)?.ign)) return 'Some party members are not registered';
+
+    const blocked = users.filter(u => u.isBanned || u.isFrozen);
+    if (blocked.length) return `Banned or frozen party members: ${blocked.map(u => u.ign).join(', ')}`;
+
+    const queued = this.findQueuedMembers(ids);
+    if (queued.length) return `Party members already in a queue: ${queued.map(id => byId.get(id)!.ign).join(', ')}`;
+
+    return cleaned.map(g => g.map(id => byId.get(id)!.ign!));
   }
 
   private static findQueuedMembers(memberIds: string[]): string[] {
@@ -385,72 +182,5 @@ export class PrivateGameService {
       }
     }
     return [...queued];
-  }
-
-  private static mapKey(map: MapInfo): string {
-    return map.physical_name ?? map.name;
-  }
-
-  private static async resolveMap(
-    mapService: MapService,
-    requested: string | undefined,
-    playerCount: number,
-  ): Promise<{ map?: string; error?: string }> {
-    try {
-      const maps = await mapService.getAllMaps();
-      if (!maps.length) {
-        return { error: 'No maps are currently available' };
-      }
-
-      const requestedName = (requested ?? '').trim();
-      if (requestedName) {
-        const normalized = requestedName.toLowerCase();
-        const target = maps.find(map =>
-          [map.name, map.physical_name]
-            .filter((name): name is string => Boolean(name))
-            .some(name => name.toLowerCase() === normalized),
-        );
-        if (!target) {
-          return { error: `Map "${requestedName}" was not found` };
-        }
-        if (target.locked) {
-          return { error: `Map "${requestedName}" is currently locked` };
-        }
-        // Private games may leave slots empty: any map with room for everyone.
-        const capacity = this.mapCapacity(target);
-        if (capacity !== undefined && capacity < playerCount) {
-          return {
-            error: `Map "${requestedName}" fits ${capacity} players, but this game has ${playerCount}`,
-          };
-        }
-        const map = this.mapKey(target);
-        mapService.claimMap(map);
-        claimMapPick(map);
-        return { map };
-      }
-
-      const eligible = maps.filter(map =>
-        !map.locked && (this.mapCapacity(map) === undefined || this.mapCapacity(map)! >= playerCount),
-      );
-      if (!eligible.length) {
-        return { error: `No available map supports ${playerCount} players` };
-      }
-
-      // The closest fit first: maps made for exactly this many players, else the smallest with room.
-      const sizeOf = (map: MapInfo) => this.mapCapacity(map) ?? playerCount;
-      const bestSize = Math.min(...eligible.map(sizeOf));
-      const fitting = eligible.filter(map => sizeOf(map) === bestSize);
-      const recent = getRecentMapPicks();
-      const open = fitting.filter(map => !recent.has(this.mapKey(map)));
-      const pool = open.length > 0 ? open : fitting;
-      const chosen = pool[Math.floor(Math.random() * pool.length)];
-      const map = this.mapKey(chosen);
-      mapService.claimMap(map);
-      claimMapPick(map);
-      return { map };
-    } catch (error) {
-      console.error('[PrivateGameService] Error resolving map:', error);
-      return { error: 'Could not load available maps' };
-    }
   }
 }

@@ -70,7 +70,7 @@ export async function party(interaction: ChatInputCommandInteraction, wsManager?
       }
       case 'private': {
         const map = interaction.options.getString('map');
-        await handleStartPrivateGame(interaction, userId, guild, wsManager, map ? map.split(/\s+/) : undefined);
+        await handleStartPrivateGame(interaction, userId, wsManager, map ? map.split(/\s+/) : undefined);
         break;
       }
       case 'cancel':
@@ -356,7 +356,6 @@ async function handleJoinParty(interaction: ChatInputCommandInteraction, userId:
 async function handleStartPrivateGame(
   interaction: ChatInputCommandInteraction,
   userId: string,
-  guild: Guild,
   wsManager?: WebSocketManager,
   args?: string[],
 ) {
@@ -383,7 +382,7 @@ async function handleStartPrivateGame(
     { name: 'Leader', value: `<@${party.leader}>`, inline: true },
     { name: 'Members', value: party.members.map((id: string) => `<@${id}>`).join('\n'), inline: false },
     { name: 'Map', value: map || 'Random eligible map', inline: true },
-    { name: 'Mode', value: 'Unranked private game', inline: true },
+    { name: 'Mode', value: 'Private game on the server (not counted)', inline: true },
   );
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -433,7 +432,7 @@ async function handleStartPrivateGame(
     if (buttonInteraction.customId !== confirmId) return;
     resolved = true;
 
-    const startingEmbed = betterEmbed('Validating your party and creating the game...', '#00AAAA', 'Starting Private Game');
+    const startingEmbed = betterEmbed('Sending the game to the Minecraft server...', '#00AAAA', 'Starting Private Game');
     startingEmbed.builder.setTimestamp();
     await buttonInteraction.update({
       embeds: [startingEmbed.builder],
@@ -442,7 +441,7 @@ async function handleStartPrivateGame(
 
     let result: Awaited<ReturnType<typeof PrivateGameService.startPrivateGame>>;
     try {
-      result = await PrivateGameService.startPrivateGame(userId, guild, wsManager, {
+      result = await PrivateGameService.startPrivateGame(userId, wsManager, {
         ...(map ? { map } : {}),
       });
     } catch (error) {
@@ -461,26 +460,19 @@ async function handleStartPrivateGame(
     }
 
     const successEmbedObj = successEmbed(
-      `Private game #${result.gameId} has been created and is starting now.`,
+      result.message || 'Your private game is starting on the server.',
       'Private Game Started',
     );
     successEmbedObj.builder.addFields(
-      { name: 'Game ID', value: `#${result.gameId}`, inline: true },
-      { name: 'Map', value: result.map || 'Unknown', inline: true },
-      {
-        name: 'Team 1',
-        value: (result.team1 || []).map((id: string) => `<@${id}>`).join(', '),
-        inline: false,
-      },
-      {
-        name: 'Team 2',
-        value: (result.team2 || []).map((id: string) => `<@${id}>`).join(', '),
-        inline: false,
-      },
+      { name: 'Map', value: result.map || 'Random', inline: true },
+      { name: 'Players', value: result.players?.length ? result.players.join(', ') : 'None', inline: false },
+      ...(result.missing?.length
+        ? [{ name: 'Not on the server', value: result.missing.join(', '), inline: false }]
+        : []),
     ).setTimestamp();
 
     await buttonInteraction.editReply({
-      content: [...(result.team1 || []), ...(result.team2 || [])].map((id: string) => `<@${id}>`).join(' '),
+      content: party.members.map((id: string) => `<@${id}>`).join(' '),
       embeds: [successEmbedObj.builder],
     }).catch(() => undefined);
     collector.stop('started');

@@ -163,9 +163,9 @@ export class PartyBridge {
         case 'close':
           return await this.setOpen(msg, me, action === 'open');
         case 'queue':
-          return await this.queue(msg, me, guild);
+          return await this.queue(msg, me);
         case 'duel':
-          return await this.duel(msg, me, guild);
+          return await this.duel(msg, me);
         default:
           this.reply(msg, false, 'Unknown party command.');
       }
@@ -420,7 +420,7 @@ export class PartyBridge {
    * /party queue: with private games on, the leader's pick of map starts a private game for the
    * party. Otherwise (or without a party) it's the normal queue, answered as queuefromingame_*.
    */
-  private async queue(msg: PartyCommandPayload, me: UserLite, guild: Guild): Promise<void> {
+  private async queue(msg: PartyCommandPayload, me: UserLite): Promise<void> {
     const party = await this.myParty(me);
     if (!party || !party.privateGames) {
       await this.ws.handleQueueFromInGame({ type: 'queuefromingame', ign: me.ign || msg.ign || '', uuid: msg.request_id || '' });
@@ -431,20 +431,21 @@ export class PartyBridge {
       return;
     }
     const map = (msg.map || '').trim();
-    const result = await PrivateGameService.startPrivateGame(me.discordId, guild, this.ws, map ? { map } : {});
+    const result = await PrivateGameService.startPrivateGame(me.discordId, this.ws, map ? { map } : {});
     if (!result.success) {
       this.reply(msg, false, result.message || 'Could not start the private game.');
       return;
     }
-    this.reply(msg, true, `Private game #${result.gameId} on ${result.map} is starting!`, { game_id: result.gameId, map: result.map });
-    await this.notify(party.members, `Private game #${result.gameId} on ${result.map} is starting!`, me.ign);
+    const text = `Private game on ${result.map || 'a random map'} is starting!`;
+    this.reply(msg, true, text, { map: result.map });
+    await this.notify(party.members, text, me.ign);
   }
 
   /**
    * /party duel <player>: challenges that player's party (both need private games on and the same
    * size). The other leader accepts with /party duel <challenger>.
    */
-  private async duel(msg: PartyCommandPayload, me: UserLite, guild: Guild): Promise<void> {
+  private async duel(msg: PartyCommandPayload, me: UserLite): Promise<void> {
     const mine = await this.myParty(me);
     if (!mine) {
       this.reply(msg, false, "You're not in a party.");
@@ -474,13 +475,13 @@ export class PartyBridge {
       // Accepting their challenge.
       this.duels.delete(mine.partyId);
       const map = (msg.map || '').trim();
-      const result = await PrivateGameService.startDuel(theirs.partyId, mine.partyId, guild, this.ws, map ? { map } : {});
+      const result = await PrivateGameService.startDuel(theirs.partyId, mine.partyId, this.ws, map ? { map } : {});
       if (!result.success) {
         this.reply(msg, false, result.message || 'Could not start the duel.');
         return;
       }
-      const text = `Duel accepted! Game #${result.gameId} on ${result.map} is starting.`;
-      this.reply(msg, true, text, { game_id: result.gameId, map: result.map });
+      const text = `Duel accepted! The game on ${result.map || 'a random map'} is starting.`;
+      this.reply(msg, true, text, { map: result.map });
       await this.notify([...mine.members, ...theirs.members], text, me.ign);
       return;
     }
