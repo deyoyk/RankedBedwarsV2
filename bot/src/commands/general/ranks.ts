@@ -1,8 +1,10 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, infoEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { getEloRanks } from '../../utils/fix';
+
+const { errorEmbed, infoEmbed } = embedsFor('Player');
 
 export async function ranks(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
 

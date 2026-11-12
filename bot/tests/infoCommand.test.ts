@@ -136,7 +136,7 @@ describe('info command', () => {
     expect(UserModel.aggregate).toHaveBeenCalledTimes(1);
 
     const embed = payload.embeds[0].toJSON();
-    expect(embed.title).toBe('Info: Steve');
+    expect(embed.description).toContain('-# ➡ Steve');
     expect(embed.description).toContain('<@1>');
 
     const fields = fieldsByEmbed(payload);

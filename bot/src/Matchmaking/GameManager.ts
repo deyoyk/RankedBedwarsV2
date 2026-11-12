@@ -11,6 +11,8 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import { fix } from '../utils/fix';
 import { normalizeTeams } from './utils';
 import { generateScoreImageBuffer } from '../utils/scoreImage';
+import { formatMapName } from '../utils/mapName';
+import { NumericSnapshot, clampEloOp, snapshotCounters, toAtomicUpdate } from '../utils/atomicStats';
 import { checkLevelUp, EXPERIENCE_REWARDS } from '../utils/levelSystem';
 import { WorkersManager } from '../managers/WorkersManager';
 import { updateDailyElo } from '../utils/userStats';
@@ -18,9 +20,11 @@ import type { IRecentGame } from '../models/gameBase';
 import type { ICombatEntry } from '../models/gameTypes';
 import { bountyForOpponentStreak, parseTiers, type ProgressionTier, streakBonusFor } from '../utils/eloProgression';
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
-import { themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
+
+const { themedEmbed } = embedsFor('Scoring');
 
 interface PlayerScoreData {
   player: IUser;
@@ -1050,7 +1054,7 @@ export class GameManager {
         console.warn(`[GameManager] Game ${gameId} warping with ${actual}/${expected} players resolved (some IGNs missing, game will start short-handed)`);
       }
 
-      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs);
+      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs, Boolean(game.isPrivate));
 
       console.log(`[GameManager] Initiated warp request for game ${gameId} with map ${game.map}`);
     } catch (error) {
@@ -1131,6 +1135,7 @@ export class GameManager {
       game_id: key,
       map: warpData.map,
       is_ranked: warpData.isRanked,
+      is_private: warpData.isPrivate === true,
       team1: {
         players: warpData.team1IGNs
       },
@@ -1441,7 +1446,8 @@ export class GameManager {
     map: string,
     isRanked: boolean,
     team1IGNs: string[],
-    team2IGNs: string[]
+    team2IGNs: string[],
+    isPrivate: boolean = false
   ): void {
     try {
       const warpData: WarpRequestData = {
@@ -1454,6 +1460,7 @@ export class GameManager {
         team2IGNs,
         map,
         isRanked,
+        isPrivate,
         timestamp: Date.now()
       };
 
@@ -2259,7 +2266,9 @@ export class GameManager {
       if (playerScoreData.length === 0) return;
       const gameDurationSeconds = this.computeGameDurationSeconds(game);
       const entries = new Map<string, IRecentGame>();
+      const counters = new Map<string, NumericSnapshot>();
       for (const scoreData of playerScoreData) {
+        counters.set(scoreData.player.discordId, snapshotCounters(scoreData.player));
         const entry = this.applyScoreDataToPlayer(scoreData.player, scoreData, game, gameDurationSeconds);
         entries.set(scoreData.player.discordId, entry);
       }
@@ -2272,21 +2281,26 @@ export class GameManager {
           const ops: Record<string, unknown>[] = [];
           for (const scoreData of playerScoreData) {
             const entry = entries.get(scoreData.player.discordId);
+            const discordId = scoreData.player.discordId;
+            // Drop an older non-scored entry for this game (pending/voided). A scored one stays and
+            // blocks the next op, so a replay can never count the same game twice.
             ops.push({
               updateOne: {
-                filter: { discordId: scoreData.player.discordId },
-                update: { $pull: { recentGames: { gameId: game.gameId } } }
+                filter: { discordId },
+                update: { $pull: { recentGames: { gameId: game.gameId, state: { $ne: 'scored' } } } }
               }
             });
             ops.push({
               updateOne: {
-                filter: { discordId: scoreData.player.discordId },
+                filter: { discordId, recentGames: { $not: { $elemMatch: { gameId: game.gameId, state: 'scored' } } } },
                 update: {
-                  $set: this.scalarSetsForScoredPlayer(scoreData.player),
+                  // Differences, not totals: an ELO edit made while this game was scoring is kept
+                  ...toAtomicUpdate(counters.get(discordId) ?? snapshotCounters({}), this.scalarSetsForScoredPlayer(scoreData.player)),
                   $push: { recentGames: { $each: [entry], $position: 0, $slice: RECENT_GAMES_CAP } }
                 }
               }
             });
+            ops.push(clampEloOp(discordId));
           }
           await UserModel.bulkWrite(ops);
         } catch (error) {
@@ -2700,7 +2714,9 @@ export class GameManager {
   private async revertPlayerStats(playerVoidData: PlayerVoidData[], gameId?: number): Promise<void> {
     try {
       const meta = new Map<string, { targetGameId: number | null; hadExisting: boolean }>();
+      const counters = new Map<string, NumericSnapshot>();
       for (const voidData of playerVoidData) {
+        counters.set(voidData.player.discordId, snapshotCounters(voidData.player));
         try {
           meta.set(voidData.player.discordId, this.applyVoidDataToPlayer(voidData, gameId));
         } catch (error) {
@@ -2720,13 +2736,17 @@ export class GameManager {
           if (!targetGameId) {
             continue;
           }
+          const revert = toAtomicUpdate(counters.get(player.discordId) ?? snapshotCounters({}), this.scalarSetsForVoidedPlayer(player));
           if (info?.hadExisting) {
             ops.push({
               updateOne: {
-                filter: { discordId: player.discordId, 'recentGames.gameId': targetGameId },
+                // Only a not-yet-voided entry, so the same game can't be reverted twice
+                filter: { discordId: player.discordId, recentGames: { $elemMatch: { gameId: targetGameId, state: { $ne: 'voided' } } } },
                 update: {
+                  ...(revert.$inc ? { $inc: revert.$inc } : {}),
+                  ...(revert.$max ? { $max: revert.$max } : {}),
                   $set: {
-                    ...this.scalarSetsForVoidedPlayer(player),
+                    ...(revert.$set || {}),
                     'recentGames.$.state': 'voided',
                     'recentGames.$.eloGain': 0,
                     'recentGames.$.won': false,
@@ -2738,9 +2758,9 @@ export class GameManager {
           } else {
             ops.push({
               updateOne: {
-                filter: { discordId: player.discordId },
+                filter: { discordId: player.discordId, 'recentGames.gameId': { $ne: targetGameId } },
                 update: {
-                  $set: this.scalarSetsForVoidedPlayer(player),
+                  ...revert,
                   $push: {
                     recentGames: {
                       $each: [{
@@ -2773,6 +2793,7 @@ export class GameManager {
             });
           }
         }
+        for (const voidData of playerVoidData) ops.push(clampEloOp(voidData.player.discordId));
         if (ops.length > 0) {
           await UserModel.bulkWrite(ops);
         }
@@ -2841,20 +2862,19 @@ export class GameManager {
       const formatPlayer = (voidData: PlayerVoidData): string => {
         const eloChangeStr = voidData.eloChange >= 0 ? `+${voidData.eloChange}` : `${voidData.eloChange}`;
         const expChangeStr = voidData.experienceToRevert > 0 ? ` (-${voidData.experienceToRevert} XP)` : '';
-        const levelChangeStr = voidData.level_before !== voidData.level_after ? ` (Lv.${voidData.level_before}â†’${voidData.level_after})` : '';
-        return `<@${voidData.player.discordId}>: ${voidData.elo_before} â†’ ${voidData.elo_after} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
+        const levelChangeStr = voidData.level_before !== voidData.level_after ? ` (Lv.${voidData.level_before}→${voidData.level_after})` : '';
+        return `<@${voidData.player.discordId}>: ${voidData.elo_before} → ${voidData.elo_after} (${eloChangeStr})${expChangeStr}${levelChangeStr}`;
       };
 
       const voidedSummary = playerVoidData.map(formatPlayer).join('\n');
-      const rawMap = context.game.map; 
-      const versionMatch = rawMap.match(/(\d+v\d+)/);
-      const mapName = versionMatch ? rawMap.slice(0, versionMatch.index).trim() || rawMap : rawMap;
-      return themedEmbed('warning')
-        .setTitle(`Game #${context.game.gameId} Voided`)
-        .setDescription(`Game #${context.game.gameId} has been voided.\n\n**Reason:** ${context.reason}\n**Map:** ${mapName}`)
-        .addFields([
-          { name: 'Stats Reverted', value: voidedSummary || 'None', inline: false }
-        ]);
+      return themedEmbed('error')
+        .setTitle(`Game #${context.game.gameId} — Match Voided`)
+        .addFields(
+          { name: 'Reason', value: `\`${context.reason}\``, inline: true },
+          { name: 'Arena', value: formatMapName(context.game.map), inline: true },
+          { name: 'Stats Reverted', value: voidedSummary || '*None*', inline: false }
+        )
+        .setTimestamp();
     } catch (error) {
       console.error('[GameManager] Error creating void embed:', error);
       return themedEmbed('error').setTitle('Void Embed Error').setDescription('Could not create void embed.');

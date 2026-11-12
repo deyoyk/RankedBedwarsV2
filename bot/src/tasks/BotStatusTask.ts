@@ -4,7 +4,9 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import config from '../config/config';
 import os from 'os';
 import botPackage from '../../package.json';
-import { EMBED_THEME, themedEmbed } from '../utils/betterembed';
+import { EMBED_THEME, embedsFor } from '../utils/betterembed';
+
+const { themedEmbed } = embedsFor('Status');
 
 export const STATUS_EMBED_TITLE = 'Bot Environment Status';
 const STATUS_WARNING_COLOR = EMBED_THEME.warningColor;
@@ -98,7 +100,7 @@ export class BotStatusTask {
       if (!ownId) return null;
       const messages = await channel.messages.fetch({ limit: 10 });
       for (const message of messages.values()) {
-        if (message.author?.id === ownId && message.embeds?.some(embed => embed.title?.includes(STATUS_EMBED_TITLE))) {
+        if (message.author?.id === ownId && message.embeds?.some(embed => (embed.title ?? embed.description ?? '').includes(STATUS_EMBED_TITLE))) {
           return message;
         }
       }
@@ -164,6 +166,7 @@ export class BotStatusTask {
 
       const embed = themedEmbed(color)
         .setTitle(STATUS_EMBED_TITLE)
+        .setTimestamp()
         .setDescription(
           healthy
             ? 'All services are online.'

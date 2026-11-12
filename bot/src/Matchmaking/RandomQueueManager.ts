@@ -9,7 +9,9 @@ import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
 import { MapVoteService } from '../services/MapVoteService';
 import { calculateTeamAverageElo, selectMapVoteCandidates, selectRandomMap as selectRandomMapUtil } from './utils';
-import { themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
+
+const { themedEmbed } = embedsFor('Queue');
 
 interface QueueLike {
   id?: unknown;

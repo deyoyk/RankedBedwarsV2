@@ -3,7 +3,8 @@ import { wipe } from '../commands/account/wipe';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
-import { errorEmbed, successEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
+import config from '../config/config';
 import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, SlashCommandBuilder } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
@@ -35,7 +36,8 @@ import { nick } from '../commands/account/nick';
 import { settings } from '../commands/account/settings';
 import { forcevoid } from '../commands/scoring/forcevoid';
 import { refresh } from '../commands/account/refresh';
-import { gameinfo } from '../commands/general/gameinfo';
+import { gameinfo, handleGameInfoButton, handleGameInfoVoidModal } from '../commands/general/gameinfo';
+import { handlePunishmentDetails } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
 import { lose } from '../commands/scoring/lose';
@@ -60,6 +62,8 @@ import { seasoninfo } from '../commands/season/seasoninfo';
 import { statreset } from '../commands/account/statreset';
 import { claimelo } from '../commands/account/claimelo';
 import { queuecontrol, queueControlData } from '../commands/queue/queuecontrol';
+
+const { errorEmbed, successEmbed } = embedsFor('Command');
 
 interface Command {
   name: string;
@@ -114,6 +118,21 @@ export class CommandManager {
 
         if (interaction.isButton() && interaction.customId.startsWith('ss_cancel_')) {
           await this.handleScreenshareCancel(interaction);
+          return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('gameinfo:')) {
+          await handleGameInfoButton(interaction);
+          return;
+        }
+
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('gameinfo:voidmodal:')) {
+          await handleGameInfoVoidModal(interaction);
+          return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('punishment:details:')) {
+          await handlePunishmentDetails(interaction);
           return;
         }
       } catch (error) {
@@ -238,16 +257,32 @@ export class CommandManager {
   private registerQueueCommands() {
     this.reg('queuecontrol', 'Enable or disable queues by type or specific queue', queuecontrol, [], queueControlData.toJSON());
     this.reg('queue', 'Show information about players in the current queue', queue);
+    // Each party action is its own subcommand: /party invite, /party list, ...
+    const sub = (name: string, description: string, options: ApplicationCommandOptionData[] = []) =>
+      ({ name, description, type: 1, options }) as unknown as ApplicationCommandOptionData;
+    const userOpt = (description: string, required = true) =>
+      ({ name: 'user', description, type: 6, required }) as ApplicationCommandOptionData;
     this.reg('party', 'Party management', party, [
-      { name: 'action', description: 'Party action to perform', type: 3, required: true, choices: [
-        { name: 'create', value: 'create' }, { name: 'invite', value: 'invite' }, { name: 'leave', value: 'leave' },
-        { name: 'info', value: 'info' }, { name: 'disband', value: 'disband' }, { name: 'kick', value: 'kick' },
-        { name: 'promote', value: 'promote' }, { name: 'settings', value: 'settings' }, { name: 'list', value: 'list' },
-        { name: 'join', value: 'join' }, { name: 'private', value: 'private' }, { name: 'cancel', value: 'cancel' }
-      ]},
-      { name: 'user', description: 'User to invite, kick, or promote (only for relevant actions)', type: 6, required: false },
-      { name: 'party_id', description: 'Party ID to join (only for join action)', type: 3, required: false },
-      { name: 'args', description: 'Additional arguments for settings or other actions', type: 3, required: false }
+      sub('create', 'Create a party'),
+      sub('invite', 'Invite a player (creates a party if you have none)', [userOpt('Player to invite')]),
+      sub('list', 'Show the players in your party', [userOpt("Show another player's party instead", false)]),
+      sub('leave', 'Leave your party'),
+      sub('disband', 'Disband your party (leader only)'),
+      sub('kick', 'Kick a player from your party', [userOpt('Player to kick')]),
+      sub('promote', 'Make a player the party leader', [userOpt('Player to promote')]),
+      sub('join', 'Join a public party', [
+        { name: 'party', description: 'Party ID', type: 3, required: true } as ApplicationCommandOptionData
+      ]),
+      sub('settings', 'View or change party settings', [
+        { name: 'setting', description: 'Setting to change (leave empty to view all)', type: 3, required: false, choices: [
+          { name: 'Max members', value: 'maxmembers' }, { name: 'Private', value: 'private' }, { name: 'Description', value: 'description' }
+        ]} as ApplicationCommandOptionData,
+        { name: 'value', description: 'New value', type: 3, required: false } as ApplicationCommandOptionData
+      ]),
+      sub('private', 'Start an unranked private game with your party', [
+        { name: 'map', description: 'Map to play (leave empty for a random one)', type: 3, required: false } as ApplicationCommandOptionData
+      ]),
+      sub('cancel', 'Cancel your party\'s private game')
     ]);
     this.reg('call', 'Grant voice channel access to a user in game voice channels', call, [
       { name: 'user', description: 'The user to grant voice channel access to', type: 6, required: true }
@@ -468,8 +503,29 @@ export class CommandManager {
       console.log(`[Command Manager] Registering ${commands.length} commands`);
 
 
-      await this.client.application?.commands.set(commands);
-      console.log('[Command Manager] Slash commands registered successfully');
+      // Register on the server itself (shows up instantly) and clear the global set. Having both,
+      // for example global from this bot and guild-level from an earlier one on the same token,
+      // makes Discord list every command twice.
+      const guildIds = new Set<string>(this.client.guilds?.cache?.keys() ?? []);
+      if (config.guildId) guildIds.add(config.guildId);
+      let registered = 0;
+      for (const id of guildIds) {
+        try {
+          const guild = this.client.guilds?.cache?.get(id) ?? await this.client.guilds.fetch(id);
+          await guild.commands.set(commands);
+          registered++;
+          console.log(`[Command Manager] Slash commands registered for ${guild.name} (${id})`);
+        } catch (guildError) {
+          console.warn(`[Command Manager] Could not register slash commands for guild ${id}:`, guildError instanceof Error ? guildError.message : guildError);
+        }
+      }
+      if (registered > 0) {
+        await this.client.application?.commands.set([]);
+        console.log('[Command Manager] Cleared global slash commands (server commands are in use)');
+      } else {
+        await this.client.application?.commands.set(commands);
+        console.log('[Command Manager] Slash commands registered globally (no server could be registered)');
+      }
     } catch (error) {
       console.error('[Command Manager] Error registering slash commands:', error);
 

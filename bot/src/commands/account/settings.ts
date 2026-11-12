@@ -1,9 +1,11 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import UserModel from '../../models/User';
 import { fix } from '../../utils/fix';
+
+const { betterEmbed, errorEmbed, successEmbed } = embedsFor('Player');
 
 const SETTINGS = [
   { key: 'toggleprefix', label: 'Show Prefix', description: 'Show only IGN or [ELO] IGN in nickname.' },

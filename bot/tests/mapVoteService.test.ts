@@ -57,7 +57,7 @@ describe('MapVoteService', () => {
     );
     const sent = channel.send.mock.calls[0][0];
     const json = sent.embeds[0].toJSON();
-    expect(json.title).toBe('Info: Game #12 Map Vote');
+    expect(json.description).toContain('-# ➡ Game #12 Map Vote');
     expect(json.color).toBe(EMBED_COLORS.info);
     expect(json.fields?.map((field: { name: string }) => field.name)).toEqual(['Map 1', 'Map 2', 'Map 3']);
 

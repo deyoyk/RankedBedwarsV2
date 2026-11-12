@@ -106,7 +106,7 @@ export abstract class TimedPunishmentManager {
       addPunishmentRole(promises, guild, targetId, config.roles[kind.roleKey], 'add', kind.type);
       this.discordApply(promises, guild, targetId, reason, moderatorId, duration);
 
-      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.type, expires });
+      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.type, expires, caseId: recordId });
       sendWebSocketNotification(promises, wsManager, user, {
         type: kind.type,
         reason,

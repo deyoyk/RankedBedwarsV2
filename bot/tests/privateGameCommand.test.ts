@@ -70,9 +70,9 @@ function interaction(action = 'private', argsString?: string) {
       channelId: 'channel-1',
       client: { users: { cache: { get: jest.fn() } } },
       options: {
+        getSubcommand: () => action,
         getString: (name: string) => {
-          if (name === 'action') return action;
-          if (name === 'args') return argsString ?? null;
+          if (name === 'map') return argsString ?? null;
           if (name === 'party_id') return null;
           return null;
         },

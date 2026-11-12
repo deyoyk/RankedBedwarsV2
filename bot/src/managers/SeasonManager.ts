@@ -7,7 +7,9 @@ import Game from '../models/Game';
 import { getLevelInfo } from '../utils/levelSystem';
 import { EmbedBuilder } from 'discord.js';
 import { computePagination, validatePageLimit, validatePositiveInt } from './validationHelpers';
-import { successEmbed, errorEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
+
+const { successEmbed, errorEmbed } = embedsFor('Season');
 
 export interface SeasonStartOptions {
   seasonNumber: number;

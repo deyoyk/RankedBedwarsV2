@@ -795,7 +795,7 @@ export class WebSocketManager {
         }
         if (!channel || !channel.isTextBased()) return;
 
-        const { successEmbed } = await import('../utils/betterembed');
+        const { successEmbed } = (await import('../utils/betterembed')).embedsFor('Game');
         const embed = successEmbed(
           `Game started in arena: \`${msg.arena || 'Unknown'}\`\nStart time: <t:${Math.floor((msg.timestamp || Date.now())/1000)}:F>`,
           'Game Started!'
@@ -1384,7 +1384,7 @@ export class WebSocketManager {
         
         
         try {
-          const { successEmbed } = await import('../utils/betterembed');
+          const { successEmbed } = (await import('../utils/betterembed')).embedsFor('VC Access');
           const gameChannel = guild.channels.cache.get(game.channels.text) ?? await guild.channels.fetch(game.channels.text).catch(() => null);
           
           if (gameChannel && gameChannel.isTextBased()) {
@@ -1424,7 +1424,7 @@ export class WebSocketManager {
     }
   }
 
-  private async handleQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
+  public async handleQueueFromInGame(msg: QueueFromInGamePayload): Promise<void> {
     const key = (msg?.ign || '').toLowerCase();
     if (!key) {
       await this.processQueueFromInGame(msg);

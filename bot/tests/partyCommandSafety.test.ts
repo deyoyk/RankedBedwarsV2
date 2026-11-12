@@ -42,7 +42,8 @@ function interaction(action = 'invite', targetUser?: any) {
     channelId: 'channel-1',
     client: { users: { cache: { get: jest.fn() } } },
     options: {
-      getString: (name: string) => (name === 'action' ? action : null),
+      getSubcommand: () => action,
+      getString: () => null,
       getUser: () => targetUser ?? null,
     },
     reply: jest.fn().mockResolvedValue({}),
@@ -62,7 +63,7 @@ describe('party command safety', () => {
     await party(target);
 
     expect(PartyService.inviteToParty).not.toHaveBeenCalled();
-    expect(replyText(target)).toContain('cannot invite yourself');
+    expect(replyText(target)).toContain("can't invite yourself");
   });
 
   it('rejects bot invites before calling the service', async () => {
@@ -71,6 +72,6 @@ describe('party command safety', () => {
     await party(target);
 
     expect(PartyService.inviteToParty).not.toHaveBeenCalled();
-    expect(replyText(target)).toContain('cannot invite a bot');
+    expect(replyText(target)).toContain("can't invite a bot");
   });
 });

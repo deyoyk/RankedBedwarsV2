@@ -1,7 +1,9 @@
 import { ButtonInteraction } from 'discord.js';
 import { ScreenshareService } from '../services/ScreenshareService';
-import { errorEmbed, successEmbed, themedFrom } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
+
+const { errorEmbed, successEmbed, themedFrom } = embedsFor('Screenshare');
 
 export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
   const { guild, user } = interaction;

@@ -1,9 +1,11 @@
 import { ChatInputCommandInteraction, VoiceChannel } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import Game from '../../models/Game';
 import User from '../../models/User';
+
+const { errorEmbed, successEmbed } = embedsFor('VC Access');
 
 export async function call(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let targetUser: string;
@@ -80,6 +82,8 @@ export async function call(interaction: ChatInputCommandInteraction, _wsManager?
         { name: 'Granted by', value: `<@${senderId}>`, inline: true }
       );
       await safeReply(interaction, { embeds: [embedObj.builder] });
+      const { CallBridge } = await import('../../services/CallBridge');
+      await CallBridge.announce(interaction.client, targetUser, voiceChannel.id, true);
     } catch (permError) {
       console.error('Error granting voice channel permissions:', permError);
       await safeReply(interaction, errorEmbed('Failed to grant voice channel permissions. Please try again or check my permissions.', 'Permission Error'));

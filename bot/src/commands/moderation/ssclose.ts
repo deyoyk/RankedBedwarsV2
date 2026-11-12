@@ -1,9 +1,11 @@
 import { ChatInputCommandInteraction, GuildMember, TextChannel } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
+
+const { errorEmbed, successEmbed } = embedsFor('SS');
 
 export async function ssclose(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
   void _wsManager;

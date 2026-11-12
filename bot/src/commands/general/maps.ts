@@ -2,7 +2,9 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteracti
 import { safeReply } from '../../utils/safeReply';
 import { MapService } from '../../managers/MapManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
-import { betterEmbed, errorEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
+
+const { betterEmbed, errorEmbed } = embedsFor('Game');
 
 export async function maps(
   interaction: ChatInputCommandInteraction,

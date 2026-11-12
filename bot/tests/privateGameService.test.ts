@@ -199,21 +199,31 @@ describe('PrivateGameService', () => {
     expect(service.claimMap).toHaveBeenCalledWith('Duo');
   });
 
-  it('rejects a map that does not support the party size', async () => {
-    validatePartyAccess.mockResolvedValue(party(['a', 'b']));
-    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1100)]));
+  it('rejects a map too small for the party, and allows a bigger one', async () => {
+    validatePartyAccess.mockResolvedValue(party(['a', 'b', 'c', 'd']));
+    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1100), user('c', 1200), user('d', 1300)]));
 
     const result = await PrivateGameService.startPrivateGame(
+      'a',
+      guildFor(['a', 'b', 'c', 'd']),
+      wsFor(gameManager()),
+      { map: 'Duo' },
+    );
+
+    expect(result).toEqual({
+      success: false,
+      message: 'Map "Duo" fits 2 players, but this game has 4',
+    });
+
+    validatePartyAccess.mockResolvedValue(party(['a', 'b']));
+    UserModel.find.mockReturnValue(usersQuery([user('a', 1000), user('b', 1100)]));
+    const bigger = await PrivateGameService.startPrivateGame(
       'a',
       guildFor(['a', 'b']),
       wsFor(gameManager()),
       { map: 'Quad' },
     );
-
-    expect(result).toEqual({
-      success: false,
-      message: 'Map "Quad" supports 4 players, but this party has 2',
-    });
+    expect(bigger.success).toBe(true);
   });
 
   it('rejects unknown maps instead of silently using a fallback', async () => {

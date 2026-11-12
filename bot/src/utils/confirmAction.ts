@@ -1,6 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, EmbedField, Message } from 'discord.js';
 import { safeReply } from './safeReply';
-import { errorEmbed, successEmbed, themedEmbed } from './betterembed';
+import { embedsFor } from './betterembed';
+
+const { errorEmbed, successEmbed, themedEmbed } = embedsFor('Command');
 
 export interface ConfirmActionConfig {
   commandName: string;

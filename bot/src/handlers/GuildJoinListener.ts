@@ -2,7 +2,9 @@ import { Client, Events, GuildMember } from 'discord.js';
 import User from '../models/User';
 import { fix } from '../utils/fix';
 import config from '../config/config';
-import { themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
+
+const { themedEmbed } = embedsFor('Player');
 
 export class GuildJoinListener {
   private client: Client;

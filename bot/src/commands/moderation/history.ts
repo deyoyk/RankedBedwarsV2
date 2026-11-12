@@ -1,8 +1,10 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
-import { betterEmbed, errorEmbed, infoEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+
+const { betterEmbed, errorEmbed, infoEmbed } = embedsFor('Punishment');
 
 interface HistoryRecordView {
   reason: string;

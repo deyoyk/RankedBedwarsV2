@@ -44,8 +44,8 @@ describe('queuecontrol embeds', () => {
 
     expect(mockUpdateMany).toHaveBeenCalledWith({ isRanked: true }, { isActive: true });
     const embed = embedJson(target);
-    expect(embed.title).toBe('Success: Queue System');
-    expect(embed.description).toBe('> Successfully opened `Ranked` queues');
+    expect(embed.author?.name).toBe('Veltrix · Queue');
+    expect(embed.description).toBe('Successfully opened `Ranked` queues');
   });
 
   it('reports closed unranked queues', async () => {
@@ -54,8 +54,8 @@ describe('queuecontrol embeds', () => {
     await queuecontrol(target);
 
     expect(mockUpdateMany).toHaveBeenCalledWith({ isRanked: false }, { isActive: false });
-    expect(embedJson(target).title).toBe('Success: Queue System');
-    expect(embedJson(target).description).toBe('> Successfully closed `Unranked` queues');
+    expect(embedJson(target).author?.name).toBe('Veltrix · Queue');
+    expect(embedJson(target).description).toBe('Successfully closed `Unranked` queues');
   });
 
   it('reports when nothing matched without a success marker', async () => {
@@ -64,7 +64,7 @@ describe('queuecontrol embeds', () => {
 
     await queuecontrol(target);
 
-    expect(embedJson(target).title).toBe('Info: Queue System');
-    expect(embedJson(target).description).toBe('> No matching `Ranked` queues were updated');
+    expect(embedJson(target).author?.name).toBe('Veltrix · Queue');
+    expect(embedJson(target).description).toBe('No matching `Ranked` queues were updated');
   });
 });

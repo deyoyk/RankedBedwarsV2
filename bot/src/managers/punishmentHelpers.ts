@@ -85,6 +85,8 @@ export function sendPunishmentNotification(
     reason: string;
     type: PunishmentNotificationType;
     expires?: Date;
+    /** The record ID (for example "4840E"), shown next to the reason and used by the Details button */
+    caseId?: string;
   }
 ): void {
   promises.push(

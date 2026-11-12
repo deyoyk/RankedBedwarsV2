@@ -2,8 +2,10 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import Game from '../../models/Game';
 import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
-import { errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+
+const { errorEmbed, successEmbed } = embedsFor('Scoring');
 
 export async function forcevoid(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
   

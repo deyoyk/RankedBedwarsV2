@@ -1,6 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Message, MessageComponentInteraction, ThreadAutoArchiveDuration } from 'discord.js';
 import VoteRequest from '../models/VoteRequest';
-import { themedEmbed } from './betterembed';
+import { embedsFor } from './betterembed';
+
+const { themedEmbed } = embedsFor('Scoring');
 
 export interface VoteData {
   upvote: Set<string>;
@@ -38,11 +40,11 @@ export function createVoteButtons(upLabel: string, downLabel: string, prefix: st
     new ButtonBuilder()
       .setCustomId(`${prefix}_upvote`)
       .setLabel(upLabel)
-      .setStyle(ButtonStyle.Success),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`${prefix}_downvote`)
       .setLabel(downLabel)
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Secondary)
   );
 }
 

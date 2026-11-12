@@ -6,8 +6,10 @@ import {
   StringSelectMenuBuilder,
 } from 'discord.js';
 import config from '../config/config';
-import { themedEmbed } from '../utils/betterembed';
+import { embedsFor } from '../utils/betterembed';
 import { tallyMapVotes } from '../utils/mapVote';
+
+const { themedEmbed } = embedsFor('Map voting');
 
 interface MapVoteInteraction {
   user: { id: string };

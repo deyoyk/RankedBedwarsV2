@@ -1,8 +1,10 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
-import { betterEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import Game from '../../models/Game';
 import { paginate } from '../../utils/paginate';
+
+const { betterEmbed } = embedsFor('Game');
 
 type GameListItem = { gameId: number; state: string };
 

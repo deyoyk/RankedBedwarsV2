@@ -1,10 +1,12 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, ComponentType, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
-import { betterEmbed, errorEmbed, successEmbed } from '../../utils/betterembed';
+import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import config from '../../config/config';
+
+const { betterEmbed, errorEmbed, successEmbed } = embedsFor('Player');
 
 export async function register(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager) {
   let ign: string;
