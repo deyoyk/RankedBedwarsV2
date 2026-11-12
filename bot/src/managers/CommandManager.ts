@@ -36,7 +36,7 @@ import { nick } from '../commands/account/nick';
 import { settings } from '../commands/account/settings';
 import { forcevoid } from '../commands/scoring/forcevoid';
 import { refresh } from '../commands/account/refresh';
-import { gameinfo } from '../commands/general/gameinfo';
+import { gameinfo, handleGameInfoButton, handleGameInfoVoidModal } from '../commands/general/gameinfo';
 import { handlePunishmentDetails } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
@@ -120,6 +120,17 @@ export class CommandManager {
           await this.handleScreenshareCancel(interaction);
           return;
         }
+
+        if (interaction.isButton() && interaction.customId.startsWith('gameinfo:')) {
+          await handleGameInfoButton(interaction);
+          return;
+        }
+
+        if (interaction.isModalSubmit() && interaction.customId.startsWith('gameinfo:voidmodal:')) {
+          await handleGameInfoVoidModal(interaction);
+          return;
+        }
+
         if (interaction.isButton() && interaction.customId.startsWith('punishment:details:')) {
           await handlePunishmentDetails(interaction);
           return;

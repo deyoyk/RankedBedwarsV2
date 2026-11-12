@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction, EmbedBuilder, Message } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder, Message, MessageFlags, ModalSubmitInteraction } from 'discord.js';
 import Game, { type IGame } from '../../models/Game';
 import configuration from '../../config/config';
 import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
@@ -6,6 +6,8 @@ import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { buildResultEmbed, claimVoteRequest, createDiscussionThread, createVoteButtons, releaseVoteRequest, setupVoteCollector, VoteData } from '../../utils/voteRequest';
 import { embedsFor } from '../../utils/betterembed';
+import { formatMapName } from '../../utils/mapName';
+
 const { errorEmbed, successEmbed, themedEmbed } = embedsFor('Scoring');
 
 interface VoidRequestData {
@@ -14,22 +16,37 @@ interface VoidRequestData {
   requesterId: string;
 }
 
+type VoidRequestSource = ChatInputCommandInteraction | ModalSubmitInteraction;
+
+// Replies from the "Request void" button on /gameinfo are only shown to the person who pressed it
+async function reply(interaction: VoidRequestSource, payload: { embeds: EmbedBuilder[] }) {
+  if (interaction instanceof ModalSubmitInteraction) {
+    if (interaction.replied || interaction.deferred) await interaction.followUp({ ...payload, flags: MessageFlags.Ephemeral }).catch(() => {});
+    else await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral }).catch(() => {});
+    return;
+  }
+  await safeReply(interaction, payload);
+}
+
 export async function voidrequest(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   try {
     const requestData = await parseVoidRequest(interaction);
     if (!requestData) return;
-
-    const validationResult = await validateVoidRequest(requestData);
-    if (!validationResult.isValid) {
-      await safeReply(interaction, errorEmbed(validationResult.error || 'Invalid void request.', 'Void Request Error'));
-      return;
-    }
-
-    await createVoidRequest(interaction, requestData, validationResult.game);
+    await submitVoidRequest(interaction, requestData);
   } catch (error) {
     console.error('Error in voidrequest command:', error);
     await safeReply(interaction, errorEmbed('An error occurred while processing your void request.', 'Void Request Error'));
   }
+}
+
+/** Validates and posts a void vote. Used by /voidrequest and by the Request void button on /gameinfo. */
+export async function submitVoidRequest(interaction: VoidRequestSource, requestData: VoidRequestData) {
+  const validationResult = await validateVoidRequest(requestData);
+  if (!validationResult.isValid) {
+    await reply(interaction, { embeds: [errorEmbed(validationResult.error || 'Invalid void request.').builder] });
+    return;
+  }
+  await createVoidRequest(interaction, requestData, validationResult.game);
 }
 
 async function parseVoidRequest(interaction: ChatInputCommandInteraction): Promise<VoidRequestData | null> {
@@ -65,10 +82,10 @@ async function validateVoidRequest(data: VoidRequestData): Promise<{ isValid: tr
   return { isValid: true, game };
 }
 
-async function createVoidRequest(interaction: ChatInputCommandInteraction, data: VoidRequestData, game: IGame) {
+async function createVoidRequest(interaction: VoidRequestSource, data: VoidRequestData, game: IGame) {
   const channel = interaction.guild?.channels.cache.get(configuration.channels.voidrequestsChannel);
   if (!channel?.isTextBased()) {
-    await safeReply(interaction, errorEmbed('Void request channel not found.', 'Void Request Error'));
+    await reply(interaction, { embeds: [errorEmbed('Void request channel not found.').builder] });
     return;
   }
 
@@ -77,12 +94,12 @@ async function createVoidRequest(interaction: ChatInputCommandInteraction, data:
 
   const claimed = await claimVoteRequest(data.gameId, 'void', data.requesterId);
   if (!claimed) {
-    await safeReply(interaction, errorEmbed('There is already an open vote request for this game.', 'Void Request Error'));
+    await reply(interaction, { embeds: [errorEmbed('There is already an open vote request for this game.').builder] });
     return;
   }
 
   const embed = createVoidRequestEmbed(data, game);
-  const components = createVoteButtons('Approve Void', 'Reject Void', 'void');
+  const components = createVoteButtons('Approve', 'Reject', 'void');
 
   const message = await channel.send({
     content: teamMentions,
@@ -103,22 +120,23 @@ async function createVoidRequest(interaction: ChatInputCommandInteraction, data:
     await processVoteResults(message, data, votes, allPlayers);
   });
 
-  await safeReply(interaction, successEmbed('Void request created successfully.', 'Void Request Created'));
+  await reply(interaction, { embeds: [successEmbed(`Void request for game \`#${data.gameId}\` posted in <#${channel.id}>.`).builder] });
 }
 
 function createVoidRequestEmbed(data: VoidRequestData, game: IGame): EmbedBuilder {
+  const players = [...(game?.team1 || []), ...(game?.team2 || [])];
+  const needed = Math.max(2, Math.ceil(players.length * 0.6));
+  const mentions = (ids: string[] | undefined) => ids?.map((id: string) => `<@${id}>`).join(' ') || 'None';
   return themedEmbed('warning')
-    .setTitle('Void Request')
-    .setDescription(`A void has been requested for Game ID ${data.gameId}.`)
+    .setDescription(`<@${data.requesterId}> has requested a void for game \`#${data.gameId}\`.\n> **Reason:** ${data.reason}`)
     .addFields(
-      { name: 'Reason', value: data.reason, inline: false },
-      { name: 'Game ID', value: data.gameId, inline: true },
-      { name: 'Requested by', value: `<@${data.requesterId}>`, inline: true },
-      { name: 'Game State', value: game?.state || 'Unknown', inline: true },
-      { name: 'Map', value: game?.map || 'Unknown', inline: true },
-      { name: 'Team 1', value: game?.team1?.map((id: string) => `<@${id}>`).join(', ') || 'None', inline: false },
-      { name: 'Team 2', value: game?.team2?.map((id: string) => `<@${id}>`).join(', ') || 'None', inline: false }
-    );
+      { name: 'Map', value: `\`${game?.map ? formatMapName(game.map) : 'Unknown'}\``, inline: true },
+      { name: 'Status', value: `\`${game?.state || 'unknown'}\``, inline: true },
+      { name: 'Needed', value: `\`${needed} votes\``, inline: true },
+      { name: 'Team 1 · Red', value: mentions(game?.team1), inline: true },
+      { name: 'Team 2 · Green', value: mentions(game?.team2), inline: true }
+    )
+    .setTimestamp();
 }
 
 async function processVoteResults(message: Message, data: VoidRequestData, votes: VoteData, allPlayers: string[]) {
