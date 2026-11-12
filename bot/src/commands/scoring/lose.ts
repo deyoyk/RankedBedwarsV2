@@ -40,7 +40,8 @@ export async function lose(interaction: ChatInputCommandInteraction, _wsManager?
     const updatedElo = Math.max(0, (existing.elo ?? 0) - eloRank.loseElo);
     const newWlr = computeWlr(existing.wins ?? 0, (existing.losses ?? 0) + 1);
     const user = await User.findOneAndUpdate(
-      { discordId: targetId },
+      // Only if ELO is still what was read above, so a concurrent change isn't overwritten
+      { discordId: targetId, elo: existing.elo },
       {
         $inc: { losses: 1, games: 1, loseStreak: 1 },
         $set: { elo: updatedElo, winStreak: 0, wlr: newWlr },
@@ -49,7 +50,7 @@ export async function lose(interaction: ChatInputCommandInteraction, _wsManager?
       { new: true }
     );
     if (!user) {
-      await safeReply(interaction, errorEmbed('User not found.'));
+      await safeReply(interaction, errorEmbed('Their ELO changed while the loss was being given. Run the command again.'));
       return;
     }
 

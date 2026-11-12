@@ -11,6 +11,7 @@ import { WebSocketManager } from '../websocket/WebSocketManager';
 import { fix } from '../utils/fix';
 import { normalizeTeams } from './utils';
 import { generateScoreImageBuffer } from '../utils/scoreImage';
+import { NumericSnapshot, clampEloOp, snapshotCounters, toAtomicUpdate } from '../utils/atomicStats';
 import { checkLevelUp, EXPERIENCE_REWARDS } from '../utils/levelSystem';
 import { WorkersManager } from '../managers/WorkersManager';
 import { updateDailyElo } from '../utils/userStats';
@@ -2259,7 +2260,9 @@ export class GameManager {
       if (playerScoreData.length === 0) return;
       const gameDurationSeconds = this.computeGameDurationSeconds(game);
       const entries = new Map<string, IRecentGame>();
+      const counters = new Map<string, NumericSnapshot>();
       for (const scoreData of playerScoreData) {
+        counters.set(scoreData.player.discordId, snapshotCounters(scoreData.player));
         const entry = this.applyScoreDataToPlayer(scoreData.player, scoreData, game, gameDurationSeconds);
         entries.set(scoreData.player.discordId, entry);
       }
@@ -2272,21 +2275,26 @@ export class GameManager {
           const ops: Record<string, unknown>[] = [];
           for (const scoreData of playerScoreData) {
             const entry = entries.get(scoreData.player.discordId);
+            const discordId = scoreData.player.discordId;
+            // Drop an older non-scored entry for this game (pending/voided). A scored one stays and
+            // blocks the next op, so a replay can never count the same game twice.
             ops.push({
               updateOne: {
-                filter: { discordId: scoreData.player.discordId },
-                update: { $pull: { recentGames: { gameId: game.gameId } } }
+                filter: { discordId },
+                update: { $pull: { recentGames: { gameId: game.gameId, state: { $ne: 'scored' } } } }
               }
             });
             ops.push({
               updateOne: {
-                filter: { discordId: scoreData.player.discordId },
+                filter: { discordId, recentGames: { $not: { $elemMatch: { gameId: game.gameId, state: 'scored' } } } },
                 update: {
-                  $set: this.scalarSetsForScoredPlayer(scoreData.player),
+                  // Differences, not totals: an ELO edit made while this game was scoring is kept
+                  ...toAtomicUpdate(counters.get(discordId) ?? snapshotCounters({}), this.scalarSetsForScoredPlayer(scoreData.player)),
                   $push: { recentGames: { $each: [entry], $position: 0, $slice: RECENT_GAMES_CAP } }
                 }
               }
             });
+            ops.push(clampEloOp(discordId));
           }
           await UserModel.bulkWrite(ops);
         } catch (error) {
@@ -2700,7 +2708,9 @@ export class GameManager {
   private async revertPlayerStats(playerVoidData: PlayerVoidData[], gameId?: number): Promise<void> {
     try {
       const meta = new Map<string, { targetGameId: number | null; hadExisting: boolean }>();
+      const counters = new Map<string, NumericSnapshot>();
       for (const voidData of playerVoidData) {
+        counters.set(voidData.player.discordId, snapshotCounters(voidData.player));
         try {
           meta.set(voidData.player.discordId, this.applyVoidDataToPlayer(voidData, gameId));
         } catch (error) {
@@ -2720,13 +2730,17 @@ export class GameManager {
           if (!targetGameId) {
             continue;
           }
+          const revert = toAtomicUpdate(counters.get(player.discordId) ?? snapshotCounters({}), this.scalarSetsForVoidedPlayer(player));
           if (info?.hadExisting) {
             ops.push({
               updateOne: {
-                filter: { discordId: player.discordId, 'recentGames.gameId': targetGameId },
+                // Only a not-yet-voided entry, so the same game can't be reverted twice
+                filter: { discordId: player.discordId, recentGames: { $elemMatch: { gameId: targetGameId, state: { $ne: 'voided' } } } },
                 update: {
+                  ...(revert.$inc ? { $inc: revert.$inc } : {}),
+                  ...(revert.$max ? { $max: revert.$max } : {}),
                   $set: {
-                    ...this.scalarSetsForVoidedPlayer(player),
+                    ...(revert.$set || {}),
                     'recentGames.$.state': 'voided',
                     'recentGames.$.eloGain': 0,
                     'recentGames.$.won': false,
@@ -2738,9 +2752,9 @@ export class GameManager {
           } else {
             ops.push({
               updateOne: {
-                filter: { discordId: player.discordId },
+                filter: { discordId: player.discordId, 'recentGames.gameId': { $ne: targetGameId } },
                 update: {
-                  $set: this.scalarSetsForVoidedPlayer(player),
+                  ...revert,
                   $push: {
                     recentGames: {
                       $each: [{
@@ -2773,6 +2787,7 @@ export class GameManager {
             });
           }
         }
+        for (const voidData of playerVoidData) ops.push(clampEloOp(voidData.player.discordId));
         if (ops.length > 0) {
           await UserModel.bulkWrite(ops);
         }
