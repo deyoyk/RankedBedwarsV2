@@ -100,9 +100,6 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
                     }
                 }
                 break;
-            case "reloadpermissions":
-                reloadPermissions(sender);
-                break;
             case "clearcache":
                 clearPlaceholderCache(sender);
                 break;
@@ -127,7 +124,6 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GOLD + "/rbw ping " + ChatColor.GRAY + "- Show server tick ping (mspt)");
         sender.sendMessage(ChatColor.GOLD + "/rbw disablemap <map> " + ChatColor.GRAY + "- Disable a map for play");
         sender.sendMessage(ChatColor.GOLD + "/rbw enablemap <map> " + ChatColor.GRAY + "- Enable a previously disabled map");
-        sender.sendMessage(ChatColor.GOLD + "/rbw reloadpermissions " + ChatColor.GRAY + "- Reload permissions and send to WebSocket");
         sender.sendMessage(ChatColor.GOLD + "/rbw clearcache " + ChatColor.GRAY + "- Clear PlaceholderAPI cache");
         sender.sendMessage(ChatColor.GOLD + "/rbw update " + ChatColor.GRAY + "- Check GitHub for a plugin update");
     }
@@ -275,40 +271,13 @@ public class AdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.GREEN + "Map data refreshed and sent to WebSocket server!");
     }
 
-    private void reloadPermissions(CommandSender sender) {
-        sender.sendMessage(ChatColor.YELLOW + "Reloading permissions...");
-
-        if (plugin.getWebSocketManager() == null || !plugin.getWebSocketManager().isConnected()) {
-            sender.sendMessage(ChatColor.RED + "WebSocket not connected! Permissions will be reloaded but not sent.");
-        }
-        
-        try {
-            java.io.File permissionFile = new java.io.File(plugin.getDataFolder(), "permission.yml");
-            if (!permissionFile.exists()) {
-                plugin.saveResource("permission.yml", false);
-                sender.sendMessage(ChatColor.GREEN + "Created default permission.yml file.");
-            }
-            
-            if (plugin.getWebSocketManager() != null && plugin.getWebSocketManager().isConnected()) {
-                plugin.getWebSocketManager().resendPermissionsData();
-                sender.sendMessage(ChatColor.GREEN + "Permissions reloaded and sent to WebSocket server successfully!");
-            } else {
-                sender.sendMessage(ChatColor.YELLOW + "Permissions reloaded but NOT sent (WebSocket disconnected).");
-            }
-        } catch (Exception e) {
-            sender.sendMessage(ChatColor.RED + "Error reloading permissions: " + e.getMessage());
-            plugin.getLogger().severe("Error reloading permissions: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (!sender.hasPermission("rankedbedwars.admin")) {
             return Collections.emptyList();
         }
         if (args.length == 1) {
-            List<String> completions = Arrays.asList("reload", "status", "maps", "refresh", "test", "ping", "disablemap", "enablemap", "reloadpermissions", "clearcache", "update");
+            List<String> completions = Arrays.asList("reload", "status", "maps", "refresh", "test", "ping", "disablemap", "enablemap", "clearcache", "update");
             return completions.stream().filter(s -> s.startsWith(args[0].toLowerCase())).collect(Collectors.toList());
         }
         if (args.length == 2 && (args[0].equalsIgnoreCase("disablemap") || args[0].equalsIgnoreCase("enablemap"))) {
