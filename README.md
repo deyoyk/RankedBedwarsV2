@@ -5,20 +5,6 @@
 
 **Note:** I only accept paid setup requests. I do not work for free.
 
-## Previews
-
-### Player Stats
-
-![Player stats card](images/previews/stats-preview.png)
-
-### Match Results
-
-![Match results card](images/previews/score-preview.png)
-
-### Match Start
-
-![Match start card](images/previews/start-preview.png)
-
 ## Features
 
 - Ranked BedWars queues with ELO-based team balancing
