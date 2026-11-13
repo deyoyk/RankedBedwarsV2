@@ -551,13 +551,7 @@ public class MapManager {
         });
     }
 
-    /**
-     * Private games reuse the ranked warp bookkeeping, keyed by the bot's request id instead of a
-     * game id: the arena group gets locked, warp data is stored and players are warped. The warp
-     * success/failure replies then answer the bot's host_private_game request instead of warp_*.
-     */
-    public void hostPrivateGame(String requestId, String arenaName, JsonObject team1Json, JsonObject team2Json,
-                                List<String> missingPlayers, Runnable onSuccess) {
+    public void hostPrivateGame(String requestId, String arenaName, JsonObject team1Json, JsonObject team2Json,                                List<String> missingPlayers, Runnable onSuccess) {
         for (String ign : missingPlayers) {
             Player player = Bukkit.getPlayerExact(ign);
             if (player != null) {

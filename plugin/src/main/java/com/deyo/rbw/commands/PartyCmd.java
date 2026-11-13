@@ -21,11 +21,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-/**
- * In-game /party backed by the Discord bot's parties (PartyBridge). The command is sent as
- * party_command and answered with party_result; party_notify/party_invite/party_duel push
- * party activity to players who are online.
- */
 public class PartyCmd implements CommandExecutor, TabCompleter {
     private final RankedBedwars plugin;
     private final Map<String, PendingCommand> pending = new ConcurrentHashMap<>();

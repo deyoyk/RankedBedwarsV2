@@ -270,10 +270,6 @@ public class GameDataManager {
         return enabled;
     }
 
-    /**
-     * In-memory roster of the most recent warp for each game id, used to address vc_chat to the
-     * right team. team is 1 or 2 (team 1 is the winning/red side of the warp payload).
-     */
     private final Map<String, List<String>[]> gameTeams = new java.util.concurrent.ConcurrentHashMap<>();
 
     @SuppressWarnings("unchecked")

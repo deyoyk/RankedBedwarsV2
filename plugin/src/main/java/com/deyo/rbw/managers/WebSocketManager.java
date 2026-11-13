@@ -988,11 +988,6 @@ public class WebSocketManager {
         }
     }
 
-    /**
-     * Private games are hosted by the server itself: pick a free arena group, build two teams
-     * (bot sends either one flat party or two duel teams) and reuse the ranked warp path.
-     * request_id stands in for the game id so warp replies land on the bot's warp handlers.
-     */
     private void handleHostPrivateGameAsync(JsonObject json) {
         String requestId = json.has("request_id") ? json.get("request_id").getAsString() : "";
         String requestedMap = json.has("map") && !json.get("map").isJsonNull() ? json.get("map").getAsString() : "random";
