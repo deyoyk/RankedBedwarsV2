@@ -28,6 +28,10 @@ commands:
     description: Start a private game with your Discord party
     usage: /private [map]
     permission: rankedbedwars.private
+  party:
+    description: Manage your Discord party from in game
+    usage: /party <list|invite|accept|leave|disband|kick|promote|private|open|close|queue|duel>
+    permission: rankedbedwars.party
   stats:
     description: Show your ranked bedwars stats
     usage: /stats
@@ -41,6 +45,9 @@ permissions:
     default: true
   rankedbedwars.private:
     description: Allows use of the private game command
+    default: true
+  rankedbedwars.party:
+    description: Allows use of the in-game party command
     default: true
   rankedbedwars.state:
     description: Allows use of the state command

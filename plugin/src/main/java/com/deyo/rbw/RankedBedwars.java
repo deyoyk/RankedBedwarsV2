@@ -30,6 +30,7 @@ public class RankedBedwars extends JavaPlugin {
     private CallCmd callCommand;
     private QueueCmd queueCommand;
     private PrivateCmd privateCommand;
+    private com.deyo.rbw.commands.PartyCmd partyCommand;
     private RankedBedwarsExpansion placeholderExpansion;
     private com.deyo.rbw.utils.APIClient apiClient;
     private PluginUpdater pluginUpdater;
@@ -56,6 +57,10 @@ public class RankedBedwars extends JavaPlugin {
         return privateCommand;
     }
 
+    public com.deyo.rbw.commands.PartyCmd getPartyCommand() {
+        return partyCommand;
+    }
+
     @Override
     public void onEnable() {
         
@@ -78,8 +83,6 @@ public class RankedBedwars extends JavaPlugin {
             );
         }
 
-        savePermissionsFile();
-        
         initializeManagers();
         AdminCommand adminCmd = new AdminCommand(this);
         setAdminCommand(adminCmd);
@@ -93,6 +96,9 @@ public class RankedBedwars extends JavaPlugin {
 
         privateCommand = new PrivateCmd(this);
         getCommand("private").setExecutor(privateCommand);
+
+        partyCommand = new com.deyo.rbw.commands.PartyCmd(this);
+        getCommand("party").setExecutor(partyCommand);
 
         com.deyo.rbw.commands.SsCmd ssCmd = new com.deyo.rbw.commands.SsCmd(this);
         getCommand("ss").setExecutor(ssCmd);
@@ -243,9 +249,6 @@ public class RankedBedwars extends JavaPlugin {
 
         pluginUpdater = new PluginUpdater(this);
 
-        savePermissionsFile();
-        
-        
         if (placeholderExpansion != null) {
             placeholderExpansion.clearCache();
         }
@@ -335,13 +338,5 @@ public class RankedBedwars extends JavaPlugin {
             getLogger().warning("Could not read live game stats for " + player.getName() + ": " + e.getMessage());
         }
         return null;
-    }
-
-    private void savePermissionsFile() {
-        java.io.File permissionFile = new java.io.File(getDataFolder(), "permission.yml");
-        if (!permissionFile.exists()) {
-            saveResource("permission.yml", false);
-            getLogger().info("Created default permission.yml file");
-        }
     }
 }
