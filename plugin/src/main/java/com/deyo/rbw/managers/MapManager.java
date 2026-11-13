@@ -582,7 +582,6 @@ public class MapManager {
         }
     }
 
-    /** Answers the bot's host_private_game request once the warp succeeded or failed. */
     private void runPrivateWarpCallback(String gameId) {
         Runnable callback = privateWarpCallbacks.remove(gameId);
         if (callback != null) {

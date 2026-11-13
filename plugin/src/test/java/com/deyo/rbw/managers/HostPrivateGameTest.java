@@ -36,10 +36,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * host_private_game reuses the warp path with the bot's request id, and the warp replies answer
- * the bot's request instead of going to the GameManager's warp handlers.
- */
 public class HostPrivateGameTest {
 
     private RankedBedwars plugin;
@@ -102,7 +98,6 @@ public class HostPrivateGameTest {
         api.close();
     }
 
-    /** A real manager whose outgoing messages are captured; the client is never connected. */
     private WebSocketManager newCapturingManager() {
         return new WebSocketManager(plugin) {
             @Override

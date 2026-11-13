@@ -26,7 +26,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/** vc_chat from a game's Discord team voice channel is shown to that team in game. */
 public class VcChatRelayTest {
 
     private RankedBedwars plugin;

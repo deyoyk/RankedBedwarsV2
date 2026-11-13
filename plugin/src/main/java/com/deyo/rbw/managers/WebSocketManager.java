@@ -1052,7 +1052,6 @@ public class WebSocketManager {
         return values;
     }
 
-    /** Resolves the requested map/group to a free physical arena, or null when nothing is usable. */
     private String pickPrivateArena(String requestedMap) {
         if (plugin.getMapManager() == null) {
             return null;
@@ -1145,7 +1144,6 @@ public class WebSocketManager {
         }
     }
 
-    /** Discord VC chat for a ranked game, shown to that team's players in game. */
     private void handleVcChat(JsonObject json) {
         if (!json.has("game_id") || !json.has("team") || !json.has("ign") || !json.has("message")) {
             return;
