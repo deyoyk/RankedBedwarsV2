@@ -8,6 +8,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import lombok.Getter;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitTask;
@@ -16,11 +17,15 @@ import org.java_websocket.handshake.ServerHandshake;
 
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 
 
 
@@ -341,6 +346,24 @@ public class WebSocketManager {
                         break;
                     case "privatefromingame_fail":
                         handlePrivateFailure(json);
+                        break;
+                    case "party_result":
+                        Bukkit.getScheduler().runTask(plugin, () -> handlePartyResult(json));
+                        break;
+                    case "party_notify":
+                        Bukkit.getScheduler().runTask(plugin, () -> handlePartyNotify(json));
+                        break;
+                    case "party_invite":
+                        Bukkit.getScheduler().runTask(plugin, () -> handlePartyInvite(json));
+                        break;
+                    case "party_duel":
+                        Bukkit.getScheduler().runTask(plugin, () -> handlePartyDuel(json));
+                        break;
+                    case "host_private_game":
+                        handleHostPrivateGameAsync(json);
+                        break;
+                    case "vc_chat":
+                        Bukkit.getScheduler().runTask(plugin, () -> handleVcChat(json));
                         break;
                     case "scoringsettled":
                         handleScoringSettled(json);
@@ -701,8 +724,6 @@ public class WebSocketManager {
                 statusMessage.addProperty("timestamp", System.currentTimeMillis());
                 sendMessage(statusMessage.toString());
                 
-                sendPermissionData();
-
                 sendMapDataIfReady(0);
                 if (plugin.getMapManager() != null) {
                     plugin.getMapManager().sendActiveGameStates();
@@ -908,43 +929,6 @@ public class WebSocketManager {
         return response;
     }
 
-    private void sendPermissionData() {
-        try {
-            java.io.File permissionFile = new java.io.File(plugin.getDataFolder(), "permission.yml");
-            if (!permissionFile.exists()) {
-                plugin.saveResource("permission.yml", false);
-                plugin.getLogger().info("Created default permission.yml file");
-            }
-            
-            org.bukkit.configuration.file.YamlConfiguration permConfig = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(permissionFile);
-            JsonObject permissionsJson = new JsonObject();
-            permissionsJson.addProperty("type", "permission");
-            
-            for (String key : permConfig.getKeys(false)) {
-                JsonArray userArray = new JsonArray();
-                for (String user : permConfig.getStringList(key)) {
-                    userArray.add(user);
-                }
-                permissionsJson.add(key, userArray);
-            }
-            
-            plugin.debug("Sending permissions data to WebSocket server");
-            sendMessage(permissionsJson.toString());
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Error sending permission data to WebSocket", e);
-        }
-    }
-
-    public void resendPermissionsData() {
-        if (isConnected()) {
-            plugin.getLogger().info("Manually resending permissions data...");
-            sendPermissionData();
-        } else {
-            plugin.getLogger().warning("Cannot resend permissions data: WebSocket not connected");
-        }
-    }
-    
-
     public void resetReconnectionState() {
         reconnectAttempts.set(0);
         reconnectScheduled.set(false);
@@ -1003,7 +987,202 @@ public class WebSocketManager {
             plugin.getPrivateCommand().handlePrivateFailure(json.get("uuid").getAsString(), reason);
         }
     }
-    
+
+    /**
+     * Private games are hosted by the server itself: pick a free arena group, build two teams
+     * (bot sends either one flat party or two duel teams) and reuse the ranked warp path.
+     * request_id stands in for the game id so warp replies land on the bot's warp handlers.
+     */
+    private void handleHostPrivateGameAsync(JsonObject json) {
+        String requestId = json.has("request_id") ? json.get("request_id").getAsString() : "";
+        String requestedMap = json.has("map") && !json.get("map").isJsonNull() ? json.get("map").getAsString() : "random";
+
+        List<List<String>> teams = new ArrayList<>();
+        if (json.has("teams") && json.get("teams").isJsonArray()) {
+            for (JsonElement element : json.getAsJsonArray("teams")) {
+                teams.add(readStringList(element.getAsJsonArray()));
+            }
+        } else {
+            List<String> players = json.has("players") && json.get("players").isJsonArray()
+                    ? readStringList(json.getAsJsonArray("players"))
+                    : Collections.emptyList();
+            if (players.size() < 2) {
+                replyHostPrivateGame(requestId, false, "A private game needs at least 2 players", null, players, Collections.emptyList());
+                return;
+            }
+            teams.add(new ArrayList<>(players.subList(0, players.size() / 2)));
+            teams.add(new ArrayList<>(players.subList(players.size() / 2, players.size())));
+        }
+
+        String arena = pickPrivateArena(requestedMap);
+        if (arena == null) {
+            replyHostPrivateGame(requestId, false, requestedMap.equalsIgnoreCase("random")
+                    ? "No arena is free right now" : "Arena '" + requestedMap + "' is not available", null, Collections.emptyList(), Collections.emptyList());
+            return;
+        }
+
+        JsonObject team1 = new JsonObject();
+        team1.add("players", toJsonArray(teams.get(0)));
+        JsonObject team2 = new JsonObject();
+        team2.add("players", toJsonArray(teams.get(1)));
+
+        List<String> allPlayers = new ArrayList<>();
+        allPlayers.addAll(teams.get(0));
+        allPlayers.addAll(teams.get(1));
+        List<String> missing = allPlayers.stream()
+                .filter(ign -> Bukkit.getPlayerExact(ign) == null)
+                .collect(Collectors.toList());
+
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            if (plugin.getMapManager() == null) {
+                replyHostPrivateGame(requestId, false, "The server is still starting up", arena, Collections.emptyList(), missing);
+                return;
+            }
+            plugin.getMapManager().hostPrivateGame(requestId, arena, team1, team2, missing, () ->
+                replyHostPrivateGame(requestId, true, "Hosting on " + arena, arena, joinedPlayers(allPlayers), missing));
+        });
+    }
+
+    private List<String> joinedPlayers(List<String> allPlayers) {
+        return allPlayers.stream()
+                .filter(ign -> Bukkit.getPlayerExact(ign) != null)
+                .collect(Collectors.toList());
+    }
+
+    private List<String> readStringList(JsonArray array) {
+        List<String> values = new ArrayList<>();
+        for (JsonElement element : array) {
+            values.add(element.getAsString());
+        }
+        return values;
+    }
+
+    /** Resolves the requested map/group to a free physical arena, or null when nothing is usable. */
+    private String pickPrivateArena(String requestedMap) {
+        if (plugin.getMapManager() == null) {
+            return null;
+        }
+        MapManager maps = plugin.getMapManager();
+        if (requestedMap == null || requestedMap.isEmpty() || requestedMap.equalsIgnoreCase("random")) {
+            for (String groupId : maps.getAvailableArenaGroups()) {
+                String arena = maps.getBestArenaForGroup(groupId, false);
+                if (arena != null) {
+                    return arena;
+                }
+            }
+            return null;
+        }
+        if (maps.getArenaGroupIds().contains(requestedMap)) {
+            return maps.getBestArenaForGroup(requestedMap, false);
+        }
+        if (maps.getMapNames().contains(requestedMap)) {
+            return requestedMap;
+        }
+        return null;
+    }
+
+    private void replyHostPrivateGame(String requestId, boolean ok, String message, String map,
+                                      List<String> players, List<String> missing) {
+        JsonObject response = new JsonObject();
+        response.addProperty("type", "host_private_game_result");
+        response.addProperty("request_id", requestId);
+        response.addProperty("ok", ok);
+        response.addProperty("message", message);
+        if (map != null) {
+            response.addProperty("map", map);
+        }
+        response.add("players", toJsonArray(players));
+        response.add("missing", toJsonArray(missing));
+        sendMessage(response.toString());
+    }
+
+    public void sendHostPrivateGameResult(String requestId, boolean ok, String message) {
+        replyHostPrivateGame(requestId, ok, message, null, Collections.emptyList(), Collections.emptyList());
+    }
+
+    private void handlePartyResult(JsonObject json) {
+        if (plugin.getPartyCommand() != null) {
+            plugin.getPartyCommand().handlePartyResult(json);
+        }
+    }
+
+    private void handlePartyNotify(JsonObject json) {
+        if (!json.has("igns") || !json.get("igns").isJsonArray()) {
+            return;
+        }
+        String message = json.has("message") ? json.get("message").getAsString() : "";
+        for (String ign : readStringList(json.getAsJsonArray("igns"))) {
+            Player player = Bukkit.getPlayerExact(ign);
+            if (player != null) {
+                player.sendMessage(ChatColor.GOLD + "[Party] " + ChatColor.WHITE + message);
+            }
+        }
+    }
+
+    private void handlePartyInvite(JsonObject json) {
+        if (!json.has("ign")) {
+            return;
+        }
+        String from = json.has("from") ? json.get("from").getAsString() : "Someone";
+        if (plugin.getPartyCommand() != null) {
+            plugin.getPartyCommand().handlePartyInvite(json.get("ign").getAsString(), from);
+        } else {
+            Player player = Bukkit.getPlayerExact(json.get("ign").getAsString());
+            if (player != null) {
+                player.sendMessage(ChatColor.YELLOW + from + " invited you to their party. Use /party accept to join.");
+            }
+        }
+    }
+
+    private void handlePartyDuel(JsonObject json) {
+        if (!json.has("ign")) {
+            return;
+        }
+        String from = json.has("from") ? json.get("from").getAsString() : "Someone";
+        int size = json.has("size") ? json.get("size").getAsInt() : 0;
+        if (plugin.getPartyCommand() != null) {
+            plugin.getPartyCommand().handlePartyDuel(json.get("ign").getAsString(), from, size);
+        } else {
+            Player player = Bukkit.getPlayerExact(json.get("ign").getAsString());
+            if (player != null) {
+                player.sendMessage(ChatColor.YELLOW + from + "'s party (" + size + ") challenged you to a duel. Use /party duel " + from + " to accept.");
+            }
+        }
+    }
+
+    /** Discord VC chat for a ranked game, shown to that team's players in game. */
+    private void handleVcChat(JsonObject json) {
+        if (!json.has("game_id") || !json.has("team") || !json.has("ign") || !json.has("message")) {
+            return;
+        }
+        if (plugin.getGameDataManager() == null) {
+            return;
+        }
+        String gameId = json.get("game_id").getAsString();
+        int team = json.get("team").getAsInt();
+        String ign = json.get("ign").getAsString();
+        String message = json.get("message").getAsString();
+        Integer elo = json.has("elo") && !json.get("elo").isJsonNull() ? json.get("elo").getAsInt() : null;
+        boolean registered = json.has("registered") && json.get("registered").getAsBoolean();
+
+        List<String> receivers = plugin.getGameDataManager().findGameTeamPlayers(gameId, team);
+        if (receivers == null || receivers.isEmpty()) {
+            return;
+        }
+
+        String prefix = registered
+                ? ChatColor.AQUA + "VC " + (elo != null ? ChatColor.GRAY + "[" + elo + "] " : "") + ChatColor.YELLOW + ign + ChatColor.GRAY + ": "
+                : ChatColor.AQUA + "VC " + ChatColor.GRAY + "[" + ChatColor.RED + "NR" + ChatColor.GRAY + "] " + ChatColor.YELLOW + ign + ChatColor.GRAY + ": ";
+        String line = prefix + ChatColor.WHITE + message;
+
+        for (String receiver : receivers) {
+            Player player = Bukkit.getPlayerExact(receiver);
+            if (player != null) {
+                player.sendMessage(line);
+            }
+        }
+    }
+
     private void handleQueueStatus(JsonObject json) {
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             try {

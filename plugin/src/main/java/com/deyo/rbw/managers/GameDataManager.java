@@ -3,6 +3,7 @@ package com.deyo.rbw.managers;
 import com.deyo.rbw.RankedBedwars;
 import com.deyo.rbw.models.Game;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.bukkit.Bukkit;
@@ -18,8 +19,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.logging.Level;
 
@@ -265,5 +268,40 @@ public class GameDataManager {
     
     public boolean isEnabled() {
         return enabled;
+    }
+
+    /**
+     * In-memory roster of the most recent warp for each game id, used to address vc_chat to the
+     * right team. team is 1 or 2 (team 1 is the winning/red side of the warp payload).
+     */
+    private final Map<String, List<String>[]> gameTeams = new java.util.concurrent.ConcurrentHashMap<>();
+
+    @SuppressWarnings("unchecked")
+    public void rememberGameTeams(String gameId, JsonObject team1Json, JsonObject team2Json) {
+        List<String> team1 = readTeamNames(team1Json);
+        List<String> team2 = readTeamNames(team2Json);
+        gameTeams.put(gameId, new List[]{team1, team2});
+    }
+
+    public List<String> findGameTeamPlayers(String gameId, int team) {
+        List<String>[] teams = gameTeams.get(gameId);
+        if (teams == null || team < 1 || team > teams.length) {
+            return Collections.emptyList();
+        }
+        return teams[team - 1];
+    }
+
+    public void forgetGameTeams(String gameId) {
+        gameTeams.remove(gameId);
+    }
+
+    private List<String> readTeamNames(JsonObject team) {
+        List<String> names = new ArrayList<>();
+        if (team != null && team.has("players")) {
+            for (JsonElement element : team.getAsJsonArray("players")) {
+                names.add(element.getAsString());
+            }
+        }
+        return names;
     }
 }

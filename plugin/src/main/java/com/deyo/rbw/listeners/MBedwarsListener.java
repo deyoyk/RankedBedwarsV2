@@ -87,6 +87,10 @@ public class MBedwarsListener implements Listener {
             plugin.getLogger().warning("Round started in arena '" + arenaName + "' without a mapped game ID; scoring will be skipped");
             return;
         }
+        if (plugin.getMapManager().isPrivateWarp(gameId)) {
+            plugin.debug("Skipping private game in arena '" + arenaName + "': not scored");
+            return;
+        }
         GameInstance gameInstance = new GameInstance(gameId, arena, true);
         gameInstances.put(arenaName, gameInstance);
 

@@ -5,6 +5,8 @@ import com.deyo.rbw.bedwars.BedwarsAPIManager;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.entity.Player;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -102,6 +104,8 @@ public class MapManager {
     
     private final Set<String> lockedArenaGroups = ConcurrentHashMap.newKeySet();
     private final Map<String, Long> pendingWarpLocks = new ConcurrentHashMap<>();
+    private final Map<String, Runnable> privateWarpCallbacks = new ConcurrentHashMap<>();
+    private final Set<String> privateGames = ConcurrentHashMap.newKeySet();
     private static final long PENDING_WARP_TIMEOUT_MS = 15 * 60 * 1000L;
     private final Set<String> disabledArenaGroups = ConcurrentHashMap.newKeySet();
     private final Set<String> allowedGroups = ConcurrentHashMap.newKeySet();
@@ -460,6 +464,7 @@ public class MapManager {
 
         if (plugin.getGameDataManager() != null) {
             plugin.getGameDataManager().saveGameWarpData(gameId, physicalArenaToUse, team1Json, team2Json, isRanked);
+            plugin.getGameDataManager().rememberGameTeams(gameId, team1Json, team2Json);
         }
 
         if (BedwarsAPIManager.isAvailable()) {
@@ -527,6 +532,11 @@ public class MapManager {
     
     
     public void sendWarpSuccess(String gameId) {
+        Runnable privateCallback = privateWarpCallbacks.remove(gameId);
+        if (privateCallback != null) {
+            privateCallback.run();
+            return;
+        }
         String mapName = gameIdToPhysicalArenaMap.get(gameId);
         if (mapName != null) {
             pendingWarpLocks.remove(mapName);
@@ -542,10 +552,60 @@ public class MapManager {
     }
 
     /**
+     * Private games reuse the ranked warp bookkeeping, keyed by the bot's request id instead of a
+     * game id: the arena group gets locked, warp data is stored and players are warped. The warp
+     * success/failure replies then answer the bot's host_private_game request instead of warp_*.
+     */
+    public void hostPrivateGame(String requestId, String arenaName, JsonObject team1Json, JsonObject team2Json,
+                                List<String> missingPlayers, Runnable onSuccess) {
+        for (String ign : missingPlayers) {
+            Player player = Bukkit.getPlayerExact(ign);
+            if (player != null) {
+                player.sendMessage(ChatColor.RED + "Your private game skipped " + ign + " (not on the server).");
+            }
+        }
+
+        cleanupExistingGameForMap(arenaName);
+        lockMap(arenaName);
+        gameIdToPhysicalArenaMap.put(requestId, arenaName);
+        physicalArenaToGameIdMap.put(arenaName, requestId);
+        pendingWarpLocks.put(arenaName, System.currentTimeMillis());
+        privateWarpCallbacks.put(requestId, onSuccess);
+        privateGames.add(requestId);
+
+        if (plugin.getGameDataManager() != null) {
+            plugin.getGameDataManager().saveGameWarpData(requestId, arenaName, team1Json, team2Json, false);
+            plugin.getGameDataManager().rememberGameTeams(requestId, team1Json, team2Json);
+        }
+
+        try {
+            BedwarsAPIManager.getImplementation().warpPlayersToGame(requestId, arenaName, team1Json, team2Json, false);
+        } catch (Exception e) {
+            plugin.getLogger().warning("Private game warp threw for request " + requestId + ": " + e.getMessage());
+            privateWarpCallbacks.remove(requestId);
+            clearWarpFailureState(requestId);
+            plugin.getWebSocketManager().sendHostPrivateGameResult(requestId, false, "The server could not start the private game");
+        }
+    }
+
+    /** Answers the bot's host_private_game request once the warp succeeded or failed. */
+    private void runPrivateWarpCallback(String gameId) {
+        Runnable callback = privateWarpCallbacks.remove(gameId);
+        if (callback != null) {
+            callback.run();
+        }
+    }
+
+    public boolean isPrivateWarp(String gameId) {
+        return privateGames.contains(gameId);
+    }
+
+    /**
      * A failed warp must release the map immediately. Otherwise a retry from
      * the bot sees the map as permanently locked and every retry fails.
      */
     void clearWarpFailureState(String gameId) {
+        privateGames.remove(gameId);
         String mapName = gameIdToPhysicalArenaMap.remove(gameId);
         if (mapName == null) {
             return;
@@ -557,6 +617,11 @@ public class MapManager {
     }
 
     public void sendWarpFailedArenaNotFound(String gameId, String mapName) {
+        if (privateWarpCallbacks.remove(gameId) != null) {
+            clearWarpFailureState(gameId);
+            plugin.getWebSocketManager().sendHostPrivateGameResult(gameId, false, "Arena '" + mapName + "' is not available");
+            return;
+        }
         clearWarpFailureState(gameId);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
@@ -570,6 +635,12 @@ public class MapManager {
     }
 
     public void sendWarpFailedOfflinePlayers(String gameId, List<String> offlinePlayers) {
+        if (privateWarpCallbacks.remove(gameId) != null) {
+            clearWarpFailureState(gameId);
+            plugin.getWebSocketManager().sendHostPrivateGameResult(gameId, false,
+                    "Not on the server: " + String.join(", ", offlinePlayers));
+            return;
+        }
         clearWarpFailureState(gameId);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
@@ -586,6 +657,11 @@ public class MapManager {
         });
     }
     public void sendWarpFailureUnknown(String gameId) {
+        if (privateWarpCallbacks.remove(gameId) != null) {
+            clearWarpFailureState(gameId);
+            plugin.getWebSocketManager().sendHostPrivateGameResult(gameId, false, "The server could not start the private game");
+            return;
+        }
         clearWarpFailureState(gameId);
         Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
             JsonObject response = new JsonObject();
@@ -608,7 +684,12 @@ public class MapManager {
         String gameId = physicalArenaToGameIdMap.remove(arenaName);
         if (gameId != null) {
             gameIdToPhysicalArenaMap.remove(gameId, arenaName);
+            if (plugin.getGameDataManager() != null) {
+                plugin.getGameDataManager().forgetGameTeams(gameId);
+            }
         }
+        privateWarpCallbacks.remove(gameId);
+        privateGames.remove(gameId);
         pendingWarpLocks.remove(arenaName);
         unlockMap(arenaName);
     }

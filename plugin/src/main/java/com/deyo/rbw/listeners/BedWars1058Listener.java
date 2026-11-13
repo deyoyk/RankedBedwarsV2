@@ -110,6 +110,10 @@ public class BedWars1058Listener implements Listener {
             
             
             boolean isRanked = plugin.getMapManager().getGameIdForArena(arenaName) != null;
+            if (plugin.getMapManager().isPrivateWarp(gameId)) {
+                plugin.debug("Skipping private game in arena '" + arenaName + "': not scored");
+                return;
+            }
             BW1058GameTracker gameTracker = new BW1058GameTracker(gameId, arena, isRanked);
             gameTrackers.put(arenaName, gameTracker);
             
