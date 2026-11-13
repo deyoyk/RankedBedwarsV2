@@ -2281,8 +2281,6 @@ export class GameManager {
           for (const scoreData of playerScoreData) {
             const entry = entries.get(scoreData.player.discordId);
             const discordId = scoreData.player.discordId;
-            // Drop an older non-scored entry for this game (pending/voided). A scored one stays and
-            // blocks the next op, so a replay can never count the same game twice.
             ops.push({
               updateOne: {
                 filter: { discordId },
@@ -2293,7 +2291,6 @@ export class GameManager {
               updateOne: {
                 filter: { discordId, recentGames: { $not: { $elemMatch: { gameId: game.gameId, state: 'scored' } } } },
                 update: {
-                  // Differences, not totals: an ELO edit made while this game was scoring is kept
                   ...toAtomicUpdate(counters.get(discordId) ?? snapshotCounters({}), this.scalarSetsForScoredPlayer(scoreData.player)),
                   $push: { recentGames: { $each: [entry], $position: 0, $slice: RECENT_GAMES_CAP } }
                 }
@@ -2748,7 +2745,6 @@ export class GameManager {
           if (info?.hadExisting) {
             ops.push({
               updateOne: {
-                // Only a not-yet-voided entry, so the same game can't be reverted twice
                 filter: { discordId: player.discordId, recentGames: { $elemMatch: { gameId: targetGameId, state: { $ne: 'voided' } } } },
                 update: {
                   ...(revert.$inc ? { $inc: revert.$inc } : {}),

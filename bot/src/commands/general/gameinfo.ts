@@ -78,12 +78,10 @@ function buildEmbed(game: IGame, players: Map<string, PlayerView>, guild: Guild 
   const sword = findEmoji('sword', '⚔️');
   const diamond = findEmoji('diamond', '💎');
 
-  // Enemy diamonds: the other team's average
   const avgDiamonds = (ids: string[]) =>
     Math.round(ids.reduce((sum, id) => sum + (players.get(id)?.diamonds || 0), 0) / Math.max(1, ids.length));
   const enemyDiamonds: Record<number, number> = { 1: avgDiamonds(game.team2 || []), 2: avgDiamonds(game.team1 || []) };
 
-  // A voided game shows +0 for everyone
   const eloChip = (gain: number) => {
     const value = state === 'voided' ? 0 : gain;
     return `\`[${value < 0 ? '−' : '+'}${Math.abs(value)}]\``;
@@ -145,7 +143,6 @@ function buildButtons(game: IGame, guild: Guild | null): ActionRowBuilder<Button
     row.addComponents(new ButtonBuilder().setLabel('Thread').setStyle(ButtonStyle.Link).setURL(`https://discord.com/channels/${guild.id}/${threadId}`));
   }
   if (state === 'pending' || state === 'active') {
-    // /voidrequest only accepts games that aren't scored or voided yet
     row.addComponents(new ButtonBuilder().setCustomId(`gameinfo:void:${game.gameId}`).setLabel('Request void').setStyle(ButtonStyle.Secondary));
   }
   row.addComponents(new ButtonBuilder().setCustomId('gameinfo:help').setLabel('?').setStyle(ButtonStyle.Secondary));

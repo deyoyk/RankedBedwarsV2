@@ -58,7 +58,6 @@ export class PartyBridge {
     console.log('[PartyBridge] In-game /party commands are linked');
   }
 
-  // ---- helpers ----
 
   private guild(): Guild | undefined {
     return this.client.guilds.cache.first();
@@ -124,7 +123,6 @@ export class PartyBridge {
     }
   }
 
-  // ---- commands ----
 
   private async handle(msg: PartyCommandPayload): Promise<void> {
     const action = (msg.action || '').toLowerCase();
@@ -201,7 +199,6 @@ export class PartyBridge {
     }
     let party = await this.myParty(me);
     if (!party) {
-      // Inviting someone starts a party, closed until the leader opens it.
       const created = await PartyService.createParty(me.discordId, { isPrivate: true });
       if (!created.success || !created.party) {
         this.reply(msg, false, PartyBridge.why(created.error));
@@ -220,7 +217,6 @@ export class PartyBridge {
       await this.notify(party.members, `${me.ign} invited ${target.ign} to the party.`, me.ign);
       return;
     }
-    // Not online in game: invite them on Discord, in the bot commands channel.
     const sent = await postIn(this.client, botCommandsChannelId(), {
       content: `<@${target.discordId}>`,
       embeds: result.embed ? [result.embed.setFooter({ text: `Invited from in game by ${me.ign}` })] : [],
@@ -320,7 +316,6 @@ export class PartyBridge {
         await this.disband(msg, me, guild);
         return;
       }
-      // The leader leaves: the next member takes over.
       const promoted = await PartyService.promoteToLeader(me.discordId, next, 'game');
       if (!promoted.success) {
         this.reply(msg, false, PartyBridge.why(promoted.message));
@@ -472,7 +467,6 @@ export class PartyBridge {
     const now = Date.now();
     const incoming = this.duels.get(mine.partyId);
     if (incoming && incoming.fromPartyId === theirs.partyId && incoming.expiresAt >= now) {
-      // Accepting their challenge.
       this.duels.delete(mine.partyId);
       const map = (msg.map || '').trim();
       const result = await PrivateGameService.startDuel(theirs.partyId, mine.partyId, this.ws, map ? { map } : {});
@@ -513,10 +507,9 @@ export class PartyBridge {
     }
   }
 
-  // ---- things done on Discord, told in game ----
 
   private async onEvent(event: PartyEvent): Promise<void> {
-    if (event.source === 'game') return; // the in-game command told everyone already
+    if (event.source === 'game') return;
     try {
       const names = await this.ignsOf([event.userId, ...(event.actorId ? [event.actorId] : [])]);
       const who = names.get(event.userId) || 'Someone';

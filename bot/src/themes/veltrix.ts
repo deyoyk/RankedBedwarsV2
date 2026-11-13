@@ -6,7 +6,6 @@ import { getRankInfo } from '../utils/rankInfo';
 
 export { PlayerData, RecentGame, Helpers, RankInfo };
 
-// ─── Font Registration ───────────────────────────────────────
 const FONT_PATHS = {
   Minecraft: path.resolve(process.cwd(), 'src', 'assets', 'fonts', 'Minecraft.otf'),
   ADAMCGPRO: path.resolve(process.cwd(), 'src', 'assets', 'fonts', 'ADAM.CG PRO.otf'),
@@ -52,7 +51,6 @@ async function fetchSkin(ign: string, type: 'fullbody' | 'face' = 'fullbody'): P
       const buf = Buffer.from(await res.arrayBuffer());
       return await loadImage(buf);
     } catch {
-      // try fallback url
     }
   }
   return null;
@@ -115,7 +113,6 @@ function adjustColor(hex: string, percent: number): string {
   }
 }
 
-// Draw text with Minecraft-style drop shadow (2px offset, darker color)
 function drawMinecraftText(
   ctx: SKRSContext2D,
   text: string,
@@ -213,7 +210,6 @@ function drawFormattedMinecraftText(
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
 
-  // 1. Shadows
   let curX = startX;
   ctx.fillStyle = '#1A1A1A';
   for (const seg of segments) {
@@ -221,7 +217,6 @@ function drawFormattedMinecraftText(
     curX += ctx.measureText(seg.text).width;
   }
 
-  // 2. Foreground text
   curX = startX;
   for (const seg of segments) {
     ctx.fillStyle = seg.color;
@@ -232,7 +227,6 @@ function drawFormattedMinecraftText(
   ctx.restore();
 }
 
-// Draw stat text with auto-scaling so it never overrides label text
 function drawFittedStat(
   ctx: SKRSContext2D,
   text: string,
@@ -256,14 +250,10 @@ function drawFittedStat(
   ctx.restore();
 }
 
-// ─── Theme image path ────────────────────────────────────────
 function getThemeImagePath(themeName = 'veltrix'): string {
   return path.resolve(process.cwd(), 'src', 'assets', 'themes', `${themeName}.png`);
 }
 
-// ═════════════════════════════════════════════════════════════
-// Main renderer – loads theme image (1024x585) and renders stats
-// ═════════════════════════════════════════════════════════════
 export async function generateVeltrixImage(
   playerData: PlayerData,
   recentGames: RecentGame[],
@@ -276,10 +266,8 @@ export async function generateVeltrixImage(
   const canvas = createCanvas(theme.width, theme.height);
   const ctx = canvas.getContext('2d');
 
-  // Draw background template
   ctx.drawImage(theme, 0, 0);
 
-  // 1. TOP BAR: Player Head & IGN
   try {
     const head = await fetchSkin(playerData.ign, 'face');
     if (head) {
@@ -290,7 +278,6 @@ export async function generateVeltrixImage(
       ctx.restore();
     }
   } catch {
-    // Graceful fallback if head fails
   }
 
   const ign = playerData.ign || 'Player';
@@ -309,27 +296,22 @@ export async function generateVeltrixImage(
   const startFontSize = prime ? 24 : (ign.length <= 12 ? 28 : 22);
   drawFormattedMinecraftText(ctx, segments, 80, 44, startFontSize, 640);
 
-  // 2. Header Box: Current Rank (left), ELO (center), Next Rank (right)
   const rankInfo = playerData.rankInfo || (await getRankInfo(playerData.elo ?? 0));
 
   const eloVal = (playerData.elo ?? 0).toLocaleString();
 
-  // Left: Current Rank Name in its role color
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
   drawMinecraftText(ctx, rankInfo.name, 375, 104, '18px "Minecraft"', rankInfo.color);
 
-  // Center: ELO in gold
   ctx.textAlign = 'center';
   drawMinecraftText(ctx, `${eloVal} ELO`, 682, 104, '18px "Minecraft"', '#FFAA00');
 
-  // Right: Next Rank Name in its role color
   ctx.textAlign = 'right';
   const nextName = rankInfo.isMaxRank ? 'MAX RANK' : (rankInfo.nextRankName || 'MAX RANK');
   const nextCol = rankInfo.isMaxRank ? rankInfo.color : (rankInfo.nextRankColor || rankInfo.color);
   drawMinecraftText(ctx, nextName, 988, 104, '18px "Minecraft"', nextCol);
 
-  // Progress Bar calculation based on EloRank progression
   const startElo = rankInfo.startElo;
   const targetElo = rankInfo.nextRankStartElo || rankInfo.endElo;
   let progressPct: number;
@@ -344,7 +326,6 @@ export async function generateVeltrixImage(
     progressPct = 1.0;
   }
 
-  // Progress Bar fill with 3D rank-based color grading
   const barX = 375;
   const barY = 123;
   const barW = 612;
@@ -353,21 +334,17 @@ export async function generateVeltrixImage(
   const fillW = Math.max(14, Math.round(barW * progressPct));
   const rankColor = rankInfo.color || '#FFAA00';
 
-  // 1. Clip to recessed track of the template
   ctx.save();
   roundedRect(ctx, barX, barY, barW, barH, radius);
   ctx.clip();
 
-  // Dark unfilled track background
   ctx.fillStyle = 'rgba(12, 17, 32, 0.75)';
   ctx.fillRect(barX, barY, barW, barH);
 
-  // 2. The fill shape (rounded pill)
   ctx.save();
   roundedRect(ctx, barX, barY, fillW, barH, radius);
   ctx.clip();
 
-  // Horizontal gradient: rich rank color -> vibrant rank color
   const fillGrad = ctx.createLinearGradient(barX, barY, barX + fillW, barY);
   fillGrad.addColorStop(0, adjustColor(rankColor, -20));
   fillGrad.addColorStop(0.6, rankColor);
@@ -375,7 +352,6 @@ export async function generateVeltrixImage(
   ctx.fillStyle = fillGrad;
   ctx.fillRect(barX, barY, fillW, barH);
 
-  // Vertical highlight & shadow (glossy cylindrical depth)
   const vertGrad = ctx.createLinearGradient(barX, barY, barX, barY + barH);
   vertGrad.addColorStop(0, 'rgba(255, 255, 255, 0.60)');
   vertGrad.addColorStop(0.25, 'rgba(255, 255, 255, 0.15)');
@@ -385,11 +361,9 @@ export async function generateVeltrixImage(
   ctx.fillStyle = vertGrad;
   ctx.fillRect(barX, barY, fillW, barH);
 
-  // Subtle top rim highlight line
   ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
   ctx.fillRect(barX, barY, fillW, 1);
 
-  // Leading edge highlight (rounded cap sheen)
   if (fillW < barW - 4) {
     const tipGrad = ctx.createRadialGradient(
       barX + fillW - 4, barY + barH / 2, 0,
@@ -401,10 +375,9 @@ export async function generateVeltrixImage(
     ctx.fillRect(barX + fillW - 10, barY, 10, barH);
   }
 
-  ctx.restore(); // end fill clip
-  ctx.restore(); // end track clip
+  ctx.restore();
+  ctx.restore();
 
-  // 3. Left Panel: Player Standing Skin & Leaderboard Position
   try {
     const skin = await fetchSkin(playerData.ign, 'fullbody');
     if (skin) {
@@ -417,10 +390,8 @@ export async function generateVeltrixImage(
       ctx.drawImage(skin, skinX, skinY, skinW, skinH);
     }
   } catch {
-    // Graceful fallback if skin fails
   }
 
-  // Leaderboard Rank
   let positionValue: string | number;
   try {
     positionValue = await Promise.resolve(helpers.calculatePosition(String(playerData.discordid)));
@@ -434,7 +405,6 @@ export async function generateVeltrixImage(
   ctx.textBaseline = 'middle';
   drawMinecraftText(ctx, rankText, 176, 448, rankText.length > 6 ? '26px "Minecraft"' : '34px "Minecraft"', '#FFAA00');
 
-  // 4. Middle 3 Cards (Matches, Combat, Honours)
   const rows = [
     { y: 232 },
     { y: 290 },
@@ -454,35 +424,20 @@ export async function generateVeltrixImage(
   const kpgNum = totalGames > 0 ? totalKills / totalGames : 0;
   const mvpRateVal = totalGames > 0 ? Math.round((totalMvps / totalGames) * 100) : 0;
 
-  // Card 1: Matches (rightX: 554)
-  // Played: White #FFFFFF
   drawFittedStat(ctx, totalGames.toLocaleString(), 554, rows[0].y, '#FFFFFF', 115);
-  // Wins: Green #55FF55
   drawFittedStat(ctx, totalWins.toLocaleString(), 554, rows[1].y, '#55FF55', 125);
-  // Losses: Red #FF5555
   drawFittedStat(ctx, totalLosses.toLocaleString(), 554, rows[2].y, '#FF5555', 115);
-  // W/L: Green if >= 1.0, Yellow if < 1.0
   drawFittedStat(ctx, wlNum.toFixed(2), 554, rows[3].y, wlNum >= 1.0 ? '#55FF55' : '#FFFF55', 125);
 
-  // Card 2: Combat (rightX: 772)
-  // Kills: Green #55FF55
   drawFittedStat(ctx, totalKills.toLocaleString(), 772, rows[0].y, '#55FF55', 130);
-  // Deaths: Red #FF5555
   drawFittedStat(ctx, totalDeaths.toLocaleString(), 772, rows[1].y, '#FF5555', 120);
-  // K/D: Green if >= 1.0, Yellow if < 1.0
   drawFittedStat(ctx, kdNum.toFixed(2), 772, rows[2].y, kdNum >= 1.0 ? '#55FF55' : '#FFFF55', 130);
-  // Kills/Game: Gold #FFAA00 (maxWidth 88 ensures it never overrides 'Kills/Game' label)
   drawFittedStat(ctx, kpgNum.toFixed(2), 772, rows[3].y, '#FFAA00', 88);
 
-  // Card 3: Honours (rightX: 992)
-  // MVPs: Gold #FFAA00
   drawFittedStat(ctx, totalMvps.toLocaleString(), 992, rows[0].y, '#FFAA00', 130);
-  // MVP Rate: Yellow #FFFF55
   drawFittedStat(ctx, `${mvpRateVal}%`, 992, rows[1].y, '#FFFF55', 95);
-  // Beds Broken: Red #FF5555
   drawFittedStat(ctx, (playerData.bedBroken ?? 0).toLocaleString(), 992, rows[2].y, '#FF5555', 85);
 
-  // Streak: Gold #FFAA00 or Red if losestreak
   const ws = playerData.winstreak ?? 0;
   const ls = playerData.losestreak ?? 0;
   if (ws > 0) {
@@ -493,16 +448,11 @@ export async function generateVeltrixImage(
     drawFittedStat(ctx, '0', 992, rows[3].y, '#FFFFFF', 95);
   }
 
-  // 5. Resource Row (Iron, Gold, Diamonds, Emeralds)
   const resFont = '15px "Minecraft"';
   ctx.textAlign = 'left';
-  // Iron: White #FFFFFF
   drawMinecraftText(ctx, (playerData.irons ?? 0).toLocaleString(), 438, 471, resFont, '#FFFFFF');
-  // Gold: Gold #FFAA00
   drawMinecraftText(ctx, (playerData.gold ?? 0).toLocaleString(), 598, 471, resFont, '#FFAA00');
-  // Diamonds: Diamond Cyan #55FFFF
   drawMinecraftText(ctx, (playerData.diamonds ?? 0).toLocaleString(), 746, 471, resFont, '#55FFFF');
-  // Emeralds: Emerald Green #55FF55 (Centered directly above 'EMERALDS' written on template)
   ctx.textAlign = 'center';
   drawMinecraftText(ctx, (playerData.emeralds ?? 0).toLocaleString(), 944, 471, resFont, '#55FF55');
 

@@ -8,7 +8,6 @@
 import { PermissionService } from '../src/services/PermissionService';
 import { ChatInputCommandInteraction, Message, EmbedBuilder } from 'discord.js';
 
-// ---------- heavy module mocks ----------
 jest.mock('chartjs-node-canvas', () => ({
   ChartJSNodeCanvas: jest.fn().mockImplementation(() => ({
     renderToBuffer: jest.fn().mockResolvedValue(Buffer.from('chart')),

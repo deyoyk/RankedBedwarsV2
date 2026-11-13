@@ -75,7 +75,6 @@ describe('/gameinfo result image', () => {
     expect(buf).toEqual(Buffer.from('png'));
     const [, winners, losers] = mockGenerate.mock.calls[0];
     expect(winners[0]).toMatchObject({ username: 'Alpha', oldElo: 1000, newElo: 1025, kills: 7, diamonds: 9, mvp: true });
-    // No saved before/after: work back from the current ELO
     expect(losers[0]).toMatchObject({ username: 'Charlie', oldElo: 1005, newElo: 990 });
   });
 });

@@ -260,7 +260,6 @@ export class CommandManager {
   private registerQueueCommands() {
     this.reg('queuecontrol', 'Enable or disable queues by type or specific queue', queuecontrol, [], queueControlData.toJSON());
     this.reg('queue', 'Show information about players in the current queue', queue);
-    // Each party action is its own subcommand: /party invite, /party list, ...
     const sub = (name: string, description: string, options: ApplicationCommandOptionData[] = []) =>
       ({ name, description, type: 1, options }) as unknown as ApplicationCommandOptionData;
     const userOpt = (description: string, required = true) =>
@@ -517,9 +516,6 @@ export class CommandManager {
       console.log(`[Command Manager] Registering ${commands.length} commands`);
 
 
-      // Register on the server itself (shows up instantly) and clear the global set. Having both,
-      // for example global from this bot and guild-level from an earlier one on the same token,
-      // makes Discord list every command twice.
       const guildIds = new Set<string>(this.client.guilds?.cache?.keys() ?? []);
       if (config.guildId) guildIds.add(config.guildId);
       let registered = 0;

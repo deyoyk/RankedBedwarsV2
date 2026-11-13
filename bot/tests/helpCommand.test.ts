@@ -31,7 +31,6 @@ describe('help command version and server name', () => {
     expect(embed.description).toContain('Select a category to view commands and their required roles.');
     expect(embed.description).not.toContain(':star2:');
     expect(embed.description).not.toContain('2.5.0');
-    // House style: no footer that only repeats the server name (it's in the description)
     expect(embed.footer).toBeUndefined();
   });
 });

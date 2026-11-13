@@ -91,7 +91,6 @@ describe('punishment embeds', () => {
     expect(embed.description).toContain('has been 🔨 rank banned.');
     expect(fields.Duration).toBe('`Permanent`');
     expect(fields.Expires).toBe('`Never`');
-    // No record ID, so no Details button
     expect(sent(channel).components).toEqual([]);
   });
 

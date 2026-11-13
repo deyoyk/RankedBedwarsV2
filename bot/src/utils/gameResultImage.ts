@@ -44,7 +44,6 @@ export async function buildGameResultImage(game: ResultGame, guild?: Guild | nul
       const user = byId.get(id);
       const entry = user?.recentGames?.[0];
       const gain = typeof entry?.eloGain === 'number' ? entry.eloGain : 0;
-      // Older entries have no before/after: fall back to the player's current ELO
       const after = typeof entry?.elo_after === 'number' ? entry.elo_after : (user?.elo ?? 0);
       return {
         discordId: id,

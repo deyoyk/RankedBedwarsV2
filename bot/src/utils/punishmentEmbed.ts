@@ -19,7 +19,6 @@ interface PunishmentEmbedOptions {
   caseId?: string;
 }
 
-// What happened, as the first line of the post: "<@user> has been issued a ⭐ strike."
 const TYPE_CONFIG: Record<PunishmentType, { action: string; color: number }> = {
   ban: { action: 'has been 🔨 rank banned', color: 0x7b0606 },
   unban: { action: 'has been ✅ unbanned', color: 0x00aaaa },

@@ -33,7 +33,6 @@ const LEADERBOARD_MODES: Record<string, { title: string; field: string }> = {
   firstBloods: { title: 'First Bloods Leaderboard', field: 'firstBloods' },
 };
 
-// Short column heading on the leaderboard image
 const VALUE_LABELS: Record<string, string> = {
   bedBroken: 'BEDS', finalKills: 'FINALS', diamonds: 'DIAS', emeralds: 'EMS', blocksPlaced: 'BLOCKS',
   winStreak: 'STREAK', loseStreak: 'STREAK', damageDealt: 'DMG', damageTaken: 'TAKEN', bestStreak: 'BEST', firstBloods: 'FB',

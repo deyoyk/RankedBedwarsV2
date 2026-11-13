@@ -29,12 +29,9 @@ export interface ScoreGameMetadata {
   gameId?: string | number;
   mvps?: string[];
   bedBreakers?: string[];
-  // 'partial': losers were refunded (their ELO shows a greyed-out +0)
-  // 'full': every ELO change was reversed (both teams show a greyed-out +0)
   voided?: 'partial' | 'full';
 }
 
-// Colour for ELO changes that were reversed by a void
 const VOIDED_ELO_COLOR = '#8C8C8C';
 
 export const RANKS = [
@@ -87,7 +84,6 @@ async function loadStaticImages(): Promise<void> {
     try {
       cachedSteve = await loadImage(FALLBACK_AVATAR);
     } catch {
-      // ignore
     }
   }
 }
@@ -250,7 +246,6 @@ async function loadAvatar(username: string): Promise<Image> {
         return img;
       }
     } catch {
-      // try next
     }
   }
 
@@ -274,7 +269,6 @@ export async function loadRankIconImage(roleIdOrUrl?: string | null, iconUrl?: s
     return cached.img;
   }
 
-  // 1. Check if direct file path exists
   for (const candidate of [iconUrl, roleIdOrUrl]) {
     if (candidate && fs.existsSync(candidate)) {
       try {
@@ -285,7 +279,6 @@ export async function loadRankIconImage(roleIdOrUrl?: string | null, iconUrl?: s
     }
   }
 
-  // 2. Check local file in ranks cache directory by roleId or identifier
   if (roleIdOrUrl && !roleIdOrUrl.startsWith('http')) {
     const localPath = path.join(RANKS_CACHE_DIR, `${roleIdOrUrl}.png`);
     if (fs.existsSync(localPath)) {
@@ -297,7 +290,6 @@ export async function loadRankIconImage(roleIdOrUrl?: string | null, iconUrl?: s
     }
   }
 
-  // 3. Fetch via URL
   const fetchUrl = (iconUrl && iconUrl.startsWith('http')) ? iconUrl : (roleIdOrUrl && roleIdOrUrl.startsWith('http') ? roleIdOrUrl : null);
   if (fetchUrl) {
     try {
@@ -361,10 +353,8 @@ export async function generateScoredImage(
   const canvas = createCanvas(template.width, template.height);
   const ctx = canvas.getContext('2d');
 
-  // Draw the base template
   ctx.drawImage(template, 0, 0);
 
-  // 1. Game Details (Top Right) - aligned next to labels
   const mapStr = metadata?.map && metadata.map !== 'Unknown' ? metadata.map : 'Speedway';
   const gameIdStr = `#${gameId}`;
   const durationStr = metadata?.duration || 'N/A';
@@ -378,7 +368,6 @@ export async function generateScoredImage(
   const winnersVoided = metadata?.voided === 'full';
   const losersVoided = metadata?.voided === 'full' || metadata?.voided === 'partial';
 
-  // 2. Team ELO (Top Left - Victory)
   let winText: string;
   if (winnersVoided) {
     winText = '+0';
@@ -390,7 +379,6 @@ export async function generateScoredImage(
   }
   mcText(ctx, winText, 137, 88, 14, winnersVoided ? VOIDED_ELO_COLOR : '#55FF55', 'left');
 
-  // 3. Team ELO (Bottom Right - Defeat)
   let loseText: string;
   if (losersVoided) {
     loseText = '+0';
@@ -410,13 +398,11 @@ export async function generateScoredImage(
   mcText(ctx, teamEloLabel, teamEloStartX, 507, 14, '#C8C8C8', 'left');
   mcText(ctx, loseText, teamEloStartX + labelW, 507, 14, losersVoided ? VOIDED_ELO_COLOR : '#FF5555', 'left');
 
-  // 4. Winners (Left Side Slots 0..3)
   for (let i = 0; i < Math.min(4, winners.length); i++) {
     const p = winners[i];
     const yBox = 110 + i * 54;
     const cy = 140.5 + i * 54;
 
-    // Avatar in box (42, yBox, 38, 38)
     try {
       const avatar = await loadAvatar(p.username);
       drawAvatarBox(ctx, avatar, 42, yBox, 38, 38, 3);
@@ -424,11 +410,9 @@ export async function generateScoredImage(
       if (cachedSteve) drawAvatarBox(ctx, cachedSteve, 42, yBox, 38, 38, 3);
     }
 
-    // Line 1: Player Name in white
     const nameSize = fitSize(ctx, p.username, 16, 220);
     mcText(ctx, p.username, 92, yBox + 10, nameSize, '#FFFFFF', 'left');
 
-    // Line 2: Rank Icon + Rank Name
     const resolvedRank = await resolvePlayerRank(p);
     if (resolvedRank.iconImg) {
       const iconSize = 13;
@@ -438,11 +422,9 @@ export async function generateScoredImage(
     }
     mcText(ctx, resolvedRank.name.toUpperCase(), 107, cy, 12, resolvedRank.colorStr, 'left');
 
-    // Line 2: Sword kills (template sword icon ends at 200)
     const kills = p.kills ?? 0;
     mcText(ctx, String(kills), 205, cy, 12, '#FFFFFF', 'left');
 
-    // Line 2: KDR (template 'KDR' is at 274..297, value right-aligned before it at 270)
     let kdrVal: number;
     if (typeof p.kdr === 'number') {
       kdrVal = p.kdr;
@@ -456,7 +438,6 @@ export async function generateScoredImage(
     const kdrCol = kdrVal >= 1.0 ? '#55FF55' : '#FF5555';
     mcText(ctx, kdrStr, 270, cy, 12, kdrCol, 'right');
 
-    // Line 2: Diamonds (template diamond icon is at 317..325)
     let ownDiamonds = 0;
     let enemyDiamonds = 0;
     if (Array.isArray(p.diamonds)) {
@@ -475,26 +456,22 @@ export async function generateScoredImage(
     curX += ctx.measureText('/').width;
     mcText(ctx, String(enemyDiamonds), curX, cy, 13, '#C8C8C8', 'left');
 
-    // Right of row: ELO change parallel to diagonal line
     const diff = p.newElo - p.oldElo;
     const diffStr = winnersVoided ? '+0' : (diff >= 0 ? '+' : '') + diff;
     const eloX = 510 - i * 17.5;
     mcText(ctx, diffStr, Math.round(eloX), 128 + i * 54, 22, winnersVoided ? VOIDED_ELO_COLOR : '#55FF55', 'right');
   }
 
-  // 5. Losers (Right Side Slots 0..3) - Template order: Diamond -> KDR -> Sword
   for (let i = 0; i < Math.min(4, losers.length); i++) {
     const p = losers[i];
     const yBox = 267 + i * 54;
     const cy = 298 + i * 54;
 
-    // 1) Left of row: ELO change parallel to diagonal line
     const diff = p.newElo - p.oldElo;
     const diffStr = losersVoided ? '+0' : String(diff);
     const eloX = 565 - i * 17.5;
     mcText(ctx, diffStr, Math.round(eloX), 286 + i * 54, 22, losersVoided ? VOIDED_ELO_COLOR : '#FF5555', 'left');
 
-    // 2) Diamond count (template diamond icon is at 633..641)
     let ownDiamonds = 0;
     let enemyDiamonds = 0;
     if (Array.isArray(p.diamonds)) {
@@ -513,7 +490,6 @@ export async function generateScoredImage(
     curX += ctx.measureText('/').width;
     mcText(ctx, String(enemyDiamonds), curX, cy, 13, '#C8C8C8', 'left');
 
-    // 3) KDR value (template 'KDR' is at 762..788, value right-aligned before it at 757)
     const kills = p.kills ?? 0;
     let kdrVal: number;
     if (typeof p.kdr === 'number') {
@@ -528,10 +504,8 @@ export async function generateScoredImage(
     const kdrCol = kdrVal >= 1.0 ? '#55FF55' : '#FF5555';
     mcText(ctx, kdrStr, 757, cy, 12, kdrCol, 'right');
 
-    // 4) Sword kills (template sword icon is at 805..814, kills right after it at 818)
     mcText(ctx, String(kills), 818, cy, 12, '#FFFFFF', 'left');
 
-    // 5) Rank Icon + Rank Name (placed cleanly after sword kills at 840)
     const resolvedRank = await resolvePlayerRank(p);
     if (resolvedRank.iconImg) {
       const iconSize = 13;
@@ -541,11 +515,9 @@ export async function generateScoredImage(
     }
     mcText(ctx, resolvedRank.name.toUpperCase(), 855, cy, 12, resolvedRank.colorStr, 'left');
 
-    // 6) Player Name (right-aligned to 930) in white
     const nameSize = fitSize(ctx, p.username, 16, 125);
     mcText(ctx, p.username, 930, yBox + 10, nameSize, '#FFFFFF', 'right');
 
-    // 7) Avatar in right box (945, yBox, 38, 38)
     try {
       const avatar = await loadAvatar(p.username);
       drawAvatarBox(ctx, avatar, 945, yBox, 38, 38, 3);
@@ -554,7 +526,6 @@ export async function generateScoredImage(
     }
   }
 
-  // 6. MVPs (Bottom Left: 43, bottomBoxYs[m], 22, 22)
   const bottomBoxYs = [376, 405, 435];
   const mvpNames = [...new Set(Array.isArray(metadata?.mvps) && metadata.mvps.length > 0
     ? metadata.mvps
@@ -578,7 +549,6 @@ export async function generateScoredImage(
     mcText(ctx, 'None', 72, bottomBoxYs[0] + 11, 14, '#777777', 'left');
   }
 
-  // 7. Bed Breakers (Bottom Left: 233, bottomBoxYs[b], 22, 22)
   const bbNames = [...new Set(Array.isArray(metadata?.bedBreakers) && metadata.bedBreakers.length > 0
     ? metadata.bedBreakers
     : [...winners, ...losers].filter(p => p.bedBreaker).map(p => p.username))];

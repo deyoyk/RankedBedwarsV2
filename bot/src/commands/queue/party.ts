@@ -89,7 +89,6 @@ export async function party(interaction: ChatInputCommandInteraction, wsManager?
 }
 
 // /party invite: makes a party first when the inviter has none (or theirs no longer exists).
-// If that fresh party's invite then fails, it's removed again so no empty party is left behind.
 async function handleInvite(interaction: ChatInputCommandInteraction, userId: string, targetId: string, guild: Guild) {
   let created = false;
   const access = await PartyService.validatePartyAccess(userId);

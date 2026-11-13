@@ -3,7 +3,6 @@ import path from 'path';
 import { existsSync } from 'fs';
 import axios from 'axios';
 
-// Register Minecraft font
 const fontPath = path.join(process.cwd(), 'src/assets/fonts/Minecraft.otf');
 if (existsSync(fontPath)) {
   try {
@@ -114,7 +113,6 @@ export async function generateLeaderboardImage(
 
   ctx.drawImage(template, 0, 0);
 
-  // 1. Capital White Header Title (e.g. "ELO LEADERBOARD" or "ELO LEADERBOARD - PAGE 3")
   const upperTitle = title.toUpperCase();
   const headerText = isFirstPage
     ? upperTitle
@@ -122,43 +120,35 @@ export async function generateLeaderboardImage(
   const titleSize = fitSize(ctx, headerText, 13, 250);
   mcText(ctx, headerText, 342, 27, titleSize, '#FFFFFF', 'right');
 
-  // Pre-fetch avatars for all entries in parallel
   const avatarResults = await Promise.allSettled(
     entries.slice(0, 10).map(e => loadAvatar(e.ign))
   );
 
   if (isFirstPage) {
-    // Draw category label under Row 1 value on top 10 card
     if (categoryLabel) {
       mcText(ctx, categoryLabel.toUpperCase(), 332, 136, 9, '#AAAAAA', 'right');
     }
 
-    // Row 1 (1st place)
     if (entries.length > 0) {
       const e = entries[0];
       const rankNum = e.rank ?? (page * 10 + 1);
 
-      // Rank #1 text
       mcText(ctx, `#${rankNum}`, 42, 122, 14, '#FFD700', 'center');
 
-      // Avatar at (61, 104, 36, 36)
       const avRes = avatarResults[0];
       const avImg = avRes && avRes.status === 'fulfilled' ? avRes.value : cachedSteve;
       if (avImg) {
         drawAvatarBox(ctx, avImg, 61, 104, 36, 36, 3);
       }
 
-      // Player IGN
       const nameSize = fitSize(ctx, e.ign, 15, 145);
       mcText(ctx, e.ign, 108, 122, nameSize, '#FFFFFF', 'left');
 
-      // Stat Value
       const valStr = typeof e.value === 'number' ? e.value.toLocaleString() : String(e.value);
       const valSize = fitSize(ctx, valStr, 15, 75);
       mcText(ctx, valStr, 332, 117, valSize, '#55FF55', 'right');
     }
 
-    // Rows 2 through 10
     const rowStartCy = 179;
     const rowSpacing = 35;
 
@@ -167,30 +157,24 @@ export async function generateLeaderboardImage(
       const cy = rowStartCy + (i - 1) * rowSpacing;
       const rankNum = e.rank ?? (page * 10 + i + 1);
 
-      // Rank prefix color
       const rankColor = rankNum === 2 ? '#E0E0E0' : rankNum === 3 ? '#CD7F32' : '#888888';
 
-      // Rank number
       mcText(ctx, `#${rankNum}`, 45, cy, 12, rankColor, 'center');
 
-      // Avatar box at (67, cy - 10, 20, 20)
       const avRes = avatarResults[i];
       const avImg = avRes && avRes.status === 'fulfilled' ? avRes.value : cachedSteve;
       if (avImg) {
         drawAvatarBox(ctx, avImg, 67, Math.round(cy - 10), 20, 20, 2);
       }
 
-      // Username
       const nameSize = fitSize(ctx, e.ign, 13, 145);
       mcText(ctx, e.ign, 95, cy, nameSize, '#FFFFFF', 'left');
 
-      // Stat value
       const valStr = typeof e.value === 'number' ? e.value.toLocaleString() : String(e.value);
       const valSize = fitSize(ctx, valStr, 13, 75);
       mcText(ctx, valStr, 332, cy, valSize, '#FFFFFF', 'right');
     }
   } else {
-    // Multi-page template (ranks 11+, 10 uniform rows)
     const rowCenters = [116, 154, 193, 231, 270, 308, 347, 385, 423, 462];
 
     for (let i = 0; i < Math.min(10, entries.length); i++) {
@@ -198,23 +182,19 @@ export async function generateLeaderboardImage(
       const cy = rowCenters[i];
       const rankNum = e.rank ?? (page * 10 + i + 1);
 
-      // Rank number
       const rankStr = `#${rankNum}`;
       const rankSize = fitSize(ctx, rankStr, 12, 36, 8);
       mcText(ctx, rankStr, 45, cy, rankSize, '#888888', 'center');
 
-      // Avatar box at (67, cy - 10, 20, 20)
       const avRes = avatarResults[i];
       const avImg = avRes && avRes.status === 'fulfilled' ? avRes.value : cachedSteve;
       if (avImg) {
         drawAvatarBox(ctx, avImg, 67, Math.round(cy - 10), 20, 20, 2);
       }
 
-      // Username
       const nameSize = fitSize(ctx, e.ign, 13, 145);
       mcText(ctx, e.ign, 95, cy, nameSize, '#FFFFFF', 'left');
 
-      // Stat value
       const valStr = typeof e.value === 'number' ? e.value.toLocaleString() : String(e.value);
       const valSize = fitSize(ctx, valStr, 13, 75);
       mcText(ctx, valStr, 332, cy, valSize, '#FFFFFF', 'right');

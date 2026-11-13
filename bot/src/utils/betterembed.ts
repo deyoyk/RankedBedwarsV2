@@ -2,11 +2,6 @@ import { APIEmbed, ColorResolvable, EmbedBuilder, EmbedFooterOptions, resolveCol
 
 // ---------------------------------------------------------------------------
 // House style: every embed opens with a "<brand> · <header>" author line and the bot's avatar
-// instead of a title, and has one teal brand bar. Reds, ambers and yellows (errors, warnings,
-// voids, punishments) keep their colour. setTitle() becomes a small "-# ➡" subtitle line.
-//
-// Each file picks its header once:
-//   const { errorEmbed, successEmbed, themedEmbed } = embedsFor('Player');
 // ---------------------------------------------------------------------------
 
 export type EmbedStatus = 'info' | 'success' | 'warning' | 'error' | 'punishment';
@@ -46,7 +41,6 @@ export const EMBED_THEME = {
   successText: 'Done.',
 } as const;
 
-// Titles that only repeat what the colour or header already says
 const GENERIC_TITLE = /^(info|information|notice|success|warning|punishment|.*\berror\b.*|.*\busage\b.*)$/i;
 const DEFAULT_FOOTERS = /^(veltrix ranked bedwars|deyo ranked bedwars)$/i;
 
@@ -129,7 +123,6 @@ export class HouseEmbed extends EmbedBuilder {
     const data: APIEmbed = 'toJSON' in embed ? embed.toJSON() : 'data' in embed ? { ...embed.data } : { ...embed };
     const result = new HouseEmbed(header, options, { ...data, title: undefined, description: undefined });
     if (data.color !== undefined) result.setColor(data.color);
-    // An embed that is already house-styled carries its subtitle as the first description line
     const existing = data.description?.match(/^-# ➡ (.*)(?:\n([\s\S]*))?$/);
     if (existing) {
       result.subtitle = existing[1];
@@ -221,5 +214,4 @@ export function embedsFor(header: string) {
   return { themedEmbed, themedFrom, betterEmbed, errorEmbed, successEmbed, warningEmbed, infoEmbed };
 }
 
-// Header-less versions for code that hasn't picked a header (brand name only)
 export const { themedEmbed, themedFrom, betterEmbed, errorEmbed, successEmbed, warningEmbed, infoEmbed } = embedsFor('');

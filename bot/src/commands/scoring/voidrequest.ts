@@ -18,7 +18,6 @@ interface VoidRequestData {
 
 type VoidRequestSource = ChatInputCommandInteraction | ModalSubmitInteraction;
 
-// Replies from the "Request void" button on /gameinfo are only shown to the person who pressed it
 async function reply(interaction: VoidRequestSource, payload: { embeds: EmbedBuilder[] }) {
   if (interaction instanceof ModalSubmitInteraction) {
     if (interaction.replied || interaction.deferred) await interaction.followUp({ ...payload, flags: MessageFlags.Ephemeral }).catch(() => {});

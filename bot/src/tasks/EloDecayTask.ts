@@ -97,7 +97,6 @@ export class EloDecayTask {
           updateDailyElo({ dailyElo } as { dailyElo: Array<{ elo: number; date: Date | string }> }, newElo);
           ops.push({
             updateOne: {
-              // Only if ELO is still what was read: a game scored meanwhile isn't overwritten
               filter: { discordId: user.discordId, elo: user.elo },
               update: { $set: { elo: newElo, dailyElo: dailyElo.slice(-30) } },
             },
