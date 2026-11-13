@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class CallCmd implements CommandExecutor, TabCompleter {
     private final RankedBedwars plugin;
@@ -65,13 +66,14 @@ public class CallCmd implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (args.length < 1) {
-            player.sendMessage(ChatColor.RED + "Usage: /call <player>");
-            player.sendMessage(ChatColor.GRAY + "Example: /call BankruptSky");
+        if (args.length < 2 || !args[0].equalsIgnoreCase("add") && !args[0].equalsIgnoreCase("remove")) {
+            player.sendMessage(ChatColor.RED + "Usage: /call add|remove <player>");
+            player.sendMessage(ChatColor.GRAY + "Example: /call add BankruptSky");
             return true;
         }
 
-        String targetIgn = args[0];
+        boolean add = args[0].equalsIgnoreCase("add");
+        String targetIgn = args[1];
         String requesterIgn = player.getName();
 
         if (targetIgn.equalsIgnoreCase(requesterIgn)) {
@@ -81,7 +83,7 @@ public class CallCmd implements CommandExecutor, TabCompleter {
 
         String callId = UUID.randomUUID().toString();
         JsonObject json = new JsonObject();
-        json.addProperty("type", "callcmd");
+        json.addProperty("type", add ? "callcmd" : "callremove");
         json.addProperty("call_id", callId);
         json.addProperty("requester", requesterIgn);
         json.addProperty("target", targetIgn);
@@ -90,7 +92,8 @@ public class CallCmd implements CommandExecutor, TabCompleter {
 
         plugin.getWebSocketManager().sendMessage(json.toString());
 
-        player.sendMessage(ChatColor.GREEN + "Call request sent to " + ChatColor.YELLOW + targetIgn + ChatColor.GREEN + "!");
+        String actionText = add ? "Call request sent to " : "Remove request sent to ";
+        player.sendMessage(ChatColor.GREEN + actionText + ChatColor.YELLOW + targetIgn + ChatColor.GREEN + "!");
         player.sendMessage(ChatColor.GRAY + "Waiting for response...");
 
         plugin.debug("Call command executed: " + requesterIgn + " -> " + targetIgn);
@@ -111,6 +114,11 @@ public class CallCmd implements CommandExecutor, TabCompleter {
         }
 
         if (args.length == 1) {
+            return Stream.of("add", "remove")
+                    .filter(sub -> sub.startsWith(args[0].toLowerCase()))
+                    .collect(Collectors.toList());
+        }
+        if (args.length == 2) {
             List<String> playerNames = new ArrayList<>();
 
             for (Player onlinePlayer : plugin.getServer().getOnlinePlayers()) {
@@ -120,7 +128,7 @@ public class CallCmd implements CommandExecutor, TabCompleter {
             }
 
             return playerNames.stream()
-                    .filter(name -> name.toLowerCase().startsWith(args[0].toLowerCase()))
+                    .filter(name -> name.toLowerCase().startsWith(args[1].toLowerCase()))
                     .collect(Collectors.toList());
         }
 
