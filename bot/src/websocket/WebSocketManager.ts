@@ -1,6 +1,7 @@
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
+import type { RankProgress } from '../utils/rankInfo';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { GameResult, PlayerData } from '../types/GameTypes';
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
@@ -286,7 +287,7 @@ interface ScoringSuccessPayload {
   game_id: number;
   gameid?: number;
   players: string[];
-  elo?: Array<{ ign: string; before: number; after: number }>;
+  elo?: Array<{ ign: string; before: number; after: number; rank: RankProgress | null }>;
 }
 
 interface ScoringSettledPayload {

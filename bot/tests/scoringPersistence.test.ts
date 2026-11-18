@@ -168,10 +168,10 @@ describe('scoring persistence', () => {
 
     const sent = wsManagerMock.send.mock.calls.map(c => c[0]).find(m => m.type === 'scoringsuccess');
     expect(sent.elo).toEqual([
-      { ign: 'A', before: 1000, after: players[0].elo },
-      { ign: 'B', before: 1100, after: players[1].elo },
-      { ign: 'C', before: 1200, after: players[2].elo },
-      { ign: 'D', before: 1300, after: players[3].elo },
+      { ign: 'A', before: 1000, after: players[0].elo, rank: { name: 'Rank', color: '#FFFFFF', start: 0, end: 99999, win_elo: 30, next: null } },
+      { ign: 'B', before: 1100, after: players[1].elo, rank: { name: 'Rank', color: '#FFFFFF', start: 0, end: 99999, win_elo: 30, next: null } },
+      { ign: 'C', before: 1200, after: players[2].elo, rank: { name: 'Rank', color: '#FFFFFF', start: 0, end: 99999, win_elo: 30, next: null } },
+      { ign: 'D', before: 1300, after: players[3].elo, rank: { name: 'Rank', color: '#FFFFFF', start: 0, end: 99999, win_elo: 30, next: null } },
     ]);
     expect(players[0].elo).toBeGreaterThan(1000);
     expect(players[2].elo).toBeLessThan(1200);

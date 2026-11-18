@@ -21,6 +21,7 @@ import { bountyForOpponentStreak, parseTiers, type ProgressionTier, streakBonusF
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import { embedsFor } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
+import { rankProgressFor } from '../utils/rankInfo';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 
 const { themedEmbed } = embedsFor('Scoring');
@@ -897,13 +898,19 @@ export class GameManager {
       try {
         const allPlayerIGNs = context.players.map(p => p.ign).filter(Boolean);
         if (allPlayerIGNs.length > 0) {
+          const guild = context.game.isPrivate ? null : await this.getGuild();
           this.wsManager.send({
             type: 'scoringsuccess',
             game_id: gameResult.gameId,
             players: allPlayerIGNs,
             elo: context.game.isPrivate ? [] : playerScoreData
               .filter(data => Boolean(data.player.ign))
-              .map(data => ({ ign: data.player.ign, before: data.elo_before, after: data.elo_after }))
+              .map(data => ({
+                ign: data.player.ign,
+                before: data.elo_before,
+                after: data.elo_after,
+                rank: rankProgressFor(data.elo_after, context.eloRanks, guild)
+              }))
           });
         }
       } catch (e) {
