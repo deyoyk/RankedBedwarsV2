@@ -286,6 +286,7 @@ interface ScoringSuccessPayload {
   game_id: number;
   gameid?: number;
   players: string[];
+  elo?: Array<{ ign: string; before: number; after: number }>;
 }
 
 interface ScoringSettledPayload {

@@ -159,6 +159,35 @@ describe('scoring persistence', () => {
     expect(players[2].elo).toBe(1200);
   });
 
+  it('tells the server the ELO of each player before and after a ranked game', async () => {
+    const gameDoc = makeGameDoc();
+    const players = [makeUser('a', 1000), makeUser('b', 1100), makeUser('c', 1200), makeUser('d', 1300)];
+    setupGame(players, gameDoc);
+
+    await makeManager().scoreGame({ gameId: 1, winningTeam: 1, mvps: [], bedbreaks: [] });
+
+    const sent = wsManagerMock.send.mock.calls.map(c => c[0]).find(m => m.type === 'scoringsuccess');
+    expect(sent.elo).toEqual([
+      { ign: 'A', before: 1000, after: players[0].elo },
+      { ign: 'B', before: 1100, after: players[1].elo },
+      { ign: 'C', before: 1200, after: players[2].elo },
+      { ign: 'D', before: 1300, after: players[3].elo },
+    ]);
+    expect(players[0].elo).toBeGreaterThan(1000);
+    expect(players[2].elo).toBeLessThan(1200);
+  });
+
+  it('sends no ELO changes for private games', async () => {
+    const gameDoc = makeGameDoc();
+    (gameDoc as any).isPrivate = true;
+    setupGame([makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')], gameDoc);
+
+    await makeManager().scoreGame({ gameId: 1, winningTeam: 1, mvps: [], bedbreaks: [] });
+
+    const sent = wsManagerMock.send.mock.calls.map(c => c[0]).find(m => m.type === 'scoringsuccess');
+    expect(sent.elo).toEqual([]);
+  });
+
   it('recovery scoring skips players whose stats were already applied', async () => {
     const gameDoc = makeGameDoc();
     const alreadyScored = makeUser('a', 1050);

@@ -900,7 +900,10 @@ export class GameManager {
           this.wsManager.send({
             type: 'scoringsuccess',
             game_id: gameResult.gameId,
-            players: allPlayerIGNs
+            players: allPlayerIGNs,
+            elo: context.game.isPrivate ? [] : playerScoreData
+              .filter(data => Boolean(data.player.ign))
+              .map(data => ({ ign: data.player.ign, before: data.elo_before, after: data.elo_after }))
           });
         }
       } catch (e) {
