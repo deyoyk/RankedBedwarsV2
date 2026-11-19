@@ -36,6 +36,8 @@ export interface WarpRequestData {
   isRanked: boolean;
   /** A party's private game: the server lets players pick their teams in the waiting room. */
   isPrivate?: boolean;
+  /** The queue's ruleset (normal or ppp): the server shows its season rules and shop rules. */
+  ruleset?: string;
   timestamp: number;
 }
 

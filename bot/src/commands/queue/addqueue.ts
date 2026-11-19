@@ -20,6 +20,7 @@ export async function addqueue(interaction: ChatInputCommandInteraction, _wsMana
     maxElo = interaction.options.getInteger('max_elo', true);
     isRanked = interaction.options.getBoolean('is_ranked', true);
     isPicking = interaction.options.getBoolean('is_picking', true);
+    const ruleset = interaction.options.getString('ruleset', false) === 'ppp' ? 'ppp' : 'normal';
     const bypassRolesStr = interaction.options.getString('bypass_roles', false);
     if (bypassRolesStr) {
       bypassRoles = bypassRolesStr.split(',').map(id => id.trim());
@@ -44,12 +45,13 @@ export async function addqueue(interaction: ChatInputCommandInteraction, _wsMana
     return;
   }
 
-  const details = (queue: { maxPlayers: number; minElo: number; maxElo: number; isRanked?: boolean; isPicking?: boolean }) => [
+  const details = (queue: { maxPlayers: number; minElo: number; maxElo: number; isRanked?: boolean; isPicking?: boolean; ruleset?: string }) => [
     `**Channel:** <#${channelId}>`,
     `**Max Players:** ${queue.maxPlayers}`,
     `**ELO Range:** ${queue.minElo}-${queue.maxElo}`,
     `**Queue Type:** ${queue.isRanked ? 'Ranked' : 'Casual'}`,
     `**Picking:** ${queue.isPicking ? 'Enabled' : 'Disabled'}`,
+    `**Ruleset:** ${queue.ruleset === 'ppp' ? 'PPP' : 'Normal'}`,
   ];
 
   try {
@@ -72,6 +74,7 @@ export async function addqueue(interaction: ChatInputCommandInteraction, _wsMana
       isRanked,
       isPicking,
       bypassRoles,
+      ruleset,
       players: [],
       parties: []
     });

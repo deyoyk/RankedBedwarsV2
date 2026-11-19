@@ -9,6 +9,8 @@ export interface IQueue extends Document {
   isPicking: boolean;
   bypassRoles: string[];
   isActive?: boolean;
+  /** The Minecraft server's ruleset for this queue's games: its season rules and shop rules. */
+  ruleset?: 'normal' | 'ppp';
 }
 
 const QueueSchema: Schema = new Schema({
@@ -19,7 +21,8 @@ const QueueSchema: Schema = new Schema({
   isRanked: { type: Boolean, required: true },
   isPicking: { type: Boolean, default: false },
   bypassRoles: [{ type: String, default: [] }],
-  isActive: { type: Boolean, default: true, index: true }
+  isActive: { type: Boolean, default: true, index: true },
+  ruleset: { type: String, enum: ['normal', 'ppp'], default: 'normal' }
 });
 
 QueueSchema.index({ isActive: 1, minElo: 1, maxElo: 1 });

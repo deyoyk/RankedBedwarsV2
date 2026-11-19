@@ -297,7 +297,9 @@ export class CommandManager {
       { name: 'max_elo', description: 'Maximum ELO allowed', type: 4, required: true },
       { name: 'is_ranked', description: 'Whether this is a ranked queue', type: 5, required: true },
       { name: 'is_picking', description: 'Whether team picking is enabled', type: 5, required: true },
-      { name: 'bypass_roles', description: 'Role IDs that can bypass restrictions (comma-separated)', type: 3, required: false }
+      { name: 'bypass_roles', description: 'Role IDs that can bypass restrictions (comma-separated)', type: 3, required: false },
+      { name: 'ruleset', description: 'Rules for its games on the server (default normal)', type: 3, required: false,
+        choices: [{ name: 'normal', value: 'normal' }, { name: 'ppp', value: 'ppp' }] }
     ]);
     this.reg('removequeue', 'Remove a queue by channel ID', removequeue, [
       { name: 'channel_id', description: 'Channel ID of the queue to remove', type: 3, required: true }

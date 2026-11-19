@@ -3,6 +3,7 @@ import Game, { IGame } from '../models/Game';
 import GameSettlement from '../models/GameSettlement';
 import User, { IUser } from '../models/User';
 import EloRank, { IEloRank } from '../models/EloRank';
+import Queue from '../models/Queue';
 import { Counter, getNextSequence } from '../models/Counter';
 import config from '../config/config';
 import { GameResources, GameResult, GameState, PlayerData, VoidResult, WarpRequestData } from '../types/GameTypes';
@@ -1063,7 +1064,8 @@ export class GameManager {
         console.warn(`[GameManager] Game ${gameId} warping with ${actual}/${expected} players resolved (some IGNs missing, game will start short-handed)`);
       }
 
-      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs, Boolean(game.isPrivate));
+      const ruleset = game.isPrivate ? 'normal' : await this.queueRuleset(game.queueId);
+      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs, Boolean(game.isPrivate), ruleset);
 
       console.log(`[GameManager] Initiated warp request for game ${gameId} with map ${game.map}`);
     } catch (error) {
@@ -1145,6 +1147,7 @@ export class GameManager {
       map: warpData.map,
       is_ranked: warpData.isRanked,
       is_private: warpData.isPrivate === true,
+      ruleset: warpData.ruleset ?? 'normal',
       team1: {
         players: warpData.team1IGNs
       },
@@ -1450,13 +1453,25 @@ export class GameManager {
     }
   }
 
+  private async queueRuleset(channelId: string | undefined): Promise<string> {
+    if (!channelId) return 'normal';
+    try {
+      const queue = await Queue.findOne({ channelId }).select('ruleset').lean() as { ruleset?: string } | null;
+      return queue?.ruleset === 'ppp' ? 'ppp' : 'normal';
+    } catch (error) {
+      console.error(`[GameManager] Could not read the ruleset of queue ${channelId}:`, error);
+      return 'normal';
+    }
+  }
+
   private sendWarpRequest(
     gameId: string,
     map: string,
     isRanked: boolean,
     team1IGNs: string[],
     team2IGNs: string[],
-    isPrivate: boolean = false
+    isPrivate: boolean = false,
+    ruleset: string = 'normal'
   ): void {
     try {
       const warpData: WarpRequestData = {
@@ -1470,6 +1485,7 @@ export class GameManager {
         map,
         isRanked,
         isPrivate,
+        ruleset,
         timestamp: Date.now()
       };
 
