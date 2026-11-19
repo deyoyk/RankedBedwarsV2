@@ -943,6 +943,14 @@ export class WebSocketManager {
         const copy = { ...user };
         delete copy._id;
         delete copy.__v;
+        try {
+          const EloRank = (await import('../models/EloRank')).default;
+          const { rankProgressFor } = await import('../utils/rankInfo');
+          const ranks = await EloRank.find().lean();
+          copy.rank = rankProgressFor(Number(copy.elo) || 0, ranks, this.discordClient?.guilds.cache.first());
+        } catch (error) {
+          console.error('[WebSocketManager] Rank lookup for stats failed:', error);
+        }
         data = copy;
       }
     } catch (error) {
