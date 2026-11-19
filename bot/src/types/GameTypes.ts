@@ -38,6 +38,8 @@ export interface WarpRequestData {
   isPrivate?: boolean;
   /** The queue's ruleset (normal or ppp): the server shows its season rules and shop rules. */
   ruleset?: string;
+  /** Players who queued together, by IGN: the server marks them in the tab list. */
+  parties?: string[][];
   timestamp: number;
 }
 

@@ -1065,7 +1065,8 @@ export class GameManager {
       }
 
       const ruleset = game.isPrivate ? 'normal' : await this.queueRuleset(game.queueId);
-      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs, Boolean(game.isPrivate), ruleset);
+      const parties = await this.partyGroups([...game.team1, ...game.team2]);
+      this.sendWarpRequest(key, game.map, game.isRanked || false, team1IGNs, team2IGNs, Boolean(game.isPrivate), ruleset, parties);
 
       console.log(`[GameManager] Initiated warp request for game ${gameId} with map ${game.map}`);
     } catch (error) {
@@ -1148,6 +1149,7 @@ export class GameManager {
       is_ranked: warpData.isRanked,
       is_private: warpData.isPrivate === true,
       ruleset: warpData.ruleset ?? 'normal',
+      parties: warpData.parties ?? [],
       team1: {
         players: warpData.team1IGNs
       },
@@ -1453,6 +1455,30 @@ export class GameManager {
     }
   }
 
+  /** The game's parties of two or more, as IGNs; players with no IGN are left out. */
+  private async partyGroups(discordIds: string[]): Promise<string[][]> {
+    try {
+      const users = await User.find({ discordId: { $in: discordIds }, partyId: { $exists: true, $ne: null } })
+        .select('discordId partyId').lean() as Array<{ discordId: string; partyId?: string | null }>;
+      const byParty = new Map<string, string[]>();
+      for (const u of users) {
+        if (!u.partyId) continue;
+        const list = byParty.get(String(u.partyId)) ?? [];
+        list.push(u.discordId);
+        byParty.set(String(u.partyId), list);
+      }
+      const ids = [...byParty.values()].filter(list => list.length >= 2);
+      if (ids.length === 0) return [];
+      const igns = await getPlayerIgns(ids.flat());
+      return ids
+        .map(list => list.map(id => igns.get(id)).filter((ign): ign is string => Boolean(ign)))
+        .filter(list => list.length >= 2);
+    } catch (error) {
+      console.error('[GameManager] Could not read the parties in a game:', error);
+      return [];
+    }
+  }
+
   private async queueRuleset(channelId: string | undefined): Promise<string> {
     if (!channelId) return 'normal';
     try {
@@ -1471,7 +1497,8 @@ export class GameManager {
     team1IGNs: string[],
     team2IGNs: string[],
     isPrivate: boolean = false,
-    ruleset: string = 'normal'
+    ruleset: string = 'normal',
+    parties: string[][] = []
   ): void {
     try {
       const warpData: WarpRequestData = {
@@ -1486,6 +1513,7 @@ export class GameManager {
         isRanked,
         isPrivate,
         ruleset,
+        parties,
         timestamp: Date.now()
       };
 
