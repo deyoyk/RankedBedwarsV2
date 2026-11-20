@@ -534,6 +534,60 @@ export class ApiManager {
     };
   }
 
+  private async buildGamePlayerStats(game: LeanGame) {
+    const participantIds = [...(game.team1 || []), ...(game.team2 || [])];
+    if (participantIds.length === 0) return [];
+
+    const statUsers = await User.find(
+      {
+        discordId: { $in: participantIds },
+        'recentGames.gameId': game.gameId
+      },
+      {
+        discordId: 1,
+        recentGames: { $elemMatch: { gameId: game.gameId } }
+      }
+    ).lean();
+
+    const recentById = new Map(
+      statUsers.map((user) => [user.discordId, user.recentGames?.[0]])
+    );
+    const combatById = new Map(
+      (game.combat || []).map((entry) => [entry.player, entry])
+    );
+    const bedBreakers = new Set(game.bedbreaks || []);
+
+    const num = (...values: Array<number | undefined>): number => {
+      for (const value of values) {
+        if (typeof value === 'number') return value;
+      }
+      return 0;
+    };
+
+    return participantIds.map((discordId) => {
+      const recent = recentById.get(discordId);
+      const combat = combatById.get(discordId);
+      return {
+        discordId,
+        kills: num(recent?.kills, combat?.kills),
+        deaths: num(recent?.deaths, combat?.deaths),
+        finalKills: num(recent?.finalKills),
+        finalDeaths: num(recent?.finalDeaths),
+        bedBroken: num(recent?.bedBroken, bedBreakers.has(discordId) ? 1 : 0),
+        diamonds: num(recent?.diamonds),
+        irons: num(recent?.irons),
+        gold: num(recent?.gold),
+        emeralds: num(recent?.emeralds),
+        blocksPlaced: num(recent?.blocksPlaced),
+        damageDealt: num(recent?.damageDealt, combat?.damageDealt),
+        damageTaken: num(recent?.damageTaken, combat?.damageTaken),
+        assists: num(recent?.assists, combat?.assists),
+        highestKillstreak: num(recent?.maxStreak, combat?.maxStreak),
+        firstBlood: recent?.firstBlood ?? combat?.firstBlood ?? false
+      };
+    });
+  }
+
   private getUserData = async (req: Request, res: Response): Promise<void> => {
     try {
       const ign = req.query.ign as string;
@@ -596,7 +650,8 @@ export class ApiManager {
         const game = await Game.findOne({ gameId: Number(gameid) }).lean();
         if (!game) return null;
         const idToIgn = await this.resolveGameIgns([game]);
-        return { ...game, ...this.mapGameIgns(game, idToIgn) };
+        const playerStats = await this.buildGamePlayerStats(game);
+        return { ...game, ...this.mapGameIgns(game, idToIgn), playerStats };
       });
       if (!response) {
         res.status(404).json({ error: 'Game not found' });
