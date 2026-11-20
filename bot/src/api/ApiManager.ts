@@ -51,9 +51,23 @@ interface ApiStatusError extends Error {
   statusCode?: number;
 }
 
+export const PUBLIC_API_PREFIX = '/public/rbw/api';
+
+export interface ApiManagerOptions {
+  routePrefix?: string;
+  requireAuth?: boolean;
+  mountRoutes?: boolean;
+}
+
+function isPublicApiPath(path: string): boolean {
+  return path === PUBLIC_API_PREFIX || path.startsWith(`${PUBLIC_API_PREFIX}/`);
+}
+
 export class ApiManager {
-  private client: Client;
-  private wsManager: WebSocketManager;
+  protected client: Client;
+  protected wsManager: WebSocketManager;
+  protected readonly routePrefix: string;
+  private readonly requireAuth: boolean;
   private gameModel: Model<IGame> | null = null;
   private cache: Map<string, CacheEntry> = new Map();
   private inflight: Map<string, Promise<unknown>> = new Map();
@@ -80,58 +94,76 @@ export class ApiManager {
     }
   });
 
-  constructor(client: Client, wsManager: WebSocketManager) {
+  constructor(client: Client, wsManager: WebSocketManager, options: ApiManagerOptions = {}) {
     this.client = client;
     this.wsManager = wsManager;
+    this.routePrefix = options.routePrefix ?? '/rbw/api';
+    this.requireAuth = options.requireAuth ?? true;
 
-    this.wsManager.app.use(cors());
+    if (this.requireAuth) {
+      this.wsManager.app.use(cors());
 
-    const webDir = this.resolveWebDir();
-    if (webDir) {
-      this.wsManager.app.use(express.static(webDir, { index: 'index.html', maxAge: '1h' }));
-      console.log(`[API] Serving web UI from ${webDir}`);
+      const webDir = this.resolveWebDir();
+      if (webDir) {
+        this.wsManager.app.use(express.static(webDir, { index: 'index.html', maxAge: '1h' }));
+        console.log(`[API] Serving web UI from ${webDir}`);
+      }
+
+      this.wsManager.app.get('/rbw/web/config', (req: Request, res: Response) => {
+        res.json({
+          apiBase: '',
+          apiKeyRequired: process.env.RBW_PUBLIC_API !== 'true',
+          rateLimited: true,
+          siteVersion: 1
+        });
+      });
+
+      this.wsManager.app.use((req, res, next) => {
+        if (isPublicApiPath(req.path)) {
+          next();
+          return;
+        }
+        this.globalLimiter(req, res, next);
+      });
+
+      this.wsManager.app.use((req, res, next) => {
+        if (this.isHeavyEndpoint(req.path)) {
+          this.strictLimiter(req, res, next);
+          return;
+        }
+        next();
+      });
+
+      this.wsManager.app.use((req, res, next) => {
+        if (isPublicApiPath(req.path)) {
+          next();
+          return;
+        }
+        const apiKey = req.headers['x-api-key'] || req.query.key;
+        const authKey = process.env.AUTH_KEY;
+        const publicReadOnly = process.env.RBW_PUBLIC_API === 'true';
+        if (authKey && apiKey !== authKey && !(publicReadOnly && !apiKey)) {
+          res.status(401).json({ error: 'Unauthorized' });
+          return;
+        }
+        next();
+      });
     }
 
-    this.wsManager.app.get('/rbw/web/config', (req: Request, res: Response) => {
-      res.json({
-        apiBase: '',
-        apiKeyRequired: process.env.RBW_PUBLIC_API !== 'true',
-        rateLimited: true,
-        siteVersion: 1
-      });
-    });
-
-    this.wsManager.app.use(this.globalLimiter);
-
-    this.wsManager.app.use((req, res, next) => {
-      if (this.isHeavyEndpoint(req.path)) {
-        this.strictLimiter(req, res, next);
-        return;
-      }
-      next();
-    });
-
-    this.wsManager.app.use((req, res, next) => {
-      const apiKey = req.headers['x-api-key'] || req.query.key;
-      const authKey = process.env.AUTH_KEY;
-      const publicReadOnly = process.env.RBW_PUBLIC_API === 'true';
-      if (authKey && apiKey !== authKey && !(publicReadOnly && !apiKey)) {
-        res.status(401).json({ error: 'Unauthorized' });
-        return;
-      }
-      next();
-    });
-
-    this.setupRoutes();
+    if (options.mountRoutes !== false) {
+      this.setupRoutes();
+    }
   }
 
-  private isHeavyEndpoint(path: string): boolean {
+  protected isHeavyEndpoint(path: string): boolean {
+    const prefix = this.routePrefix;
+    const segments = path.startsWith(`${prefix}/`) ? path.slice(prefix.length + 1).split('/') : [];
     return (
-      path.startsWith('/rbw/api/leaderboard') ||
-      path === '/rbw/api/stats/top' ||
-      /^\/rbw\/api\/seasons\/[^/]+\/[^/]+\/leaderboard$/.test(path) ||
-      /^\/rbw\/api\/user\/[^/]+\/compare\/[^/]+$/.test(path) ||
-      path === '/rbw/api/search/users'
+      path.startsWith(`${prefix}/leaderboard`) ||
+      path === `${prefix}/stats/top` ||
+      (segments.length === 4 && segments[0] === 'seasons' && segments[3] === 'leaderboard') ||
+      (segments.length === 4 && segments[0] === 'user' && segments[2] === 'compare') ||
+      path === `${prefix}/search/users`
     );
   }
 
@@ -192,94 +224,94 @@ export class ApiManager {
     return task;
   }
 
-  private setupRoutes() {
-    this.wsManager.app.get('/rbw/api', (req: Request, res: Response) => {
+  protected setupRoutes() {
+    this.wsManager.app.get(this.routePrefix, (req: Request, res: Response) => {
       res.json({
         status: 'online',
-        note: 'New clients: prefer GET /rbw/api/user/:discordid/overview - a single consolidated user profile (stats, recent games, level, streak, season history) that supersedes multiple separate calls.',
+        note: `New clients: prefer GET ${this.routePrefix}/user/:discordid/overview - a single consolidated user profile (stats, recent games, level, streak, season history) that supersedes multiple separate calls.`,
         endpoints: [
-          '/rbw/api/user?ign=<ign>',
-          '/rbw/api/user?discordid=<id>',
-          '/rbw/api/user/:discordid/overview',
-          '/rbw/api/leaderboard?mode=<mode>&page=<page>',
-          '/rbw/api/game/:gameid',
-          '/rbw/api/game/:gameid/timeline',
-          '/rbw/api/queues',
-          '/rbw/api/eloranks',
-          '/rbw/api/punishments/:type',
-          '/rbw/api/baninfo?id=<banid>',
-          '/rbw/api/muteinfo?discordid=<id>|ign=<ign>',
-          '/rbw/api/strikeinfo?discordid=<id>|ign=<ign>',
-          '/rbw/api/seasons',
-          '/rbw/api/seasons/current',
-          '/rbw/api/seasons/:season/:chapter',
-          '/rbw/api/seasons/:season/:chapter/stats?ign=<ign>|discordid=<id>',
-          '/rbw/api/seasons/:season/:chapter/leaderboard?mode=<mode>&page=<page>',
-          '/rbw/api/seasons/:season/:chapter/games',
-          '/rbw/api/level?ign=<ign>|discordid=<id>',
-          '/rbw/api/stats/global',
-          '/rbw/api/stats/top?stat=<stat>&limit=<limit>',
-          '/rbw/api/user/:discordid/games?page=<page>&limit=<limit>',
-          '/rbw/api/user/:discordid/recent-games?limit=<limit>',
-          '/rbw/api/search/users?query=<query>&limit=<limit>',
-          '/rbw/api/online-players',
-          '/rbw/api/server/status',
-          '/rbw/api/user/:discordid/punishment-history',
-          '/rbw/api/user/:discordid/season-history',
-          '/rbw/api/leaderboard/top-players?mode=<mode>&limit=<limit>',
-          '/rbw/api/games/recent?limit=<limit>',
-          '/rbw/api/games/live',
-          '/rbw/api/user/:discordid/compare/:targetid',
-          '/rbw/api/maps',
-          '/rbw/api/user/:discordid/winstreak-history',
-          '/rbw/api/user/:discordid/elo-history',
+          `${this.routePrefix}/user?ign=<ign>`,
+          `${this.routePrefix}/user?discordid=<id>`,
+          `${this.routePrefix}/user/:discordid/overview`,
+          `${this.routePrefix}/leaderboard?mode=<mode>&page=<page>`,
+          `${this.routePrefix}/game/:gameid`,
+          `${this.routePrefix}/game/:gameid/timeline`,
+          `${this.routePrefix}/queues`,
+          `${this.routePrefix}/eloranks`,
+          `${this.routePrefix}/punishments/:type`,
+          `${this.routePrefix}/baninfo?id=<banid>`,
+          `${this.routePrefix}/muteinfo?discordid=<id>|ign=<ign>`,
+          `${this.routePrefix}/strikeinfo?discordid=<id>|ign=<ign>`,
+          `${this.routePrefix}/seasons`,
+          `${this.routePrefix}/seasons/current`,
+          `${this.routePrefix}/seasons/:season/:chapter`,
+          `${this.routePrefix}/seasons/:season/:chapter/stats?ign=<ign>|discordid=<id>`,
+          `${this.routePrefix}/seasons/:season/:chapter/leaderboard?mode=<mode>&page=<page>`,
+          `${this.routePrefix}/seasons/:season/:chapter/games`,
+          `${this.routePrefix}/level?ign=<ign>|discordid=<id>`,
+          `${this.routePrefix}/stats/global`,
+          `${this.routePrefix}/stats/top?stat=<stat>&limit=<limit>`,
+          `${this.routePrefix}/user/:discordid/games?page=<page>&limit=<limit>`,
+          `${this.routePrefix}/user/:discordid/recent-games?limit=<limit>`,
+          `${this.routePrefix}/search/users?query=<query>&limit=<limit>`,
+          `${this.routePrefix}/online-players`,
+          `${this.routePrefix}/server/status`,
+          `${this.routePrefix}/user/:discordid/punishment-history`,
+          `${this.routePrefix}/user/:discordid/season-history`,
+          `${this.routePrefix}/leaderboard/top-players?mode=<mode>&limit=<limit>`,
+          `${this.routePrefix}/games/recent?limit=<limit>`,
+          `${this.routePrefix}/games/live`,
+          `${this.routePrefix}/user/:discordid/compare/:targetid`,
+          `${this.routePrefix}/maps`,
+          `${this.routePrefix}/user/:discordid/winstreak-history`,
+          `${this.routePrefix}/user/:discordid/elo-history`,
         ],
         version: botPackage.version
       });
     });
 
-    this.wsManager.app.get('/rbw/api/user', this.getUserData);
-    this.wsManager.app.get('/rbw/api/leaderboard', this.getLeaderboard);
-    this.wsManager.app.get('/rbw/api/game/:gameid', this.getGameById);
-    this.wsManager.app.get('/rbw/api/game/:gameid/timeline', this.getGameTimeline);
-    this.wsManager.app.get('/rbw/api/queues', this.getQueues);
-    this.wsManager.app.get('/rbw/api/eloranks', this.getEloRanks);
-    this.wsManager.app.get('/rbw/api/punishments/:type', this.getPunishments);
+    this.wsManager.app.get(`${this.routePrefix}/user`, this.getUserData);
+    this.wsManager.app.get(`${this.routePrefix}/leaderboard`, this.getLeaderboard);
+    this.wsManager.app.get(`${this.routePrefix}/game/:gameid`, this.getGameById);
+    this.wsManager.app.get(`${this.routePrefix}/game/:gameid/timeline`, this.getGameTimeline);
+    this.wsManager.app.get(`${this.routePrefix}/queues`, this.getQueues);
+    this.wsManager.app.get(`${this.routePrefix}/eloranks`, this.getEloRanks);
+    this.wsManager.app.get(`${this.routePrefix}/punishments/:type`, this.getPunishments);
 
 
-    this.wsManager.app.get('/rbw/api/baninfo', this.getBanInfo);
-    this.wsManager.app.get('/rbw/api/muteinfo', this.getMuteInfo);
-    this.wsManager.app.get('/rbw/api/strikeinfo', this.getStrikeInfo);
+    this.wsManager.app.get(`${this.routePrefix}/baninfo`, this.getBanInfo);
+    this.wsManager.app.get(`${this.routePrefix}/muteinfo`, this.getMuteInfo);
+    this.wsManager.app.get(`${this.routePrefix}/strikeinfo`, this.getStrikeInfo);
 
 
-    this.wsManager.app.get('/rbw/api/seasons', this.getAllSeasons);
-    this.wsManager.app.get('/rbw/api/seasons/current', this.getCurrentSeason);
-    this.wsManager.app.get('/rbw/api/seasons/:season/:chapter', this.getSeasonInfo);
-    this.wsManager.app.get('/rbw/api/seasons/:season/:chapter/stats', this.getSeasonStats);
-    this.wsManager.app.get('/rbw/api/seasons/:season/:chapter/leaderboard', this.getSeasonLeaderboard);
-    this.wsManager.app.get('/rbw/api/seasons/:season/:chapter/games', this.getSeasonGames);
+    this.wsManager.app.get(`${this.routePrefix}/seasons`, this.getAllSeasons);
+    this.wsManager.app.get(`${this.routePrefix}/seasons/current`, this.getCurrentSeason);
+    this.wsManager.app.get(`${this.routePrefix}/seasons/:season/:chapter`, this.getSeasonInfo);
+    this.wsManager.app.get(`${this.routePrefix}/seasons/:season/:chapter/stats`, this.getSeasonStats);
+    this.wsManager.app.get(`${this.routePrefix}/seasons/:season/:chapter/leaderboard`, this.getSeasonLeaderboard);
+    this.wsManager.app.get(`${this.routePrefix}/seasons/:season/:chapter/games`, this.getSeasonGames);
 
 
-    this.wsManager.app.get('/rbw/api/level', this.getLevelInfo);
+    this.wsManager.app.get(`${this.routePrefix}/level`, this.getLevelInfo);
 
 
-    this.wsManager.app.get('/rbw/api/stats/global', this.getGlobalStats);
-    this.wsManager.app.get('/rbw/api/stats/top', this.getTopStats);
-    this.wsManager.app.get('/rbw/api/user/:discordid/games', this.getUserGames);
-    this.wsManager.app.get('/rbw/api/user/:discordid/recent-games', this.getUserRecentGames);
-    this.wsManager.app.get('/rbw/api/search/users', this.searchUsers);
-    this.wsManager.app.get('/rbw/api/online-players', this.getOnlinePlayers);
-    this.wsManager.app.get('/rbw/api/server/status', this.getServerStatus);
-    this.wsManager.app.get('/rbw/api/user/:discordid/punishment-history', this.getUserPunishmentHistory);
-    this.wsManager.app.get('/rbw/api/user/:discordid/season-history', this.getUserSeasonHistory);
-    this.wsManager.app.get('/rbw/api/leaderboard/top-players', this.getTopPlayers);
-    this.wsManager.app.get('/rbw/api/games/recent', this.getRecentGames);
-    this.wsManager.app.get('/rbw/api/games/live', this.getLiveGames);
-    this.wsManager.app.get('/rbw/api/user/:discordid/compare/:targetid', this.compareUsers);
-    this.wsManager.app.get('/rbw/api/maps', this.getMaps);
-    this.wsManager.app.get('/rbw/api/user/:discordid/winstreak-history', this.getUserWinstreakHistory);
-    this.wsManager.app.get('/rbw/api/user/:discordid/elo-history', this.getUserEloHistory);
-    this.wsManager.app.get('/rbw/api/user/:discordid/overview', this.getUserOverview);
+    this.wsManager.app.get(`${this.routePrefix}/stats/global`, this.getGlobalStats);
+    this.wsManager.app.get(`${this.routePrefix}/stats/top`, this.getTopStats);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/games`, this.getUserGames);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/recent-games`, this.getUserRecentGames);
+    this.wsManager.app.get(`${this.routePrefix}/search/users`, this.searchUsers);
+    this.wsManager.app.get(`${this.routePrefix}/online-players`, this.getOnlinePlayers);
+    this.wsManager.app.get(`${this.routePrefix}/server/status`, this.getServerStatus);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/punishment-history`, this.getUserPunishmentHistory);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/season-history`, this.getUserSeasonHistory);
+    this.wsManager.app.get(`${this.routePrefix}/leaderboard/top-players`, this.getTopPlayers);
+    this.wsManager.app.get(`${this.routePrefix}/games/recent`, this.getRecentGames);
+    this.wsManager.app.get(`${this.routePrefix}/games/live`, this.getLiveGames);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/compare/:targetid`, this.compareUsers);
+    this.wsManager.app.get(`${this.routePrefix}/maps`, this.getMaps);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/winstreak-history`, this.getUserWinstreakHistory);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/elo-history`, this.getUserEloHistory);
+    this.wsManager.app.get(`${this.routePrefix}/user/:discordid/overview`, this.getUserOverview);
   }
 
   private async findUserByQuery(req: Request) {
@@ -738,8 +770,8 @@ export class ApiManager {
 
         console.log(`[API] API endpoints initialized on port ${port}`);
         console.log(`[API] API endpoints available at:`);
-        console.log(`[API] - http://localhost:${port}/rbw/api/user?ign=<ign>`);
-        console.log(`[API] - http://localhost:${port}/rbw/api/leaderboard?mode=elo&page=1`);
+        console.log(`[API] - http://localhost:${port}${this.routePrefix}/user?ign=<ign>`);
+        console.log(`[API] - http://localhost:${port}${this.routePrefix}/leaderboard?mode=elo&page=1`);
         resolve();
       } catch (error) {
         console.error('[API] Failed to initialize API endpoints:', error);
