@@ -29,17 +29,34 @@ describe('selectMapVoteCandidates', () => {
     UserModel.find.mockImplementation(() => chainable([]));
   });
 
-  it('returns five distinct maps ranked by the existing frequency rating', async () => {
+  it('picks five different maps at random from the ones that fit the queue', async () => {
+    const { selectMapVoteCandidates } = await import('../src/Matchmaking/utils');
+    const names = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    const svc = service([...names.map(name => ({ name, maxplayers: 4 })), { name: 'Big', maxplayers: 8 }]);
+    const seen = new Set<string>();
+    const firsts = new Set<string>();
+    for (let i = 0; i < 40; i++) {
+      const candidates = await selectMapVoteCandidates(svc as any, { maxPlayers: 4 });
+      expect(candidates).toHaveLength(5);
+      expect(new Set(candidates).size).toBe(5);
+      candidates.forEach(c => { expect(names).toContain(c); seen.add(c); });
+      firsts.add(candidates[0]);
+    }
+    expect(seen.size).toBe(names.length);
+    expect(firsts.size).toBeGreaterThan(1);
+  });
+
+  it("doesn't hold back maps that were just played or are in use", async () => {
     const { selectMapVoteCandidates } = await import('../src/Matchmaking/utils');
     const svc = service(
-      ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(name => ({ name, maxplayers: 4 })),
-      { getRecentPickHistory: jest.fn().mockReturnValue(['A', 'A', 'A']) },
+      ['A', 'B', 'C'].map(name => ({ name, maxplayers: 4 })),
+      {
+        getRecentPickHistory: jest.fn().mockReturnValue(['A', 'A', 'A']),
+        getRecentlyClaimedNames: jest.fn().mockReturnValue(new Set(['B'])),
+      },
     );
-
-    const candidates = await selectMapVoteCandidates(svc as any, { maxPlayers: 4 }, ['p1']);
-
-    expect(candidates).toEqual(['B', 'C', 'D', 'E', 'F']);
-    expect(new Set(candidates).size).toBe(5);
+    const candidates = await selectMapVoteCandidates(svc as any, { maxPlayers: 4 });
+    expect([...candidates].sort()).toEqual(['A', 'B', 'C']);
   });
 
   it('returns physical arena names used by the warp', async () => {
@@ -51,19 +68,7 @@ describe('selectMapVoteCandidates', () => {
 
     const candidates = await selectMapVoteCandidates(svc as any, { maxPlayers: 4 });
 
-    expect(candidates).toEqual(['rbw4v4katsu', 'rbw4v4lighthouse']);
-  });
-
-  it('skips recently claimed maps', async () => {
-    const { selectMapVoteCandidates } = await import('../src/Matchmaking/utils');
-    const svc = service(
-      ['A', 'B', 'C', 'D'].map(name => ({ name, maxplayers: 4 })),
-      { getRecentlyClaimedNames: jest.fn().mockReturnValue(new Set(['A'])) },
-    );
-
-    const candidates = await selectMapVoteCandidates(svc as any, { maxPlayers: 4 });
-
-    expect(candidates).toEqual(['B', 'C', 'D']);
+    expect([...candidates].sort()).toEqual(['rbw4v4katsu', 'rbw4v4lighthouse']);
   });
 
   it('falls back to unlocked maps when no map matches the queue size', async () => {
@@ -75,7 +80,7 @@ describe('selectMapVoteCandidates', () => {
 
     const candidates = await selectMapVoteCandidates(svc as any, { maxPlayers: 4 });
 
-    expect(candidates).toEqual(['Big', 'Small']);
+    expect([...candidates].sort()).toEqual(['Big', 'Small']);
   });
 
   it('can rank options without claiming them', async () => {

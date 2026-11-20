@@ -122,7 +122,7 @@ export class RandomQueueManager {
           const gameId = await this.gameManager.getNextGameId();
           const playerIds = [...teamResult.team1, ...teamResult.team2];
           const mapCandidates = config.mapSelection.enabled
-            ? await selectMapVoteCandidates(this.mapService, queueData, playerIds)
+            ? await selectMapVoteCandidates(this.mapService, queueData)
             : [];
           let selectedMap = mapCandidates[0] ?? await this.selectRandomMap(queueData, playerIds);
 

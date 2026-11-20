@@ -317,7 +317,7 @@ export class PickingQueueManager {
           
           const gameId = await this.gameManager.getNextGameId();
           const mapCandidates = config.mapSelection.enabled
-            ? await selectMapVoteCandidates(this.mapService, queueData, selectedPlayers)
+            ? await selectMapVoteCandidates(this.mapService, queueData)
             : [];
           const selectedMap = mapCandidates[0] ?? await this.selectRandomMap(queueData, selectedPlayers);
 
@@ -1466,11 +1466,7 @@ export class PickingQueueManager {
       let mapCandidates: string[] = [];
       if (config.mapSelection.enabled) {
         try {
-          mapCandidates = await selectMapVoteCandidates(
-            this.mapService,
-            queueData,
-            [...session.team1, ...session.team2, ...session.remainingPlayers],
-          );
+          mapCandidates = await selectMapVoteCandidates(this.mapService, queueData);
         } catch (mapError) {
           console.error(`[PickingQueue] Could not rebuild map choices for recovered game ${session.gameId}:`, mapError);
         }

@@ -240,7 +240,7 @@ export class MapVoteService {
       .setDescription(
         winner
           ? `Voting has ended. **${winner}** will be played for Game #${gameId}.`
-          : 'Vote for the map you want to play. Each player gets one vote; the map with the most votes wins. Ties go to the higher-rated map.',
+          : 'Vote for the map you want to play. Each player gets one vote; the map with the most votes wins. A tie goes to the map listed first.',
       )
       .addFields(fields);
   }

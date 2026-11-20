@@ -305,12 +305,13 @@ function pickFromTier(tier: MapSize[], pool: MapSelectionPool): MapSize | null {
   return tier.find(m => m.name === chosen) ?? tier[Math.floor(Math.random() * tier.length)];
 }
 
-function rankTier(tier: MapSize[], pool: MapSelectionPool): MapSize[] {
-  if (tier.length === 0) return [];
-  if (pool.playerRecent.length === 0 && pool.globalHistory.length === 0) return [...tier];
-  const scored = scoreMapsByFrequency(tier.map(m => m.name), pool.playerRecent, pool.globalHistory, pool.frequencyOptions);
-  const heat = new Map(scored.map(entry => [entry.name, entry.heat]));
-  return [...tier].sort((a, b) => (heat.get(a.name) ?? 0) - (heat.get(b.name) ?? 0));
+function shuffled<T>(list: T[]): T[] {
+  const out = [...list];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
 }
 
 export async function selectRandomMap(
@@ -356,24 +357,27 @@ export async function selectRandomMap(
   }
 }
 
+/**
+ * The maps a game votes on: picked at random from the maps that fit the queue (any map when none
+ * does). Recent games don't count: every game gets its own copy of its map, so a map in use is fine.
+ */
 export async function selectMapVoteCandidates(
   mapService: MapService,
   queueData: { maxPlayers: number },
-  playerIds?: string[],
   count: number = MAP_VOTE_OPTION_COUNT
 ): Promise<string[]> {
   try {
     const target = Number.isFinite(count) && count > 0 ? Math.floor(count) : MAP_VOTE_OPTION_COUNT;
-    const pool = await loadMapSelectionPool(mapService, false, new Set(), playerIds);
+    const pool = await loadMapSelectionPool(mapService, false, new Set());
     const tiers = [
-      preferUnblocked(pool.reservedMaps.filter(m => mapSize(m) === queueData.maxPlayers), pool.blocked),
-      preferUnblocked(pool.unlockedMaps.filter(m => mapSize(m) === queueData.maxPlayers), pool.blocked),
-      preferUnblocked(pool.unlockedMaps, pool.blocked),
+      pool.reservedMaps.filter(m => mapSize(m) === queueData.maxPlayers),
+      pool.unlockedMaps.filter(m => mapSize(m) === queueData.maxPlayers),
+      pool.unlockedMaps,
     ];
     const selected: MapSize[] = [];
     const seen = new Set<string>();
     for (const tier of tiers) {
-      for (const map of rankTier(tier, pool)) {
+      for (const map of shuffled(tier)) {
         const name = resolveWarpMapName(map);
         if (seen.has(name)) continue;
         seen.add(name);
