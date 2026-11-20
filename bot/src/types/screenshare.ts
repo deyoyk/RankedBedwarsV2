@@ -11,6 +11,23 @@ export interface ScreenshareSessionResult {
   };
 }
 
+export interface ScreenshareCreateOptions {
+  fromGame?: boolean;
+}
+
+export interface ScreensharePostResult {
+  success: boolean;
+  threadId?: string;
+  error?: string;
+}
+
+export interface ScreensharePostOptions {
+  targetName: string;
+  imageUrl?: string;
+  dontlogResult?: ScreenshareSessionResult['dontlogResult'];
+  loggedOff?: boolean;
+}
+
 export interface ScreenshareFreezeResult {
   success: boolean;
   channel?: TextChannel;

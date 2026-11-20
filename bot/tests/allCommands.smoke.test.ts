@@ -147,6 +147,7 @@ jest.mock('../src/services/ScreenshareService', () => ({
     getSessionById: jest.fn().mockResolvedValue(null),
     createSessionEmbed: jest.fn().mockReturnValue(new EmbedBuilder().setTitle('ss')),
     createFreezeButton: jest.fn().mockReturnValue({}),
+    postRequest: jest.fn().mockResolvedValue({ success: true, threadId: 'thread1' }),
   },
 }));
 jest.mock('../src/services/PartyService', () => ({

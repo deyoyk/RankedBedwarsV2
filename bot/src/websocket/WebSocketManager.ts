@@ -177,6 +177,8 @@ interface AutoSSPayload {
   targetign: string;
   requestign: string;
   uuid: string;
+  reason?: string;
+  loggedoff?: boolean;
 }
 
 interface PlayerStatusUpdatePayload {
@@ -254,6 +256,7 @@ interface AutoSSSuccessPayload {
 interface AutoSSFailurePayload {
   type: 'autoss_fail';
   uuid: string;
+  error: string;
 }
 
 interface BotBanPayload {
@@ -427,8 +430,9 @@ export class WebSocketManager {
   
   private async handleAutoSS(msg: AutoSSPayload) {
     const { targetign, requestign, uuid } = msg;
+    const fail = (error: string) => this.send({ type: 'autoss_fail', uuid, error });
     if (!targetign || !requestign || !uuid) {
-      this.send({ type: 'autoss_fail', uuid });
+      fail('Missing target, requester or request id');
       return;
     }
     try {
@@ -437,35 +441,52 @@ export class WebSocketManager {
         User.findOne({ ign: targetign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean(),
         User.findOne({ ign: requestign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean()
       ]);
-      
-      if (!targetUser || !requesterUser) {
-        this.send({ type: 'autoss_fail', uuid });
+
+      if (!targetUser) {
+        fail(`${targetign} is not registered`);
+        return;
+      }
+      if (!requesterUser) {
+        fail('You are not registered');
         return;
       }
 
       const guild = this.discordClient?.guilds.cache.first();
       if (!guild) {
-        this.send({ type: 'autoss_fail', uuid });
+        fail('Discord server is not available');
         return;
       }
 
+      const reason = (typeof msg.reason === 'string' ? msg.reason.trim() : '') || 'Requested in-game';
       const { ScreenshareService } = await import('../services/ScreenshareService');
       const result = await ScreenshareService.createSession(
         guild,
         targetUser.discordId,
         requesterUser.discordId,
-        'Auto screenshare request from ingame',
-        ''
+        reason,
+        '',
+        { fromGame: true }
       );
-
-      if (result.success) {
-        this.send({ type: 'autoss_success', uuid });
-      } else {
-        this.send({ type: 'autoss_fail', uuid });
+      if (!result.success) {
+        fail(result.error ?? 'Failed to create screenshare session');
+        return;
       }
+
+      const session = result.session!;
+      const posted = await ScreenshareService.postRequest(guild, session, {
+        targetName: session.targetIgn,
+        dontlogResult: result.dontlogResult,
+        loggedOff: msg.loggedoff === true
+      });
+      if (!posted.success) {
+        fail(posted.error ?? 'Failed to post screenshare request');
+        return;
+      }
+
+      this.send({ type: 'autoss_success', uuid });
     } catch (e) {
       console.error('[WebSocketManager] autoss error:', e);
-      this.send({ type: 'autoss_fail', uuid });
+      fail('Internal error while creating the screenshare request');
     }
   }
   private wss: WebSocketServer;

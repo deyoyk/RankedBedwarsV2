@@ -1,15 +1,12 @@
-import { ChatInputCommandInteraction, TextChannel } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
-import config from '../../config/config';
 
 const { errorEmbed, successEmbed } = embedsFor('Screenshare');
 
-export async function screenshare(interaction: ChatInputCommandInteraction, wsManager?: WebSocketManager): Promise<void> {
-  const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
-  void resolvedWs;
+export async function screenshare(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
   const target = interaction.options.getUser('user') ?? interaction.options.getUser('target');
   const reason = interaction.options.getString('reason', true);
   const image = interaction.options.getAttachment('image') ?? interaction.options.getAttachment('proof');
@@ -51,90 +48,14 @@ export async function screenshare(interaction: ChatInputCommandInteraction, wsMa
 
     const session = result.session!;
 
-
-    const channelId = config.channels.screensharerequestsChannel;
-    if (!channelId) {
-      await safeReply(interaction, { embeds: [errorEmbed('Screenshare requests channel not configured.', 'Screenshare Error').builder] });
+    const posted = await ScreenshareService.postRequest(guild, session, {
+      targetName: target.username,
+      imageUrl: image.url,
+      dontlogResult: result.dontlogResult
+    });
+    if (!posted.success) {
+      await safeReply(interaction, { embeds: [errorEmbed(posted.error!, 'Screenshare Error').builder] });
       return;
-    }
-
-    let channel: TextChannel;
-    try {
-      const channelRaw = guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
-      if (!channelRaw || !channelRaw.isTextBased()) {
-        await safeReply(interaction, { embeds: [errorEmbed('Screenshare requests channel not found or not a text channel.', 'Screenshare Error').builder] });
-        return;
-      }
-      channel = channelRaw as TextChannel;
-    } catch (error) {
-      console.error('[Screenshare Command] Failed to fetch channel:', error);
-      await safeReply(interaction, { embeds: [errorEmbed('Failed to access screenshare requests channel.', 'Screenshare Error').builder] });
-      return;
-    }
-
-
-    const embed = ScreenshareService.createSessionEmbed(session, image.url);
-    const row = ScreenshareService.createFreezeButton(session.sessionId);
-
-
-    if (result.dontlogResult) {
-      embed.addFields({
-        name: 'Player Status',
-        value: `Online: ${result.dontlogResult.online ? 'Yes' : 'No'} | DontLog: ${result.dontlogResult.dontlog ? 'Yes' : 'No'}`,
-        inline: true
-      });
-    }
-
-    const screensharerRoleId = config.roles.screensharer;
-    const mention = screensharerRoleId ? `<@&${screensharerRoleId}>` : '';
-
-
-    let sentMsg, thread;
-    try {
-      sentMsg = await channel.send({
-        content: mention,
-        embeds: [embed],
-        components: [row]
-      });
-
-      thread = await sentMsg.startThread({
-        name: `SS: ${target.username} | ${session.sessionId}`,
-        autoArchiveDuration: 60,
-        reason: `Screenshare session thread for ${session.sessionId}`
-      });
-
-      if (screensharerRoleId) {
-        await thread.setLocked(false);
-      }
-
-      await thread.send({
-        content: `<@${target.id}>`,
-        embeds: [embed]
-      });
-
-    } catch (error) {
-      console.error('[Screenshare Command] Failed to create thread:', error);
-      await safeReply(interaction, { embeds: [errorEmbed('Failed to create screenshare thread.', 'Screenshare Error').builder] });
-
-
-      await ScreenshareService.closeSession(guild, session.sessionId, 'system', 'Thread creation failed');
-      return;
-    }
-
-
-    const activeWs = resolvedWs ?? global._wsManager;
-    if (activeWs && typeof activeWs.registerScreenshareThread === 'function') {
-      try {
-        activeWs.registerScreenshareThread({
-          ign: session.targetIgn,
-          sessionId: session.sessionId,
-          threadId: thread.id,
-          expiresAt: Date.now() + 15 * 60 * 1000
-        });
-      } catch (error) {
-        console.warn('[Screenshare Command] Failed to register with websocket manager:', error);
-
-      }
     }
 
 
@@ -142,7 +63,7 @@ export async function screenshare(interaction: ChatInputCommandInteraction, wsMa
     successEmbedObj.builder.addFields(
       { name: 'Target', value: `<@${target.id}> (${session.targetIgn})`, inline: true },
       { name: 'Session ID', value: session.sessionId, inline: true },
-      { name: 'Thread', value: `<#${thread.id}>`, inline: true },
+      { name: 'Thread', value: `<#${posted.threadId}>`, inline: true },
       { name: 'Expires', value: `<t:${Math.floor(session.expireTime.getTime() / 1000)}:R>`, inline: true }
     );
 
