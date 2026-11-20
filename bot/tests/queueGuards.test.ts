@@ -19,7 +19,7 @@ jest.mock('../src/models/Queue', () => ({
 }));
 jest.mock('../src/models/User', () => ({
   __esModule: true,
-  default: { findOne: jest.fn(), find: jest.fn().mockResolvedValue([]), updateOne: jest.fn().mockResolvedValue({}) },
+  default: { findOne: jest.fn(), find: jest.fn().mockResolvedValue([]), updateOne: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({}) },
 }));
 jest.mock('../src/models/Game', () => ({
   __esModule: true,
@@ -190,6 +190,72 @@ describe('QueueListener admission guards', () => {
     expect(queuePlayers.get(Q1)).toEqual([]);
   });
 
+  it('remembers the queue a player got into, for /q', async () => {
+    await listener.handleVoiceStateUpdate(voiceState(null), voiceState(Q1));
+    expect(UserModel.updateMany).toHaveBeenCalledWith(
+      { discordId: { $in: [UID] } },
+      { $set: { lastQueueChannelId: Q1, lastQueueAt: expect.any(Date) } },
+    );
+  });
+
+  describe('autowarp', () => {
+    const MEMBER = '223456789012345678';
+    const OFFLINE = '323456789012345678';
+
+    function setupParty(autoWarp: boolean, leader = UID) {
+      const memberVoice = { channelId: 'waiting', setChannel: jest.fn().mockResolvedValue(undefined) };
+      const offlineVoice = { channelId: null, setChannel: jest.fn() };
+      const queueChannel = { id: Q1, isVoiceBased: () => true, members: new Map([[UID, {}]]) };
+      const guild = {
+        channels: { cache: new Map([[Q1, queueChannel]]), fetch: jest.fn().mockResolvedValue(null) },
+        members: {
+          cache: new Map<string, any>([[MEMBER, { id: MEMBER, voice: memberVoice }], [OFFLINE, { id: OFFLINE, voice: offlineVoice }]]),
+          fetch: jest.fn().mockResolvedValue(null),
+        },
+      };
+      UserModel.findOne.mockImplementation(() => chainable({
+        discordId: UID, ign: 'Steve', partyId: 'P', elo: 1000, isBanned: false, isFrozen: false,
+      }));
+      PartyModel.findOne.mockImplementation(() => chainable({ partyId: 'P', leader, members: [UID, MEMBER, OFFLINE], autoWarp }));
+      UserModel.find.mockImplementation(() => chainable([
+        { discordId: UID, ign: 'Steve', elo: 1000, isBanned: false, isFrozen: false },
+        { discordId: MEMBER, ign: 'Alex', elo: 1000, isBanned: false, isFrozen: false },
+        { discordId: OFFLINE, ign: 'Kai', elo: 1000, isBanned: false, isFrozen: false },
+      ]));
+      return { guild, queueChannel, memberVoice, offlineVoice };
+    }
+
+    async function listenerFor(guild: any) {
+      const { QueueListener } = await import('../src/handlers/QueueListener');
+      return new QueueListener({ guilds: { cache: { first: () => guild } } } as any, wsManagerMock, {} as any) as any;
+    }
+
+    it("moves the leader's party members who are in voice into the queue", async () => {
+      const { guild, queueChannel, memberVoice, offlineVoice } = setupParty(true);
+      const custom = await listenerFor(guild);
+      try {
+        await custom.handleVoiceStateUpdate(voiceState(null), voiceState(Q1));
+        expect(memberVoice.setChannel).toHaveBeenCalledWith(queueChannel);
+        expect(offlineVoice.setChannel).not.toHaveBeenCalled();
+      } finally {
+        custom.cleanup();
+      }
+    });
+
+    it('does nothing when autowarp is off, or a member (not the leader) joins', async () => {
+      for (const [autoWarp, leader] of [[false, UID], [true, MEMBER]] as const) {
+        const { guild, memberVoice } = setupParty(autoWarp, leader);
+        const custom = await listenerFor(guild);
+        try {
+          await custom.handleVoiceStateUpdate(voiceState(null), voiceState(Q1));
+          expect(memberVoice.setChannel).not.toHaveBeenCalled();
+        } finally {
+          custom.cleanup();
+        }
+      }
+    });
+  });
+
   it('re-adds a solo member present in the voice channel but missing from memory', async () => {
     QueueModel.findOne.mockImplementation((filter: any) => chainable(queueDoc(filter.channelId)));
     UserModel.find.mockImplementation(() => chainable([
@@ -344,9 +410,9 @@ describe('WebSocket queuefromingame guards', () => {
     return { ws: ws as any, guild };
   }
 
-  function mockDb(activeGame: any, elo = 1000) {
+  function mockDb(activeGame: any, elo = 1000, lastQueue: Record<string, unknown> = { lastQueueChannelId: Q1, lastQueueAt: new Date() }) {
     UserModel.findOne.mockImplementation(() => ({
-      collation: () => ({ select: () => ({ lean: async () => ({ discordId: UID, elo, ign: 'Steve' }) }) }),
+      collation: () => ({ select: () => ({ lean: async () => ({ discordId: UID, elo, ign: 'Steve', ...lastQueue }) }) }),
     }));
     QueueModel.find.mockImplementation(() => chainable([
       { channelId: Q1, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },
@@ -399,7 +465,7 @@ describe('WebSocket queuefromingame guards', () => {
     UserModel.findOne.mockReturnValue({
       collation: () => ({
         select: () => ({
-          lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve', partyId: 'P' }),
+          lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve', partyId: 'P', lastQueueChannelId: Q1, lastQueueAt: new Date() }),
         }),
       }),
     });
@@ -428,6 +494,47 @@ describe('WebSocket queuefromingame guards', () => {
     expect(sent.some((p: any) => p.type === 'queuefromingame_success')).toBe(true);
   });
 
+  it('/q needs a queue from the last 24 hours', async () => {
+    const { ws } = await makeWs();
+    mockDb(null, 1000, { lastQueueChannelId: Q1, lastQueueAt: new Date(Date.now() - 25 * 60 * 60 * 1000) });
+    await (ws as any).handleQueueFromInGame({ ign: 'Steve', uuid: 'u4' });
+    const sent = (ws.send as jest.Mock).mock.calls.map(c => c[0]);
+    expect(sent).toContainEqual(expect.objectContaining({ type: 'queuefromingame_fail', reason: expect.stringMatching(/last 24 hours/) }));
+    expect(queuePlayers.get(Q1) || []).not.toContain(UID);
+  });
+
+  it('/q goes to the last queue, not the busiest one', async () => {
+    const { ws, guild } = await makeWs();
+    mockDb(null, 1000, { lastQueueChannelId: Q2, lastQueueAt: new Date() });
+    QueueModel.find.mockImplementation(() => chainable([
+      { channelId: Q1, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },
+      { channelId: Q2, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },
+    ]));
+    guild.channels.cache.set(Q2, { id: Q2, isVoiceBased: () => true, name: 'queue-2' });
+    queuePlayers.set(Q1, ['x1', 'x2', 'x3']);
+    await (ws as any).handleQueueFromInGame({ ign: 'Steve', uuid: 'u5' });
+    expect(queuePlayers.get(Q2)).toContain(UID);
+    expect(queuePlayers.get(Q1)).not.toContain(UID);
+    expect(guild.members.cache.get(UID).voice.setChannel).toHaveBeenCalledWith(expect.objectContaining({ id: Q2 }));
+  });
+
+  it('/q says why when the last queue no longer fits', async () => {
+    const { ws } = await makeWs();
+    mockDb(null, 1000);
+    QueueModel.find.mockImplementation(() => chainable([
+      { channelId: Q1, minElo: 1200, maxElo: 9999, maxPlayers: 8, isRanked: false },
+    ]));
+    await (ws as any).handleQueueFromInGame({ ign: 'Steve', uuid: 'u6' });
+    let sent = (ws.send as jest.Mock).mock.calls.map(c => c[0]);
+    expect(sent).toContainEqual(expect.objectContaining({ type: 'queuefromingame_fail', reason: "Your ELO is outside your last queue's range (1200-9999)" }));
+
+    (ws.send as jest.Mock).mockClear();
+    QueueModel.find.mockImplementation(() => chainable([]));
+    await (ws as any).handleQueueFromInGame({ ign: 'Steve', uuid: 'u7' });
+    sent = (ws.send as jest.Mock).mock.calls.map(c => c[0]);
+    expect(sent).toContainEqual(expect.objectContaining({ type: 'queuefromingame_fail', reason: 'Your last queue is closed right now.' }));
+  });
+
   it('rejects an in-game party when a member is not in voice', async () => {
     const UID2 = '123456789012345680';
     const { ws, guild } = await makeWs();
@@ -441,7 +548,7 @@ describe('WebSocket queuefromingame guards', () => {
     UserModel.findOne.mockReturnValue({
       collation: () => ({
         select: () => ({
-          lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve', partyId: 'P' }),
+          lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve', partyId: 'P', lastQueueChannelId: Q1, lastQueueAt: new Date() }),
         }),
       }),
     });

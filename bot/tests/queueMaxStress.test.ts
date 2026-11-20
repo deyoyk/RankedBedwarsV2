@@ -18,7 +18,7 @@ jest.mock('../src/models/Queue', () => ({
 }));
 jest.mock('../src/models/User', () => ({
   __esModule: true,
-  default: { findOne: jest.fn(), find: jest.fn(), updateOne: jest.fn().mockResolvedValue({}) },
+  default: { findOne: jest.fn(), find: jest.fn(), updateOne: jest.fn().mockResolvedValue({}), updateMany: jest.fn().mockResolvedValue({}) },
 }));
 jest.mock('../src/models/Game', () => ({
   __esModule: true,
@@ -205,7 +205,7 @@ describe('websocket queuefromingame flood', () => {
     queuePlayers.clear();
     const UID = '123456789012345678';
     UserModel.findOne.mockImplementation(() => ({
-      collation: () => ({ select: () => ({ lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve' }) }) }),
+      collation: () => ({ select: () => ({ lean: async () => ({ discordId: UID, elo: 1000, ign: 'Steve', lastQueueChannelId: Q1, lastQueueAt: new Date() }) }) }),
     }));
     QueueModel.find.mockImplementation(() => chainable([
       { channelId: Q1, minElo: 0, maxElo: 9999, maxPlayers: 8, isRanked: false },

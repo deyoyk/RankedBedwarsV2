@@ -1,4 +1,4 @@
-import { Client, type VoiceBasedChannel, VoiceState } from 'discord.js';
+import { Client, type Guild, type VoiceBasedChannel, VoiceState } from 'discord.js';
 import Queue from '../models/Queue';
 import User, { type IUser } from '../models/User';
 import Party from '../models/Party';
@@ -10,6 +10,7 @@ import { WorkersManager } from '../managers/WorkersManager';
 import { queuePlayers } from '../types/queuePlayersMemory';
 import { PresenceService } from '../services/PresenceService';
 import { maxPartySizeForQueue } from '../utils/partyQueue';
+import { rememberQueue } from '../utils/lastQueue';
 import { findInGamePlayerIds, isIgnInGame, getPlayerIGNs as resolvePlayerIgns } from '../Matchmaking/utils';
 
 async function updatePartyActivity(partyId: string) {
@@ -1067,7 +1068,7 @@ export class QueueListener {
       const wasQueued = queueState.players.includes(userId);
 
       if (user.partyId) {
-        const partyResult = await this.handlePartyJoin(state, user, queueState, queue);
+        const partyResult = await this.handlePartyJoin(state, user, queueState, queue, true);
         if (!partyResult.success) {
           return;
         }
@@ -1079,6 +1080,7 @@ export class QueueListener {
 
       queueState.lastUpdate = Date.now();
       queuePlayers.set(queue.channelId, [...queueState.players]);
+      void rememberQueue(user.partyId ? queueState.parties.get(user.partyId) ?? [userId] : [userId], queue.channelId);
 
       if (!user.partyId && !wasQueued) {
         console.log(`[QueueListener] ${user.ign} joined queue ${this.queueLabel(state)} (${queueState.players.length}/${queue.maxPlayers})`);
@@ -1103,7 +1105,8 @@ export class QueueListener {
     state: VoiceState,
     user: { partyId?: string | null; ign?: string },
     queueState: QueueState,
-    queue: QueueLike
+    queue: QueueLike,
+    warp = false
   ): Promise<{ success: boolean }> {
     try {
       const partyId = user.partyId;
@@ -1114,9 +1117,9 @@ export class QueueListener {
       }
 
       let partyMembers: string[];
-      const party = await resolveQuery<{ partyId: string; members?: string[] } | null>(
+      const party = await resolveQuery<{ partyId: string; leader?: string; members?: string[]; autoWarp?: boolean } | null>(
         Party.findOne({ partyId }),
-        'partyId members'
+        'partyId leader members autoWarp'
       );
       if (party && party.members) {
         partyMembers = party.members;
@@ -1193,6 +1196,10 @@ export class QueueListener {
       const membersInVC = partyMembers.filter(memberId => playersInVC.has(memberId));
 
       if (membersInVC.length !== partyMembers.length) {
+        // Only a real join by the leader warps: a rescan or a member's own join never drags anyone.
+        if (warp && party.autoWarp && party.leader === state.member?.id) {
+          await this.warpParty(guild, voiceChannel, partyMembers.filter(memberId => !playersInVC.has(memberId)), partyId);
+        }
         console.log(`[QueueListener] Party ${partyId}: waiting for ${partyMembers.length - membersInVC.length} member(s) to join queue ${this.queueLabel(state)}`);
         return { success: false };
       }
@@ -1214,6 +1221,20 @@ export class QueueListener {
       console.error('[QueueListener] Error in handlePartyJoin:', error);
       await this.moveToWaiting(state, 'Party join error');
       return { success: false };
+    }
+  }
+
+  /** /party autowarp: moves party members who are in another voice channel into the leader's queue. */
+  private async warpParty(guild: Guild, queueChannel: VoiceBasedChannel, memberIds: string[], partyId: string): Promise<void> {
+    for (const memberId of memberIds) {
+      const member = guild.members.cache.get(memberId) ?? await guild.members.fetch(memberId).catch(() => null);
+      if (!member?.voice?.channelId) {
+        console.log(`[QueueListener] Autowarp for party ${partyId}: ${memberId} isn't in a voice channel, so they can't be moved`);
+        continue;
+      }
+      await member.voice.setChannel(queueChannel).catch((error: unknown) => {
+        console.warn(`[QueueListener] Autowarp for party ${partyId} couldn't move ${memberId}:`, error);
+      });
     }
   }
 

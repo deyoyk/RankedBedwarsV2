@@ -10,6 +10,8 @@ interface IParty extends Document {
   isPrivate: boolean;
   /** /party private: the party's /party queue starts private games (and it can duel other parties). */
   privateGames: boolean;
+  /** /party autowarp: when the leader joins a queue VC, members in voice are moved there too. */
+  autoWarp: boolean;
   description: string;
 }
 
@@ -22,6 +24,7 @@ const PartySchema: Schema = new Schema({
   maxMembers: { type: Number, default: 8 },
   isPrivate: { type: Boolean, default: false },
   privateGames: { type: Boolean, default: false },
+  autoWarp: { type: Boolean, default: false },
   description: { type: String, default: '' }
 });
 

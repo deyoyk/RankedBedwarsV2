@@ -26,6 +26,9 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
   recentGames: IRecentGame[];
   partyId?: string;
   lastPlayedAt?: Date;
+  /** The queue VC this player last got into, for /q in game. */
+  lastQueueChannelId?: string;
+  lastQueueAt?: Date;
   dailyElo: IDailyElo[];
   strikes: Array<{
     id: string;
@@ -84,6 +87,8 @@ const UserSchema: Schema = new Schema({
   recentGames: [recentGameSubdoc],
   partyId: { type: String },
   lastPlayedAt: { type: Date, index: true },
+  lastQueueChannelId: { type: String },
+  lastQueueAt: { type: Date },
   dailyElo: [dailyEloSubdoc],
   strikes: [{
     id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },

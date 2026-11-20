@@ -10,6 +10,7 @@ import express from 'express';
 import { Client, GuildMember } from 'discord.js';
 import config from '../config/config';
 import { maxPartySizeForQueue } from '../utils/partyQueue';
+import { recentQueueId } from '../utils/lastQueue';
 import { getPlayerIgns } from '../utils/playerDirectory';
 
 const activeScreenshareThreads: {
@@ -1679,11 +1680,17 @@ export class WebSocketManager {
       const User = (await import('../models/User')).default;
       const user = await User.findOne({ ign })
         .collation({ locale: 'en', strength: 2 })
-        .select('discordId elo ign partyId')
+        .select('discordId elo ign partyId lastQueueChannelId lastQueueAt')
         .lean();
       if (!user) {
         console.error(`[WebSocketManager] User ${ign} not found in database`);
         fail('User not found in database');
+        return;
+      }
+
+      const lastQueueId = recentQueueId(user);
+      if (!lastQueueId) {
+        fail("You haven't been in a queue in the last 24 hours. Join one on Discord first.");
         return;
       }
 
@@ -1748,47 +1755,28 @@ export class WebSocketManager {
         .select('channelId minElo maxElo maxPlayers isRanked isPicking')
         .lean();
       const roleSizes = this.getPartyRoleSizes(presentMembers);
-      const suitableQueues = allQueues.filter((queue) => {
-        if (members.length > Math.floor(queue.maxPlayers / 2)) return false;
-        if (members.length > maxPartySizeForQueue(queue, roleSizes)) return false;
-        return members.every((member) => member.elo >= queue.minElo && member.elo <= queue.maxElo);
-      });
-
-      if (suitableQueues.length === 0) {
-        console.error(`[WebSocketManager] No suitable queues found for ${ign} party (${members.length} players)`);
-        const eloEligible = allQueues.some((queue) =>
-          members.every((member) => member.elo >= queue.minElo && member.elo <= queue.maxElo),
-        );
-        fail(eloEligible
-          ? `No queue currently allows a party of ${members.length} players`
-          : 'No queues available for your party in your ELO range');
+      const targetQueue = allQueues.find((queue) => queue.channelId === lastQueueId);
+      if (!targetQueue) {
+        fail('Your last queue is closed right now.');
+        return;
+      }
+      if (!members.every((member) => member.elo >= targetQueue.minElo && member.elo <= targetQueue.maxElo)) {
+        fail(members.length > 1
+          ? `Someone in your party is outside your last queue's ELO range (${targetQueue.minElo}-${targetQueue.maxElo})`
+          : `Your ELO is outside your last queue's range (${targetQueue.minElo}-${targetQueue.maxElo})`);
+        return;
+      }
+      if (members.length > Math.floor(targetQueue.maxPlayers / 2) || members.length > maxPartySizeForQueue(targetQueue, roleSizes)) {
+        fail(`Your last queue doesn't allow a party of ${members.length} players`);
         return;
       }
 
       const { queuePlayers } = await import('../types/queuePlayersMemory');
-      const alreadyQueued = suitableQueues.find((queue) =>
-        members.every((member) => (queuePlayers.get(queue.channelId) || []).includes(member.discordId)),
-      );
-      if (alreadyQueued) {
+      const listed = queuePlayers.get(targetQueue.channelId) || [];
+      if (members.every((member) => listed.includes(member.discordId))) {
         console.log(`[WebSocketManager] Party ${ign} is already queued, skipping move`);
         this.send({ type: 'queuefromingame_success', uuid } as QueueFromInGameSuccessPayload);
         return;
-      }
-
-      let targetQueue = suitableQueues[0];
-      let maxPlayers = -1;
-      for (const queue of suitableQueues) {
-        const playersInQueue = (queuePlayers.get(queue.channelId) || []).length;
-        if (playersInQueue > maxPlayers) {
-          maxPlayers = playersInQueue;
-          targetQueue = queue;
-        }
-      }
-      const queuesWithMaxPlayers = suitableQueues.filter((queue) =>
-        (queuePlayers.get(queue.channelId) || []).length === maxPlayers,
-      );
-      if (queuesWithMaxPlayers.length > 1) {
-        targetQueue = queuesWithMaxPlayers[Math.floor(Math.random() * queuesWithMaxPlayers.length)];
       }
 
       let queueVoiceChannel;

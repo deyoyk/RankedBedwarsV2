@@ -30,6 +30,7 @@ interface PartyView {
   members: string[];
   open: boolean;
   private_games: boolean;
+  auto_warp: boolean;
   max: number;
 }
 
@@ -74,7 +75,7 @@ export class PartyBridge {
     return new Map(docs.map(d => [d.discordId, d.ign || d.discordId]));
   }
 
-  private async view(party: PartyDocument | { partyId: string; leader: string; members: string[]; isPrivate?: boolean; privateGames?: boolean; maxMembers?: number }): Promise<PartyView> {
+  private async view(party: PartyDocument | { partyId: string; leader: string; members: string[]; isPrivate?: boolean; privateGames?: boolean; autoWarp?: boolean; maxMembers?: number }): Promise<PartyView> {
     const names = await this.ignsOf([...party.members]);
     return {
       party_id: party.partyId,
@@ -82,6 +83,7 @@ export class PartyBridge {
       members: party.members.filter(id => id !== party.leader).map(id => names.get(id) || id),
       open: !party.isPrivate,
       private_games: Boolean(party.privateGames),
+      auto_warp: Boolean(party.autoWarp),
       max: party.maxMembers ?? 8,
     };
   }
@@ -157,6 +159,8 @@ export class PartyBridge {
           return await this.promote(msg, me);
         case 'private':
           return await this.togglePrivate(msg, me);
+        case 'autowarp':
+          return await this.toggleAutoWarp(msg, me);
         case 'open':
         case 'close':
           return await this.setOpen(msg, me, action === 'open');
@@ -394,9 +398,27 @@ export class PartyBridge {
     }
     const on = Boolean(result.party?.privateGames);
     this.reply(msg, true, on
-      ? 'Private games ON: /party queue picks a map and starts a private game.'
-      : 'Private games OFF: /party queue joins the ranked queue.');
+      ? 'Private games ON: other parties can challenge yours with /party duel.'
+      : "Private games OFF: other parties can't challenge yours.");
     await this.notify(party.members, `${me.ign} turned private games ${on ? 'on' : 'off'}.`, me.ign);
+  }
+
+  private async toggleAutoWarp(msg: PartyCommandPayload, me: UserLite): Promise<void> {
+    const party = await this.myParty(me);
+    if (!party) {
+      this.reply(msg, false, "You're not in a party.");
+      return;
+    }
+    const result = await PartyService.setAutoWarp(me.discordId, !party.autoWarp);
+    if (!result.success) {
+      this.reply(msg, false, PartyBridge.why(result.message));
+      return;
+    }
+    const on = Boolean(result.party?.autoWarp);
+    this.reply(msg, true, on
+      ? 'Autowarp ON: when you join a queue VC, your party members in voice are moved there with you.'
+      : 'Autowarp OFF: your party joins queues on its own.');
+    await this.notify(party.members, `${me.ign} turned autowarp ${on ? 'on' : 'off'}.`, me.ign);
   }
 
   private async setOpen(msg: PartyCommandPayload, me: UserLite, open: boolean): Promise<void> {
@@ -411,14 +433,11 @@ export class PartyBridge {
     await this.notify(result.party?.members ?? [], `${me.ign} ${open ? 'opened' : 'closed'} the party.`, me.ign);
   }
 
-  /**
-   * /party queue: with private games on, the leader's pick of map starts a private game for the
-   * party. Otherwise (or without a party) it's the normal queue, answered as queuefromingame_*.
-   */
+  /** /party queue: the leader's pick of map starts a private game for the party (ranked queues are /q). */
   private async queue(msg: PartyCommandPayload, me: UserLite): Promise<void> {
     const party = await this.myParty(me);
-    if (!party || !party.privateGames) {
-      await this.ws.handleQueueFromInGame({ type: 'queuefromingame', ign: me.ign || msg.ign || '', uuid: msg.request_id || '' });
+    if (!party) {
+      this.reply(msg, false, 'You need a party to start a private game. Invite someone with /party invite <player>.');
       return;
     }
     if (party.leader !== me.discordId) {

@@ -1,6 +1,7 @@
 const mockStartPrivateGame = jest.fn();
 const mockStartDuel = jest.fn();
 const mockValidatePartyAccess = jest.fn();
+const mockSetAutoWarp = jest.fn();
 
 const USERS: Record<string, { discordId: string; ign: string; partyId: string }> = {
   alpha: { discordId: 'a', ign: 'Alpha', partyId: 'P1' },
@@ -8,7 +9,7 @@ const USERS: Record<string, { discordId: string; ign: string; partyId: string }>
   charlie: { discordId: 'c', ign: 'Charlie', partyId: 'P2' },
   delta: { discordId: 'd', ign: 'Delta', partyId: 'P2' },
 };
-const PARTIES: Record<string, { partyId: string; leader: string; members: string[]; privateGames: boolean }> = {
+const PARTIES: Record<string, { partyId: string; leader: string; members: string[]; privateGames: boolean; autoWarp?: boolean }> = {
   P1: { partyId: 'P1', leader: 'a', members: ['a', 'b'], privateGames: true },
   P2: { partyId: 'P2', leader: 'c', members: ['c', 'd'], privateGames: true },
 };
@@ -30,7 +31,10 @@ jest.mock('../src/models/Party', () => ({
 }));
 jest.mock('../src/services/PartyService', () => ({
   __esModule: true,
-  PartyService: { validatePartyAccess: (...args: unknown[]) => mockValidatePartyAccess(...args) },
+  PartyService: {
+    validatePartyAccess: (...args: unknown[]) => mockValidatePartyAccess(...args),
+    setAutoWarp: (...args: unknown[]) => mockSetAutoWarp(...args),
+  },
 }));
 jest.mock('../src/services/PrivateGameService', () => ({
   __esModule: true,
@@ -74,6 +78,38 @@ describe('in-game private games', () => {
     const result = sent().find(m => m.type === 'party_result');
     expect(result).toMatchObject({ request_id: 'r1', ok: true, message: 'Private game on Quad is starting!', map: 'Quad' });
     expect(result.game_id).toBeUndefined();
+  });
+
+  it('/party queue only ever starts a private game, even with private games off', async () => {
+    const { bridge, ws, sent } = setup();
+    mockStartPrivateGame.mockResolvedValue({ success: true, map: 'Quad', players: [], missing: [] });
+    PARTIES.P1.privateGames = false;
+    try {
+      await bridge.handle({ type: 'party_command', request_id: 'r5', ign: 'Alpha', action: 'queue', map: 'Quad' });
+    } finally {
+      PARTIES.P1.privateGames = true;
+    }
+    expect(mockStartPrivateGame).toHaveBeenCalled();
+    expect(ws.handleQueueFromInGame).not.toHaveBeenCalled();
+    expect(sent().find(m => m.type === 'party_result')).toMatchObject({ ok: true });
+  });
+
+  it('/party queue without a party says a party is needed instead of joining a ranked queue', async () => {
+    const { bridge, ws, sent } = setup();
+    mockValidatePartyAccess.mockResolvedValue({ isValid: false });
+    await bridge.handle({ type: 'party_command', request_id: 'r6', ign: 'Alpha', action: 'queue' });
+    expect(ws.handleQueueFromInGame).not.toHaveBeenCalled();
+    expect(mockStartPrivateGame).not.toHaveBeenCalled();
+    expect(sent().find(m => m.type === 'party_result')).toMatchObject({ ok: false, message: expect.stringMatching(/need a party/) });
+  });
+
+  it('/party autowarp flips autowarp and tells the party', async () => {
+    const { bridge, sent } = setup();
+    mockSetAutoWarp.mockResolvedValue({ success: true, party: { ...PARTIES.P1, autoWarp: true } });
+    await bridge.handle({ type: 'party_command', request_id: 'r7', ign: 'Alpha', action: 'autowarp' });
+    expect(mockSetAutoWarp).toHaveBeenCalledWith('a', true);
+    expect(sent().find(m => m.type === 'party_result')).toMatchObject({ ok: true, message: expect.stringMatching(/^Autowarp ON/) });
+    expect(sent()).toContainEqual(expect.objectContaining({ type: 'party_notify', message: 'Alpha turned autowarp on.' }));
   });
 
   it("passes on the server's reason when the game can't start", async () => {

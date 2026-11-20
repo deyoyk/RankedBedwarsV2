@@ -77,13 +77,22 @@ export class PartyService {
 
   /** /party private: turns the party's private games on or off (leader only). */
   static async setPrivateGames(leaderId: string, value: boolean): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+    return this.setFlag(leaderId, 'privateGames', value);
+  }
+
+  /** /party autowarp: turns autowarp on or off (leader only). */
+  static async setAutoWarp(leaderId: string, value: boolean): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
+    return this.setFlag(leaderId, 'autoWarp', value);
+  }
+
+  private static async setFlag(leaderId: string, flag: 'privateGames' | 'autoWarp', value: boolean): Promise<{ success: boolean; message?: string; party?: PartyDocument }> {
     const validation = await this.validatePartyAccess(leaderId, true);
     if (!validation.isValid) {
       return { success: false, message: validation.error };
     }
     const party = validation.party!;
-    await Party.updateOne({ partyId: party.partyId, leader: leaderId }, { $set: { privateGames: value } });
-    party.privateGames = value;
+    await Party.updateOne({ partyId: party.partyId, leader: leaderId }, { $set: { [flag]: value } });
+    party[flag] = value;
     await this.updatePartyActivity(party.partyId);
     return { success: true, party };
   }
