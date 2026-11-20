@@ -61,45 +61,6 @@ jobs:
           path: rbw-bot.zip
           retention-days: 30
 
-  build-website:
-    name: Build website
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-
-      - name: Install dependencies
-        working-directory: web
-        run: npm ci
-
-      - name: Typecheck
-        working-directory: web
-        run: npx tsc --noEmit
-
-      - name: Build static export
-        working-directory: web
-        run: npm run build
-
-      - name: Package website
-        run: |
-          cd web
-          zip -r ../rbw-website.zip . -x 'node_modules/*' '.env*' '*.log'
-
-      - name: Upload website artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rbw-website
-          path: rbw-website.zip
-          retention-days: 30
-
   build-plugin:
     name: Build plugin
     runs-on: ubuntu-latest
@@ -133,7 +94,7 @@ jobs:
 
   release:
     name: Publish release
-    needs: [build-bot, build-website, build-plugin]
+    needs: [build-bot, build-plugin]
     if: inputs.create_release
     runs-on: ubuntu-latest
     permissions:
@@ -182,7 +143,7 @@ jobs:
       - name: Download release assets
         uses: actions/download-artifact@v4
         with:
-          pattern: '{rbw-bot,rbw-website,rbw-plugin}'
+          pattern: '{rbw-bot,rbw-plugin}'
           path: release-assets
 
       - name: Create Release
@@ -191,7 +152,6 @@ jobs:
           files: |
             release-assets/rbw-plugin/rbw-plugin.jar
             release-assets/rbw-bot/rbw-bot.zip
-            release-assets/rbw-website/rbw-website.zip
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
           body: |
@@ -205,7 +165,6 @@ jobs:
             ### Installation
             1. Plugin: download `rbw-plugin.jar` from the assets below, place it in your server's `plugins` folder, restart your server
             2. Bot: download `rbw-bot.zip`, extract, run `npm ci`, copy `.env.example` to `.env` and fill it in, then `npm start`
-            3. Web: download `rbw-website.zip`, extract, run `npm ci && npm run build`
           draft: false
           prerelease: false
         env:
