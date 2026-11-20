@@ -36,6 +36,7 @@ interface RawPlayerStats {
   finalkills?: number;
   final_deaths?: number;
   finaldeaths?: number;
+  beds?: number;
   diamonds?: number;
   irons?: number;
   gold?: number;
@@ -1016,10 +1017,13 @@ export class WebSocketManager {
   private buildPlayerData(players: Record<string, RawPlayerStats> | undefined, bedbreaks: string[]): Record<string, BuiltPlayerData> {
     const playerData: Record<string, BuiltPlayerData> = {};
     for (const [ign, stats] of Object.entries(players || {})) {
+      const beds = typeof stats.beds === 'number' && stats.beds >= 0
+        ? stats.beds
+        : (bedbreaks.includes(ign) ? 1 : 0);
       playerData[ign] = {
         kills: stats.kills ?? 0,
         deaths: stats.deaths ?? 0,
-        bedBroken: bedbreaks.includes(ign) ? 1 : 0,
+        bedBroken: beds,
         finalKills: stats.final_kills ?? stats.finalkills ?? 0,
         finalDeaths: stats.final_deaths ?? stats.finaldeaths ?? 0,
         diamonds: stats.diamonds ?? 0,
