@@ -5,6 +5,7 @@ import config, { validateConfig } from './config/config';
 import { CommandManager } from './managers/CommandManager';
 import { WebSocketManager } from './websocket/WebSocketManager';
 import { ApiManager } from './api/ApiManager';
+import { PublicApiManager } from './api/PublicApiManager';
 import { BotStatusTask } from './tasks/BotStatusTask';
 import { PartyCleanupTask } from './tasks/PartyCleanupTask';
 import { ChannelsCleanupTask } from './tasks/ChannelsCleanupTask';
@@ -58,6 +59,7 @@ const wsPath = '/rbw/websocket';
 const wsManager = new WebSocketManager(wsPort, client, wsPath); 
 
 const apiManager = new ApiManager(client, wsManager);
+const publicApiManager = new PublicApiManager(client, wsManager);
 
 
 const commandManager = new CommandManager(client, wsManager);
@@ -105,6 +107,7 @@ client.once('ready', async () => {
 
     await commandManager.registerSlashCommands();
     await apiManager.start();
+    await publicApiManager.start();
     botStatusTask = new BotStatusTask(client, wsManager);
     await botStatusTask.start();
     partyCleanupTask = new PartyCleanupTask(client);
