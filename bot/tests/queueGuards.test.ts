@@ -1,6 +1,7 @@
 import { queuePlayers } from '../src/types/queuePlayersMemory';
 import { claimPlayers, releasePlayers, isClaimedByOther, clearAllDraftClaims } from '../src/Matchmaking/draftClaims';
 import { clearPlayerDirectoryCache } from '../src/utils/playerDirectory';
+import config from '../src/config/config';
 
 const UID = '123456789012345678';
 const Q1 = '1352587524475713619';
@@ -201,8 +202,17 @@ describe('QueueListener admission guards', () => {
   describe('autowarp', () => {
     const MEMBER = '223456789012345678';
     const OFFLINE = '323456789012345678';
+    const originalPartyQueueSize = config.PartyQueueSize;
+    const originalCommonPartySize = config.CommonPartySize;
+
+    afterEach(() => {
+      config.PartyQueueSize = originalPartyQueueSize;
+      config.CommonPartySize = originalCommonPartySize;
+    });
 
     function setupParty(autoWarp: boolean, leader = UID) {
+      config.PartyQueueSize = 8;
+      config.CommonPartySize = 8;
       const memberVoice = { channelId: 'waiting', setChannel: jest.fn().mockResolvedValue(undefined) };
       const offlineVoice = { channelId: null, setChannel: jest.fn() };
       const queueChannel = { id: Q1, isVoiceBased: () => true, members: new Map([[UID, {}]]) };
