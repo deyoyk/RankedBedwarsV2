@@ -10,7 +10,7 @@ import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareCreateOpti
 const { themedEmbed } = embedsFor('Screenshare');
 
 export class ScreenshareService {
-  static readonly SESSION_TIMEOUT = 10 * 60 * 1000;
+  static readonly SESSION_TIMEOUT = 15 * 60 * 1000;
   private static readonly FREEZE_TIMEOUT = 5 * 60 * 1000; 
   private static readonly MAX_ACTIVE_SESSIONS_PER_USER = 1;
   private static readonly MAX_REASON_LENGTH = 500;
@@ -509,6 +509,10 @@ export class ScreenshareService {
         content: `<@${session.targetId}>`,
         embeds: [embed]
       });
+      // The server's "left" update came before this thread existed, so it couldn't be posted here.
+      if (options.loggedOff) {
+        await thread.send(`**${options.targetName}** left the server.`);
+      }
       threadId = thread.id;
     } catch (error) {
       console.error('[ScreenshareService] Failed to create request thread:', error);

@@ -19,7 +19,7 @@ import { WebSocketManager } from '../src/websocket/WebSocketManager';
 const SessionModel = require('../src/models/ScreenshareSession').default;
 const UserModel = require('../src/models/User').default;
 
-const TEN_MINUTES = 10 * 60 * 1000;
+const FIFTEEN_MINUTES = 15 * 60 * 1000;
 const managers: any[] = [];
 
 const users: Record<string, { discordId: string; ign: string }> = {
@@ -108,6 +108,7 @@ describe('in-game screenshare requests (autoss)', () => {
     expect(embed.fields?.map((f: any) => f.name)).not.toContain('Logged off');
     expect(message.startThread).toHaveBeenCalledWith(expect.objectContaining({ name: expect.stringContaining('SS: Steve |') }));
     expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({ content: '<@target1>' }));
+    expect(thread.send).not.toHaveBeenCalledWith(expect.stringContaining('left the server'));
 
     const created = SessionModel.create.mock.calls[0][0];
     expect(ws.registerScreenshareThread).toHaveBeenCalledWith({
@@ -120,7 +121,7 @@ describe('in-game screenshare requests (autoss)', () => {
   });
 
   it('falls back to a default reason and shows that the target logged off', async () => {
-    const { guild, requestsChannel } = makeGuild();
+    const { guild, requestsChannel, thread } = makeGuild();
     const ws = makeWs(guild);
 
     await ws.handleAutoSS({ type: 'autoss', targetign: 'steve', requestign: 'mod', uuid: 'u-2', reason: '   ', loggedoff: true });
@@ -128,6 +129,7 @@ describe('in-game screenshare requests (autoss)', () => {
     expect(SessionModel.create).toHaveBeenCalledWith(expect.objectContaining({ reason: 'Requested in-game' }));
     const embed = requestsChannel.send.mock.calls[0][0].embeds[0].toJSON();
     expect(embed.fields).toContainEqual({ name: 'Logged off', value: 'Yes — left the game after being requested', inline: true });
+    expect(thread.send).toHaveBeenCalledWith('**Steve** left the server.');
     expect(sent(ws)).toEqual([{ type: 'autoss_success', uuid: 'u-2' }]);
   });
 
@@ -272,7 +274,7 @@ describe('screenshare session expiry', () => {
     global._wsManager = undefined;
   });
 
-  it('expires every session 10 minutes after it is created', async () => {
+  it('expires every session 15 minutes after it is created', async () => {
     const now = 1_700_000_000_000;
     const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
     try {
@@ -280,22 +282,22 @@ describe('screenshare session expiry', () => {
         makeGuild().guild as any, 'target1', 'mod1', 'Need to verify this player', 'https://cdn.example.com/proof.png'
       );
       expect(result.success).toBe(true);
-      expect(result.session!.expireTime.getTime()).toBe(now + TEN_MINUTES);
+      expect(result.session!.expireTime.getTime()).toBe(now + FIFTEEN_MINUTES);
     } finally {
       nowSpy.mockRestore();
     }
-    expect(ScreenshareService.SESSION_TIMEOUT).toBe(TEN_MINUTES);
+    expect(ScreenshareService.SESSION_TIMEOUT).toBe(FIFTEEN_MINUTES);
   });
 
-  it('tells screensharers the request expires in 10 minutes and only shows an image when there is one', () => {
+  it('tells screensharers the request expires in 15 minutes and only shows an image when there is one', () => {
     const session: any = { sessionId: 'S1', targetId: 'target1', requesterId: 'mod1', reason: 'Need to verify' };
 
     const withImage = ScreenshareService.createSessionEmbed(session, 'https://cdn.example.com/proof.png').toJSON();
     const withoutImage = ScreenshareService.createSessionEmbed(session, '').toJSON();
 
-    expect(withImage.description).toContain('**Expires:** 10 minutes');
+    expect(withImage.description).toContain('**Expires:** 15 minutes');
     expect(withImage.image).toEqual({ url: 'https://cdn.example.com/proof.png' });
-    expect(withoutImage.description).toContain('**Expires:** 10 minutes');
+    expect(withoutImage.description).toContain('**Expires:** 15 minutes');
     expect(withoutImage.image).toBeUndefined();
   });
 
@@ -303,7 +305,7 @@ describe('screenshare session expiry', () => {
     const { guild } = makeGuild();
     const register = jest.fn();
     global._wsManager = { registerScreenshareThread: register } as any;
-    const expireTime = new Date(Date.now() + TEN_MINUTES);
+    const expireTime = new Date(Date.now() + FIFTEEN_MINUTES);
     const session: any = { sessionId: 'S1', targetId: 'target1', targetIgn: 'Steve', requesterId: 'mod1', reason: 'Need to verify', expireTime };
 
     const posted = await ScreenshareService.postRequest(guild as any, session, { targetName: 'Steve', imageUrl: 'https://cdn.example.com/proof.png' });
