@@ -228,7 +228,7 @@ interface MapSelectionPool {
   globalHistory: string[];
 }
 
-export const MAP_VOTE_OPTION_COUNT = 3;
+export const MAP_VOTE_OPTION_COUNT = 5;
 
 async function loadMapSelectionPool(
   mapService: MapService,

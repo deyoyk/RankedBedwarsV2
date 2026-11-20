@@ -1,5 +1,10 @@
 import { EventEmitter } from 'events';
-import { MapVoteService } from '../src/services/MapVoteService';
+
+jest.mock('../src/utils/playerDirectory', () => ({
+  getPlayerIgns: jest.fn(async (ids: string[]) => new Map(ids.map(id => [id, `Ign_${id}`]))),
+}));
+
+import { IN_GAME_PUSH_MS, MapVoteService } from '../src/services/MapVoteService';
 import { EMBED_COLORS } from '../src/utils/betterembed';
 
 class FakeCollector extends EventEmitter {
@@ -44,6 +49,73 @@ function interaction(userId: string, map: string) {
 async function flush(): Promise<void> {
   await new Promise(resolve => setImmediate(resolve));
 }
+
+describe('MapVoteService in game', () => {
+  function link() {
+    const handlers: Record<string, (msg: object) => void> = {};
+    return {
+      send: jest.fn(),
+      setGlobalHandler: jest.fn((type: string, handler: (msg: object) => void) => { handlers[type] = handler; }),
+      cast: (gameId: number, ign: string, map: string) => handlers.map_vote_cast({ type: 'map_vote_cast', game_id: gameId, ign, map }),
+    };
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+    MapVoteService.linkInGame(null);
+  });
+
+  it('shows the vote in game, counts votes clicked there and bundles the chat updates', async () => {
+    jest.useFakeTimers({ doNotFake: ['setImmediate'] });
+    const { collector, message, client } = makeChannel();
+    const ws = link();
+    MapVoteService.linkInGame(ws);
+    const service = new MapVoteService(client as any);
+    const resultPromise = service.run(204, 'thread-1', ['p1', 'p2', 'p3'], ['Archway', 'Lectus', 'Hollow', 'Aquarium', 'Sanctum']);
+    await flush();
+    await flush();
+
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(ws.send.mock.calls[0][0]).toMatchObject({
+      type: 'map_vote',
+      game_id: 204,
+      players: ['Ign_p1', 'Ign_p2', 'Ign_p3'],
+      maps: [
+        { name: 'Archway', votes: 0 }, { name: 'Lectus', votes: 0 }, { name: 'Hollow', votes: 0 },
+        { name: 'Aquarium', votes: 0 }, { name: 'Sanctum', votes: 0 },
+      ],
+      picks: {},
+      seconds_left: 60,
+    });
+
+    ws.cast(204, 'ign_p1', 'Archway');
+    ws.cast(204, 'Ign_p2', 'Archway');
+    ws.cast(204, 'Ign_p9', 'Lectus');
+    ws.cast(204, 'Ign_p3', 'Nowhere');
+    ws.cast(999, 'Ign_p3', 'Lectus');
+    expect(message.edit).toHaveBeenCalledTimes(2);
+    expect(ws.send).toHaveBeenCalledTimes(1);
+
+    jest.advanceTimersByTime(IN_GAME_PUSH_MS);
+    expect(ws.send).toHaveBeenCalledTimes(2);
+    expect(ws.send.mock.calls[1][0]).toMatchObject({
+      maps: expect.arrayContaining([{ name: 'Archway', votes: 2 }, { name: 'Lectus', votes: 0 }]),
+      picks: { Ign_p1: 'Archway', Ign_p2: 'Archway' },
+    });
+
+    collector.emit('collect', interaction('p3', 'Lectus'));
+    await flush();
+
+    await expect(resultPromise).resolves.toBe('Archway');
+    const last = ws.send.mock.calls[ws.send.mock.calls.length - 1][0];
+    expect(last).toMatchObject({ winner: 'Archway', picks: { Ign_p3: 'Lectus' } });
+    jest.advanceTimersByTime(IN_GAME_PUSH_MS * 2);
+    expect(ws.send.mock.calls[ws.send.mock.calls.length - 1][0]).toBe(last);
+
+    ws.cast(204, 'Ign_p3', 'Archway');
+    expect(message.edit.mock.calls[message.edit.mock.calls.length - 1][0].components).toEqual([]);
+  });
+});
 
 describe('MapVoteService', () => {
   it('sends a themed three-map embed and finishes when every player voted', async () => {

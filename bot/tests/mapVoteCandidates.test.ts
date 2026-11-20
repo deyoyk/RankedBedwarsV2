@@ -29,17 +29,17 @@ describe('selectMapVoteCandidates', () => {
     UserModel.find.mockImplementation(() => chainable([]));
   });
 
-  it('returns three distinct maps ranked by the existing frequency rating', async () => {
+  it('returns five distinct maps ranked by the existing frequency rating', async () => {
     const { selectMapVoteCandidates } = await import('../src/Matchmaking/utils');
     const svc = service(
-      ['A', 'B', 'C', 'D', 'E'].map(name => ({ name, maxplayers: 4 })),
+      ['A', 'B', 'C', 'D', 'E', 'F', 'G'].map(name => ({ name, maxplayers: 4 })),
       { getRecentPickHistory: jest.fn().mockReturnValue(['A', 'A', 'A']) },
     );
 
     const candidates = await selectMapVoteCandidates(svc as any, { maxPlayers: 4 }, ['p1']);
 
-    expect(candidates).toEqual(['B', 'C', 'D']);
-    expect(new Set(candidates).size).toBe(3);
+    expect(candidates).toEqual(['B', 'C', 'D', 'E', 'F']);
+    expect(new Set(candidates).size).toBe(5);
   });
 
   it('returns physical arena names used by the warp', async () => {

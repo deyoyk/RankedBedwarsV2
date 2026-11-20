@@ -127,6 +127,8 @@ client.once('ready', async () => {
 
     const { PartyBridge } = await import('./services/PartyBridge');
     new PartyBridge(client, wsManager).start();
+    const { MapVoteService } = await import('./services/MapVoteService');
+    MapVoteService.linkInGame(wsManager);
     const { CallBridge } = await import('./services/CallBridge');
     new CallBridge(client, wsManager).start();
     const { VcChatRelay } = await import('./services/VcChatRelay');
