@@ -398,8 +398,8 @@ export class PartyBridge {
     }
     const on = Boolean(result.party?.privateGames);
     this.reply(msg, true, on
-      ? 'Private games ON: other parties can challenge yours with /party duel.'
-      : "Private games OFF: other parties can't challenge yours.");
+      ? 'Private games ON: /party queue picks a map and starts a private game, and parties can /party duel you.'
+      : 'Private games OFF: /party queue and duels are off.');
     await this.notify(party.members, `${me.ign} turned private games ${on ? 'on' : 'off'}.`, me.ign);
   }
 
@@ -433,11 +433,15 @@ export class PartyBridge {
     await this.notify(result.party?.members ?? [], `${me.ign} ${open ? 'opened' : 'closed'} the party.`, me.ign);
   }
 
-  /** /party queue: the leader's pick of map starts a private game for the party (ranked queues are /q). */
+  /** /party queue: with private games on, the leader's pick of map starts a private game (ranked queues are /q). */
   private async queue(msg: PartyCommandPayload, me: UserLite): Promise<void> {
     const party = await this.myParty(me);
     if (!party) {
       this.reply(msg, false, 'You need a party to start a private game. Invite someone with /party invite <player>.');
+      return;
+    }
+    if (!party.privateGames) {
+      this.reply(msg, false, 'Turn on private games first (/party private).');
       return;
     }
     if (party.leader !== me.discordId) {

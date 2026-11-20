@@ -80,18 +80,17 @@ describe('in-game private games', () => {
     expect(result.game_id).toBeUndefined();
   });
 
-  it('/party queue only ever starts a private game, even with private games off', async () => {
+  it('/party queue with private games off asks for them instead of joining a ranked queue', async () => {
     const { bridge, ws, sent } = setup();
-    mockStartPrivateGame.mockResolvedValue({ success: true, map: 'Quad', players: [], missing: [] });
     PARTIES.P1.privateGames = false;
     try {
       await bridge.handle({ type: 'party_command', request_id: 'r5', ign: 'Alpha', action: 'queue', map: 'Quad' });
     } finally {
       PARTIES.P1.privateGames = true;
     }
-    expect(mockStartPrivateGame).toHaveBeenCalled();
+    expect(mockStartPrivateGame).not.toHaveBeenCalled();
     expect(ws.handleQueueFromInGame).not.toHaveBeenCalled();
-    expect(sent().find(m => m.type === 'party_result')).toMatchObject({ ok: true });
+    expect(sent().find(m => m.type === 'party_result')).toMatchObject({ ok: false, message: 'Turn on private games first (/party private).' });
   });
 
   it('/party queue without a party says a party is needed instead of joining a ranked queue', async () => {
