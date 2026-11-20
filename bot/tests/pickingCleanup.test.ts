@@ -138,7 +138,6 @@ describe('PickingQueueManager channel cleanup', () => {
         session,
         { team1: ['a', 'c'], team2: ['b', 'd'] },
         'game-thread-12',
-        expect.anything(),
         'VotedMap',
       );
       expect(manager.mapService.claimMap).toHaveBeenCalledWith('VotedMap');

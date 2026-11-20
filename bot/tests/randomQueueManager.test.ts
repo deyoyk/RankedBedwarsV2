@@ -28,6 +28,27 @@ function makeManager(): any {
   return new RandomQueueManager({} as any, {} as any, {} as any);
 }
 
+describe('RandomQueueManager game start post', () => {
+  it('posts only the embed, naming the map, with no image', async () => {
+    const manager = makeManager();
+    manager.workersManager = { sendMessage: jest.fn().mockResolvedValue(undefined) };
+    const before = config.channels.gamesChannel;
+    config.channels.gamesChannel = 'games-channel';
+    try {
+      await manager.announceGameStart(9, ['a'], ['b'], 'game-channel', 'Archway', new Map([['a', 1000], ['b', 1000]]));
+    } finally {
+      config.channels.gamesChannel = before;
+    }
+    const calls = manager.workersManager.sendMessage.mock.calls;
+    expect(calls.map((c: any[]) => c[0])).toEqual(['games-channel', 'game-channel']);
+    for (const [, message] of calls) {
+      expect(message.files).toBeUndefined();
+      expect(message.embeds).toHaveLength(1);
+      expect(message.embeds[0].toJSON().description).toContain('Game #9 has started on **Archway**.');
+    }
+  });
+});
+
 describe('RandomQueueManager.selectBalancedTeams', () => {
   it('creates a game and keeps drafted players marked used even when warp startup fails after creation', async () => {
     mockUserFind([

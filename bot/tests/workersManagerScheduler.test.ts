@@ -5,12 +5,13 @@ const mainClientMock: any = {
   channels: { cache: { get: () => undefined } },
 };
 
-function makeManager(): WorkersManager {
-  return new (WorkersManager as any)(mainClientMock);
+function makeManager(mainClient: any = mainClientMock): WorkersManager {
+  return new (WorkersManager as any)(mainClient);
 }
 
 function makeWorker(name: string, ready = true): any {
   const sent: Array<{ channelId: string; message: unknown }> = [];
+  const moved: Array<{ memberId: string; channelId: string }> = [];
   const guild = {
     channels: {
       cache: {
@@ -23,12 +24,24 @@ function makeWorker(name: string, ready = true): any {
         }),
       },
     },
-    members: { cache: { get: () => undefined } },
+    members: {
+      cache: {
+        get: (memberId: string) => ({
+          voice: {
+            channel: { id: 'somewhere' },
+            setChannel: async (channelId: string) => {
+              moved.push({ memberId, channelId });
+            },
+          },
+        }),
+      },
+    },
   };
 
   return {
     name,
     sent,
+    moved,
     client: { guilds: { cache: { first: () => guild } } },
     isReady: ready,
     currentTasks: new Set<string>(),
@@ -50,59 +63,85 @@ function enable(manager: WorkersManager, workers: any[]): void {
 }
 
 describe('WorkersManager demand-aware scheduler', () => {
-  it('routes messages through workers instead of the main client', async () => {
+  it('sends messages from the main bot, never a worker', async () => {
+    const mainSent: Array<{ channelId: string; message: unknown }> = [];
+    const mainClient = {
+      guilds: {
+        cache: {
+          first: () => ({
+            channels: {
+              cache: {
+                get: (channelId: string) => ({
+                  isTextBased: () => true,
+                  send: async (message: unknown) => {
+                    mainSent.push({ channelId, message });
+                    return { id: 'main-1' };
+                  },
+                }),
+              },
+            },
+          }),
+        },
+      },
+    };
+    const manager = makeManager(mainClient);
+    const worker = makeWorker('worker-1');
+    enable(manager, [worker]);
+
+    await expect(manager.sendMessage('channel-1', 'hello', 8)).resolves.toEqual({ id: 'main-1' });
+    expect(manager.getQueueDepth()).toBe(0);
+    expect(mainSent).toEqual([{ channelId: 'channel-1', message: 'hello' }]);
+    expect(worker.sent).toEqual([]);
+  });
+
+  it('routes background work through workers instead of the main client', async () => {
     const manager = makeManager();
     const worker = makeWorker('worker-1');
     enable(manager, [worker]);
 
-    const promise = manager.sendMessage('channel-1', 'hello', 8);
+    const promise = manager.moveMembers(['m1'], 'vc-1', 8);
     expect(manager.getQueueDepth()).toBe(1);
 
     await (manager as any).processTasks();
-    await expect(promise).resolves.toEqual({ id: 'worker-1-1' });
-    expect(worker.sent).toEqual([{ channelId: 'channel-1', message: 'hello' }]);
+    await promise;
+    expect(worker.moved).toEqual([{ memberId: 'm1', channelId: 'vc-1' }]);
   });
 
-  it('spreads independent routes across idle workers', async () => {
+  it('spreads work across idle workers', async () => {
     const manager = makeManager();
     const workers = [makeWorker('worker-1'), makeWorker('worker-2'), makeWorker('worker-3')];
     enable(manager, workers);
 
-    const promises = [
-      manager.sendMessage('channel-a', 'a', 8),
-      manager.sendMessage('channel-b', 'b', 8),
-      manager.sendMessage('channel-c', 'c', 8),
-    ];
+    const promise = manager.moveMembers(['a', 'b', 'c'], 'vc-1', 8);
 
     await (manager as any).processTasks();
-    await Promise.all(promises);
+    await promise;
 
-    expect(workers.every((worker) => worker.sent.length === 1)).toBe(true);
+    expect(workers.every((worker) => worker.moved.length === 1)).toBe(true);
   });
 
-  it('isolates a channel rate limit to the affected worker and route', async () => {
+  it('isolates a rate limit to the affected worker and route', async () => {
     const manager = makeManager();
     const workers = [makeWorker('worker-1'), makeWorker('worker-2')];
     enable(manager, workers);
 
-    const promise = manager.sendMessage('hot-channel', 'hello', 8);
+    const promise = manager.moveMembers(['m1'], 'vc-1', 8);
     const task = (manager as any).taskQueue.get(8)[0];
 
     (manager as any).handleRateLimit(workers[0], {
       global: false,
-      url: '/channels/hot-channel/messages',
-      majorParameter: 'hot-channel',
+      url: '/guilds/g1/members/m1',
       retryAfter: 5000,
       timeToReset: 5000,
     });
 
-    expect(workers[0].routeCooldowns.get('message:hot-channel')).toBeGreaterThan(Date.now());
+    expect(workers[0].routeCooldowns.get('member:guild')).toBeGreaterThan(Date.now());
     expect((manager as any).workerCanHandleTask(workers[0], task, Date.now())).toBe(false);
     expect((manager as any).workerCanHandleTask(workers[1], task, Date.now())).toBe(true);
 
     await (manager as any).processTasks();
-    await expect(promise).resolves.toBeDefined();
-    expect(workers[1].sent).toEqual([{ channelId: 'hot-channel', message: 'hello' }]);
+    await promise;
+    expect(workers[1].moved).toEqual([{ memberId: 'm1', channelId: 'vc-1' }]);
   });
 
   it('quarantines a worker globally for global rate limits', async () => {
@@ -125,7 +164,7 @@ describe('WorkersManager demand-aware scheduler', () => {
     enable(manager, [makeWorker('worker-1')]);
     (manager as any).queuedTaskCount = 500;
 
-    await expect(manager.sendMessage('channel-1', 'hello', 8)).rejects.toThrow('queue is full');
+    await expect(manager.setMemberNickname('m1', 'nick', 8)).rejects.toThrow('queue is full');
   });
 
   it('ages low-priority cleanup work ahead of a sustained high-priority flood', () => {
@@ -143,7 +182,7 @@ describe('WorkersManager demand-aware scheduler', () => {
     const manager = makeManager();
     enable(manager, [makeWorker('worker-1', false)]);
 
-    await expect(manager.sendMessage('channel-1', 'hello', 8)).rejects.toThrow('Guild not found');
+    await expect(manager.setMemberNickname('m1', 'nick', 8)).rejects.toThrow('Guild not found');
     expect(manager.getQueueDepth()).toBe(0);
   });
 });

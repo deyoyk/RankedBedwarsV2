@@ -921,12 +921,13 @@ export class WorkersManager {
     await this.addTask<void>('member_roles', { memberId, add, remove }, priority);
   }
 
+  /** Messages always come from the main bot; workers only do the background work (moves, channels, roles). */
   public async sendMessage(
     channelId: string,
     message: string | MessageCreateOptions,
-    priority: number = 8,
+    _priority: number = 8,
   ): Promise<unknown> {
-    return this.addTask('message_send', { channelId, message }, priority);
+    return this.executeTaskOnMainClient('message_send', { channelId, message });
   }
 
   private addTask<T = unknown>(

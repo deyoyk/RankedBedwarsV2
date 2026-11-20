@@ -175,7 +175,6 @@ export class RandomQueueManager {
               teamResult.team2,
               gameChannelId,
               selectedMap,
-              queueData,
               eloById,
             ).catch((announceError) => {
               console.error(`[RandomQueue] Failed to announce game ${gameId}:`, announceError);
@@ -384,7 +383,6 @@ export class RandomQueueManager {
     team2: string[],
     gameChannelId: string,
     selectedMap: string,
-    queueData: QueueLike,
     eloById: Map<string, number>,
   ): Promise<void> {
     try {
@@ -397,43 +395,14 @@ export class RandomQueueManager {
         team2Avg,
         'Ongoing',
         gameId,
+        selectedMap,
       );
-
-      let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
-      try {
-        const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
-        const roster = await fetchGameStartRoster([...team1, ...team2]);
-        const toTeam = (ids: string[]) => ids.map(id => {
-          const entry = roster.get(id);
-          return { discordId: id, username: entry?.username ?? id, elo: entry?.elo ?? 0, isCaptain: false };
-        });
-        if (roster.size > 0) {
-          const buffer = await generateGameStartImageBuffer(gameId, toTeam(team1), toTeam(team2), {
-            mapName: selectedMap,
-            modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
-            isRanked: queueData.isRanked === true,
-            minElo: queueData.minElo,
-            maxElo: queueData.maxElo,
-          });
-          startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
-        }
-      } catch (imageError) {
-        console.error(`[RandomQueue] Failed to generate game start image for game ${gameId}:`, imageError);
-      }
 
       if (config.channels.gamesChannel) {
-        await this.workersManager.sendMessage(
-          config.channels.gamesChannel,
-          { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
-          8,
-        );
+        await this.workersManager.sendMessage(config.channels.gamesChannel, { embeds: [embed] }, 8);
       }
 
-      await this.workersManager.sendMessage(
-        gameChannelId,
-        { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
-        8,
-      );
+      await this.workersManager.sendMessage(gameChannelId, { embeds: [embed] }, 8);
     } catch (error) {
       console.error(`[RandomQueue] Error announcing start for game ${gameId}:`, error);
     }
@@ -446,6 +415,7 @@ export class RandomQueueManager {
     team2Avg: number,
     _status: string = 'Ongoing',
     gameId: number,
+    mapName?: string,
   ): Promise<import('discord.js').EmbedBuilder> {
     const team1Value = [
       ` **Average Elo:** ${team1Avg}`,
@@ -461,7 +431,7 @@ export class RandomQueueManager {
     ].filter(Boolean).join('\n');
     return themedEmbed('info')
       .setTitle(`Game #${gameId} Started`)
-      .setDescription(`Game #${gameId} has started.`)
+      .setDescription(`Game #${gameId} has started${mapName ? ` on **${mapName}**` : ''}.`)
       .addFields(
         {
           name: '**TEAM GREEN**',
