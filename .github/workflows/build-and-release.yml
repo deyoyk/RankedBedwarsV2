@@ -61,40 +61,9 @@ jobs:
           path: rbw-bot.zip
           retention-days: 30
 
-  build-plugin:
-    name: Build plugin
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          java-version: '11'
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Build and test with Maven
-        working-directory: plugin
-        run: mvn clean package
-
-      - name: Rename plugin jar
-        run: |
-          JAR=$(ls plugin/target/RankedBedwars-*.jar | grep -v 'original-' | head -n 1)
-          cp "$JAR" rbw-plugin.jar
-
-      - name: Upload plugin artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: rbw-plugin
-          path: rbw-plugin.jar
-          retention-days: 30
-
   release:
     name: Publish release
-    needs: [build-bot, build-plugin]
+    needs: [build-bot]
     if: inputs.create_release
     runs-on: ubuntu-latest
     permissions:
@@ -103,21 +72,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Set up JDK 11
-        uses: actions/setup-java@v4
-        with:
-          java-version: '11'
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Get version from pom.xml
-        id: version
-        working-directory: plugin
-        run: |
-          VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Built plugin version: $VERSION"
 
       - name: Calculate next sequential release tag
         id: tag
@@ -143,28 +97,24 @@ jobs:
       - name: Download release assets
         uses: actions/download-artifact@v4
         with:
-          pattern: '{rbw-bot,rbw-plugin}'
+          name: rbw-bot
           path: release-assets
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release-assets/rbw-plugin/rbw-plugin.jar
-            release-assets/rbw-bot/rbw-bot.zip
+            release-assets/rbw-bot.zip
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Release ${{ steps.tag.outputs.tag }}
           body: |
             ## RankedBedwars ${{ steps.tag.outputs.tag }}
 
-            Plugin build version: `${{ steps.version.outputs.version }}`
-
             ### Changes
             - See commit history for details
 
             ### Installation
-            1. Plugin: download `rbw-plugin.jar` from the assets below, place it in your server's `plugins` folder, restart your server
-            2. Bot: download `rbw-bot.zip`, extract, run `npm ci`, copy `.env.example` to `.env` and fill it in, then `npm start`
+            1. Bot: download `rbw-bot.zip`, extract, run `npm ci`, copy `.env.example` to `.env` and fill it in, then `npm start`
           draft: false
           prerelease: false
         env:

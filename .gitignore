@@ -3,7 +3,6 @@ node_modules/
 npm-debug.log*
 
 # Build output
-plugin/target/
 web/out/
 web/.next/
 web/tsconfig.tsbuildinfo

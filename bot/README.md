@@ -24,7 +24,7 @@ Open `.env` and fill in these values:
 | `CLIENT_ID` | Bot application ID from the Developer Portal |
 | `GUILD_ID` | Your Discord server ID (right click the server with Developer Mode on) |
 | `MONGO_URI` | MongoDB connection string |
-| `AUTH_KEY` | Any random secret. Must match the plugin config exactly |
+| `AUTH_KEY` | Any random secret used to authenticate WebSocket/API clients |
 | `WEBSOCKETPORT` | Port for WebSocket and API. Default 25565 |
 
 Everything else in `.env.example` is optional and has working defaults. Channel and role IDs can be added later.
@@ -78,7 +78,7 @@ installs dev dependencies first because Pterodactyl often sets
 
 All commands are slash commands: `/register`, `/stats`, `/leaderboard`, `/party`, `/queue`, `/score`, `/ban`, `/addqueue`, `/startseason`, `/help` and more. Use `/help` in Discord for the full list.
 
-Command permissions come from the plugin's `permission.yml`. See `plugin/README.md`.
+Command permissions are configured with `/rbwconfig`.
 
 ## Tests
 
