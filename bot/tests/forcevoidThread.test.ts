@@ -48,7 +48,7 @@ describe('forcevoid in game threads', () => {
     await forcevoid(target, {} as any);
 
     expect(GameModel.findOne).toHaveBeenCalledWith({ 'channels.text': 'thread-42' });
-    expect(voidGame).toHaveBeenCalledWith(42, 'force voided by <@staff-1>');
+    expect(voidGame).toHaveBeenCalledWith(42, 'force voided by <@staff-1>', false, true);
     expect(replyText(target)).toContain('force voided');
     expect(replyText(target)).toContain('Game threads will be archived in 30 seconds');
   });

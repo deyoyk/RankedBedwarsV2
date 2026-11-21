@@ -495,6 +495,7 @@ export class GameManager {
     gameId: number,
     type: 'score' | 'void',
     payload: Record<string, unknown>,
+    force: boolean = false,
   ): Promise<void> {
     try {
       const existingQuery = GameSettlement.findOne({ gameId }) as unknown as {
@@ -506,8 +507,10 @@ export class GameManager {
           type?: string;
           status?: string;
         } | null;
-      if (existing && existing.status !== 'completed' && existing.type !== type) {
-        console.warn(`[GameManager] Repairing settlement journal type for game ${gameId}: ${existing.type} -> ${type}`);
+      if (existing && (force || (existing.status !== 'completed' && existing.type !== type))) {
+        if (existing.type !== type) {
+          console.warn(`[GameManager] Repairing settlement journal type for game ${gameId}: ${existing.type} -> ${type}`);
+        }
         await GameSettlement.updateOne(
           { gameId },
           { $set: { type, status: 'started', payload, startedAt: new Date() } },
@@ -934,19 +937,19 @@ export class GameManager {
   }
 
   
-  public async voidGame(gameId: number, reason: string, recovery: boolean = false): Promise<VoidResult> {
+  public async voidGame(gameId: number, reason: string, recovery: boolean = false, force: boolean = false): Promise<VoidResult> {
     if (this.settlingGames.has(gameId)) {
       throw new Error(`Game ${gameId} is already settled (settlement in progress)`);
     }
     this.settlingGames.add(gameId);
     try {
-      return await this.voidGameInternal(gameId, reason, recovery);
+      return await this.voidGameInternal(gameId, reason, recovery, force);
     } finally {
       this.settlingGames.delete(gameId);
     }
   }
 
-  private async voidGameInternal(gameId: number, reason: string, recovery: boolean = false): Promise<VoidResult> {
+  private async voidGameInternal(gameId: number, reason: string, recovery: boolean = false, force: boolean = false): Promise<VoidResult> {
     console.log(`[GameManager] Starting to void game ${gameId}: ${reason}`);
     try {
       if (!gameId || !reason) throw new Error('Invalid void parameters');
@@ -964,9 +967,9 @@ export class GameManager {
       await this.validateGameForSettlement(context.game);
 
       const previousState = context.game.state as GameState;
-      const claimedGame = await this.claimGameForSettling(gameId);
+      const claimedGame = await this.claimGameForSettling(gameId, force);
       try {
-        await this.beginSettlement(gameId, 'void', { reason });
+        await this.beginSettlement(gameId, 'void', { reason }, force);
       } catch (error) {
         await this.releaseFailedClaim(gameId, previousState);
         throw error;
@@ -1909,9 +1912,12 @@ export class GameManager {
    * an error. The game is left in `scoring` until the settlement journal is
    * written, then the caller applies the final state.
    */
-  private async claimGameForSettling(gameId: number): Promise<IGame> {
+  private async claimGameForSettling(gameId: number, force: boolean = false): Promise<IGame> {
+    const allowedStates = force
+      ? [GameState.PENDING, GameState.ACTIVE, GameState.SCORED]
+      : [GameState.PENDING, GameState.ACTIVE];
     const claimed = await Game.findOneAndUpdate(
-      { gameId, state: { $in: [GameState.PENDING, GameState.ACTIVE] } },
+      { gameId, state: { $in: allowedStates } },
       { $set: { endTime: new Date(), state: GameState.SCORING } },
       { new: true }
     );
@@ -1931,7 +1937,7 @@ export class GameManager {
     try {
       await Game.updateOne(
         { gameId, state: GameState.SCORING },
-        { $set: { state: previousState === GameState.ACTIVE ? GameState.ACTIVE : GameState.PENDING } },
+        { $set: { state: previousState } },
       );
     } catch (error) {
       console.error(`[GameManager] Could not release failed settlement claim for game ${gameId}:`, error);

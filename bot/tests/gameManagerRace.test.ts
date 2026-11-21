@@ -300,6 +300,38 @@ describe('GameManager race conditions', () => {
     expect(gameDoc.state).toBe('scored');
   });
 
+  it('does not claim an already-scored game for a normal void', async () => {
+    const gameDoc = makeGameDoc('scored');
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    GameModel.findOneAndUpdate.mockResolvedValue(null);
+    const manager = makeManager();
+
+    await expect(manager.voidGame(1, 'test void')).rejects.toThrow(/already settled/);
+    expect(GameModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ gameId: 1, state: { $in: ['pending', 'active'] } }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('force void claims and reverts an already-scored game', async () => {
+    const gameDoc = makeGameDoc('scored');
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    const manager = makeManager();
+
+    const result = await manager.voidGame(1, 'force void test', false, true);
+
+    expect(result.gameId).toBe(1);
+    expect(gameDoc.state).toBe('voided');
+    expect(GameModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ gameId: 1, state: { $in: ['pending', 'active', 'scored'] } }),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
   it('voids a game even when a player no longer exists in the database', async () => {
     const players = [makeUser('a'), makeUser('b'), makeUser('c')];
     const gameDoc = makeGameDoc('pending');

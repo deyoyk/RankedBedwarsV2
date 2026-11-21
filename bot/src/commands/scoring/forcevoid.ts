@@ -40,7 +40,7 @@ export async function forcevoid(interaction: ChatInputCommandInteraction, wsMana
     }
     
     const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
-    await gameManager.voidGame(game.gameId, reason);
+    await gameManager.voidGame(game.gameId, reason, false, true);
     
     
       await safeReply(interaction, successEmbed(
