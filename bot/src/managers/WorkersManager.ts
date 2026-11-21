@@ -156,7 +156,7 @@ export class WorkersManager {
 
           const workerClient = this.createWorkerClient(client);
 
-          client.once('ready', () => {
+          client.once('clientReady', () => {
             workerClient.isReady = true;
             console.log(`[WorkersManager] Worker ${index + 1} ready: ${client.user?.tag}`);
           });

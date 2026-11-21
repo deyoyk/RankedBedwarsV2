@@ -77,7 +77,7 @@ let eloDecayTask: EloDecayTask;
 let gameManager: GameManager | undefined;
 let workersManager: WorkersManager;
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`[Bot] Logged in as ${client.user?.tag}`);
   setBrandIcon(client.user?.displayAvatarURL({ size: 64 }));
   try {
