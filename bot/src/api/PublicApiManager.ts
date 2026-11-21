@@ -67,6 +67,6 @@ export class PublicApiManager extends ApiManager {
       publicStrictLimiter(req, res, next);
     });
 
-    this.setupRoutes();
+    this.setupPublicRoutes();
   }
 }

@@ -53,6 +53,7 @@ jest.mock('../src/websocket/WebSocketManager', () => ({
 
 const UserModel = require('../src/models/User').default;
 const QueueModel = require('../src/models/Queue').default;
+const SeasonStatsModel = require('../src/models/SeasonStats').default;
 
 const servers: any[] = [];
 
@@ -76,7 +77,8 @@ function makeApp(): { app: any; wsManager: any; client: any } {
     getAllMaps: () => [],
     getReservedMaps: () => [],
     getLockedMaps: () => [],
-    getDisabledMaps: () => []
+    getDisabledMaps: () => [],
+    getServerStats: () => null
   };
   const client: any = { guilds: { cache: { first: () => undefined } } };
   return { app, wsManager, client };
@@ -126,43 +128,41 @@ describe('PublicApiManager', () => {
     for (const server of servers) server.close();
   });
 
-  it('serves public routes without an auth key while the private API stays protected', async () => {
+  it('serves the website endpoints publicly while the private API stays protected', async () => {
     UserModel.findOne.mockImplementation(() => mockQuery(makeUserDoc()));
+    SeasonStatsModel.find.mockImplementation(() => mockQuery([]));
     const { app, wsManager, client } = makeApp();
     new ApiManager(client, wsManager);
     new PublicApiManager(client, wsManager);
     const base = await boot(app);
 
-    const publicRes = await fetch(`${base}/public/rbw/api/user?discordid=1001`);
+    const publicRes = await fetch(`${base}/public/rbw/api/user/1001/overview`);
     expect(publicRes.status).toBe(200);
     const publicBody = await publicRes.json();
-    expect(publicBody.discordId).toBe('1001');
-    expect(publicBody.ign).toBe('PlayerOne');
-    expect(publicBody.levelInfo.level).toBe(1);
+    expect(publicBody.profile.discordId).toBe('1001');
+    expect(publicBody.profile.ign).toBe('PlayerOne');
+    expect(publicBody.profile.levelInfo.level).toBe(1);
 
     const privateRes = await fetch(`${base}/rbw/api/user?discordid=1001`);
     expect(privateRes.status).toBe(401);
     await expect(privateRes.json()).resolves.toEqual({ error: 'Unauthorized' });
   });
 
-  it('advertises the public endpoint list at /public/rbw/api', async () => {
+  it('does not expose endpoints the website does not use', async () => {
     const { app, wsManager, client } = makeApp();
     new PublicApiManager(client, wsManager);
     const base = await boot(app);
 
-    const res = await fetch(`${base}/public/rbw/api`);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe('online');
-    expect(body.note).toContain('/public/rbw/api/user/:discordid/overview');
-    expect(body.endpoints).toContain('/public/rbw/api/user/:discordid/overview');
-    expect(body.endpoints).toContain('/public/rbw/api/game/:gameid/timeline');
-    expect(body.endpoints.every((endpoint: string) => endpoint.startsWith('/public/rbw/api'))).toBe(true);
+    for (const path of ['', '/user', '/game/1/timeline', '/queues', '/server/status', '/stats/global', '/maps']) {
+      const res = await fetch(`${base}/public/rbw/api${path}`);
+      expect(res.status).toBe(404);
+    }
   });
 
   it('rate limits public requests per IP without consuming the private API limit', async () => {
     process.env.RBW_PUBLIC_RATE_LIMIT_MAX = '2';
     process.env.RBW_PUBLIC_RATE_LIMIT_STRICT_MAX = '100';
+    UserModel.find.mockImplementation(() => mockQuery([]));
     QueueModel.find.mockImplementation(() => mockQuery([]));
     const { app, wsManager, client } = makeApp();
     new ApiManager(client, wsManager);
@@ -173,7 +173,7 @@ describe('PublicApiManager', () => {
     let limited = 0;
     let limitedBody: any = null;
     for (let i = 0; i < 5; i++) {
-      const res = await fetch(`${base}/public/rbw/api/queues`);
+      const res = await fetch(`${base}/public/rbw/api/online-players`);
       if (res.status === 200) ok++;
       if (res.status === 429) {
         limited++;

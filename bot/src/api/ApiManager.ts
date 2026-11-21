@@ -314,6 +314,27 @@ export class ApiManager {
     this.wsManager.app.get(`${this.routePrefix}/user/:discordid/overview`, this.getUserOverview);
   }
 
+  /**
+   * Public read-only surface for the website. Only the routes the site actually
+   * calls are exposed; everything else stays on the authenticated API.
+   */
+  protected setupPublicRoutes() {
+    const app = this.wsManager.app;
+    const prefix = this.routePrefix;
+
+    app.get(`${prefix}/user/:discordid/overview`, this.getUserOverview);
+    app.get(`${prefix}/user/:discordid/games`, this.getUserGames);
+    app.get(`${prefix}/leaderboard`, this.getLeaderboard);
+    app.get(`${prefix}/leaderboard/top-players`, this.getTopPlayers);
+    app.get(`${prefix}/game/:gameid`, this.getGameById);
+    app.get(`${prefix}/eloranks`, this.getEloRanks);
+    app.get(`${prefix}/search/users`, this.searchUsers);
+    app.get(`${prefix}/online-players`, this.getOnlinePlayers);
+    app.get(`${prefix}/games/recent`, this.getRecentGames);
+    app.get(`${prefix}/seasons`, this.getAllSeasons);
+    app.get(`${prefix}/seasons/:season/:chapter/leaderboard`, this.getSeasonLeaderboard);
+  }
+
   private async findUserByQuery(req: Request) {
     const discordid = req.query.discordid as string;
     const ign = req.query.ign as string;
