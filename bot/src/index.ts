@@ -17,6 +17,9 @@ import { GuildJoinListener } from './handlers/GuildJoinListener';
 import type { GameManager } from './Matchmaking/GameManager';
 import { setBrandIcon } from './utils/betterembed';
 import { PermissionService } from './services/PermissionService';
+import { installErrorReporting } from './utils/errorReporter';
+
+installErrorReporting();
 
 declare global {
   

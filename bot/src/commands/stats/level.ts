@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { EXPERIENCE_REWARDS, getLevelInfo } from '../../utils/levelSystem';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 
@@ -74,11 +75,7 @@ export async function level(interaction: ChatInputCommandInteraction, _wsManager
         await safeReply(interaction, { embeds: [embed] });
 
     } catch (error) {
-        console.error('Error in level command:', error);
-        await safeReply(interaction, {
-            embeds: [errorEmbed('An error occurred while fetching level information.', 'Level Information Error').builder],
-            ephemeral: true
-        });
+        await replyCommandError(interaction, error, 'fetch level information', '[level]');
     }
 }
 

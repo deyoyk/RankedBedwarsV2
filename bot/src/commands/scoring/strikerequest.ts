@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game, { IGame } from '../../models/Game';
 import { StrikeManager } from '../../managers/StrikeManager';
 import configuration from '../../config/config';
+import { commandErrorDetails, replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { buildResultEmbed, claimVoteRequest, createDiscussionThread, createVoteButtons, releaseVoteRequest, setupVoteCollector, VoteData } from '../../utils/voteRequest';
 import { embedsFor } from '../../utils/betterembed';
@@ -29,8 +30,7 @@ export async function strikerequest(interaction: ChatInputCommandInteraction, _w
 
     await createStrikeRequest(interaction, requestData);
   } catch (error) {
-    console.error('Error in strikerequest command:', error);
-    await safeReply(interaction, errorEmbed('An error occurred while processing your strike request.', 'Strike Request Error'));
+    await replyCommandError(interaction, error, 'process your strike request', '[strikerequest]');
   }
 }
 
@@ -155,11 +155,11 @@ async function processVoteResults(message: Message, data: StrikeRequestData, vot
     });
     await releaseVoteRequest(data.gameId, `strike:${data.targetId}`);
   } catch (error) {
-    console.error('Error processing strike request results:', error);
+    const { description } = commandErrorDetails('process the strike request results', error, '[strikerequest:results]');
     await releaseVoteRequest(data.gameId, `strike:${data.targetId}`);
     await message.edit({
       content: teamMentions,
-      embeds: [errorEmbed('Error processing strike request results.', 'Strike Request Error').builder],
+      embeds: [message.embeds[0], errorEmbed(description, 'Strike Request Error').builder],
       components: []
     });
   }

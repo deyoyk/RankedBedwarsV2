@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 import Queue from '../../models/Queue';
@@ -33,7 +34,6 @@ export async function removequeue(interaction: ChatInputCommandInteraction, _wsM
       ], 'success')]
     });
   } catch (error) {
-    console.error('Error in removequeue command:', error);
-    await safeReply(interaction, { embeds: [queueSystemEmbed('There was an error removing the queue.', 'error')] });
+    await replyCommandError(interaction, error, 'remove the queue', '[removequeue]');
   }
 }

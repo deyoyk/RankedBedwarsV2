@@ -218,7 +218,10 @@ describe('CommandHandler slash failure replies', () => {
       embeds: expect.any(Array)
     }));
     const payload = interaction.editReply.mock.calls[0][0];
-    expect(payload.embeds[0].toJSON().description).toBe('Something went wrong running that command.');
+    const description = payload.embeds[0].toJSON().description;
+    expect(description).toContain('Could not run /boom.');
+    expect(description).toContain('kaboom');
+    expect(description).toMatch(/Error ID: `[0-9a-f]{8}`/);
   });
 });
 

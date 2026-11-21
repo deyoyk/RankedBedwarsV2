@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
 
@@ -36,7 +37,6 @@ export async function wipe(interaction: ChatInputCommandInteraction, _wsManager?
 
     await safeReply(interaction, successEmbed(`All stats for ${targetMention} have been wiped.`, 'Wipe Successful'));
   } catch (error) {
-    console.error('Error in wipe command:', error);
-    await safeReply(interaction, errorEmbed('There was an error wiping the user stats.', 'Wipe Error'));
+    await replyCommandError(interaction, error, 'wipe the user stats', '[wipe]');
   }
 }

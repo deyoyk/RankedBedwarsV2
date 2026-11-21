@@ -3,6 +3,7 @@ import Game, { type IGame } from '../../models/Game';
 import configuration from '../../config/config';
 import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
+import { commandErrorDetails, replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { buildResultEmbed, claimVoteRequest, createDiscussionThread, createVoteButtons, releaseVoteRequest, setupVoteCollector, VoteData } from '../../utils/voteRequest';
 import { embedsFor } from '../../utils/betterembed';
@@ -33,8 +34,7 @@ export async function voidrequest(interaction: ChatInputCommandInteraction, _wsM
     if (!requestData) return;
     await submitVoidRequest(interaction, requestData);
   } catch (error) {
-    console.error('Error in voidrequest command:', error);
-    await safeReply(interaction, errorEmbed('An error occurred while processing your void request.', 'Void Request Error'));
+    await replyCommandError(interaction, error, 'process your void request', '[voidrequest]');
   }
 }
 
@@ -173,11 +173,11 @@ async function processVoteResults(message: Message, data: VoidRequestData, votes
     });
     await releaseVoteRequest(data.gameId, 'void');
   } catch (error) {
-    console.error('Error processing void request results:', error);
+    const { description } = commandErrorDetails('process the void request results', error, '[voidrequest:results]');
     await releaseVoteRequest(data.gameId, 'void');
     await message.edit({
       content: teamMentions,
-      embeds: [errorEmbed('Error processing void request results.', 'Void Request Error').builder],
+      embeds: [message.embeds[0], errorEmbed(description, 'Void Request Error').builder],
       components: []
     });
   }

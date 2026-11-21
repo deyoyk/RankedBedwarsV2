@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 
@@ -31,11 +32,7 @@ export async function startseason(interaction: ChatInputCommandInteraction, _wsM
       await safeReply(interaction, embed);
     }
   } catch (error) {
-    console.error('Error starting season:', error);
-    await safeReply(interaction, errorEmbed(
-      'An error occurred while starting the season. Please check the logs and try again.',
-      'Season Start Error'
-    )).catch(() => {});
+    await replyCommandError(interaction, error, 'start the season', '[startseason]');
   }
 }
 

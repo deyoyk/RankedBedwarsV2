@@ -4,6 +4,7 @@ import { WebSocketManager } from '../../websocket/WebSocketManager';
 import Game from '../../models/Game';
 import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { bedBreakerLimitMessage, getMaxBedBreakersPerGame, getMaxMvpsPerGame, mvpLimitMessage, uniquePlayers } from '../../utils/scoringLimits';
 
@@ -93,7 +94,6 @@ export async function score(interaction: ChatInputCommandInteraction, _wsManager
       'Game Scored'
     ));
   } catch (error) {
-    console.error('Error in score command:', error);
-    await safeReply(interaction, errorEmbed('There was an error recording the game score.', 'Score Command Error'));
+    await replyCommandError(interaction, error, `record the score for game #${gameId}`, '[score]');
   }
 }

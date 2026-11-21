@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction, Guild } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 import User, { type IUser } from '../../models/User';
@@ -88,7 +89,6 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
 
     await safeReply(interaction, { files: [{ attachment: image, name: `${playerData.ign}_stats.png` }] });
   } catch (error) {
-    console.error('[stats] Error drawing stats:', error);
-    await safeReply(interaction, errorEmbed('Could not load those stats. Try again.'));
+    await replyCommandError(interaction, error, 'load those stats', '[stats]');
   }
 }

@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 import User from '../../models/User';
@@ -27,7 +28,6 @@ export async function unregister(interaction: ChatInputCommandInteraction, _wsMa
     
     await safeReply(interaction, successEmbed(`User <@${targetUserId}> has been removed from the database.`, 'User Unregistered'));
   } catch (error) {
-    console.error('Error in unregister command:', error);
-    await safeReply(interaction, errorEmbed('There was an error removing the user.', 'Unregister Error'));
+    await replyCommandError(interaction, error, 'remove the user', '[unregister]');
   }
 }

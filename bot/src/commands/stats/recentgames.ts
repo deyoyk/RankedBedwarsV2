@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { commandErrorDetails, replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import User, { IUser } from '../../models/User';
 import { IRecentGame } from '../../models/gameBase';
@@ -31,8 +32,7 @@ export async function recentgames(interaction: ChatInputCommandInteraction, _wsM
 
     await displayRecentGames(interaction, user, data);
   } catch (error) {
-    console.error('Error in recentgames command:', error);
-    await safeReply(interaction, errorEmbed('An error occurred while fetching recent games.', 'Recent Games Error'));
+    await replyCommandError(interaction, error, 'fetch recent games', '[recentgames]');
   }
 }
 
@@ -191,8 +191,8 @@ async function setupPaginationCollector(interaction: ChatInputCommandInteraction
 
       await i.update({ embeds: [embed], components });
     } catch (error) {
-      console.error('Error handling pagination:', error);
-      await i.reply(errorEmbed('An error occurred while updating the page.', 'Recent Games Error', true));
+      const { description } = commandErrorDetails('update the page', error, '[recentgames:pagination]');
+      await i.reply(errorEmbed(description, 'Recent Games Error', true));
     }
   });
 
@@ -203,7 +203,7 @@ async function setupPaginationCollector(interaction: ChatInputCommandInteraction
         await safeReply(interaction, { components: [] });
       }
     } catch (error) {
-      console.error('Error cleaning up pagination:', error);
+      await replyCommandError(interaction, error, 'clean up the recent games pagination', '[recentgames:cleanup]');
     }
   });
 }

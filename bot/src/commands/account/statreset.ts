@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
 import { countStatResetsInWindow, getStatResetAllowance } from '../../utils/statReset';
@@ -63,7 +64,6 @@ export async function statreset(interaction: ChatInputCommandInteraction, _wsMan
     const remaining = allowed - (used + 1);
     await safeReply(interaction, successEmbed(`Your stats have been reset.\nResets left for ${windowText}: **${remaining}** (used ${used + 1}/${allowed}).`, 'Stat Reset Successful'));
   } catch (error) {
-    console.error('Error in statreset command:', error);
-    await safeReply(interaction, errorEmbed('There was an error resetting your stats.', 'Stat Reset Error'));
+    await replyCommandError(interaction, error, 'reset your stats', '[statreset]');
   }
 }

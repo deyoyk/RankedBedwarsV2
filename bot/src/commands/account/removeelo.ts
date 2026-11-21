@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 
 const { errorEmbed, successEmbed } = embedsFor('Rank');
@@ -28,7 +29,6 @@ export async function removeelo(interaction: ChatInputCommandInteraction, _wsMan
     );
     await safeReply(interaction, embed);
   } catch (error) {
-    console.error('Error in removeelo command:', error);
-    await safeReply(interaction, errorEmbed('There was an error removing the ELO rank.', 'ELO Rank Removal Error'));
+    await replyCommandError(interaction, error, 'remove the ELO rank', '[removeelo]');
   }
 }

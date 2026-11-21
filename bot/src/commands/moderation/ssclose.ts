@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction, GuildMember, TextChannel } from 'discord.j
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
 
@@ -68,7 +69,6 @@ export async function ssclose(interaction: ChatInputCommandInteraction, _wsManag
 
     await safeReply(interaction, { embeds: [successEmbedObj.builder] });
   } catch (error) {
-    console.error('[SSClose Command] Error:', error);
-    await safeReply(interaction, errorEmbed('There was an error closing the screenshare session.', 'Screenshare Error'));
+    await replyCommandError(interaction, error, 'close the screenshare session', '[ssclose]');
   }
 }

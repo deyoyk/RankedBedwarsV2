@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ChatInputCommandInteraction, StringSelectMenuBuilder, StringSelectMenuInteraction, StringSelectMenuOptionBuilder } from 'discord.js';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
+import { commandErrorDetails, reportError, replyCommandError } from '../utils/errorReporter';
 import { safeReply } from '../utils/safeReply';
 import fs from 'fs';
 import path from 'path';
@@ -99,13 +100,7 @@ export async function help(interaction: ChatInputCommandInteraction, _wsManager?
 
     await safeReply(interaction, { embeds: [embed], components: [row] });
   } catch (error) {
-    console.error('Error in help command:', error);
-
-    try {
-      await safeReply(interaction, errorEmbed('There was an error loading the help menu. Please try again.', 'Help Error'));
-    } catch (followUpError) {
-      console.error('Error sending followUp:', followUpError);
-    }
+    await replyCommandError(interaction, error, 'load the help menu', '[help]');
   }
 }
 
@@ -173,15 +168,13 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
       });
     });
   } catch (error) {
-    console.error('Error in handleHelpMenu:', error);
-    try {
-      await interaction.editReply({
-        embeds: [errorEmbed('There was an error displaying the help menu. Please try again.', 'Help Error').builder],
-        components: []
-      }).catch(() => {});
-    } catch (replyError) {
-      console.error('Failed to send error message:', replyError);
-    }
+    const { description } = commandErrorDetails('display the help menu', error, '[help:menu]');
+    await interaction.editReply({
+      embeds: [errorEmbed(description, 'Help Error').builder],
+      components: []
+    }).catch((replyError) => {
+      reportError('[help:menu] (reply)', replyError);
+    });
   }
 }
 
@@ -200,14 +193,12 @@ export async function handleHelpPagination(interaction: ButtonInteraction) {
     interaction.customId = `help_category:${category}:${newPage}`;
     await handleHelpMenu(interaction);
   } catch (error) {
-    console.error('Error in handleHelpPagination:', error);
-    try {
-      await interaction.update({
-        embeds: [errorEmbed('There was an error navigating the help pages. Please try again.', 'Help Error').builder],
-        components: []
-      }).catch(() => {});
-    } catch (replyError) {
-      console.error('Failed to send pagination error message:', replyError);
-    }
+    const { description } = commandErrorDetails('navigate the help pages', error, '[help:pagination]');
+    await interaction.update({
+      embeds: [errorEmbed(description, 'Help Error').builder],
+      components: []
+    }).catch((replyError) => {
+      reportError('[help:pagination] (reply)', replyError);
+    });
   }
 }

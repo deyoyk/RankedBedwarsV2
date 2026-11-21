@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, Guild, Message } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
+import { commandErrorDetails, replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { type PartyDocument, PartyService } from '../../services/PartyService';
 import { PrivateGameService } from '../../services/PrivateGameService';
@@ -83,8 +84,7 @@ export async function party(interaction: ChatInputCommandInteraction, wsManager?
         await safeReply(interaction, errorEmbed('Unknown party command.', 'Party Error'));
     }
   } catch (error) {
-    console.error('Error in party command:', error);
-    await safeReply(interaction, errorEmbed('There was an error processing your party command.', 'Party Error'));
+    await replyCommandError(interaction, error, 'process your party command', '[party]');
   }
 }
 
@@ -444,9 +444,9 @@ async function handleStartPrivateGame(
         ...(map ? { map } : {}),
       });
     } catch (error) {
-      console.error('Error starting private game:', error);
+      const { description } = commandErrorDetails('start the private game', error, '[party:privategame]');
       await buttonInteraction.editReply({
-        embeds: [errorEmbed('There was an error starting the private game.', 'Private Game Error').builder],
+        embeds: [errorEmbed(description, 'Private Game Error').builder],
       }).catch(() => undefined);
       return;
     }

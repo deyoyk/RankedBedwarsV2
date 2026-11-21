@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 import User from '../../models/User';
@@ -68,7 +69,6 @@ export async function queue(interaction: ChatInputCommandInteraction, _wsManager
     await safeReply(interaction, { embeds: [queueSystemEmbed(lines)] });
 
   } catch (error) {
-    console.error('[Queue Command] Error:', error);
-    await safeReply(interaction, { embeds: [queueSystemEmbed('An error occurred while fetching queue information.', 'error')] });
+    await replyCommandError(interaction, error, 'fetch queue information', '[queue]');
   }
 }

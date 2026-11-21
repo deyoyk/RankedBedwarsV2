@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { SeasonManager } from '../../managers/SeasonManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 
@@ -28,10 +29,7 @@ export async function endseason(interaction: ChatInputCommandInteraction, _wsMan
             await safeReply(interaction, { embeds: [errorEmbed(result.message, 'Season End Failed').builder] });
         }
     } catch (error) {
-        console.error('Error ending season:', error);
-        await safeReply(interaction, {
-            embeds: [errorEmbed('An error occurred while ending the season. Please check the logs and try again.', 'Season End Failed').builder]
-        });
+      await replyCommandError(interaction, error, 'end the season', '[endseason]');
     }
 }
 

@@ -3,6 +3,7 @@ import { checkPermission } from '../utils/permissions';
 import { PermissionService } from '../services/PermissionService';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { safeReply } from '../utils/safeReply';
+import { replyCommandError } from '../utils/errorReporter';
 import type { BotCommandFn } from '../types/commands';
 import { embedsFor } from '../utils/betterembed';
 
@@ -97,21 +98,12 @@ export class CommandHandler {
 
       await command(interaction, this.wsManager);
     } catch (error) {
-      console.error(
-        `Error executing slash command ${commandName}:`,
-        error
+      await replyCommandError(
+        interaction,
+        error,
+        `run /${commandName}`,
+        `command:${commandName}`
       );
-
-      try {
-        await safeReply(
-          interaction,
-          errorEmbed(
-            'Something went wrong running that command.',
-            'Command Error'
-          )
-        );
-      } catch {
-      }
     }
   }
 }

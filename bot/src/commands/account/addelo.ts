@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 
 const { errorEmbed, successEmbed } = embedsFor('Rank');
@@ -72,7 +73,6 @@ export async function addelo(interaction: ChatInputCommandInteraction, _wsManage
     );
     await safeReply(interaction, embed);
   } catch (error) {
-    console.error('Error in addelo command:', error);
-    await safeReply(interaction, errorEmbed('There was an error creating the ELO rank.', 'ELO Rank Creation Error'));
+    await replyCommandError(interaction, error, 'create the ELO rank', '[addelo]');
   }
 }

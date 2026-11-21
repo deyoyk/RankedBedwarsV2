@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { getEloRanks } from '../../utils/fix';
 
@@ -21,7 +22,6 @@ export async function ranks(interaction: ChatInputCommandInteraction, _wsManager
 
     await safeReply(interaction, infoEmbed(`Configured ELO ranks.\n\n${rankLines.join('\n')}`, 'Rank List'));
   } catch (error) {
-    console.error('Error in ranks command:', error);
-    await safeReply(interaction, errorEmbed('Failed to fetch ranks.', 'Ranks Error'));
+    await replyCommandError(interaction, error, 'fetch the ELO ranks', '[ranks]');
   }
 }

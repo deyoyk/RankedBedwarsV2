@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { parse } from 'yaml';
 import fs from 'fs';
 import path from 'path';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import Season from '../../models/Season';
 import { embedsFor } from '../../utils/betterembed';
@@ -65,14 +66,6 @@ export async function seasoninfo(interaction: ChatInputCommandInteraction, _wsMa
 
     await safeReply(interaction, { embeds: [embed] });
   } catch (error) {
-    console.error('Error in seasoninfo command:', error);
-    
-    const errorMessage = 'There was an error loading the season information. Please try again.';
-    
-    try {
-      await safeReply(interaction, errorEmbed(errorMessage, 'Season Info Error', true));
-    } catch (replyError) {
-      console.error('Error sending error message:', replyError);
-    }
+    await replyCommandError(interaction, error, 'load the season information', '[seasoninfo]');
   }
 }

@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 import User from '../../models/User';
@@ -79,10 +80,11 @@ export async function forceregister(interaction: ChatInputCommandInteraction, _w
         await user.save();
       } catch (createError) {
         const code = (createError as { code?: unknown })?.code;
-        await safeReply(interaction, errorEmbed(
-          code === 11000 ? 'This user is already registered.' : 'There was an error force registering the user.',
-          'Force Register Error'
-        ));
+        if (code === 11000) {
+          await safeReply(interaction, errorEmbed('This user is already registered.', 'Force Register Error'));
+        } else {
+          await replyCommandError(interaction, createError, 'force register the user', '[forceregister:create]');
+        }
         return;
       }
       await safeFix(interaction.guild, targetUser);
@@ -95,7 +97,6 @@ export async function forceregister(interaction: ChatInputCommandInteraction, _w
       await safeReply(interaction, embed);
     }
   } catch (error) {
-    console.error('Error in forceregister command:', error);
-    await safeReply(interaction, errorEmbed('There was an error force registering the user.', 'Force Register Error'));
+    await replyCommandError(interaction, error, 'force register the user', '[forceregister]');
   }
 }

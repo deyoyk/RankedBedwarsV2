@@ -1,6 +1,7 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import UserModel, { type IUser } from '../../models/User';
 
@@ -137,7 +138,6 @@ export async function edit(interaction: ChatInputCommandInteraction, _wsManager?
     await safeReply(interaction, embed);
 
   } catch (error) {
-    console.error('Error in edit command:', error);
-    await safeReply(interaction, errorEmbed('There was an error updating the user stat.', 'Edit Command Error'));
+    await replyCommandError(interaction, error, 'update the user stat', '[edit]');
   }
 }

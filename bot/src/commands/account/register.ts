@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction, ComponentType, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import User from '../../models/User';
 import { fix } from '../../utils/fix';
@@ -170,7 +171,6 @@ export async function register(interaction: ChatInputCommandInteraction, wsManag
       }
     });
   } catch (error) {
-    console.error('Error during API registration:', error);
-    await safeReply(interaction, errorEmbed('An error occurred during registration. Please try again later.', 'Register Error'));
+    await replyCommandError(interaction, error, 'register your account', '[register]');
   }
 }

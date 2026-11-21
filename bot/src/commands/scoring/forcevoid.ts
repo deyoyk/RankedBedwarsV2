@@ -3,6 +3,7 @@ import Game from '../../models/Game';
 import { getSharedGameManager } from '../../Matchmaking/sharedGameManager';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 
 const { errorEmbed, successEmbed } = embedsFor('Scoring');
@@ -27,10 +28,7 @@ export async function forcevoid(interaction: ChatInputCommandInteraction, wsMana
     return;
   }
 
-  let reason: string;
-  
-    reason = `force voided by <@${interaction.user.id}>`;
-  
+  const reason = `force voided by <@${interaction.user.id}>`;
 
   try {
     const resolvedWs = wsManager ?? (global as unknown as { _wsManager?: WebSocketManager })._wsManager;
@@ -50,13 +48,6 @@ export async function forcevoid(interaction: ChatInputCommandInteraction, wsMana
       ));
     
   } catch (error) {
-    console.error('Error in forcevoid command:', error);
-    
-      await safeReply(interaction, errorEmbed(
-        'There was an error force voiding the game.',
-        'Error',
-        true
-      ));
-    
+    await replyCommandError(interaction, error, `force void game #${game.gameId}`, '[forcevoid]');
   }
 }

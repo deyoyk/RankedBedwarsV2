@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteracti
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 
 const { betterEmbed, errorEmbed, infoEmbed } = embedsFor('Punishment');
@@ -153,7 +154,6 @@ Moderator: ${item.moderator}
       await (message as unknown as Message | undefined)?.edit({ components: [] }).catch(() => undefined);
     });
   } catch (error) {
-    console.error('Error in history command:', error);
-    await safeReply(interaction, errorEmbed('There was an error retrieving the user history.', 'History Command Error'));
+    await replyCommandError(interaction, error, 'retrieve the user history', '[history]');
   }
 }

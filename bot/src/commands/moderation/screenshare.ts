@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 
 const { errorEmbed, successEmbed } = embedsFor('Screenshare');
@@ -78,11 +79,6 @@ export async function screenshare(interaction: ChatInputCommandInteraction, _wsM
     await safeReply(interaction, { embeds: [successEmbedObj.builder] });
 
   } catch (error) {
-    console.error('[Screenshare Command] Unexpected error:', error);
-
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    await safeReply(interaction, {
-      embeds: [errorEmbed(`There was an error processing your screenshare request: ${errorMessage}`, 'Screenshare Error').builder]
-    });
+    await replyCommandError(interaction, error, 'process your screenshare request', '[screenshare]');
   }
 }

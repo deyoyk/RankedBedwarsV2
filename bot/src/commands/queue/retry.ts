@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 
@@ -37,7 +38,6 @@ export async function retry(interaction: ChatInputCommandInteraction, wsManager?
       embeds: [queueSystemEmbed(`Retry sent for game \`${game.gameId}\` (attempt ${result.attempts}/${result.maxAttempts}).`, 'success')]
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'An error occurred while retrying the game.';
-    await safeReply(interaction, { embeds: [queueSystemEmbed(message, 'error')] });
+    await replyCommandError(interaction, error, 'retry the game', '[retry]');
   }
 }

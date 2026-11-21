@@ -2,6 +2,7 @@ import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { fix } from '../../utils/fix';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 
 const { errorEmbed, successEmbed } = embedsFor('Player');
@@ -16,7 +17,6 @@ export async function refresh(interaction: ChatInputCommandInteraction, _wsManag
     await fix(interaction.guild, userId);
     await safeReply(interaction, successEmbed('Your nickname and roles have been refreshed.', 'Refreshed'));
   } catch (error) {
-    console.error('Error in refresh command:', error);
-    await safeReply(interaction, errorEmbed('There was an error refreshing your nickname and roles.', 'Refresh Error'));
+    await replyCommandError(interaction, error, 'refresh your nickname and roles', '[refresh]');
   }
 }

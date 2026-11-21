@@ -1,11 +1,12 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import config from '../../config/config';
 import { parseTiers, type ProgressionTier } from '../../utils/eloProgression';
 
-const { errorEmbed, themedEmbed } = embedsFor('Rank');
+const { themedEmbed } = embedsFor('Rank');
 
 function statusLine(enabled: boolean): string {
   return enabled ? 'Enabled' : 'Disabled';
@@ -48,7 +49,6 @@ export async function bonus(interaction: ChatInputCommandInteraction, _wsManager
 
     await safeReply(interaction, { embeds: [embed] });
   } catch (error) {
-    console.error('Error in bonus command:', error);
-    await safeReply(interaction, errorEmbed('Failed to load bonus configuration.', 'Bonus Error'));
+    await replyCommandError(interaction, error, 'load the bonus configuration', '[bonus]');
   }
 }

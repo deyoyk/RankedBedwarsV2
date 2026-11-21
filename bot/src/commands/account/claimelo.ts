@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
 import { safeFix } from '../../utils/fix';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { getEloClaimEligibility, getEloClaimGrant } from '../../utils/eloClaim';
 import { getMemberRoleIds } from '../../utils/memberRoles';
@@ -102,7 +103,6 @@ export async function claimelo(interaction: ChatInputCommandInteraction, _wsMana
       'ELO Claimed',
     ));
   } catch (error) {
-    console.error('Error in claimelo command:', error);
-    await safeReply(interaction, errorEmbed('There was an error claiming your ELO.', 'ELO Claim Error'));
+    await replyCommandError(interaction, error, 'claim your ELO', '[claimelo]');
   }
 }

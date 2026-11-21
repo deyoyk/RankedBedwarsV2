@@ -1,10 +1,11 @@
 import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Season from '../../models/Season';
+import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 
-const { errorEmbed, infoEmbed } = embedsFor('Season');
+const { infoEmbed } = embedsFor('Season');
 
 export async function listseasons(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
   void _wsManager;
@@ -39,11 +40,7 @@ export async function listseasons(interaction: ChatInputCommandInteraction, _wsM
 
     await safeReply(interaction, { embeds });
   } catch (error) {
-    console.error('Error listing seasons:', error);
-    await safeReply(interaction, {
-      embeds: [errorEmbed('An error occurred while fetching seasons.', 'Seasons List Error').builder],
-      ephemeral: true
-    });
+    await replyCommandError(interaction, error, 'fetch the list of seasons', '[listseasons]');
   }
 }
 

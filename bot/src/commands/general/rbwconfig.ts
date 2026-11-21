@@ -13,6 +13,7 @@ import {
 } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
+import { commandErrorDetails } from '../../utils/errorReporter';
 import { isServerAdmin } from '../../utils/permissions';
 import { PermissionService } from '../../services/PermissionService';
 import { CATEGORY_LABELS, CommandCategory, commandsIn } from '../../config/commandCategories';
@@ -151,8 +152,8 @@ export async function rbwconfig(interaction: ChatInputCommandInteraction, _wsMan
     try {
       await click.update(await handlePanelClick(click));
     } catch (error) {
-      console.error('[rbwconfig] Could not apply the change:', error);
-      await click.reply({ embeds: [errorEmbed('That change could not be saved. Try again.').builder], flags: MessageFlags.Ephemeral }).catch(() => undefined);
+      const { description } = commandErrorDetails('save that config change', error, '[rbwconfig]');
+      await click.reply({ embeds: [errorEmbed(description).builder], flags: MessageFlags.Ephemeral }).catch(() => undefined);
     }
   });
   collector.on('end', () => {
