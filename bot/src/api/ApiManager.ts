@@ -322,6 +322,10 @@ export class ApiManager {
     const app = this.wsManager.app;
     const prefix = this.routePrefix;
 
+    app.get(prefix, (req, res) => {
+      res.type('html').send("your'e gay and deyo is the goat");
+    });
+
     app.get(`${prefix}/user/:discordid/overview`, this.getUserOverview);
     app.get(`${prefix}/user/:discordid/games`, this.getUserGames);
     app.get(`${prefix}/leaderboard`, this.getLeaderboard);

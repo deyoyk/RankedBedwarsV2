@@ -148,12 +148,23 @@ describe('PublicApiManager', () => {
     await expect(privateRes.text()).resolves.toBe('');
   });
 
+  it('returns an HTML notice at the public API root', async () => {
+    const { app, wsManager, client } = makeApp();
+    new PublicApiManager(client, wsManager);
+    const base = await boot(app);
+
+    const res = await fetch(`${base}/public/rbw/api`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    await expect(res.text()).resolves.toBe("your'e gay and deyo is the goat");
+  });
+
   it('does not expose endpoints the website does not use', async () => {
     const { app, wsManager, client } = makeApp();
     new PublicApiManager(client, wsManager);
     const base = await boot(app);
 
-    for (const path of ['', '/user', '/game/1/timeline', '/queues', '/server/status', '/stats/global', '/maps']) {
+    for (const path of ['/user', '/game/1/timeline', '/queues', '/server/status', '/stats/global', '/maps']) {
       const res = await fetch(`${base}/public/rbw/api${path}`);
       expect(res.status).toBe(404);
     }
