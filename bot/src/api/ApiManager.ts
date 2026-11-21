@@ -1385,9 +1385,14 @@ export class ApiManager {
           level: user.level || getLevelInfo(user.experience || 0).level
         }));
 
+        const serverStats = this.wsManager.getServerStats();
+
         return {
-          count: onlinePlayers.length,
-          players: onlinePlayers
+          count: serverStats ? serverStats.online : onlinePlayers.length,
+          players: onlinePlayers,
+          server: serverStats
+            ? { online: serverStats.online, max: serverStats.max, tps: serverStats.tps }
+            : null
         };
       });
 
@@ -1411,6 +1416,7 @@ export class ApiManager {
         }
 
         const currentSeason = await Season.findOne({ isActive: true }).lean();
+        const serverStats = this.wsManager.getServerStats();
 
         return {
           status: 'online',
@@ -1419,6 +1425,9 @@ export class ApiManager {
           totalGames,
           totalQueues: queues.length,
           playersInQueue: totalPlayersInQueue,
+          serverOnline: serverStats?.online ?? null,
+          serverMax: serverStats?.max ?? null,
+          serverTps: serverStats?.tps ?? null,
           currentSeason: currentSeason ? {
             season: currentSeason.seasonNumber,
             chapter: currentSeason.chapterNumber,

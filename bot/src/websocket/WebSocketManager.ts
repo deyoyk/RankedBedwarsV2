@@ -512,11 +512,29 @@ export class WebSocketManager {
   private lastQueueStatusHash: string | null = null;
   private lastPingMs: number | null = null;
   private lastPingAt = 0;
+  private lastServerOnline: number | null = null;
+  private lastServerMax: number | null = null;
+  private lastServerTps: number | null = null;
+  private lastServerStatsAt = 0;
 
   public getLastPing(maxAgeMs = 45000): number | null {
     if (this.lastPingMs === null) return null;
     if (Date.now() - this.lastPingAt > maxAgeMs) return null;
     return this.lastPingMs;
+  }
+
+  public getServerStats(maxAgeMs = 90000): { online: number; max: number | null; tps: number | null } | null {
+    if (this.lastServerOnline === null) return null;
+    if (Date.now() - this.lastServerStatsAt > maxAgeMs) return null;
+    return { online: this.lastServerOnline, max: this.lastServerMax, tps: this.lastServerTps };
+  }
+
+  private recordServerStats(msg: PongPayload): void {
+    if (typeof msg.server_online !== 'number') return;
+    this.lastServerOnline = msg.server_online;
+    this.lastServerMax = typeof msg.server_max === 'number' ? msg.server_max : null;
+    this.lastServerTps = typeof msg.server_tps === 'number' ? msg.server_tps : null;
+    this.lastServerStatsAt = Date.now();
   }
   private dontLogCallbacks: Map<string, (result: { online: boolean; dontlog: boolean }) => void> = new Map();
 
@@ -696,6 +714,7 @@ export class WebSocketManager {
         this.lastQueueStatusHash = null;
         this.send({ type: 'auth_success', message: 'Authentication successful' });
         console.log('[WebSocketManager] Authentication successful');
+        void this.getPing().catch(() => null);
         const resumeTimer = setTimeout(() => {
           void this.gameManager?.resumePendingWarps?.();
         }, 3000);
@@ -735,6 +754,9 @@ export class WebSocketManager {
         break;
       case 'ping':
         this.send({ type: 'pong', ping_id: msg.ping_id, timestamp: Date.now() });
+        break;
+      case 'pong':
+        this.recordServerStats(msg);
         break;
       case 'callcmd':
         this.handleCallCommand(msg);
