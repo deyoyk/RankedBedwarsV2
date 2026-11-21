@@ -5,6 +5,13 @@ dotenvConfig();
 
 const clean = (v: string | undefined): string => (v ?? '').trim();
 
+/** Builds the public game page URL from a site base such as https://www.vrbw.club. */
+export function buildGameResultUrl(base: string, gameId: number | string): string {
+  const root = clean(base).replace(/\/+$/, '');
+  const withScheme = /^https?:\/\//i.test(root) ? root : `https://${root}`;
+  return `${withScheme}/game?id=${gameId}`;
+}
+
 export function isSnowflake(v: string): boolean {
   return /^\d{17,20}$/.test(v);
 }
@@ -181,6 +188,8 @@ interface Config {
   };
   serverip: string;
   serverName: string;
+  /** Base URL of the public website; the game result path is appended to it. */
+  gameResultUrl: string;
   bot_stats_text: string;
 
   eloDecay: {
@@ -300,6 +309,7 @@ const configuration: Config = {
   },
   serverip: clean(process.env.SERVER_IP) || 'play.deyo.lol',
   serverName: clean(process.env.SERVER_NAME) || 'deyo Ranked Bedwars',
+  gameResultUrl: clean(process.env.GAME_RESULT_URL) || 'https://www.vrbw.club',
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',
   eloDecay: {
     enabled: clean(process.env.ELO_DECAY_ENABLED) !== 'false',

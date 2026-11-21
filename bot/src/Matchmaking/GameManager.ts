@@ -5,7 +5,7 @@ import User, { IUser } from '../models/User';
 import EloRank, { IEloRank } from '../models/EloRank';
 import Queue from '../models/Queue';
 import { Counter, getNextSequence } from '../models/Counter';
-import config from '../config/config';
+import config, { buildGameResultUrl } from '../config/config';
 import { GameResources, GameResult, GameState, PlayerData, VoidResult, WarpRequestData } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { fix } from '../utils/fix';
@@ -2444,7 +2444,9 @@ export class GameManager {
 
       const mentions = this.getMentionString(playerScoreData.map(p => p.player.discordId));
       const bonusLines = this.getProgressionBonusLines(playerScoreData, context);
-      const notificationContent = bonusLines ? `${mentions}\n${bonusLines}` : mentions;
+      const notificationBody = bonusLines ? `${mentions}\n${bonusLines}` : mentions;
+      const gameLink = buildGameResultUrl(config.gameResultUrl, context.game.gameId);
+      const notificationContent = notificationBody ? `${notificationBody}\n${gameLink}` : gameLink;
 
       const winnersIds = new Set<string>(context.winningTeam === 1 ? context.game.team1 : context.game.team2);
       const toScored = (p: PlayerScoreData): ScoredPlayer => ({

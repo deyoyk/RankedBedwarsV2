@@ -1,4 +1,5 @@
 import { GameManager } from '../src/Matchmaking/GameManager';
+import config, { buildGameResultUrl } from '../src/config/config';
 
 const mockSave = jest.fn().mockImplementation(() => Promise.resolve());
 
@@ -140,6 +141,25 @@ async function settleWithDelay(promises: Promise<any>[]): Promise<any[]> {
 describe('GameManager race conditions', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('posts the game result link with the score notification', async () => {
+    const gameDoc = makeGameDoc();
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    setupGame(players, gameDoc);
+    clientMock.guilds.cache.first.mockReturnValue({ emojis: { cache: { find: () => undefined } } });
+    const manager = makeManager();
+    const sendMessage = (manager as any).workersManager.sendMessage as jest.Mock;
+
+    try {
+      await manager.scoreGame({ gameId: 1, winningTeam: 1, mvps: ['A'], bedbreaks: ['C'] });
+
+      const gameChannelCall = sendMessage.mock.calls.find(([channel]: [string]) => channel === 'text-1');
+      expect(gameChannelCall).toBeDefined();
+      expect(gameChannelCall![1].content).toContain(buildGameResultUrl(config.gameResultUrl, 1));
+    } finally {
+      clientMock.guilds.cache.first.mockReturnValue(undefined);
+    }
   });
 
   it('concurrent scoreGame calls settle the game exactly once', async () => {

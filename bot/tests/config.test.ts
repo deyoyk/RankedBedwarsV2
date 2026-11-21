@@ -1,4 +1,4 @@
-import { isSnowflake, validateConfig } from '../src/config/config';
+import { buildGameResultUrl, isSnowflake, validateConfig } from '../src/config/config';
 
 const base = {
   token: 'tok',
@@ -25,6 +25,17 @@ const base = {
   serverip: 'play.deyo.lol',
   bot_stats_text: 'x'
 } as any;
+
+describe('buildGameResultUrl', () => {
+  it('builds the game page from a site base', () => {
+    expect(buildGameResultUrl('https://www.vrbw.club', 42)).toBe('https://www.vrbw.club/game?id=42');
+  });
+
+  it('tolerates trailing slashes and a missing scheme', () => {
+    expect(buildGameResultUrl('https://example.com/', 7)).toBe('https://example.com/game?id=7');
+    expect(buildGameResultUrl('www.example.com', 7)).toBe('https://www.example.com/game?id=7');
+  });
+});
 
 describe('isSnowflake', () => {
   it('accepts 17-20 digits', () => {
