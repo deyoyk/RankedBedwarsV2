@@ -143,7 +143,7 @@ export class ApiManager {
         const authKey = process.env.AUTH_KEY;
         const publicReadOnly = process.env.RBW_PUBLIC_API === 'true';
         if (authKey && apiKey !== authKey && !(publicReadOnly && !apiKey)) {
-          res.status(401).json({ error: 'Unauthorized' });
+          res.status(401).end();
           return;
         }
         next();

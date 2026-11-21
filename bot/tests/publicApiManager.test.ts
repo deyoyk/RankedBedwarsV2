@@ -145,7 +145,7 @@ describe('PublicApiManager', () => {
 
     const privateRes = await fetch(`${base}/rbw/api/user?discordid=1001`);
     expect(privateRes.status).toBe(401);
-    await expect(privateRes.json()).resolves.toEqual({ error: 'Unauthorized' });
+    await expect(privateRes.text()).resolves.toBe('');
   });
 
   it('does not expose endpoints the website does not use', async () => {
