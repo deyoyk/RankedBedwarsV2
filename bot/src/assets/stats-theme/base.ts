@@ -106,7 +106,7 @@ export async function generateThemeImage(
   const games = enriched.games ?? (playerData.wins || 0) + (playerData.losses || 0);
   const winRate = enriched.winRate ?? (games > 0 ? (playerData.wins || 0) / games : 0);
   const positionValue = await Promise.resolve(helpers.calculatePosition(String(playerData.discordid)));
-  const footerBrand = (process.env.SERVER_IP || '').trim();
+  const footerBrand = (process.env.MINECRAFT_SERVER_IP || process.env.SERVER_IP || '').trim();
   const cacheKey = `${playerData.discordid}|${JSON.stringify(playerData)}|${String(positionValue)}|${footerBrand}`;
 
   const cached = statsImageCache.get(cacheKey);
