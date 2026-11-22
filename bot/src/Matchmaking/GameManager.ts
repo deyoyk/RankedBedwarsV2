@@ -25,6 +25,7 @@ import { getPlayerIgns } from '../utils/playerDirectory';
 import { rankProgressFor } from '../utils/rankInfo';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 import { leaversToStrikeOnGiveUp, OFFLINE_WARP_REASON, strikeLeavers } from './pregameStrikes';
+import { teamVoiceOverwrites } from './teamVoice';
 
 const { themedEmbed } = embedsFor('Scoring');
 
@@ -1205,23 +1206,7 @@ export class GameManager {
         name: `Team 1 - Game ${gameId}`,
         type: ChannelType.GuildVoice,
         parent: config.categories.voiceCategory,
-        permissionOverwrites: [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-            allow: [PermissionFlagsBits.Speak]
-          },
-          ...allPlayers.map(playerId => ({
-            id: playerId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.Connect,
-              PermissionFlagsBits.Speak,
-              PermissionFlagsBits.UseVAD,
-              PermissionFlagsBits.Stream
-            ]
-          }))
-        ]
+        permissionOverwrites: teamVoiceOverwrites(guild.roles.everyone.id, allPlayers)
       }, 8);
       created.push(team1Voice);
 
@@ -1229,23 +1214,7 @@ export class GameManager {
         name: `Team 2 - Game ${gameId}`,
         type: ChannelType.GuildVoice,
         parent: config.categories.voiceCategory,
-        permissionOverwrites: [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-            allow: [PermissionFlagsBits.Speak]
-          },
-          ...allPlayers.map(playerId => ({
-            id: playerId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.Connect,
-              PermissionFlagsBits.Speak,
-              PermissionFlagsBits.UseVAD,
-              PermissionFlagsBits.Stream
-            ]
-          }))
-        ]
+        permissionOverwrites: teamVoiceOverwrites(guild.roles.everyone.id, allPlayers)
       }, 8);
       created.push(team2Voice);
 
