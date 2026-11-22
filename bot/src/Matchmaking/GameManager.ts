@@ -24,6 +24,7 @@ import { embedsFor } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
 import { rankProgressFor } from '../utils/rankInfo';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
+import { strikeLeavers } from './pregameStrikes';
 
 const { themedEmbed } = embedsFor('Scoring');
 
@@ -119,6 +120,7 @@ interface QueueLike {
 interface WarpEventMessage {
   type?: string;
   gameId?: string | number;
+  left_players?: unknown[];
 }
 
 interface FightStatRow {
@@ -1574,6 +1576,12 @@ export class GameManager {
     try {
       const { gameId } = msg;
       console.log(`[GameManager] Warp failed (offline players) for game ${gameId}`);
+      const warpData = this.warpRequests.get(String(gameId));
+      if (warpData) {
+        warpData.leftPlayers = Array.isArray(msg.left_players)
+          ? msg.left_players.filter((n): n is string => typeof n === 'string')
+          : [];
+      }
       await this.handleWarpFailure(gameId as string, 'Some players are offline');
     } catch (error) {
       console.error('[GameManager] Error handling offline players:', error);
@@ -1644,7 +1652,11 @@ export class GameManager {
       } else {
 
         console.log(`[GameManager] Max warp retries reached for game ${gameId}, voiding game`);
+        const leftPlayers = warpData.leftPlayers ?? [];
         this.clearWarpRequest(gameId);
+        if (leftPlayers.length > 0) {
+          await this.strikePregameLeavers(leftPlayers);
+        }
         this.manualWarpRetries.delete(parseInt(gameId, 10));
         await this.voidGame(parseInt(gameId), `Warp failed: ${reason}`);
       }
@@ -1734,6 +1746,24 @@ export class GameManager {
       console.error(`[GameManager] Error cleaning up game ${gameId}:`, error);
       this.cleaningGames.delete(gameId);
     }
+  }
+
+  public async strikePregameLeavers(igns: string[]): Promise<string[]> {
+    const guild = await this.getGuild();
+    if (!guild) return [];
+    const { StrikeManager } = await import('../managers/StrikeManager');
+    const moderatorId = this.client.user?.id ?? 'system';
+    const struck = await strikeLeavers(igns, {
+      discordIdOf: async (ign) => {
+        const user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean() as { discordId?: string } | null;
+        return user?.discordId ?? null;
+      },
+      strike: (discordId, reason) => StrikeManager.strike(guild, discordId, moderatorId, reason)
+    });
+    if (struck.length > 0) {
+      console.log(`[GameManager] Struck for leaving before the game started: ${struck.join(', ')}`);
+    }
+    return struck;
   }
 
   private async getGuild(): Promise<Guild | null> {

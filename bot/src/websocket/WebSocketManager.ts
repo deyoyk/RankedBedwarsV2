@@ -90,6 +90,7 @@ interface AuthIncomingPayload {
 interface GameManagerLike {
   scoreGame(gameResult: GameResult): Promise<unknown>;
   voidGame(gameId: number, reason: string): Promise<unknown>;
+  strikePregameLeavers(igns: string[]): Promise<string[]>;
   retryWarp(gameId: number): Promise<{ attempts: number; maxAttempts: number }>;
   createPrivateGame(options: {
     partyId: string;
@@ -379,6 +380,12 @@ interface PermissionPayload {
   [command: string]: string[] | 'permission';
 }
 
+interface PregameAbandonedPayload {
+  type: 'pregame_abandoned';
+  game_id: string;
+  left_players?: unknown[];
+}
+
 interface VoidingPayload {
   type: 'voiding';
   game_id: string;
@@ -426,6 +433,7 @@ type IncomingPayload =
   | StatsRequestPayload
   | PermissionPayload
   | VoidingPayload
+  | PregameAbandonedPayload
   | AuthIncomingPayload;
 
 export class WebSocketManager {
@@ -797,6 +805,9 @@ export class WebSocketManager {
       case 'voiding':
         this.handleVoiding(msg);
         break;
+      case 'pregame_abandoned':
+        this.handlePregameAbandoned(msg);
+        break;
       default:
         if (msg.type && this.listeners[msg.type]) {
           for (const cb of this.listeners[msg.type]) {
@@ -1131,6 +1142,22 @@ export class WebSocketManager {
           this.send({ type: 'scoringsettled', game_id: gameIdNum } as ScoringSettledPayload);
         }
       }
+    })();
+  }
+
+  private handlePregameAbandoned(msg: PregameAbandonedPayload) {
+    if (!this.gameManager) {
+      console.error('[WebSocketManager] GameManager not available for pregame_abandoned');
+      return;
+    }
+    const left = Array.isArray(msg.left_players) ? msg.left_players.filter((n): n is string => typeof n === 'string') : [];
+    (async () => {
+      try {
+        await this.gameManager!.strikePregameLeavers(left);
+      } catch (error) {
+        console.error(`[WebSocketManager] Striking pregame leavers of game ${msg.game_id} failed:`, error);
+      }
+      this.handleVoiding({ type: 'voiding', game_id: msg.game_id, reason: 'A player left before the game started' });
     })();
   }
 
