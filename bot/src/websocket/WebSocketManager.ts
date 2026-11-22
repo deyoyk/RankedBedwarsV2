@@ -13,6 +13,7 @@ import { maxPartySizeForQueue } from '../utils/partyQueue';
 import { recentQueueId } from '../utils/lastQueue';
 import { getPlayerIgns } from '../utils/playerDirectory';
 import { lookupDiscordNames } from '../utils/discordLookup';
+import { settleAbandonedPregame } from '../Matchmaking/pregameStrikes';
 
 const activeScreenshareThreads: {
   [ign: string]: {
@@ -1180,13 +1181,18 @@ export class WebSocketManager {
       return;
     }
     const left = Array.isArray(msg.left_players) ? msg.left_players.filter((n): n is string => typeof n === 'string') : [];
+    const gameId = parseInt(String(msg.game_id), 10);
+    const reason = 'A player left before the game started';
     (async () => {
       try {
-        await this.gameManager!.strikePregameLeavers(left);
+        await settleAbandonedPregame(left, {
+          voidGame: () => this.gameManager!.voidGame(gameId, reason),
+          strike: (players) => this.gameManager!.strikePregameLeavers(players),
+          ackAlreadySettled: () => this.send({ type: 'gamevoided', game_id: gameId, reason, players: [] } as GameVoidedPayload)
+        });
       } catch (error) {
-        console.error(`[WebSocketManager] Striking pregame leavers of game ${msg.game_id} failed:`, error);
+        console.error(`[WebSocketManager] Settling abandoned pregame ${gameId} failed:`, error);
       }
-      this.handleVoiding({ type: 'voiding', game_id: msg.game_id, reason: 'A player left before the game started' });
     })();
   }
 

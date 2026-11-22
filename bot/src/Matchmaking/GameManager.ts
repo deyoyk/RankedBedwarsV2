@@ -24,7 +24,7 @@ import { embedsFor } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
 import { rankProgressFor } from '../utils/rankInfo';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
-import { strikeLeavers } from './pregameStrikes';
+import { leaversToStrikeOnGiveUp, OFFLINE_WARP_REASON, strikeLeavers } from './pregameStrikes';
 
 const { themedEmbed } = embedsFor('Scoring');
 
@@ -1582,7 +1582,7 @@ export class GameManager {
           ? msg.left_players.filter((n): n is string => typeof n === 'string')
           : [];
       }
-      await this.handleWarpFailure(gameId as string, 'Some players are offline');
+      await this.handleWarpFailure(gameId as string, OFFLINE_WARP_REASON);
     } catch (error) {
       console.error('[GameManager] Error handling offline players:', error);
     }
@@ -1652,7 +1652,7 @@ export class GameManager {
       } else {
 
         console.log(`[GameManager] Max warp retries reached for game ${gameId}, voiding game`);
-        const leftPlayers = warpData.leftPlayers ?? [];
+        const leftPlayers = leaversToStrikeOnGiveUp(reason, warpData.leftPlayers);
         this.clearWarpRequest(gameId);
         if (leftPlayers.length > 0) {
           await this.strikePregameLeavers(leftPlayers);

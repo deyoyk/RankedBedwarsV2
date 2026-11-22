@@ -23,3 +23,30 @@ export async function strikeLeavers(igns: string[] | undefined, deps: PregameStr
   }
   return struck;
 }
+
+export const OFFLINE_WARP_REASON = 'Some players are offline';
+
+export function leaversToStrikeOnGiveUp(lastFailureReason: string, leftPlayers: string[] | undefined): string[] {
+  return lastFailureReason === OFFLINE_WARP_REASON ? leftPlayers ?? [] : [];
+}
+
+export interface AbandonedPregameDeps {
+  voidGame(): Promise<unknown>;
+  strike(left: string[]): Promise<unknown>;
+  ackAlreadySettled(): void;
+}
+
+export async function settleAbandonedPregame(left: string[], deps: AbandonedPregameDeps): Promise<void> {
+  try {
+    await deps.voidGame();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/already settled/i.test(message) && !/in progress/i.test(message)) {
+      deps.ackAlreadySettled();
+    }
+    return;
+  }
+  if (left.length > 0) {
+    await deps.strike(left);
+  }
+}
