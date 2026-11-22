@@ -208,6 +208,21 @@ function mapSize(m: MapSize): number | undefined {
   return m.maxplayers ?? m.max_players;
 }
 
+export interface QueueMapRule {
+  maxPlayers: number;
+  /** Players per team on the maps the queue may use; set means only that size, never a fallback. */
+  mapTeamSize?: number;
+}
+
+function wantedMapSize(queueData: QueueMapRule): number {
+  return queueData.mapTeamSize ? queueData.mapTeamSize * 2 : queueData.maxPlayers;
+}
+
+function noMapsFor(queueData: QueueMapRule): Error {
+  const n = queueData.mapTeamSize;
+  return new Error(n ? `No ${n}v${n} maps available for this queue` : 'No maps available: the plugin has not sent map data yet');
+}
+
 type MapServiceView = {
   getReservedMapsForMatchmaking?: (force?: boolean) => Promise<MapSize[]>;
   getUnlockedMapsForMatchmaking?: (force?: boolean) => Promise<MapSize[]>;
@@ -316,7 +331,7 @@ function shuffled<T>(list: T[]): T[] {
 
 export async function selectRandomMap(
   mapService: MapService,
-  queueData: { maxPlayers: number },
+  queueData: QueueMapRule,
   optionsOrForceRefresh?: boolean | SelectRandomMapOptions,
   maybeExcluded?: Set<string> | string[]
 ): Promise<string> {
@@ -340,17 +355,20 @@ export async function selectRandomMap(
       return warpName;
     };
 
-    const reservedPick = pickAndClaim(pool.reservedMaps.filter(m => mapSize(m) === queueData.maxPlayers));
+    const wanted = wantedMapSize(queueData);
+    const reservedPick = pickAndClaim(pool.reservedMaps.filter(m => mapSize(m) === wanted));
     if (reservedPick) return reservedPick;
 
-    const unlockedPick = pickAndClaim(pool.unlockedMaps.filter(m => mapSize(m) === queueData.maxPlayers));
+    const unlockedPick = pickAndClaim(pool.unlockedMaps.filter(m => mapSize(m) === wanted));
     if (unlockedPick) return unlockedPick;
 
-    const anyPick = pickAndClaim(pool.unlockedMaps);
-    if (anyPick) return anyPick;
+    if (!queueData.mapTeamSize) {
+      const anyPick = pickAndClaim(pool.unlockedMaps);
+      if (anyPick) return anyPick;
+    }
 
     try { svc.requestMaps?.(); } catch { }
-    throw new Error('No maps available: the plugin has not sent map data yet');
+    throw noMapsFor(queueData);
   } catch (error) {
     console.error('[MatchmakingUtils] Error selecting map:', error);
     throw error instanceof Error ? error : new Error(String(error));
@@ -363,16 +381,17 @@ export async function selectRandomMap(
  */
 export async function selectMapVoteCandidates(
   mapService: MapService,
-  queueData: { maxPlayers: number },
+  queueData: QueueMapRule,
   count: number = MAP_VOTE_OPTION_COUNT
 ): Promise<string[]> {
   try {
     const target = Number.isFinite(count) && count > 0 ? Math.floor(count) : MAP_VOTE_OPTION_COUNT;
     const pool = await loadMapSelectionPool(mapService, false, new Set());
+    const wanted = wantedMapSize(queueData);
     const tiers = [
-      pool.reservedMaps.filter(m => mapSize(m) === queueData.maxPlayers),
-      pool.unlockedMaps.filter(m => mapSize(m) === queueData.maxPlayers),
-      pool.unlockedMaps,
+      pool.reservedMaps.filter(m => mapSize(m) === wanted),
+      pool.unlockedMaps.filter(m => mapSize(m) === wanted),
+      ...(queueData.mapTeamSize ? [] : [pool.unlockedMaps]),
     ];
     const selected: MapSize[] = [];
     const seen = new Set<string>();
@@ -389,7 +408,7 @@ export async function selectMapVoteCandidates(
 
     if (selected.length === 0) {
       try { (mapService as unknown as MapServiceView).requestMaps?.(); } catch { }
-      throw new Error('No maps available: the plugin has not sent map data yet');
+      throw noMapsFor(queueData);
     }
     return selected.map(resolveWarpMapName);
   } catch (error) {
