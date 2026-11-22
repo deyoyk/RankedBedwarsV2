@@ -5,6 +5,7 @@ import config from '../config/config';
 import { v4 as uuidv4 } from 'uuid';
 import { embedsFor } from '../utils/betterembed';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
+import { isTargetThreadAccess, screenshareThreadPing, TARGET_THREAD_ACCESS } from './screenshareAccess';
 import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareCreateOptions, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreensharePostOptions, ScreensharePostResult, ScreenshareSessionResult, ScreenshareValidationResult } from '../types/screenshare';
 
 const { themedEmbed } = embedsFor('Screenshare');
@@ -505,9 +506,10 @@ export class ScreenshareService {
         await thread.setLocked(false);
       }
 
-      await thread.send({
-        content: `<@${session.targetId}>`,
-        embeds: [embed]
+      await this.letTargetIntoThread(channel, session);
+      await thread.send({ ...screenshareThreadPing(screensharerRoleId, session.targetId), embeds: [embed] });
+      await thread.members.add(session.targetId).catch(error => {
+        console.warn(`[ScreenshareService] Could not add ${session.targetId} to thread ${thread.id}:`, error);
       });
       // The server's "left" update came before this thread existed, so it couldn't be posted here.
       if (options.loggedOff) {
@@ -534,6 +536,29 @@ export class ScreenshareService {
     }
 
     return { success: true, threadId };
+  }
+
+  // Discord only adds people to a thread if they can see its parent channel, and the requests channel is staff-only.
+  private static async letTargetIntoThread(channel: TextChannel, session: IScreenshareSession): Promise<void> {
+    if (channel.permissionsFor(session.targetId)?.has('ViewChannel')) return;
+    try {
+      await channel.permissionOverwrites.edit(session.targetId, TARGET_THREAD_ACCESS, {
+        reason: `Screenshare ${session.sessionId}: let the target into the thread`
+      });
+    } catch (error) {
+      console.warn(`[ScreenshareService] Could not give ${session.targetId} access to the requests channel:`, error);
+    }
+  }
+
+  private static async removeTargetAccess(guild: Guild, session: IScreenshareSession): Promise<void> {
+    const channelId = config.channels.screensharerequestsChannel;
+    if (!channelId) return;
+    const channel = guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel || !('permissionOverwrites' in channel)) return;
+    const overwrite = channel.permissionOverwrites.cache.get(session.targetId);
+    if (overwrite && isTargetThreadAccess(overwrite.allow.bitfield, overwrite.deny.bitfield)) {
+      await channel.permissionOverwrites.delete(session.targetId, `Screenshare ${session.sessionId} ended`);
+    }
   }
 
   static createFreezeButton(sessionId: string): ActionRowBuilder<ButtonBuilder> {
@@ -707,6 +732,12 @@ export class ScreenshareService {
       }
 
       
+      cleanupTasks.push(
+        this.removeTargetAccess(guild, session).catch(error => {
+          console.warn(`[ScreenshareService] Failed to remove requests channel access for session ${session.sessionId}:`, error);
+        })
+      );
+
       const wsManager = global._wsManager;
       if (session.targetIgn && wsManager && typeof wsManager.unregisterScreenshareThread === 'function') {
         cleanupTasks.push(

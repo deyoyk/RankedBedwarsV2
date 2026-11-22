@@ -37,10 +37,21 @@ function mockUsers(registered: Record<string, { discordId: string; ign: string }
   });
 }
 
-function makeGuild({ requestsChannelPresent = true, hasScreensharerRole = true } = {}) {
-  const thread = { id: 'thread1', setLocked: jest.fn().mockResolvedValue(undefined), send: jest.fn().mockResolvedValue(undefined) };
+function makeGuild({ requestsChannelPresent = true, hasScreensharerRole = true, targetSeesChannel = false } = {}) {
+  const thread = {
+    id: 'thread1',
+    setLocked: jest.fn().mockResolvedValue(undefined),
+    send: jest.fn().mockResolvedValue(undefined),
+    members: { add: jest.fn().mockResolvedValue(undefined) }
+  };
   const message = { startThread: jest.fn().mockResolvedValue(thread) };
-  const requestsChannel = { id: 'req1', isTextBased: () => true, send: jest.fn().mockResolvedValue(message) };
+  const requestsChannel = {
+    id: 'req1',
+    isTextBased: () => true,
+    send: jest.fn().mockResolvedValue(message),
+    permissionsFor: jest.fn(() => ({ has: () => targetSeesChannel })),
+    permissionOverwrites: { cache: new Map(), edit: jest.fn().mockResolvedValue(undefined), delete: jest.fn().mockResolvedValue(undefined) }
+  };
   const member = { roles: { cache: { has: (id: string) => hasScreensharerRole && id === 'ssrole' } }, user: { tag: 'member#1' } };
   const guild = {
     channels: {
@@ -107,8 +118,11 @@ describe('in-game screenshare requests (autoss)', () => {
     expect(embed.image).toBeUndefined();
     expect(embed.fields?.map((f: any) => f.name)).not.toContain('Logged off');
     expect(message.startThread).toHaveBeenCalledWith(expect.objectContaining({ name: expect.stringContaining('SS: Steve |') }));
-    expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({ content: '<@target1>' }));
+    expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({ content: '<@&ssrole> <@target1>' }));
     expect(thread.send).not.toHaveBeenCalledWith(expect.stringContaining('left the server'));
+    expect(requestsChannel.permissionOverwrites.edit).toHaveBeenCalledWith('target1',
+      { ViewChannel: true, ReadMessageHistory: true, SendMessagesInThreads: true, SendMessages: false }, expect.anything());
+    expect(thread.members.add).toHaveBeenCalledWith('target1');
 
     const created = SessionModel.create.mock.calls[0][0];
     expect(ws.registerScreenshareThread).toHaveBeenCalledWith({
@@ -118,6 +132,32 @@ describe('in-game screenshare requests (autoss)', () => {
       expiresAt: created.expireTime.getTime()
     });
     expect(sent(ws)).toEqual([{ type: 'autoss_success', uuid: 'u-1' }]);
+  });
+
+  it('leaves the request channel alone for a target who can already see it', async () => {
+    const { guild, requestsChannel, thread } = makeGuild({ targetSeesChannel: true });
+    const ws = makeWs(guild);
+
+    await ws.handleAutoSS({ type: 'autoss', targetign: 'Steve', requestign: 'Mod', uuid: 'u-9', reason: 'reach' });
+
+    expect(requestsChannel.permissionOverwrites.edit).not.toHaveBeenCalled();
+    expect(thread.members.add).toHaveBeenCalledWith('target1');
+  });
+
+  it('takes back only the channel access it gave the target when the session closes', async () => {
+    const { PermissionFlagsBits } = require('discord.js');
+    const given = { allow: { bitfield: PermissionFlagsBits.ViewChannel | PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.SendMessagesInThreads }, deny: { bitfield: PermissionFlagsBits.SendMessages } };
+    const own = { allow: { bitfield: PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages }, deny: { bitfield: 0n } };
+
+    const first = makeGuild();
+    first.requestsChannel.permissionOverwrites.cache.set('target1', given);
+    await ScreenshareService.closeSession(first.guild as any, 'S1', 'mod1');
+    expect(first.requestsChannel.permissionOverwrites.delete).toHaveBeenCalledWith('target1', expect.any(String));
+
+    const second = makeGuild();
+    second.requestsChannel.permissionOverwrites.cache.set('target1', own);
+    await ScreenshareService.closeSession(second.guild as any, 'S1', 'mod1');
+    expect(second.requestsChannel.permissionOverwrites.delete).not.toHaveBeenCalled();
   });
 
   it('falls back to a default reason and shows that the target logged off', async () => {
