@@ -1029,6 +1029,17 @@ export class WebSocketManager {
         const copy = { ...user };
         delete copy._id;
         delete copy.__v;
+        delete copy.recentGames;
+        delete copy.dailyElo;
+        const { dailyStats, lifetimeStats } = await import('../utils/periodStats');
+        copy.daily = dailyStats(user.recentGames as Parameters<typeof dailyStats>[0]);
+        try {
+          const SeasonStats = (await import('../models/SeasonStats')).default;
+          const past = await SeasonStats.find({ discordId: user.discordId }).lean() as unknown as Record<string, unknown>[];
+          copy.lifetime = lifetimeStats(user, past);
+        } catch (error) {
+          console.error('[WebSocketManager] Past seasons for lifetime stats failed:', error);
+        }
         try {
           const EloRank = (await import('../models/EloRank')).default;
           const { rankProgressFor } = await import('../utils/rankInfo');

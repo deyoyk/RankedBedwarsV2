@@ -6,13 +6,19 @@ jest.mock('../src/models/EloRank', () => ({
   __esModule: true,
   default: { find: jest.fn() },
 }));
+jest.mock('../src/models/SeasonStats', () => ({
+  __esModule: true,
+  default: { find: jest.fn() },
+}));
 
 import User from '../src/models/User';
 import EloRank from '../src/models/EloRank';
+import SeasonStats from '../src/models/SeasonStats';
 import { WebSocketManager } from '../src/websocket/WebSocketManager';
 
 const UserModel = User as unknown as { findOne: jest.Mock };
 const RankModel = EloRank as unknown as { find: jest.Mock };
+const SeasonModel = SeasonStats as unknown as { find: jest.Mock };
 const managers: any[] = [];
 
 function makeWs() {
@@ -41,6 +47,22 @@ describe('stats_request', () => {
     expect(reply.data._id).toBeUndefined();
     expect(reply.data.wins).toBe(4);
     expect(reply.data.rank).toMatchObject({ name: 'Gold', color: '#ffaa00', start: 200, next: null });
+  });
+
+  it('sends the daily stats and lifetime stats across every season', async () => {
+    UserModel.findOne.mockReturnValue({ collation: () => ({ lean: async () => ({
+      ign: 'Steve', discordId: 'd1', elo: 300, wins: 4, kills: 20, peakElo: 320,
+      recentGames: [{ state: 'scored', date: new Date(), eloGain: 35, won: true, kills: 5, deaths: 1 }],
+    }) }) });
+    RankModel.find.mockReturnValue({ lean: async () => [] });
+    SeasonModel.find.mockReturnValue({ lean: async () => [{ wins: 10, kills: 80, peakElo: 1100 }] });
+    const ws = makeWs();
+    await ws.handleStatsRequest({ type: 'stats_request', ign: 'Steve', request_id: 'r3' });
+    expect(SeasonModel.find).toHaveBeenCalledWith({ discordId: 'd1' });
+    const data = ws.send.mock.calls[0][0].data;
+    expect(data.daily).toMatchObject({ games: 1, wins: 1, eloGain: 35, kills: 5 });
+    expect(data.lifetime).toMatchObject({ wins: 14, kills: 100, peakElo: 1100, seasons: 2 });
+    expect(data.recentGames).toBeUndefined();
   });
 
   it('still sends the stats when the ranks cannot be read', async () => {
