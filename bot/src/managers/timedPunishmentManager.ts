@@ -95,6 +95,14 @@ export abstract class TimedPunishmentManager {
         if (refreshed.matchedCount === 0) {
           throw new Error(`Failed to update existing ${kind.type} record for ${targetId}`);
         }
+        const resent: Promise<unknown>[] = [];
+        sendWebSocketNotification(resent, wsManager, existing, {
+          type: kind.type,
+          reason,
+          duration: duration ? Math.ceil(duration / 60000) : null,
+          id: lastRecord.id
+        }, kind.type);
+        await Promise.allSettled(resent);
         return undefined;
       }
 

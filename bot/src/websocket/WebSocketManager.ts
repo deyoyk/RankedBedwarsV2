@@ -12,6 +12,7 @@ import config from '../config/config';
 import { maxPartySizeForQueue } from '../utils/partyQueue';
 import { recentQueueId } from '../utils/lastQueue';
 import { getPlayerIgns } from '../utils/playerDirectory';
+import { lookupDiscordNames } from '../utils/discordLookup';
 
 const activeScreenshareThreads: {
   [ign: string]: {
@@ -369,6 +370,12 @@ interface LeaderboardRequestPayload {
   page?: number;
 }
 
+interface DiscordLookupPayload {
+  type: 'discord_lookup';
+  request_id?: string;
+  igns?: unknown[];
+}
+
 interface StatsRequestPayload {
   type: 'stats_request';
   request_id?: string;
@@ -433,6 +440,7 @@ type IncomingPayload =
   | StatsRequestPayload
   | PermissionPayload
   | VoidingPayload
+  | DiscordLookupPayload
   | PregameAbandonedPayload
   | AuthIncomingPayload;
 
@@ -796,6 +804,9 @@ export class WebSocketManager {
       case 'stats_request':
         await this.handleStatsRequest(msg);
         break;
+      case 'discord_lookup':
+        await this.handleDiscordLookup(msg);
+        break;
       case 'permission':
         this.handlePermission(msg);
         break;
@@ -983,6 +994,24 @@ export class WebSocketManager {
       }
     }
     this.send({ type: 'leaderboard_data', request_id: requestId, entries });
+  }
+
+  private async handleDiscordLookup(msg: DiscordLookupPayload) {
+    const requestId = typeof msg.request_id === 'string' ? msg.request_id : '';
+    if (!requestId) return;
+    const igns = Array.isArray(msg.igns) ? msg.igns.filter((n): n is string => typeof n === 'string' && n.trim() !== '') : [];
+    const User = (await import('../models/User')).default;
+    const results = await lookupDiscordNames(igns, {
+      discordIdOf: async (ign) => {
+        const user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean() as { discordId?: string } | null;
+        return user?.discordId ?? null;
+      },
+      usernameOf: async (discordId) => {
+        const fetched = await this.discordClient?.users.fetch(discordId).catch(() => null);
+        return fetched?.username ?? null;
+      }
+    });
+    this.send({ type: 'discord_lookup_data', request_id: requestId, results });
   }
 
   private async handleStatsRequest(msg: StatsRequestPayload) {

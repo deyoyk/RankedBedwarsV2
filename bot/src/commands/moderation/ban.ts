@@ -7,7 +7,7 @@ export async function ban(interaction: ChatInputCommandInteraction, _wsManager?:
   await executeModerationAction(interaction, {
     commandName: 'ban',
     actionVerb: 'Banned',
-    managerCall: (guild, targetId, issuerId, duration, reason) => BanManager.ban(guild, targetId, issuerId, duration, reason),
+    managerCall: (guild, targetId, issuerId, duration, reason) => BanManager.ban(guild, targetId, issuerId, duration, reason, _wsManager),
     hasDuration: true
   });
 }
