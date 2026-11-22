@@ -22,7 +22,7 @@ import { bountyForOpponentStreak, parseTiers, type ProgressionTier, streakBonusF
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import { embedsFor } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
-import { rankProgressFor } from '../utils/rankInfo';
+import { rankForElo, rankProgressFor } from '../utils/rankInfo';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 import { leaversToStrikeOnGiveUp, OFFLINE_WARP_REASON, strikeLeavers } from './pregameStrikes';
 import { teamVoiceOverwrites } from './teamVoice';
@@ -2040,7 +2040,7 @@ export class GameManager {
       const isMvp = context.mvpsIds.includes(player.discordId);
       const isBedBreaker = context.bedbreaksIds.includes(player.discordId);
 
-      const rank = context.eloRanks.find(r => player.elo >= r.startElo && player.elo <= r.endElo);
+      const rank = rankForElo(player.elo, context.eloRanks);
       const isPrivateGame = Boolean(context.game.isPrivate);
 
       let eloChange = 0;

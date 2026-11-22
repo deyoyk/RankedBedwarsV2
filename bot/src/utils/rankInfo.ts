@@ -19,10 +19,17 @@ function roleLook(guild: Guild | null | undefined, roleId: string) {
   };
 }
 
-function rankIndex(elo: number, sorted: RankRow[]): number {
+function rankIndex(elo: number, sorted: Array<{ startElo: number; endElo: number }>): number {
   const index = sorted.findIndex(r => elo >= r.startElo && elo <= r.endElo);
   if (index !== -1) return index;
   return elo >= sorted[sorted.length - 1].startElo ? sorted.length - 1 : 0;
+}
+
+/** The rank a player is scored and shown with: the one holding their ELO, else the nearest end of the ladder. */
+export function rankForElo<T extends { startElo: number; endElo: number }>(elo: number, ranks: T[]): T | undefined {
+  if (ranks.length === 0) return undefined;
+  const sorted = ranks.slice().sort((a, b) => a.startElo - b.startElo);
+  return sorted[rankIndex(elo, sorted)];
 }
 
 export interface RankProgress {
