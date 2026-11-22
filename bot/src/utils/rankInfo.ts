@@ -15,6 +15,7 @@ function roleLook(guild: Guild | null | undefined, roleId: string) {
   return {
     name: role?.name ?? 'Rank',
     color: role && role.color !== 0 ? role.hexColor : '#FFFFFF',
+    color2: role?.colors?.secondaryColor != null ? `#${role.colors.secondaryColor.toString(16).padStart(6, '0')}` : undefined,
     iconUrl: role?.iconURL({ extension: 'png', size: 64 }) ?? null,
   };
 }
@@ -35,6 +36,7 @@ export function rankForElo<T extends { startElo: number; endElo: number }>(elo: 
 export interface RankProgress {
   name: string;
   color: string;
+  color2?: string;
   start: number;
   end: number;
   win_elo: number;
@@ -57,6 +59,7 @@ export function rankProgressFor(
   return {
     name: look.name,
     color: look.color,
+    ...(look.color2 ? { color2: look.color2 } : {}),
     start: current.startElo,
     end: current.endElo,
     win_elo: current.winElo,

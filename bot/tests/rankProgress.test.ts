@@ -26,6 +26,18 @@ describe('rankProgressFor', () => {
     });
   });
 
+  it('sends the second colour of a gradient role so the server can show both', () => {
+    const gradient = {
+      roles: {
+        cache: new Map([
+          ['diamond', { name: 'Aether', color: 0x5555ff, hexColor: '#5555ff', colors: { primaryColor: 0x5555ff, secondaryColor: 0xaa00aa }, iconURL: () => null }],
+        ]),
+      },
+    } as any;
+    expect(rankProgressFor(500, ranks, gradient)?.color2).toBe('#aa00aa');
+    expect(rankProgressFor(250, ranks, guild)).not.toHaveProperty('color2');
+  });
+
   it('has no next rank at the top', () => {
     expect(rankProgressFor(5000, ranks, guild)?.next).toBeNull();
   });
