@@ -91,7 +91,7 @@ export class StrikeManager {
           actionTaken = `Warning issued (Strike ${strikeCount})`;
         } else {
           try {
-            await BanManager.ban(guild, targetId, moderatorId, banDuration, `Strike ${strikeCount}: ${reason}`, global._wsManager);
+            await BanManager.ban(guild, targetId, moderatorId, banDuration, `Strike ${strikeCount}: ${reason}`);
             actionTaken = `Banned for ${banDuration} (Strike ${strikeCount})`;
             instance.stats.escalatedStrikes++;
           } catch (banError) {
