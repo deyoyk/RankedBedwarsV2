@@ -26,7 +26,7 @@ export async function queue(interaction: ChatInputCommandInteraction, _wsManager
       return;
     }
 
-    if (!member?.voice.channel) {
+    if (!member?.voice?.channel) {
       await safeReply(interaction, { embeds: [queueSystemEmbed('You are not in a voice channel.', 'error')] });
       return;
     }
