@@ -1,4 +1,5 @@
 import { WorkersManager } from '../src/managers/WorkersManager';
+import config from '../src/config/config';
 
 const mainClientMock: any = {
   guilds: { cache: { first: () => undefined } },
@@ -44,6 +45,44 @@ describe('WorkersManager race conditions', () => {
 
     await expect(manager.deleteChannel('x', 5))
       .rejects.toThrow('Guild not found');
+  });
+
+  it('fetches the guild when it is not in the cache', async () => {
+    const guild: any = {
+      id: config.guildId,
+      channels: { create: jest.fn().mockResolvedValue({ id: 'created' }) }
+    };
+    const client: any = {
+      guilds: {
+        cache: { get: () => undefined, first: () => undefined },
+        fetch: jest.fn().mockResolvedValue(guild)
+      }
+    };
+    const manager = new (WorkersManager as any)(client) as WorkersManager;
+    managers.push(manager);
+    (manager as any).isEnabled = false;
+
+    await manager.createChannel({ name: 'test' } as any);
+
+    expect(client.guilds.fetch).toHaveBeenCalledWith(config.guildId);
+    expect(guild.channels.create).toHaveBeenCalled();
+  });
+
+  it('fetches an uncached member before moving them', async () => {
+    const setChannel = jest.fn().mockResolvedValue(undefined);
+    const member: any = { voice: { channel: { id: 'old' }, setChannel } };
+    const guild: any = {
+      members: { cache: new Map(), fetch: jest.fn().mockResolvedValue(member) }
+    };
+    const client: any = { guilds: { cache: { get: () => guild, first: () => guild } } };
+    const manager = new (WorkersManager as any)(client) as WorkersManager;
+    managers.push(manager);
+    (manager as any).isEnabled = false;
+
+    await manager.moveMembers(['member-1'], 'new-channel', 1);
+
+    expect(guild.members.fetch).toHaveBeenCalledWith('member-1');
+    expect(setChannel).toHaveBeenCalledWith('new-channel');
   });
 
   it('sets voice channel status through the REST API', async () => {

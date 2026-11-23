@@ -1,4 +1,4 @@
-import { Client, type GuildChannelCreateOptions, type MessageCreateOptions, TextChannel } from 'discord.js';
+import { Client, type Guild, type GuildChannelCreateOptions, type GuildMember, type MessageCreateOptions, TextChannel } from 'discord.js';
 import config from '../config/config';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 
@@ -576,7 +576,7 @@ export class WorkersManager {
       if (this.isRateLimitError(error)) {
         this.applyRateLimitError(worker, task, error);
         this.requeueTask(worker, task, error, false);
-      } else if (this.isPermissionError(error)) {
+      } else if (this.isPermissionError(error) || this.isGuildUnavailableError(error)) {
         const fallbackHandled = await this.fallbackToMainClient(worker, task, startTime);
         if (!fallbackHandled) {
           this.handleTaskFailure(worker, task, error);
@@ -677,9 +677,34 @@ export class WorkersManager {
     task.reject?.(new Error(`Task timeout (${task.type})`));
   }
 
+  private async resolveGuild(client: Client): Promise<Guild> {
+    const cache = client.guilds.cache as unknown as {
+      get?: (id: string) => Guild | undefined;
+      first?: () => Guild | undefined;
+    } | undefined;
+    const cached = (typeof cache?.get === 'function' ? cache.get(config.guildId) : undefined)
+      ?? (typeof cache?.first === 'function' ? cache.first() : undefined);
+    if (cached) return cached;
+
+    if (typeof client.guilds.fetch === 'function') {
+      const fetched = await client.guilds.fetch(config.guildId).catch(() => null);
+      if (fetched) return fetched;
+    }
+    throw new Error('Guild not found');
+  }
+
+  private async resolveMember(guild: Guild, memberId: string): Promise<GuildMember | null> {
+    const cache = guild.members.cache as unknown as { get?: (id: string) => GuildMember | undefined } | undefined;
+    const cached = typeof cache?.get === 'function' ? cache.get(memberId) : undefined;
+    if (cached) return cached;
+    if (typeof guild.members.fetch === 'function') {
+      return await guild.members.fetch(memberId).catch(() => null);
+    }
+    return null;
+  }
+
   private async executeChannelCreate(client: Client, data: WorkerTaskData): Promise<unknown> {
-    const guild = client.guilds.cache.first();
-    if (!guild) throw new Error('Guild not found');
+    const guild = await this.resolveGuild(client);
     return await guild.channels.create(data.options as GuildChannelCreateOptions);
   }
 
@@ -690,6 +715,14 @@ export class WorkersManager {
     const status = err.status;
     const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
     return code === 50013 || code === 50001 || status === 403 || msg.includes('missing permissions');
+  }
+
+  private isGuildUnavailableError(error: unknown): boolean {
+    const err = this.asErrorRecord(error);
+    if (!err) return false;
+    const code = err.code ?? err.rawError?.code;
+    const msg = typeof err.message === 'string' ? err.message.toLowerCase() : '';
+    return code === 10004 || (msg.includes('guild') && msg.includes('not found'));
   }
 
   private isRateLimitError(error: unknown): boolean {
@@ -741,8 +774,7 @@ export class WorkersManager {
   }
 
   private async executeChannelDelete(client: Client, data: WorkerTaskData): Promise<void> {
-    const guild = client.guilds.cache.first();
-    if (!guild) throw new Error('Guild not found');
+    const guild = await this.resolveGuild(client);
     const channelId = data.channelId as string;
     if (!channelId) return;
 
@@ -780,25 +812,22 @@ export class WorkersManager {
   }
 
   private async executeMemberMove(client: Client, data: WorkerTaskData): Promise<void> {
-    const guild = client.guilds.cache.first();
-    if (!guild) throw new Error('Guild not found');
-    const member = guild.members.cache.get(data.memberId as string);
+    const guild = await this.resolveGuild(client);
+    const member = await this.resolveMember(guild, data.memberId as string);
     if (member?.voice?.channel) {
       await member.voice.setChannel(data.channelId as string);
     }
   }
 
   private async executeMemberNickname(client: Client, data: WorkerTaskData): Promise<void> {
-    const guild = client.guilds.cache.first();
-    if (!guild) throw new Error('Guild not found');
-    const member = guild.members.cache.get(data.memberId as string);
+    const guild = await this.resolveGuild(client);
+    const member = await this.resolveMember(guild, data.memberId as string);
     if (member) await member.setNickname(data.nickname as string | null);
   }
 
   private async executeMemberRoles(client: Client, data: WorkerTaskData): Promise<void> {
-    const guild = client.guilds.cache.first();
-    if (!guild) throw new Error('Guild not found');
-    const member = guild.members.cache.get(data.memberId as string);
+    const guild = await this.resolveGuild(client);
+    const member = await this.resolveMember(guild, data.memberId as string);
     if (!member) return;
 
     const add = Array.isArray(data.add)
@@ -813,8 +842,7 @@ export class WorkersManager {
   }
 
   private async executeMessageSend(client: Client, data: WorkerTaskData): Promise<unknown> {
-    const guild = client.guilds.cache.first();
-    if (!guild) throw new Error('Guild not found');
+    const guild = await this.resolveGuild(client);
     const channelId = data.channelId as string;
     const channel = guild.channels.cache.get(channelId)
       ?? await guild.channels.fetch(channelId).catch(() => null);
@@ -1008,8 +1036,6 @@ export class WorkersManager {
     type: WorkerTaskType,
     data: WorkerTaskData,
   ): Promise<unknown> {
-    const guild = this.mainClient.guilds.cache.first();
-    if (!guild) throw new Error('Guild not found');
     try {
       switch (type) {
         case 'channel_create':
