@@ -2462,6 +2462,8 @@ export class GameManager {
         kills: p.stats.kills || 0,
         deaths: p.stats.deaths || 0,
         diamonds: p.stats.diamonds || 0,
+        emeralds: p.stats.emeralds || 0,
+        partyId: p.player.partyId || undefined,
         mvp: p.isMvp,
         bedBreaker: p.isBedBreaker,
       });
@@ -2470,14 +2472,23 @@ export class GameManager {
 
       let imageBuffer: Buffer | null = null;
       try {
+        const queue = context.game.queueId
+          ? await Queue.findOne({ channelId: context.game.queueId })
+            .select('isRanked minElo maxElo')
+            .lean()
+            .catch(() => null) as { isRanked?: boolean; minElo?: number; maxElo?: number } | null
+          : null;
         imageBuffer = await renderScoredGame({
           gameId: context.game.gameId,
           map: context.game.map,
           startTime: context.game.startTime,
           endTime: context.game.endTime,
+          isRanked: queue?.isRanked ?? context.game.isRanked === true,
+          minElo: queue?.minElo ?? 0,
+          maxElo: queue?.maxElo ?? 0,
           winners: winnerData.map(toScored),
           losers: loserData.map(toScored),
-        }, context.eloRanks, guild);
+        });
       } catch (e) {
         console.error('[GameManager] Failed generating score image, sending without it:', e);
       }

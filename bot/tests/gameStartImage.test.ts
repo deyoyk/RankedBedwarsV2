@@ -40,10 +40,11 @@ describe('startTemplate', () => {
       inviteLink: 'discord.gg/test',
     });
     expect(tpl.width).toBe(1920);
-    expect(tpl.height).toBe(1080);
+    expect(tpl.height).toBe(980);
     const all = texts(tpl.root);
     expect(all).toContain('MATCH START');
-    expect(all).toContain('Dreamgrove · RANKED');
+    expect(all).toContain('Dreamgrove');
+    expect(all).toContain('RANKED');
     expect(all).toContain('TEAM GREEN');
     expect(all).toContain('TEAM RED');
     expect(all).toContain('Alice');
@@ -51,7 +52,7 @@ describe('startTemplate', () => {
     expect(all).toContain('CPT');
     expect(all).toContain('AVG 1150');
     expect(all).toContain('AVG 1100');
-    expect(all).toContain('GAME #42');
+    expect(all).toContain('#42');
   });
 
   it('handles empty teams without crashing', () => {
@@ -102,7 +103,7 @@ describe('fetchGameStartRoster', () => {
 });
 
 describe('generateGameStartImageBuffer', () => {
-  it('produces a valid 1920x1080 PNG', async () => {
+  it('produces a valid 1920x980 PNG', async () => {
     const { generateGameStartImageBuffer } = await import('../src/utils/scoreImage');
     const buf = await generateGameStartImageBuffer(
       9,
@@ -113,6 +114,7 @@ describe('generateGameStartImageBuffer', () => {
     expect(buf[0]).toBe(0x89);
     expect(buf.toString('ascii', 1, 4)).toBe('PNG');
     expect(buf.readUInt32BE(16)).toBe(1920);
-    expect(buf.readUInt32BE(20)).toBe(1080);
+    expect(buf.readUInt32BE(20)).toBe(980);
   }, 30000);
 });
+

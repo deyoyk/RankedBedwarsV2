@@ -1,4 +1,4 @@
-jest.mock('axios', () => ({ __esModule: true, default: { get: jest.fn().mockRejectedValue(new Error('offline')) } }));
+jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
 const mockUsers = jest.fn();
 jest.mock('../src/models/User', () => ({
   __esModule: true,
@@ -7,6 +7,11 @@ jest.mock('../src/models/User', () => ({
     countDocuments: jest.fn().mockResolvedValue(23),
     findOne: jest.fn(),
   },
+}));
+const mockRanks = jest.fn();
+jest.mock('../src/models/EloRank', () => ({
+  __esModule: true,
+  default: { find: () => ({ select: () => ({ sort: () => ({ lean: () => mockRanks() }) }) }) },
 }));
 const mockDraw = jest.fn();
 jest.mock('../src/utils/leaderboardImage', () => {
@@ -32,6 +37,7 @@ function slash(mode: string | null = null) {
 beforeEach(() => {
   mockDraw.mockReset().mockResolvedValue(Buffer.from('png'));
   mockUsers.mockReset();
+  mockRanks.mockReset().mockResolvedValue([]);
 });
 
 describe('leaderboard image', () => {
@@ -40,7 +46,7 @@ describe('leaderboard image', () => {
     const entries = Array.from({ length: 10 }, (_, i) => ({ rank: i + 1, ign: `p${i}`, value: 1000 - i, elo: 1000 - i }));
     const buf = await generateLeaderboardImage('Elo Leaderboard', 'ELO', entries, 0, 3);
     expect(buf.subarray(1, 4).toString()).toBe('PNG');
-    expect(pngSize(buf)).toEqual({ width: 366, height: 512 });
+    expect(pngSize(buf)).toEqual({ width: 1200, height: 1080 });
   }, 20000);
 
   it('sends the page as an image with paging buttons', async () => {
@@ -55,8 +61,8 @@ describe('leaderboard image', () => {
     expect(title).toBe('KDR Leaderboard');
     expect(label).toBe('KDR');
     expect(entries).toEqual([
-      { rank: 1, ign: 'Alpha', value: '2.50', elo: 1500 },
-      { rank: 2, ign: 'Bravo', value: 1, elo: 1400 },
+      { rank: 1, ign: 'Alpha', value: '2.50', elo: 1500, rankName: 'Unranked', rankColor: '#6B7174' },
+      { rank: 2, ign: 'Bravo', value: 1, elo: 1400, rankName: 'Unranked', rankColor: '#6B7174' },
     ]);
     expect([page, totalPages]).toEqual([0, 3]);
 

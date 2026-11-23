@@ -165,7 +165,7 @@ export async function gameinfo(interaction: ChatInputCommandInteraction, _wsMana
   const players = await loadPlayers(game);
   const embed = buildEmbed(game, players, guild);
 
-  const image = await buildGameResultImage(game, guild);
+  const image = await buildGameResultImage(game);
   const imageName = `game_${game.gameId}_results.png`;
   if (image) embed.setImage(`attachment://${imageName}`);
 

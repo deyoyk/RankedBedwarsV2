@@ -188,6 +188,7 @@ interface Config {
   };
   serverip: string;
   serverName: string;
+  inviteLink: string;
   /** Base URL of the public website; the game result path is appended to it. */
   gameResultUrl: string;
   bot_stats_text: string;
@@ -309,6 +310,7 @@ const configuration: Config = {
   },
   serverip: clean(process.env.MINECRAFT_SERVER_IP) || clean(process.env.SERVER_IP) || 'play.deyo.lol',
   serverName: clean(process.env.SERVER_NAME) || 'deyo Ranked Bedwars',
+  inviteLink: clean(process.env.INVITE_LINK) || 'discord.gg/deyobw',
   gameResultUrl: clean(process.env.GAME_RESULT_URL) || 'https://www.vrbw.club',
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',
   eloDecay: {

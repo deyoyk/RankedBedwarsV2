@@ -1,80 +1,165 @@
 const mockGenerate = jest.fn();
-jest.mock('../src/utils/scoredImage', () => {
-  const actual = jest.requireActual('../src/utils/scoredImage');
-  return { ...actual, generateScoredImage: (...args: unknown[]) => mockGenerate(...args) };
+jest.mock('../src/utils/scoreImage', () => {
+  const actual = jest.requireActual('../src/utils/scoreImage');
+  return { ...actual, generateScoreImageBuffer: (...args: unknown[]) => mockGenerate(...args) };
 });
 const mockUsers = jest.fn();
 jest.mock('../src/models/User', () => ({
   __esModule: true,
   default: { find: () => ({ select: () => ({ lean: () => mockUsers() }) }) },
 }));
-jest.mock('../src/models/EloRank', () => ({
+const mockQueue = jest.fn();
+jest.mock('../src/models/Queue', () => ({
   __esModule: true,
-  default: { find: () => ({ select: () => ({ lean: async () => [{ roleId: 'gold', startElo: 1000, endElo: 1999 }] }) }) },
+  default: { findOne: () => ({ select: () => ({ lean: () => mockQueue() }) }) },
 }));
+jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
 
 import { renderScoredGame } from '../src/utils/scoredGameImage';
 import { buildGameResultImage } from '../src/utils/gameResultImage';
+import { scoreTemplate, ScoreTemplatePlayer } from '../src/assets/games/score';
 
 const pngSize = (buf: Buffer) => ({ width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) });
 const player = (id: string, before: number, after: number, extra: Record<string, unknown> = {}) => ({
-  discordId: id, ign: id, eloBefore: before, eloAfter: after, kills: 6, deaths: 3, diamonds: 4, mvp: false, bedBreaker: false, ...extra,
+  discordId: id, ign: id, eloBefore: before, eloAfter: after, kills: 6, deaths: 3, diamonds: 4, emeralds: 1, mvp: false, bedBreaker: false, ...extra,
 });
 
-describe('scored-game image', () => {
-  beforeEach(() => mockGenerate.mockReset().mockResolvedValue(Buffer.from('png')));
+function texts(node: unknown): string[] {
+  if (typeof node === 'string' || typeof node === 'number') return [String(node)];
+  if (!node || typeof node !== 'object') return [];
+  const kids = (node as { props?: { children?: unknown } }).props?.children;
+  return (Array.isArray(kids) ? kids : [kids]).flatMap(texts);
+}
 
-  it('draws the real template as a PNG without network access', async () => {
-    const { generateScoredImage } = jest.requireActual('../src/utils/scoredImage');
-    const realFetch = global.fetch;
-    global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as any;
-    try {
-      const buf = await generateScoredImage(58,
-        [{ username: 'wuwster', team: 'winning', oldElo: 1000, newElo: 1025, mvp: true, kills: 5, deaths: 2, diamonds: 4 }],
-        [{ username: 'ssharpp', team: 'losing', oldElo: 1010, newElo: 995, kills: 2, deaths: 5, diamonds: 1 }],
-        { map: 'Invasion', duration: '12:34', date: '12/11/2026', winnerTeamElo: '+25', loserTeamElo: '-15' });
-      expect(buf.subarray(1, 4).toString()).toBe('PNG');
-      expect(pngSize(buf)).toEqual({ width: 1024, height: 585 });
-    } finally {
-      global.fetch = realFetch;
-    }
+function templatePlayer(username: string, before: number, after: number, extra: Partial<ScoreTemplatePlayer> = {}): ScoreTemplatePlayer {
+  return {
+    username,
+    avatar: 'data:image/png;base64,',
+    kills: 4,
+    deaths: 2,
+    kdr: '2.00',
+    diamonds: 1,
+    emeralds: 0,
+    eloBefore: before,
+    eloAfter: after,
+    mvp: false,
+    bedbreaker: false,
+    ...extra,
+  };
+}
+
+describe('scored-game image', () => {
+  beforeEach(() => {
+    mockGenerate.mockReset().mockResolvedValue(Buffer.from('png'));
+    mockQueue.mockReset().mockResolvedValue(null);
+  });
+
+  it('renders the HTML card as a 1920x980 PNG without network access', async () => {
+    const { generateScoreImageBuffer } = jest.requireActual('../src/utils/scoreImage');
+    const buf = await generateScoreImageBuffer(58,
+      [{ username: 'wuwster', team: 'winning', elo_before: 1000, elo_after: 1025, mvp: true, kills: 5, deaths: 2, diamonds: 4 }],
+      [{ username: 'ssharpp', team: 'losing', elo_before: 1010, elo_after: 995, kills: 2, deaths: 5, diamonds: 1 }],
+      { isRanked: true, minElo: 1000, maxElo: 1999, map: 'Boletum', date: '22 Nov 2026', scoredAt: '16:02 UTC', duration: '5m 11s' });
+    expect(buf.subarray(1, 4).toString()).toBe('PNG');
+    expect(pngSize(buf)).toEqual({ width: 1920, height: 980 });
   }, 20000);
 
-  it('passes each player\'s rank role, KDR and the team totals to the card', async () => {
-    const guild: any = { roles: { cache: new Map([['gold', { name: 'Gold', color: 0xffd700, hexColor: '#ffd700', iconURL: () => 'https://cdn/gold.png' }]]) } };
-    await renderScoredGame({
-      gameId: 9, map: 'lighthouse4v4', startTime: new Date(0), endTime: new Date(754000),
-      winners: [player('a', 1000, 1025, { mvp: true }), player('b', 900, 921)],
-      losers: [player('c', 1010, 995, { deaths: 0 })],
-    }, [{ roleId: 'gold', startElo: 1000, endElo: 1999 }], guild);
+  it('builds the scoreboard with sections, stats, badges and metadata', () => {
+    const tpl = scoreTemplate({
+      gameId: 42,
+      winners: [
+        templatePlayer('Alice', 1200, 1230, { mvp: true }),
+        templatePlayer('Bob', 1100, 1130, { bedbreaker: true }),
+      ],
+      losers: [templatePlayer('Cara', 1300, 1280)],
+      map: 'Boletum',
+      date: '22 Nov 2026',
+      scoredAt: '16:02 UTC',
+      duration: '5m 11s',
+      mode: 'RANKED',
+      serverName: 'Test Server',
+      inviteLink: 'play.test.lol',
+    });
 
-    const [gameId, winners, losers, meta] = mockGenerate.mock.calls[0];
+    expect(tpl.width).toBe(1920);
+    expect(tpl.height).toBe(980);
+    const all = texts(tpl.root);
+    for (const expected of [
+      'WINNERS', 'LOSERS', 'KILLS', 'DEATHS', 'K/D', 'DIA', 'EMS', 'ELO CHANGE',
+      'Alice', 'Bob', 'Cara', 'MVP', 'BED', '1200 -> 1230', '30', 'Boletum', 'GAME ID',
+      'DATE', 'SCORED AT', 'DURATION', 'MODE', 'RANKED', 'Test Server', 'play.test.lol',
+    ]) {
+      expect(all).toContain(expected);
+    }
+  });
+
+  it('passes player stats and metadata to the renderer', async () => {
+    await renderScoredGame({
+      gameId: 9,
+      map: 'Boletum',
+      startTime: new Date('2026-11-22T15:56:49.000Z'),
+      endTime: new Date('2026-11-22T16:02:00.000Z'),
+      isRanked: true,
+      minElo: 1000,
+      maxElo: 1999,
+      winners: [player('a', 1000, 1025, { mvp: true }), player('b', 900, 921)],
+      losers: [player('c', 1010, 995)],
+    });
+
+    const [gameId, winners, losers, options] = mockGenerate.mock.calls[0];
     expect(gameId).toBe(9);
-    expect(winners[0]).toMatchObject({ username: 'a', rankName: 'Gold', rankColor: '#ffd700', rankIconUrl: 'https://cdn/gold.png', kdr: '2.00', mvp: true });
-    expect(winners[1].rankName).toBeUndefined();
-    expect(losers[0].kdr).toBe('6');
-    expect(meta).toMatchObject({ map: 'Lighthouse', duration: '12:34', winnerTeamElo: '+46', loserTeamElo: '-15' });
+    expect(winners[0]).toMatchObject({
+      username: 'a', elo_before: 1000, elo_after: 1025, oldElo: 1000, newElo: 1025,
+      mvp: true, kills: 6, deaths: 3, diamonds: 4, emeralds: 1,
+    });
+    expect(winners[1]).toMatchObject({ username: 'b', elo_before: 900, elo_after: 921 });
+    expect(losers[0]).toMatchObject({ username: 'c', elo_before: 1010, elo_after: 995 });
+    expect(options).toEqual({
+      map: 'Boletum',
+      date: '22 Nov 2026',
+      scoredAt: '16:02 UTC',
+      duration: '5m 11s',
+      mode: 'RANKED',
+      isRanked: true,
+      minElo: 1000,
+      maxElo: 1999,
+    });
   });
 });
 
 describe('/gameinfo result image', () => {
-  beforeEach(() => mockGenerate.mockReset().mockResolvedValue(Buffer.from('png')));
+  beforeEach(() => {
+    mockGenerate.mockReset().mockResolvedValue(Buffer.from('png'));
+    mockQueue.mockReset().mockResolvedValue(null);
+  });
 
   it('has no image for a game that was never scored', async () => {
     await expect(buildGameResultImage({ gameId: 1, state: 'voided', winners: [] })).resolves.toBeNull();
     expect(mockGenerate).not.toHaveBeenCalled();
   });
 
-  it('rebuilds the card from each player\'s saved game entry', async () => {
+  it('rebuilds the scoreboard from each player\'s saved game entry', async () => {
     mockUsers.mockResolvedValue([
-      { discordId: 'a', ign: 'Alpha', elo: 1100, recentGames: [{ eloGain: 25, elo_before: 1000, elo_after: 1025, kills: 7, deaths: 1, diamonds: 9 }] },
+      { discordId: 'a', ign: 'Alpha', elo: 1100, recentGames: [{ eloGain: 25, elo_before: 1000, elo_after: 1025, kills: 7, deaths: 1, diamonds: 9, emeralds: 3 }] },
       { discordId: 'c', ign: 'Charlie', elo: 990, recentGames: [{ eloGain: -15 }] },
     ]);
-    const buf = await buildGameResultImage({ gameId: 3, state: 'scored', winners: ['a'], losers: ['c'], mvps: ['a'] });
+    mockQueue.mockResolvedValue({ isRanked: true, minElo: 1000, maxElo: 1999 });
+    const buf = await buildGameResultImage({
+      gameId: 3, state: 'scored', queueId: 'q1', map: 'Boletum',
+      startTime: new Date('2026-11-22T15:56:49.000Z'), endTime: new Date('2026-11-22T16:02:00.000Z'),
+      winners: ['a'], losers: ['c'], mvps: ['a'], bedbreaks: ['c'],
+    });
 
     expect(buf).toEqual(Buffer.from('png'));
-    const [, winners, losers] = mockGenerate.mock.calls[0];
-    expect(winners[0]).toMatchObject({ username: 'Alpha', oldElo: 1000, newElo: 1025, kills: 7, diamonds: 9, mvp: true });
-    expect(losers[0]).toMatchObject({ username: 'Charlie', oldElo: 1005, newElo: 990 });
+    const [gameId, winners, losers, options] = mockGenerate.mock.calls[0];
+    expect(gameId).toBe(3);
+    expect(winners[0]).toMatchObject({
+      username: 'Alpha', elo_before: 1000, elo_after: 1025, mvp: true, bedbreaker: false,
+      kills: 7, deaths: 1, diamonds: 9, emeralds: 3, 
+    });
+    expect(losers[0]).toMatchObject({ username: 'Charlie', elo_before: 1005, elo_after: 990, mvp: false, bedbreaker: true });
+    expect(options).toMatchObject({ map: 'Boletum', mode: 'RANKED', isRanked: true, minElo: 1000, maxElo: 1999 });
   });
 });
+
+

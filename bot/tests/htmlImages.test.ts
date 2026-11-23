@@ -1,6 +1,5 @@
 import { generateThemeImage } from '../src/assets/stats-theme/base';
 import { defaultTemplate } from '../src/assets/stats-theme/default';
-import { staticImageDataUrl } from '../src/assets/assets';
 import { themes, resolveTheme } from '../src/assets/stats-theme';
 
 jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
@@ -18,56 +17,20 @@ function texts(node: any): string[] {
   return (Array.isArray(kids) ? kids : [kids]).flatMap(texts);
 }
 
-function countText(node: any, text: string): number {
-  if (!node || typeof node !== 'object') return 0;
-  let n = 0;
-  const kids = node.props?.children;
-  for (const k of (Array.isArray(kids) ? kids : [kids])) {
-    if (k === text) n += 1;
-    else n += countText(k, text);
-  }
-  return n;
-}
-
-const avatar = staticImageDataUrl('fallbacks', 'steve.png');
-
-function player(username: string, mvp = false, bedbreaker = false) {
-  return { discordId: username, username, team: 'winning' as const, elo_before: 1000, elo_after: 1030, mvp, bedbreaker };
-}
-
-function enrichedPlayer() {
+function player() {
   return {
     discordid: '123',
-    ign: 'TestPlayer',
-    wins: 5,
-    losses: 0,
-    mvps: 0,
-    elo: 50,
-    gamesplayed: 5,
-    games: 5,
-    joined: 'Joined Jun 15, 2026',
-    level: 3,
-    xpToNext: 70,
-    xpProgress: 0.3,
-    winRate: 1,
-    winCaption: '100.0% win rate · 5 games',
-    tiles: [
-      { value: '5', label: 'Wins', accent: '#00e676', rank: '#278' },
-      { value: '0', label: 'Losses', accent: '#ff5252', rank: '#1167' },
-      { value: '5.00', label: 'W/L ratio', accent: '#8b5cf6', rank: '#26' },
-      { value: '42', label: 'Total Kills', accent: '#8b5cf6', rank: '#328' },
-      { value: '0.95', label: 'K/D ratio', accent: '#00e5ff', rank: '#416' },
-      { value: '0', label: 'MVPs', accent: '#ffd600', rank: '#456' },
-      { value: '+5', label: 'Streak', accent: '#ff9100', rank: '#34' },
-      { value: '49m', label: 'Playtime', accent: '#ffd600', rank: '#406' },
-    ],
-    combat: [
-      { value: '3', label: 'Final Kills', accent: '#8b5cf6', rank: '#377' },
-      { value: '0', label: 'Beds Broken', accent: '#8b5cf6', rank: '#488' },
-      { value: '7', label: 'Final Deaths', accent: '#8b5cf6', rank: '#290' },
-    ],
-    seasonLine1: 'YEAR 26 SEASON 1',
-    seasonLine2: 'July 22, 2026',
+    ign: 'LoveDeyo',
+    wins: 4,
+    losses: 2,
+    mvps: 1,
+    elo: 1234,
+    gamesplayed: 6,
+    rankName: 'Coal',
+    rankColor: '#A0A0A0',
+    wlr: '2.00',
+    beds: 3,
+    streak: 2,
   };
 }
 
@@ -79,40 +42,48 @@ describe('single default theme', () => {
 });
 
 describe('html image rendering', () => {
-  it('renders the default card at 1400x940 with all sections', async () => {
+  it('renders the default card at 1200x685', async () => {
     const t0 = Date.now();
-    const buf = await generateThemeImage(enrichedPlayer(), [], {
+    const buf = await generateThemeImage(player(), [], {
       calculatePosition: () => 106,
       calculateRating: (pd: any) => pd.elo,
     });
     const ms = Date.now() - t0;
-    expect(pngSize(buf)).toEqual({ width: 1400, height: 940 });
+    expect(pngSize(buf)).toEqual({ width: 1200, height: 685 });
     expect(buf.length).toBeGreaterThan(20000);
     expect(ms).toBeLessThan(15000);
   }, 20000);
 
   it('default template keeps raw values as text nodes', () => {
     const tpl = defaultTemplate({
-      ign: '<Hacker>',
-      joined: 'Joined Jun 15, 2026',
-      level: 3,
-      xpToNext: 70,
-      xpProgress: 0.3,
+      ign: 'LoveDeyo',
       skin: null,
-      elo: 50,
-      globalRank: 106,
-      wins: '5',
-      losses: '0',
-      winRate: 1,
-      winCaption: '100.0% win rate · 5 games',
-      tiles: enrichedPlayer().tiles,
-      combat: enrichedPlayer().combat,
-      seasonLine1: 'YEAR 26 SEASON 1',
-      seasonLine2: 'July 22, 2026',
-      footerBrand: 'play.deyo.lol',
+      elo: 1234,
+      rankName: 'Coal',
+      rankColor: '#A0A0A0',
+      wins: '4',
+      losses: '2',
+      wlr: '2.00',
+      mvps: '1',
+      beds: '3',
+      streak: '+2',
+      matches: ['win', 'loss', 'voided', 'active', 'unknown'],
+      inviteLink: 'discord.gg/deyobw',
+      positions: {
+        elo: '#106',
+        wins: '#278',
+        losses: '#1167',
+        wlr: '#26',
+        mvps: '#456',
+        beds: '#488',
+        streak: '#34',
+      },
     });
     const all = texts(tpl.root);
-    for (const expected of ['<Hacker>', 'LIFETIME RECORD', 'GAME STATS', 'W/L RATIO', 'play.deyo.lol', '#278', '50', 'FINAL DEATHS', 'ELO']) {
+    for (const expected of [
+      'LoveDeyo', 'ELO', '1234', '[  COAL  ]', 'WINS', 'LOSSES', 'W/L', 'MVPS', 'BEDS',
+      'STREAK', 'LAST 10 MATCHES', '.gg/deyobw', '#106', '#278', '#1167', '#26', '#456', '#488', '#34',
+    ]) {
       expect(all).toContain(expected);
     }
   });

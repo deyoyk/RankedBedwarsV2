@@ -1,6 +1,7 @@
-import { loadBustDataUrl } from '../assets';
+import { loadSkinDataUrl } from '../assets';
+import config from '../../config/config';
 import { renderPng } from '../renderer';
-import { defaultTemplate, DefaultTile } from './default';
+import { defaultTemplate, MatchResult } from './default';
 
 export type PlayerData = {
   discordid: string;
@@ -13,8 +14,8 @@ export type PlayerData = {
 };
 
 export type RecentGame = {
-  game_id?: number | string;
-  result?: 'win' | 'lose' | 'loss' | 'voided' | 'pending' | 'submitted' | string;
+  gameid?: number | string;
+  result?: 'win' | 'lose' | 'loss' | 'voided' | 'pending' | 'submitted' | 'active' | string;
 } | null;
 
 export type Helpers = {
@@ -22,36 +23,24 @@ export type Helpers = {
   calculatePosition: (discordId: string) => number | string | Promise<number | string>;
 };
 
-export type EnrichedPlayerData = PlayerData & {
-  joined?: string;
-  level?: number;
-  xpToNext?: number;
-  xpProgress?: number;
-  games?: number;
-  winRate?: number;
-  winCaption?: string;
-  tiles?: DefaultTile[];
-  combat?: DefaultTile[];
-  seasonLine1?: string;
-  seasonLine2?: string;
+export type StatPositions = {
+  elo: string;
+  wins: string;
+  losses: string;
+  wlr: string;
+  mvps: string;
+  beds: string;
+  streak: string;
 };
 
-const FALLBACK_TILES: DefaultTile[] = [
-  { value: '0', label: 'Wins', accent: '#00e676', rank: '#-' },
-  { value: '0', label: 'Losses', accent: '#ff5252', rank: '#-' },
-  { value: '0.00', label: 'W/L ratio', accent: '#8b5cf6', rank: '#-' },
-  { value: '0', label: 'Total Kills', accent: '#8b5cf6', rank: '#-' },
-  { value: '0.00', label: 'K/D ratio', accent: '#00e5ff', rank: '#-' },
-  { value: '0', label: 'MVPs', accent: '#ffd600', rank: '#-' },
-  { value: '0', label: 'Streak', accent: '#ff9100', rank: '#-' },
-  { value: '0m', label: 'Playtime', accent: '#ffd600', rank: '#-' },
-];
-
-const FALLBACK_COMBAT: DefaultTile[] = [
-  { value: '0', label: 'Final Kills', accent: '#8b5cf6', rank: '#-' },
-  { value: '0', label: 'Beds Broken', accent: '#8b5cf6', rank: '#-' },
-  { value: '0', label: 'Final Deaths', accent: '#8b5cf6', rank: '#-' },
-];
+export type EnrichedPlayerData = PlayerData & {
+  rankName?: string;
+  rankColor?: string;
+  wlr?: string;
+  beds?: number;
+  streak?: number;
+  positions?: Partial<StatPositions>;
+};
 
 function intEnv(name: string, fallback: number, min: number, max: number): number {
   const parsed = Number.parseInt(process.env[name] ?? '', 10);
@@ -96,18 +85,42 @@ function storeStatsImage(key: string, buffer: Buffer): void {
   statsImageCache.set(key, { at: Date.now(), buffer });
 }
 
+function toMatch(result?: string | null): MatchResult {
+  if (result === 'win') return 'win';
+  if (result === 'lose' || result === 'loss') return 'loss';
+  if (result === 'voided') return 'voided';
+  if (result === 'pending' || result === 'active' || result === 'submitted') return 'active';
+  return 'unknown';
+}
+
+function signed(value: number): string {
+  return value > 0 ? `+${value}` : String(value);
+}
+
 export async function generateThemeImage(
   playerData: PlayerData,
   recentGames: RecentGame[],
-  helpers: Helpers
+  _helpers: Helpers
 ): Promise<Buffer> {
-  void recentGames;
   const enriched = playerData as EnrichedPlayerData;
-  const games = enriched.games ?? (playerData.wins || 0) + (playerData.losses || 0);
-  const winRate = enriched.winRate ?? (games > 0 ? (playerData.wins || 0) / games : 0);
-  const positionValue = await Promise.resolve(helpers.calculatePosition(String(playerData.discordid)));
-  const footerBrand = (process.env.MINECRAFT_SERVER_IP || process.env.SERVER_IP || '').trim();
-  const cacheKey = `${playerData.discordid}|${JSON.stringify(playerData)}|${String(positionValue)}|${footerBrand}`;
+  const games = enriched.gamesplayed ?? (playerData.wins || 0) + (playerData.losses || 0);
+  const wins = playerData.wins || 0;
+  const losses = playerData.losses || 0;
+  const wlr = enriched.wlr ?? (losses > 0 ? (wins / losses).toFixed(2) : wins > 0 ? String(wins) : 'N/A');
+  const matches = recentGames.slice(0, 10).map(game => toMatch(game?.result));
+  const rankName = enriched.rankName || 'Unranked';
+  const rankColor = enriched.rankColor || '#56486A';
+  const streak = enriched.streak ?? 0;
+  const positions: StatPositions = {
+    elo: enriched.positions?.elo ?? '#-',
+    wins: enriched.positions?.wins ?? '#-',
+    losses: enriched.positions?.losses ?? '#-',
+    wlr: enriched.positions?.wlr ?? '#-',
+    mvps: enriched.positions?.mvps ?? '#-',
+    beds: enriched.positions?.beds ?? '#-',
+    streak: enriched.positions?.streak ?? '#-',
+  };
+  const cacheKey = `${playerData.discordid}|${playerData.ign}|${games}|${wins}|${losses}|${playerData.elo}|${playerData.mvps}|${rankName}|${rankColor}|${wlr}|${enriched.beds ?? 0}|${streak}|${matches.join(',')}|${config.inviteLink}|${Object.values(positions).join(',')}`;
 
   const cached = statsImageCache.get(cacheKey);
   if (cached && Date.now() - cached.at <= STATS_IMAGE_TTL_MS) {
@@ -120,29 +133,26 @@ export async function generateThemeImage(
 
   const task = (async (): Promise<Buffer> => {
     const skin = await withTimeout(
-      loadBustDataUrl(playerData.ign || ''),
+      loadSkinDataUrl(playerData.ign || ''),
       SKIN_TIMEOUT_MS,
       null,
     );
 
     const tpl = defaultTemplate({
       ign: playerData.ign || 'Player',
-      joined: enriched.joined || '',
-      level: enriched.level || 1,
-      xpToNext: enriched.xpToNext ?? 0,
-      xpProgress: enriched.xpProgress ?? 0,
       skin,
       elo: playerData.elo || 0,
-      globalRank: positionValue,
-      wins: String(playerData.wins || 0),
-      losses: String(playerData.losses || 0),
-      winRate,
-      winCaption: enriched.winCaption || `${(winRate * 100).toFixed(1)}% win rate · ${games} games`,
-      tiles: enriched.tiles && enriched.tiles.length === 8 ? enriched.tiles : FALLBACK_TILES,
-      combat: enriched.combat && enriched.combat.length >= 3 ? enriched.combat : FALLBACK_COMBAT,
-      seasonLine1: enriched.seasonLine1 || '',
-      seasonLine2: enriched.seasonLine2 || '',
-      footerBrand,
+      rankName,
+      rankColor,
+      wins: String(wins),
+      losses: String(losses),
+      wlr,
+      mvps: String(playerData.mvps || 0),
+      beds: String(enriched.beds ?? 0),
+      streak: signed(streak),
+      matches,
+      inviteLink: config.inviteLink,
+      positions,
     });
 
     const buffer = await renderPng(tpl.root, tpl.width, tpl.height);

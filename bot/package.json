@@ -14,11 +14,14 @@
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "preview": "ts-node preview-local.ts",
+    "preview:stats": "ts-node preview-stats.ts",
+    "preview:score": "ts-node preview-score.ts",
+    "preview:leaderboard": "ts-node preview-leaderboard.ts",
+    "preview:start": "ts-node preview-start.ts",
     "test": "jest --runInBand --silent",
     "test:watch": "jest --watch"
   },
   "dependencies": {
-    "@napi-rs/canvas": "^0.1.100",
     "@resvg/resvg-js": "^2.6.2",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

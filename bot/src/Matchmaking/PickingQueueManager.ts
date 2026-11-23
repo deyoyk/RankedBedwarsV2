@@ -524,6 +524,7 @@ export class PickingQueueManager {
           session,
           finalTeams,
           gameResources?.gameChannel?.id,
+          queueData,
           finalSelectedMap,
         );
       } catch (announceError) {
@@ -542,6 +543,7 @@ export class PickingQueueManager {
     session: PickingSession,
     finalTeams: { team1: string[]; team2: string[] },
     startChannelId: string | undefined,
+    queueData: QueueLike,
     selectedMap: string,
   ): Promise<void> {
     const gameId = session.gameId;
@@ -560,12 +562,48 @@ export class PickingQueueManager {
       selectedMap
     );
 
+    let startImage: Array<{ attachment: Buffer; name: string }> | undefined;
+    try {
+      const { fetchGameStartRoster, generateGameStartImageBuffer } = await import('../utils/scoreImage');
+      const roster = await fetchGameStartRoster([...finalTeams.team1, ...finalTeams.team2]);
+      const captains = session.captains;
+      const toTeam = (ids: string[]) => ids.map(id => {
+        const entry = roster.get(id);
+        return {
+          discordId: id,
+          username: entry?.username ?? ignMap.get(id) ?? id,
+          elo: entry?.elo ?? 0,
+          isCaptain: captains.includes(id),
+        };
+      });
+      if (roster.size > 0) {
+        const buffer = await generateGameStartImageBuffer(gameId, toTeam(finalTeams.team1), toTeam(finalTeams.team2), {
+          mapName: selectedMap,
+          modeLabel: queueData.isRanked ? 'RANKED' : 'CASUAL',
+          isRanked: queueData.isRanked === true,
+          minElo: queueData.minElo,
+          maxElo: queueData.maxElo,
+        });
+        startImage = [{ attachment: buffer, name: `game_${gameId}_start.png` }];
+      }
+    } catch (imageError) {
+      console.error(`[PickingQueue] Failed to generate game start image for game ${gameId}:`, imageError);
+    }
+
     if (config.channels.gamesChannel) {
-      await this.workersManager.sendMessage(config.channels.gamesChannel, { embeds: [gameStartEmbed] }, 8);
+      await this.workersManager.sendMessage(
+        config.channels.gamesChannel,
+        { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+        8
+      );
     }
 
     if (startChannelId) {
-      await this.workersManager.sendMessage(startChannelId, { embeds: [gameStartEmbed] }, 8);
+      await this.workersManager.sendMessage(
+        startChannelId,
+        { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+        8
+      );
     }
   }
 

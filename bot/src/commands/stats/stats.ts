@@ -1,31 +1,14 @@
-import { ChatInputCommandInteraction, Guild } from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 import User, { type IUser } from '../../models/User';
-import { resolveTheme } from '../../themes';
-import type { PlayerData, RecentGame } from '../../themes/base';
+import { resolveTheme } from '../../assets/stats-theme';
+import type { EnrichedPlayerData, PlayerData, RecentGame } from '../../assets/stats-theme/base';
 import { getRankInfo } from '../../utils/rankInfo';
 
 const { errorEmbed } = embedsFor('Player');
-
-export const DEFAULT_THEME = 'veltrix';
-
-/** A theme the player may use: the default one, or one an admin gave them. */
-export function themeFor(user: Pick<IUser, 'currentTheme' | 'ownedThemes'>): string {
-  const chosen = (user.currentTheme || DEFAULT_THEME).toLowerCase();
-  return chosen === DEFAULT_THEME || (user.ownedThemes || []).includes(chosen) ? chosen : DEFAULT_THEME;
-}
-
-async function primeRankOf(guild: Guild | null, discordId: string): Promise<string | null> {
-  const member = guild ? await guild.members.fetch(discordId).catch(() => null) : null;
-  if (!member) return null;
-  for (const tier of ['prime++', 'prime+', 'prime']) {
-    if (member.roles.cache.some(role => role.name.toLowerCase().trim() === tier)) return tier;
-  }
-  return null;
-}
 
 export function recentResults(user: Pick<IUser, 'recentGames'>): RecentGame[] {
   return [...(user.recentGames || [])]
@@ -48,44 +31,61 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
       return;
     }
 
+    const wins = user.wins || 0;
+    const losses = user.losses || 0;
+    const games = user.games || 0;
+    const elo = user.elo || 0;
+    const winstreak = user.winStreak || 0;
+    const losestreak = user.loseStreak || 0;
+    const wlr = losses > 0 ? (wins / losses).toFixed(2) : wins > 0 ? String(wins) : 'N/A';
     const guild = interaction.guild ?? interaction.client.guilds.cache.first() ?? null;
-    const playerData: PlayerData = {
+    const rank = await getRankInfo(elo, guild);
+
+    const rankOf = async (field: string, value: number): Promise<string> => {
+      const higher = await User.countDocuments({ [field]: { $gt: value } });
+      return `#${higher + 1}`;
+    };
+    const streak = winstreak > 0 ? winstreak : losestreak > 0 ? -losestreak : 0;
+    const [eloPos, winsPos, lossesPos, wlrPos, mvpsPos, bedsPos, streakPos] = await Promise.all([
+      rankOf('elo', elo),
+      rankOf('wins', wins),
+      rankOf('losses', losses),
+      rankOf('wlr', user.wlr || 0),
+      rankOf('mvps', user.mvps || 0),
+      rankOf('bedBroken', user.bedBroken || 0),
+      rankOf(winstreak > 0 ? 'winStreak' : 'loseStreak', Math.abs(streak)),
+    ]);
+
+    const playerData: EnrichedPlayerData = {
       discordid: user.discordId,
       ign: user.ign || 'Player',
-      primeRank: await primeRankOf(guild, user.discordId),
-      wins: user.wins || 0,
-      losses: user.losses || 0,
+      wins,
+      losses,
       mvps: user.mvps || 0,
-      elo: user.elo || 0,
-      gamesplayed: user.games || 0,
-      winstreak: user.winStreak || 0,
-      losestreak: user.loseStreak || 0,
-      level: user.level || 1,
-      experience: user.experience || 0,
-      kills: user.kills || 0,
-      deaths: user.deaths || 0,
-      bedBroken: user.bedBroken || 0,
-      finalKills: user.finalKills || 0,
-      diamonds: user.diamonds || 0,
-      irons: user.irons || 0,
-      gold: user.gold || 0,
-      emeralds: user.emeralds || 0,
-      blocksPlaced: user.blocksPlaced || 0,
-      rankInfo: await getRankInfo(user.elo || 0, guild),
+      elo,
+      gamesplayed: games,
+      rankName: rank.name,
+      rankColor: rank.color,
+      wlr,
+      beds: user.bedBroken || 0,
+      streak,
+      positions: {
+        elo: eloPos,
+        wins: winsPos,
+        losses: lossesPos,
+        wlr: wlrPos,
+        mvps: mvpsPos,
+        beds: bedsPos,
+        streak: streakPos,
+      },
     };
+
     const helpers = {
-      calculatePosition: async () => (await User.countDocuments({ elo: { $gt: playerData.elo } })) + 1,
+      calculatePosition: async () => (await User.countDocuments({ elo: { $gt: elo } })) + 1,
       calculateRating: (pd: PlayerData) => pd.elo,
     };
 
-    const theme = themeFor(user);
-    let image: Buffer;
-    try {
-      image = await resolveTheme(theme)(playerData, recentResults(user), helpers);
-    } catch (themeError) {
-      console.warn(`[stats] Theme "${theme}" failed, drawing the default one:`, themeError);
-      image = await resolveTheme(DEFAULT_THEME)(playerData, recentResults(user), helpers);
-    }
+    const image = await resolveTheme()(playerData, recentResults(user), helpers);
 
     await safeReply(interaction, { files: [{ attachment: image, name: `${playerData.ign}_stats.png` }] });
   } catch (error) {

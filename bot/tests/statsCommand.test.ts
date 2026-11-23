@@ -1,12 +1,8 @@
 const mockFindOne = jest.fn();
-const mockUpdateOne = jest.fn().mockResolvedValue({});
-const mockFindOneAndUpdate = jest.fn();
 jest.mock('../src/models/User', () => ({
   __esModule: true,
   default: {
     findOne: (...args: unknown[]) => mockFindOne(...args),
-    updateOne: (...args: unknown[]) => mockUpdateOne(...args),
-    findOneAndUpdate: (...args: unknown[]) => mockFindOneAndUpdate(...args),
     countDocuments: jest.fn().mockResolvedValue(6),
   },
 }));
@@ -16,13 +12,11 @@ jest.mock('../src/models/EloRank', () => ({
   default: { find: () => ({ select: () => ({ sort: () => ({ lean: () => mockRanks() }) }) }) },
 }));
 const mockDraw = jest.fn();
-jest.mock('../src/themes', () => ({
-  themes: ['veltrix', 'halloween', 'gojo'],
-  resolveTheme: (name: string) => (...args: unknown[]) => mockDraw(name, ...args),
+jest.mock('../src/assets/stats-theme', () => ({
+  resolveTheme: () => (...args: unknown[]) => mockDraw(...args),
 }));
 
-import { recentResults, stats, themeFor } from '../src/commands/stats/stats';
-import { changetheme, thememanage, themesCommand } from '../src/commands/stats/themes';
+import { recentResults, stats } from '../src/commands/stats/stats';
 import { getRankInfo } from '../src/utils/rankInfo';
 
 function slash(options: Record<string, unknown> = {}, userId = 'me') {
@@ -48,12 +42,6 @@ beforeEach(() => {
 });
 
 describe('stats card', () => {
-  it('uses the chosen theme only if the player owns it', () => {
-    expect(themeFor({ currentTheme: 'gojo', ownedThemes: ['gojo'] } as any)).toBe('gojo');
-    expect(themeFor({ currentTheme: 'gojo', ownedThemes: [] } as any)).toBe('veltrix');
-    expect(themeFor({ currentTheme: 'elite' } as any)).toBe('veltrix');
-  });
-
   it('lists the newest ten games with their results', () => {
     const games = Array.from({ length: 12 }, (_, i) => ({ gameId: i, date: new Date(i * 1000), state: i % 3 === 0 ? 'voided' : 'scored', won: i % 2 === 0 }));
     const recent = recentResults({ recentGames: games } as any);
@@ -64,26 +52,16 @@ describe('stats card', () => {
   });
 
   it('sends the card as an image for a registered player', async () => {
-    mockFindOne.mockResolvedValue({ discordId: 'me', ign: 'wuwster', elo: 1234, wins: 4, winStreak: 2, currentTheme: 'veltrix', recentGames: [] });
+    mockFindOne.mockResolvedValue({ discordId: 'me', ign: 'wuwster', elo: 1234, wins: 4, losses: 2, mvps: 1, bedBroken: 3, winStreak: 2, recentGames: [] });
     const interaction = slash();
     await stats(interaction);
 
-    const [theme, playerData, , helpers] = mockDraw.mock.calls[0];
-    expect(theme).toBe('veltrix');
-    expect(playerData).toMatchObject({ ign: 'wuwster', elo: 1234, wins: 4, winstreak: 2 });
+    const [playerData, , helpers] = mockDraw.mock.calls[0];
+    expect(playerData).toMatchObject({
+      ign: 'wuwster', elo: 1234, wins: 4, losses: 2, mvps: 1, wlr: '2.00', beds: 3, streak: 2,
+    });
     await expect(helpers.calculatePosition()).resolves.toBe(7);
     expect(interaction.reply.mock.calls[0][0].files[0].name).toBe('wuwster_stats.png');
-  });
-
-  it('falls back to the default theme when a theme fails to draw', async () => {
-    mockFindOne.mockResolvedValue({ discordId: 'me', ign: 'p', currentTheme: 'gojo', ownedThemes: ['gojo'], recentGames: [] });
-    mockDraw.mockRejectedValueOnce(new Error('broken background'));
-    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const interaction = slash();
-    await stats(interaction);
-    warn.mockRestore();
-    expect(mockDraw.mock.calls.map(call => call[0])).toEqual(['gojo', 'veltrix']);
-    expect(interaction.reply.mock.calls[0][0].files).toHaveLength(1);
   });
 
   it('says so when the player is not registered', async () => {
@@ -92,39 +70,6 @@ describe('stats card', () => {
     await stats(interaction);
     expect(replyText(interaction)).toContain("<@other> isn't registered");
     expect(mockDraw).not.toHaveBeenCalled();
-  });
-});
-
-describe('theme commands', () => {
-  it('lists owned themes and the current one', async () => {
-    mockFindOne.mockResolvedValue({ discordId: 'me', currentTheme: 'gojo', ownedThemes: ['gojo'] });
-    const interaction = slash();
-    await themesCommand(interaction);
-    expect(replyText(interaction)).toContain('`veltrix` `gojo`');
-    expect(interaction.reply.mock.calls[0][0].flags).toBe(64);
-  });
-
-  it('only switches to a theme the player owns', async () => {
-    mockFindOne.mockResolvedValue({ discordId: 'me', ownedThemes: [] });
-    const denied = slash({ theme: 'gojo' });
-    await changetheme(denied);
-    expect(replyText(denied)).toContain("don't own the `gojo` theme");
-    expect(mockUpdateOne).not.toHaveBeenCalled();
-
-    mockFindOne.mockResolvedValue({ discordId: 'me', ownedThemes: ['gojo'] });
-    await changetheme(slash({ theme: 'gojo' }));
-    expect(mockUpdateOne).toHaveBeenCalledWith({ discordId: 'me' }, { $set: { currentTheme: 'gojo' } });
-  });
-
-  it('gives and takes themes, resetting a taken theme that was in use', async () => {
-    mockFindOneAndUpdate.mockResolvedValue({ discordId: 't', currentTheme: 'halloween' });
-    await thememanage(slash({ action: 'give', user: { id: 't' }, theme: 'halloween' }));
-    expect(mockFindOneAndUpdate).toHaveBeenLastCalledWith({ discordId: 't' }, { $addToSet: { ownedThemes: 'halloween' } }, { new: true });
-    expect(mockUpdateOne).not.toHaveBeenCalled();
-
-    await thememanage(slash({ action: 'take', user: { id: 't' }, theme: 'halloween' }));
-    expect(mockFindOneAndUpdate).toHaveBeenLastCalledWith({ discordId: 't' }, { $pull: { ownedThemes: 'halloween' } }, { new: true });
-    expect(mockUpdateOne).toHaveBeenCalledWith({ discordId: 't' }, { $set: { currentTheme: 'veltrix' } });
   });
 });
 

@@ -1,6 +1,21 @@
 import type { Guild } from 'discord.js';
 import EloRank from '../models/EloRank';
-import type { RankInfo } from '../themes/base';
+
+export type RankInfo = {
+  name: string;
+  color: string;
+  startElo: number;
+  endElo: number;
+  nextRankName?: string;
+  nextRankColor?: string;
+  nextRankStartElo?: number;
+  isMaxRank?: boolean;
+  roleId?: string;
+  iconUrl?: string | null;
+  unicodeEmoji?: string | null;
+  customEmoji?: string | null;
+  nextRankIconUrl?: string | null;
+};
 
 const UNRANKED: RankInfo = { name: 'Unranked', color: '#AAAAAA', startElo: 0, endElo: 0, isMaxRank: true };
 

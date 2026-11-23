@@ -1,9 +1,11 @@
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message, ModalBuilder, ModalSubmitInteraction, TextInputBuilder, TextInputStyle } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
+import EloRank from '../../models/EloRank';
 import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { generateLeaderboardImage, LeaderboardEntry } from '../../utils/leaderboardImage';
+import { rankForElo } from '../../utils/rankInfo';
 
 const { errorEmbed } = embedsFor('Leaderboard');
 
@@ -108,11 +110,26 @@ export async function leaderboard(interaction: ChatInputCommandInteraction, _wsM
       return;
     }
 
+    const ranks = await EloRank.find()
+      .select('roleId startElo endElo')
+      .sort({ startElo: 1 })
+      .lean()
+      .catch(() => []) as Array<{ roleId: string; startElo: number; endElo: number }>;
+    const guild = interaction.guild ?? interaction.client?.guilds?.cache?.first() ?? null;
+    const rankOf = (elo: number) => {
+      const rank = rankForElo(elo, ranks);
+      const role = rank ? guild?.roles.cache.get(rank.roleId) : undefined;
+      return {
+        rankName: role?.name || 'Unranked',
+        rankColor: role && role.color !== 0 ? role.hexColor : '#6B7174',
+      };
+    };
     const entries: LeaderboardEntry[] = users.map((user, i) => ({
       rank: page * usersPerPage + i + 1,
       ign: user.ign || user.discordId,
       value: displayValue((user as Record<string, unknown>)[valueField]),
       elo: user.elo,
+      ...rankOf(user.elo),
     }));
     const totalPages = Math.max(1, Math.ceil(totalUsers / usersPerPage));
     const image = await generateLeaderboardImage(title, labelFor(valueField), entries, page, totalPages);

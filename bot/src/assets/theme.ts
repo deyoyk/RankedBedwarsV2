@@ -16,7 +16,7 @@ export const COLORS = {
 
 export const FONT = 'PoppinsRegular';
 export const MEDIUM = 'PoppinsMedium';
-export const LIGHT = 'PoppinsLight';
+export const SEMIBOLD = 'PoppinsSemiBold';
 
 export type TextAlign = 'left' | 'center' | 'right';
 

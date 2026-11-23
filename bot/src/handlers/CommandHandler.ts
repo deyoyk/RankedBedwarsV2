@@ -11,7 +11,7 @@ const { errorEmbed } = embedsFor('Error');
 
 export type CommandFn = BotCommandFn;
 
-const REPLIES_ITSELF = new Set(['screenshare', 'rbwconfig', 'themes', 'changetheme', 'thememanage']);
+const REPLIES_ITSELF = new Set(['screenshare', 'rbwconfig']);
 
 export class CommandHandler {
   private commands: Map<string, CommandFn>;

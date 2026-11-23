@@ -31,7 +31,6 @@ import type { BotCommandFn } from '../types/commands';
 import { strikerequest } from '../commands/scoring/strikerequest';
 import { voidrequest } from '../commands/scoring/voidrequest';
 import { stats } from '../commands/stats/stats';
-import { changetheme, THEME_CHOICES, thememanage, themesCommand } from '../commands/stats/themes';
 import { call } from '../commands/queue/call';
 import { nick } from '../commands/account/nick';
 import { settings } from '../commands/account/settings';
@@ -438,17 +437,6 @@ export class CommandManager {
   }
 
   private registerStatsCommands() {
-    this.reg('themes', 'List your themes and the one your /stats card uses', themesCommand);
-    this.reg('changetheme', 'Change your /stats card theme', changetheme, [
-      { name: 'theme', description: 'Theme to use', type: 3, required: true, choices: THEME_CHOICES }
-    ]);
-    this.reg('thememanage', "Give a player a theme or take it away", thememanage, [
-      { name: 'action', description: 'Give or take', type: 3, required: true, choices: [
-        { name: 'give', value: 'give' }, { name: 'take', value: 'take' }
-      ]},
-      { name: 'user', description: 'Player', type: 6, required: true },
-      { name: 'theme', description: 'Theme', type: 3, required: true, choices: THEME_CHOICES }
-    ]);
     this.reg('stats', 'Show a player\'s stats card', stats, [
       { name: 'user', description: 'Player to show (you if empty)', type: 6, required: false }
     ]);

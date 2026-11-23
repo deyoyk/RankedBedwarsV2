@@ -10,10 +10,9 @@ export type ImageFont = {
 };
 
 const FONT_SPECS = [
-  { name: 'ADAMCGPRO', file: 'ADAM.CG PRO.otf' },
-  { name: 'PoppinsLight', file: 'Poppins-ExtraLight.ttf' },
   { name: 'PoppinsMedium', file: 'Poppins-Medium.ttf' },
   { name: 'PoppinsRegular', file: 'Poppins-Regular.ttf' },
+  { name: 'PoppinsSemiBold', file: 'Poppins-SemiBold.ttf' },
 ];
 
 let cachedFonts: ImageFont[] | null = null;
@@ -31,7 +30,7 @@ export function loadImageFonts(): ImageFont[] {
 
 const dataUrlCache = new Map<string, string>();
 
-export function staticImageDataUrl(dir: 'themes' | 'games' | 'fallbacks', file: string): string {
+export function staticImageDataUrl(dir: 'backgrounds' | 'games' | 'fallbacks', file: string): string {
   const key = `${dir}/${file}`;
   const hit = dataUrlCache.get(key);
   if (hit) return hit;
@@ -207,26 +206,30 @@ export async function loadAvatarDataUrl(username: string): Promise<string> {
   return staticImageDataUrl('fallbacks', 'steve.png');
 }
 
-export async function loadBustDataUrl(username: string): Promise<string> {
-  const key = `bust:${username.toLowerCase()}`;
-  const img = await loadCachedImage(key, async () => {
-    const remote = await fetchImageDataUrl(`https://nmsr.nickac.dev/bust/${encodeURIComponent(username)}`, 4000);
-    if (remote) return { dataUrl: remote, ok: true };
-    return { dataUrl: null, ok: false, negativeCache: staticImageDataUrl('fallbacks', 'steve-bust.png') };
-  });
-  if (img) return img;
-  return staticImageDataUrl('fallbacks', 'steve-bust.png');
+const MC_API = 'https://mc-api.io';
+const STEVE_UUID = '8667ba71-b85a-4004-af54-457a9734eed7';
+
+async function resolveSkinUuid(ign: string): Promise<string> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const res = await fetch(`${MC_API}/profile/${encodeURIComponent(ign)}/JAVA`, { signal: controller.signal });
+    if (!res.ok) return STEVE_UUID;
+    const data = await res.json() as { uuid?: string };
+    return typeof data.uuid === 'string' && data.uuid ? data.uuid : STEVE_UUID;
+  } catch {
+    return STEVE_UUID;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {
   const key = `skin:${ign.toLowerCase()}`;
   return loadCachedImage(key, async () => {
-    const [heads, fallback] = await Promise.all([
-      fetchImageDataUrl(`https://mc-heads.net/body/${encodeURIComponent(ign)}/144`, 4000),
-      fetchImageDataUrl(`https://nmsr.nickac.dev/fullbody/${encodeURIComponent(ign)}`, 4000)
-    ]);
-    if (heads) return { dataUrl: heads, ok: true };
-    if (fallback) return { dataUrl: fallback, ok: true };
+    const uuid = await resolveSkinUuid(ign);
+    const remote = await fetchImageDataUrl(`${MC_API}/render/FULL/${uuid}`, 4000);
+    if (remote) return { dataUrl: remote, ok: true };
     return { dataUrl: null, ok: false };
   });
 }

@@ -1,11 +1,12 @@
-import type { Guild } from 'discord.js';
-import EloRank from '../models/EloRank';
+import Queue from '../models/Queue';
 import User from '../models/User';
 import { renderScoredGame, ScoredPlayer } from './scoredGameImage';
 
 interface ResultGame {
   gameId: number;
   state?: string;
+  queueId?: string;
+  isRanked?: boolean;
   map?: string;
   winners?: string[];
   losers?: string[];
@@ -15,28 +16,33 @@ interface ResultGame {
   endTime?: Date | string;
 }
 
-/** "12:34" for a finished game, or null when start/end are missing. */
+interface RecentEntry {
+  eloGain?: number;
+  elo_before?: number;
+  elo_after?: number;
+  kills?: number;
+  deaths?: number;
+  diamonds?: number;
+  emeralds?: number;
+}
+
 export function formatGameDuration(game: { startTime?: Date | string; endTime?: Date | string }): string | null {
   if (!game.startTime || !game.endTime) return null;
   const total = Math.max(0, Math.floor((new Date(game.endTime).getTime() - new Date(game.startTime).getTime()) / 1000));
   return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`;
 }
 
-type RecentEntry = { eloGain?: number; elo_before?: number; elo_after?: number; kills?: number; deaths?: number; diamonds?: number };
-
-/**
- * The scored-game card from the score post, rebuilt from the stored game for /gameinfo.
- * Null for games that were never scored (in progress or voided before scoring).
- */
-export async function buildGameResultImage(game: ResultGame, guild?: Guild | null): Promise<Buffer | null> {
+export async function buildGameResultImage(game: ResultGame): Promise<Buffer | null> {
   if (game.state !== 'scored' || !game.winners?.length) return null;
   try {
     const ids = [...(game.winners || []), ...(game.losers || [])];
-    const [users, ranks] = await Promise.all([
+    const [users, queue] = await Promise.all([
       User.find({ discordId: { $in: ids } })
-        .select({ discordId: 1, ign: 1, elo: 1, recentGames: { $elemMatch: { gameId: game.gameId } } })
-        .lean() as unknown as Promise<Array<{ discordId: string; ign?: string; elo?: number; recentGames?: RecentEntry[] }>>,
-      EloRank.find().select('roleId startElo endElo').lean() as unknown as Promise<Array<{ roleId: string; startElo: number; endElo: number }>>,
+        .select({ discordId: 1, ign: 1, elo: 1, partyId: 1, recentGames: { $elemMatch: { gameId: game.gameId } } })
+        .lean() as unknown as Promise<Array<{ discordId: string; ign?: string; elo?: number; partyId?: string; recentGames?: RecentEntry[] }>>,
+      game.queueId
+        ? Queue.findOne({ channelId: game.queueId }).select('isRanked minElo maxElo').lean().catch(() => null) as Promise<{ isRanked?: boolean; minElo?: number; maxElo?: number } | null>
+        : Promise.resolve(null),
     ]);
     const byId = new Map(users.map(u => [u.discordId, u]));
 
@@ -53,6 +59,8 @@ export async function buildGameResultImage(game: ResultGame, guild?: Guild | nul
         kills: entry?.kills ?? 0,
         deaths: entry?.deaths ?? 0,
         diamonds: entry?.diamonds ?? 0,
+        emeralds: entry?.emeralds ?? 0,
+        partyId: user?.partyId,
         mvp: (game.mvps || []).includes(id),
         bedBreaker: (game.bedbreaks || []).includes(id),
       };
@@ -63,9 +71,12 @@ export async function buildGameResultImage(game: ResultGame, guild?: Guild | nul
       map: game.map,
       startTime: game.startTime,
       endTime: game.endTime,
+      isRanked: queue?.isRanked ?? game.isRanked === true,
+      minElo: queue?.minElo ?? 0,
+      maxElo: queue?.maxElo ?? 0,
       winners: (game.winners || []).map(player),
       losers: (game.losers || []).map(player),
-    }, ranks, guild);
+    });
   } catch (error) {
     console.error(`[GameResultImage] Could not build the result image for game ${game.gameId}:`, error);
     return null;
