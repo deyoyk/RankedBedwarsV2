@@ -351,6 +351,12 @@ export class ApiManager {
     return user;
   }
 
+  private parseGameId(raw: string | undefined): number | null {
+    if (!raw || !/^\d+$/.test(raw)) return null;
+    const id = Number(raw);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  }
+
   private validateSeasonChapter(req: Request, res: Response): { seasonNumber: number; chapterNumber: number } | null {
     const { season, chapter } = req.params;
     const seasonNumber = parseInt(season);
@@ -666,13 +672,14 @@ export class ApiManager {
   private getGameById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { gameid } = req.params;
-      if (!gameid) {
-        res.status(400).json({ error: 'Missing gameid parameter' });
+      const gameId = this.parseGameId(gameid);
+      if (gameId === null) {
+        res.status(400).json({ error: 'gameid must be a positive integer' });
         return;
       }
-      const response = await this.getCached(`game:${gameid}`, 10000, async () => {
+      const response = await this.getCached(`game:${gameId}`, 10000, async () => {
         const Game = await this.getGameModel();
-        const game = await Game.findOne({ gameId: Number(gameid) }).lean();
+        const game = await Game.findOne({ gameId }).lean();
         if (!game) return null;
         const idToIgn = await this.resolveGameIgns([game]);
         const playerStats = await this.buildGamePlayerStats(game);
@@ -692,13 +699,14 @@ export class ApiManager {
   private getGameTimeline = async (req: Request, res: Response): Promise<void> => {
     try {
       const { gameid } = req.params;
-      if (!gameid) {
-        res.status(400).json({ error: 'Missing gameid parameter' });
+      const gameId = this.parseGameId(gameid);
+      if (gameId === null) {
+        res.status(400).json({ error: 'gameid must be a positive integer' });
         return;
       }
-      const response = await this.getCached(`gameTimeline:${gameid}`, 10000, async () => {
+      const response = await this.getCached(`gameTimeline:${gameId}`, 10000, async () => {
         const Game = await this.getGameModel();
-        const game = await Game.findOne({ gameId: Number(gameid) })
+        const game = await Game.findOne({ gameId })
           .select('gameId map state startTime endTime winners losers timeline')
           .lean();
         if (!game) return null;

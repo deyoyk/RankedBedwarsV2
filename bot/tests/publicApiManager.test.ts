@@ -170,6 +170,21 @@ describe('PublicApiManager', () => {
     }
   });
 
+  it('rejects non-numeric game ids without querying the database', async () => {
+    const GameModel = require('../src/models/Game').default;
+    GameModel.findOne.mockClear();
+    const { app, wsManager, client } = makeApp();
+    new PublicApiManager(client, wsManager);
+    const base = await boot(app);
+
+    for (const id of ['abc', 'NaN', '0', '-1']) {
+      const res = await fetch(`${base}/public/rbw/api/game/${id}`);
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toEqual({ error: 'gameid must be a positive integer' });
+    }
+    expect(GameModel.findOne).not.toHaveBeenCalled();
+  });
+
   it('rate limits public requests per IP without consuming the private API limit', async () => {
     process.env.RBW_PUBLIC_RATE_LIMIT_MAX = '2';
     process.env.RBW_PUBLIC_RATE_LIMIT_STRICT_MAX = '100';
