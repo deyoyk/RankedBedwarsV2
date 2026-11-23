@@ -6,10 +6,13 @@ import {
   EmbedBuilder,
   MessageComponentInteraction,
   MessageFlags,
+  ModalBuilder,
   PermissionFlagsBits,
   RoleSelectMenuBuilder,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
@@ -17,12 +20,13 @@ import { commandErrorDetails } from '../../utils/errorReporter';
 import { isServerAdmin } from '../../utils/permissions';
 import { PermissionService } from '../../services/PermissionService';
 import { CATEGORY_LABELS, CommandCategory, commandsIn } from '../../config/commandCategories';
+import { describeAction, StrikeRuleService } from '../../services/StrikeRuleService';
 
 const { themedEmbed, errorEmbed } = embedsFor('Config');
 
 export const rbwconfigData = new SlashCommandBuilder()
   .setName('rbwconfig')
-  .setDescription('Choose which roles can use which commands')
+  .setDescription('Command permissions and strike rules')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .toJSON();
 
@@ -56,6 +60,7 @@ function sectionRow() {
           description: `${commandsIn(category).length} commands · ${whoCanUse(category)}`.slice(0, 100),
         })),
         { label: 'Command Overview', value: 'overview', description: 'Who can use each category' },
+        { label: 'Strike Rules', value: 'strikes', description: 'How many strikes lead to a rank ban, and for how long' },
       ),
   );
 }
@@ -116,12 +121,80 @@ export function overviewView(): View {
   return { embeds: [embed], components: [backRow()] };
 }
 
+const plural = (n: number) => `${n} strike${n === 1 ? '' : 's'}`;
+
+export function strikeView(note?: string): View {
+  const { rules, otherwise } = StrikeRuleService.current();
+  const lines = rules.map(rule => `**${plural(rule.strikes)}** → ${describeAction(rule.action)}`);
+  lines.push(`**Any other number** → ${describeAction(otherwise)}`);
+  lines.push('-# Each strike a player gets is checked against these. A rule is the total number of strikes they have.');
+  if (note) lines.push(`-# ${note}`);
+  const embed = themedEmbed('info').setTitle('Strike rules').setDescription(lines.join('\n'));
+  const components: View['components'] = [];
+  if (rules.length) {
+    components.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('rbwcfg:strikedel')
+        .setPlaceholder('Remove rules…')
+        .setMinValues(1)
+        .setMaxValues(rules.length)
+        .addOptions(rules.map(rule => ({ label: plural(rule.strikes), value: String(rule.strikes), description: describeAction(rule.action) }))),
+    ));
+  }
+  components.push(backRow(
+    new ButtonBuilder().setCustomId('rbwcfg:strikeadd').setLabel('Add or change rule').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('rbwcfg:strikeelse').setLabel('Any other number').setStyle(ButtonStyle.Primary),
+  ));
+  return { embeds: [embed], components };
+}
+
+export function strikeModal(customId: 'strikeadd' | 'strikeelse'): ModalBuilder {
+  const action = new TextInputBuilder()
+    .setCustomId('action')
+    .setLabel('What happens: warn, a ban time (12h, 7d) or perm')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(20);
+  const modal = new ModalBuilder().setCustomId(`rbwcfg:${customId}`).setTitle(customId === 'strikeadd' ? 'Strike rule' : 'Any other number of strikes');
+  if (customId === 'strikeadd') {
+    const strikes = new TextInputBuilder()
+      .setCustomId('strikes')
+      .setLabel('Number of strikes')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setMaxLength(4);
+    modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(strikes));
+  } else {
+    action.setValue(StrikeRuleService.current().otherwise);
+  }
+  return modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(action));
+}
+
+export async function saveStrikeModal(customId: string, strikes: string, action: string): Promise<View> {
+  try {
+    if (customId === 'strikeadd') {
+      const count = Number(strikes.trim());
+      await StrikeRuleService.setRule(count, action);
+      return strikeView(`${plural(count)} → ${describeAction(StrikeRuleService.actionFor(count))}`);
+    }
+    await StrikeRuleService.setOtherwise(action);
+    return strikeView(`Any other number → ${describeAction(StrikeRuleService.current().otherwise)}`);
+  } catch (error) {
+    return strikeView(`⚠ ${error instanceof Error ? error.message : 'That rule could not be saved.'}`);
+  }
+}
+
 /** Works out the next screen for a click on the panel, saving any change first. */
 export async function handlePanelClick(click: MessageComponentInteraction): Promise<View> {
   const [, action, category] = click.customId.split(':');
   if (action === 'section' && click.isStringSelectMenu()) {
     const choice = click.values[0];
+    if (choice === 'strikes') return strikeView();
     return choice === 'overview' ? overviewView() : categoryView(choice as CommandCategory);
+  }
+  if (action === 'strikedel' && click.isStringSelectMenu()) {
+    await StrikeRuleService.removeRules(click.values.map(Number));
+    return strikeView(`Removed ${click.values.map(v => plural(Number(v))).join(', ')}`);
   }
   if (action === 'roles' && click.isRoleSelectMenu()) {
     const target = category as CommandCategory;
@@ -150,6 +223,16 @@ export async function rbwconfig(interaction: ChatInputCommandInteraction, _wsMan
 
   collector.on('collect', async click => {
     try {
+      const [, action] = click.customId.split(':');
+      if (click.isButton() && (action === 'strikeadd' || action === 'strikeelse')) {
+        await click.showModal(strikeModal(action));
+        const submit = await click.awaitModalSubmit({ filter: m => m.user.id === interaction.user.id, time: PANEL_TIMEOUT_MS }).catch(() => null);
+        if (submit?.isFromMessage()) {
+          const strikes = action === 'strikeadd' ? submit.fields.getTextInputValue('strikes') : '';
+          await submit.update(await saveStrikeModal(action, strikes, submit.fields.getTextInputValue('action')));
+        }
+        return;
+      }
       await click.update(await handlePanelClick(click));
     } catch (error) {
       const { description } = commandErrorDetails('save that config change', error, '[rbwconfig]');

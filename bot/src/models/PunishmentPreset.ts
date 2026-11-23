@@ -1,6 +1,6 @@
 import mongoose, { Schema } from 'mongoose';
 
-export type PresetType = 'ban' | 'mute';
+export type PresetType = 'ban' | 'mute' | 'strike';
 
 export interface IPresetStep {
   duration: string;
@@ -18,7 +18,7 @@ export interface IPunishmentPreset {
 
 const PunishmentPresetSchema = new Schema<IPunishmentPreset>({
   name: { type: String, required: true, unique: true, lowercase: true, trim: true },
-  type: { type: String, required: true, enum: ['ban', 'mute'] },
+  type: { type: String, required: true, enum: ['ban', 'mute', 'strike'] },
   reason: { type: String, required: true },
   steps: [{
     _id: false,

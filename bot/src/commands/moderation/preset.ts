@@ -16,7 +16,12 @@ export async function preset(interaction: ChatInputCommandInteraction, _wsManage
   try {
     if (sub === 'add') {
       const type = interaction.options.getString('type', true) as PresetType;
-      const steps = parseSteps(interaction.options.getString('durations', true));
+      const durations = interaction.options.getString('durations') || '';
+      if (type !== 'strike' && !durations.trim()) {
+        await safeReply(interaction, errorEmbed('A ban or mute preset needs durations, like `1d, 7d, perm`.'));
+        return;
+      }
+      const steps = type === 'strike' ? [] : parseSteps(durations);
       const saved = await PunishmentPresets.save(interaction.options.getString('name', true), type, steps,
         interaction.options.getString('reason', true), interaction.user.id);
       await safeReply(interaction, successEmbed(
@@ -43,7 +48,7 @@ export async function preset(interaction: ChatInputCommandInteraction, _wsManage
 
 export async function presetAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
   const focused = interaction.options.getFocused(true);
-  const type = interaction.commandName === 'mute' ? 'mute' : interaction.commandName === 'ban' ? 'ban' : null;
+  const type = ['ban', 'mute', 'strike'].includes(interaction.commandName) ? interaction.commandName : null;
   const typed = String(focused.value || '').toLowerCase();
   const presets = (await PunishmentPresets.all())
     .filter(p => (type === null || p.type === type) && p.name.includes(typed))

@@ -267,7 +267,7 @@ export class CommandManager {
     this.reg('ranks', 'Show the list of ELO ranks', ranks);
     this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
-    this.reg('rbwconfig', 'Choose which roles can use which commands', rbwconfig, [], rbwconfigData);
+    this.reg('rbwconfig', 'Command permissions and strike rules', rbwconfig, [], rbwconfigData);
   }
 
   private registerQueueCommands() {
@@ -375,11 +375,11 @@ export class CommandManager {
     this.reg('preset', 'Punishment presets for /ban and /mute, here and in game', preset, [
       { name: 'add', description: 'Add or change a preset', type: 1, options: [
         { name: 'name', description: 'Its name, like cheating', type: 3, required: true },
-        { name: 'type', description: 'Ban or mute', type: 3, required: true, choices: [
-          { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }
+        { name: 'type', description: 'Ban, mute or strike', type: 3, required: true, choices: [
+          { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }, { name: 'Strike', value: 'strike' }
         ]},
-        { name: 'durations', description: 'One per offence, like 1d, 7d, 30d, perm (a step can add :its own reason)', type: 3, required: true },
-        { name: 'reason', description: 'The reason given', type: 3, required: true }
+        { name: 'reason', description: 'The reason given', type: 3, required: true },
+        { name: 'durations', description: 'Bans and mutes: one per offence, like 1d, 7d, 30d, perm (a step can add :its own reason)', type: 3, required: false }
       ]},
       { name: 'remove', description: 'Remove a preset', type: 1, options: [
         { name: 'name', description: 'The preset', type: 3, required: true, autocomplete: true }
@@ -402,7 +402,8 @@ export class CommandManager {
     ]);
     this.reg('strike', 'Issue a strike to a user', strike, [
       { name: 'user', description: 'User to strike (ID or mention)', type: 6, required: true },
-      { name: 'reason', description: 'Reason for strike', type: 3, required: false }
+      { name: 'preset', description: 'A strike preset (/preset list); fills in the reason', type: 3, required: false, autocomplete: true },
+      { name: 'reason', description: 'Reason for strike; overrides the preset', type: 3, required: false }
     ]);
     this.reg('unstrike', 'Remove a strike from a user', unstrike, [
       { name: 'user', description: 'User to remove strike from (ID or mention)', type: 6, required: true },

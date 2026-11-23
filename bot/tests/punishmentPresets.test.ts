@@ -8,10 +8,12 @@ jest.mock('../src/models/User', () => ({
 }));
 jest.mock('../src/managers/BanManager', () => ({ BanManager: { ban: jest.fn(), unban: jest.fn() } }));
 jest.mock('../src/managers/MuteManager', () => ({ MuteManager: { mute: jest.fn(), unmute: jest.fn() } }));
+jest.mock('../src/utils/safeReply', () => ({ safeReply: jest.fn() }));
 
 import type { IPunishmentPreset } from '../src/models/PunishmentPreset';
 import { parseSteps, resolvePreset, toWire, PunishmentPresets } from '../src/services/PunishmentPresets';
-import { choosePunishment } from '../src/utils/modCommands';
+import { choosePunishment, executeStrikeAction } from '../src/utils/modCommands';
+import { describeSteps } from '../src/services/PunishmentPresets';
 import { handleIngamePunish, typedDuration } from '../src/websocket/ingamePunish';
 
 const PresetModel = require('../src/models/PunishmentPreset').default;
@@ -27,9 +29,10 @@ const cheating: IPunishmentPreset = {
   createdBy: '1', updatedAt: new Date(0)
 };
 const spam: IPunishmentPreset = { name: 'spam', type: 'mute', reason: 'Spam', steps: [{ duration: '1h' }], createdBy: '1', updatedAt: new Date(0) };
+const toxic: IPunishmentPreset = { name: 'toxic', type: 'strike', reason: 'Toxicity', steps: [], createdBy: '1', updatedAt: new Date(0) };
 
 beforeEach(async () => {
-  PresetModel.find.mockReturnValue(lean([cheating, spam]));
+  PresetModel.find.mockReturnValue(lean([cheating, spam, toxic]));
   PresetModel.deleteOne.mockResolvedValue({ deletedCount: 1 });
   await PunishmentPresets.remove('nothing');
 });
@@ -139,5 +142,42 @@ describe('in-game punishments', () => {
     UserModel.findOne.mockReturnValue(lean({ bans: [] }));
     const result = await handleIngamePunish({ type: 'ingame_punish', action: 'ban', ign: 'Steve', minutes: 60 }, deps({ steve: '10' }));
     expect(result).toMatchObject({ ok: false, error: 'failed', message: 'db down' });
+  });
+});
+
+describe('strike presets', () => {
+  const strikeWith = (options: Record<string, string | null>) => ({
+    user: { id: 'mod' },
+    guild: {},
+    options: {
+      getUser: () => ({ id: '10' }),
+      getString: (name: string) => options[name] ?? null,
+    },
+  }) as any;
+
+  test('have no duration and never reach the Minecraft server as a usable preset', () => {
+    expect(describeSteps(toxic)).toBe('no duration');
+    expect(toWire(toxic).steps).toEqual([]);
+  });
+
+  test('give /strike their reason, and a typed reason still wins', async () => {
+    const managerCall = jest.fn().mockResolvedValue(undefined);
+    const config = { commandName: 'strike', successMessage: () => 'ok', managerCall };
+    await executeStrikeAction(strikeWith({ preset: 'Toxic' }), config);
+    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'Toxicity');
+    await executeStrikeAction(strikeWith({ preset: 'toxic', reason: 'Slurs in chat' }), config);
+    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'Slurs in chat');
+  });
+
+  test('a ban preset or an unknown one is refused by /strike', async () => {
+    const managerCall = jest.fn();
+    const config = { commandName: 'strike', successMessage: () => 'ok', managerCall };
+    await executeStrikeAction(strikeWith({ preset: 'cheating' }), config);
+    await executeStrikeAction(strikeWith({ preset: 'nope' }), config);
+    expect(managerCall).not.toHaveBeenCalled();
+  });
+
+  test('cannot be used for a ban', async () => {
+    expect(await choosePunishment('ban', '5', 'toxic', '', '')).toHaveProperty('error');
   });
 });

@@ -1,7 +1,7 @@
-import config from '../config/config';
 import { Guild } from 'discord.js';
 import User from '../models/User';
 import { BanManager } from './BanManager';
+import { StrikeRuleService } from '../services/StrikeRuleService';
 import { parseDuration } from '../utils/parseDuration';
 import { generatePunishmentId } from './punishmentBase';
 import { createPendingOperation, PunishmentOperation, PunishmentRecord, sendPunishmentNotification } from './punishmentHelpers';
@@ -65,8 +65,7 @@ export class StrikeManager {
       const user = updated;
       const strikeCount = user.strikes.length;
 
-      const strikeConfig = config.strikes || {};
-      const action = strikeConfig[strikeCount] || strikeConfig['default'] || 'warn';
+      const action = StrikeRuleService.actionFor(strikeCount);
 
       let banDuration: string | null = null;
       if (action !== 'warn') {
@@ -92,7 +91,7 @@ export class StrikeManager {
           actionTaken = `Warning issued (Strike ${strikeCount})`;
         } else {
           try {
-            await BanManager.ban(guild, targetId, moderatorId, banDuration, `Strike ${strikeCount}: ${reason}`);
+            await BanManager.ban(guild, targetId, moderatorId, banDuration, `Strike ${strikeCount}: ${reason}`, global._wsManager);
             actionTaken = `Banned for ${banDuration} (Strike ${strikeCount})`;
             instance.stats.escalatedStrikes++;
           } catch (banError) {

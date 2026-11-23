@@ -381,9 +381,8 @@ describe('StrikeManager.strike', () => {
   });
 
   it('rejects without recording when the strike action is invalid', async () => {
-    const configMock = require('../src/config/config').default;
-    const prev = configMock.strikes;
-    configMock.strikes = { 1: 'bogus', default: 'warn' };
+    const { StrikeRuleService } = require('../src/services/StrikeRuleService');
+    const rule = jest.spyOn(StrikeRuleService, 'actionFor').mockReturnValue('bogus');
     try {
       const user = mockUser();
       UserModel.findOne.mockResolvedValue(user);
@@ -399,7 +398,7 @@ describe('StrikeManager.strike', () => {
         { $pull: { strikes: { id: expect.any(String) } } }
       );
     } finally {
-      configMock.strikes = prev;
+      rule.mockRestore();
     }
   });
 });

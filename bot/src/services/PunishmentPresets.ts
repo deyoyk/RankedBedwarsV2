@@ -66,6 +66,9 @@ export function toWire(preset: IPunishmentPreset): WirePreset {
 }
 
 export function describeSteps(preset: IPunishmentPreset): string {
+  if (preset.steps.length === 0) {
+    return 'no duration';
+  }
   return preset.steps.map(step => step.duration + (step.reason ? ` (${step.reason})` : '')).join(' → ');
 }
 

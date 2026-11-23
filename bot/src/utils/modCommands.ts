@@ -192,7 +192,19 @@ export async function executeStrikeAction(
     return;
   }
 
-  const reason = interaction.options.getString('reason') || 'No reason provided';
+  const presetName = config.commandName === 'strike' ? interaction.options.getString('preset') : null;
+  let reason = interaction.options.getString('reason') || '';
+  if (presetName) {
+    const preset = await PunishmentPresets.get(presetName);
+    if (!preset || preset.type !== 'strike') {
+      await safeReply(interaction, errorEmbed(preset
+        ? `\`${preset.name}\` is a ${preset.type} preset, not a strike one.`
+        : `There's no preset called \`${presetName}\`. \`/preset list\` shows them.`, `${config.commandName} Error`));
+      return;
+    }
+    reason = reason || preset.reason;
+  }
+  reason = reason || 'No reason provided';
 
   try {
     await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, reason);
