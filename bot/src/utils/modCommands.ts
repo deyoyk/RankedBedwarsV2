@@ -87,9 +87,7 @@ export async function executeModerationAction(
 export interface UnmoderationActionConfig {
   commandName: string;
   actionVerb: string;
-  /** What the target has to be for the undo to apply ("banned"), for the reply when they aren't. */
   activeWord: string;
-  /** False when the target wasn't banned/muted, so nothing was undone. */
   managerCall: (guild: Guild, targetId: string, issuerId: string, reason?: string) => Promise<boolean>;
 }
 
