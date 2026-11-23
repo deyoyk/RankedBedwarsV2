@@ -22,6 +22,7 @@ export async function addqueue(interaction: ChatInputCommandInteraction, _wsMana
     isRanked = interaction.options.getBoolean('is_ranked', true);
     isPicking = interaction.options.getBoolean('is_picking', true);
     const ruleset = interaction.options.getString('ruleset', false) === 'ppp' ? 'ppp' : 'normal';
+    const mapTeamSize = interaction.options.getInteger('map', false) ?? undefined;
     const bypassRolesStr = interaction.options.getString('bypass_roles', false);
     if (bypassRolesStr) {
       bypassRoles = bypassRolesStr.split(',').map(id => id.trim());
@@ -40,19 +41,32 @@ export async function addqueue(interaction: ChatInputCommandInteraction, _wsMana
     await safeReply(interaction, { embeds: [queueSystemEmbed('minElo and maxElo must be integers with minElo no greater than maxElo.', 'error')] });
     return;
   }
+  if (mapTeamSize !== undefined) {
+    const perTeam = Math.ceil(maxPlayers / 2);
+    if (!Number.isInteger(mapTeamSize) || mapTeamSize < 1 || mapTeamSize > 4) {
+      await safeReply(interaction, { embeds: [queueSystemEmbed('map must be 1v1, 2v2, 3v3 or 4v4.', 'error')] });
+      return;
+    }
+    if (mapTeamSize < perTeam) {
+      await safeReply(interaction, { embeds: [queueSystemEmbed(
+        `A ${maxPlayers}-player queue puts ${perTeam} on each team, but ${mapTeamSize}v${mapTeamSize} maps only fit ${mapTeamSize} per team.`, 'error')] });
+      return;
+    }
+  }
   const badBypass = bypassRoles.find(id => !/^\d{17,20}$/.test(id));
   if (badBypass) {
     await safeReply(interaction, { embeds: [queueSystemEmbed(`Bypass role "${badBypass}" is not a valid Discord role ID.`, 'error')] });
     return;
   }
 
-  const details = (queue: { maxPlayers: number; minElo: number; maxElo: number; isRanked?: boolean; isPicking?: boolean; ruleset?: string }) => [
+  const details = (queue: { maxPlayers: number; minElo: number; maxElo: number; isRanked?: boolean; isPicking?: boolean; ruleset?: string; mapTeamSize?: number }) => [
     `**Channel:** <#${channelId}>`,
     `**Max Players:** ${queue.maxPlayers}`,
     `**ELO Range:** ${queue.minElo}-${queue.maxElo}`,
     `**Queue Type:** ${queue.isRanked ? 'Ranked' : 'Casual'}`,
     `**Picking:** ${queue.isPicking ? 'Enabled' : 'Disabled'}`,
     `**Ruleset:** ${queue.ruleset === 'ppp' ? 'PPP' : 'Normal'}`,
+    `**Maps:** ${queue.mapTeamSize ? `${queue.mapTeamSize}v${queue.mapTeamSize} only` : 'Matching the player count'}`,
   ];
 
   try {
@@ -76,6 +90,7 @@ export async function addqueue(interaction: ChatInputCommandInteraction, _wsMana
       isPicking,
       bypassRoles,
       ruleset,
+      ...(mapTeamSize !== undefined ? { mapTeamSize } : {}),
       players: [],
       parties: []
     });

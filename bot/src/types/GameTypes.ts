@@ -30,6 +30,8 @@ export interface WarpRequestData {
   retrying?: boolean;
   sentAttempt?: number;
   handledFailureAttempt?: number;
+  /** Players the server reported as offline (not just busy) on the latest failed warp. */
+  leftPlayers?: string[];
   team1IGNs: string[];
   team2IGNs: string[];
   map: string;

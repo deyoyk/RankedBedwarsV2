@@ -3,7 +3,7 @@ import config from '../config/config';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 
 type WorkerTaskData = Record<string, unknown>;
-type WorkerTaskType = 'channel_create' | 'channel_delete' | 'channel_status' | 'member_move' | 'member_nickname' | 'member_roles' | 'message_send';
+type WorkerTaskType = 'channel_create' | 'channel_delete' | 'channel_status' | 'member_move' | 'member_nickname' | 'member_roles' | 'message_send' | 'thread_member_add';
 type WorkerTaskState = 'queued' | 'running' | 'done';
 
 interface WorkerTask {
@@ -561,6 +561,9 @@ export class WorkersManager {
         case 'message_send':
           result = await this.executeMessageSend(worker.client, task.data);
           break;
+        case 'thread_member_add':
+          result = await this.executeThreadMemberAdd(worker.client, task.data);
+          break;
         default:
           throw new Error(`Unknown task type: ${String(task.type)}`);
       }
@@ -770,6 +773,12 @@ export class WorkersManager {
     });
   }
 
+  private async executeThreadMemberAdd(client: Client, data: WorkerTaskData): Promise<void> {
+    const channel = await client.channels.fetch(data.threadId as string);
+    if (!channel || !channel.isThread()) throw new Error(`Thread ${String(data.threadId)} not found`);
+    await channel.members.add(data.memberId as string);
+  }
+
   private async executeMemberMove(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = client.guilds.cache.first();
     if (!guild) throw new Error('Guild not found');
@@ -887,6 +896,10 @@ export class WorkersManager {
     priority: number = 9,
   ): Promise<T> {
     return this.addTask<T>('channel_create', { options }, priority);
+  }
+
+  public async addThreadMember(threadId: string, memberId: string, priority: number = 8): Promise<void> {
+    await this.addTask<void>('thread_member_add', { threadId, memberId }, priority);
   }
 
   public async deleteChannel(channelId: string, priority: number = 3): Promise<void> {
@@ -1013,6 +1026,8 @@ export class WorkersManager {
           return await this.executeMemberRoles(this.mainClient, data);
         case 'message_send':
           return await this.executeMessageSend(this.mainClient, data);
+        case 'thread_member_add':
+          return await this.executeThreadMemberAdd(this.mainClient, data);
       }
     } catch (error) {
       if (this.isPermissionError(error)) return;

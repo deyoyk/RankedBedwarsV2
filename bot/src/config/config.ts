@@ -307,7 +307,7 @@ const configuration: Config = {
     4: clean(process.env.STRIKE_4_DURATION) || '48h',
     default: clean(process.env.STRIKE_DEFAULT_DURATION) || '48h'
   },
-  serverip: clean(process.env.SERVER_IP) || 'play.deyo.lol',
+  serverip: clean(process.env.MINECRAFT_SERVER_IP) || clean(process.env.SERVER_IP) || 'play.deyo.lol',
   serverName: clean(process.env.SERVER_NAME) || 'deyo Ranked Bedwars',
   gameResultUrl: clean(process.env.GAME_RESULT_URL) || 'https://www.vrbw.club',
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',

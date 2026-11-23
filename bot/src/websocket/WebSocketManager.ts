@@ -12,6 +12,8 @@ import config from '../config/config';
 import { maxPartySizeForQueue } from '../utils/partyQueue';
 import { recentQueueId } from '../utils/lastQueue';
 import { getPlayerIgns } from '../utils/playerDirectory';
+import { lookupDiscordNames } from '../utils/discordLookup';
+import { settleAbandonedPregame } from '../Matchmaking/pregameStrikes';
 
 const activeScreenshareThreads: {
   [ign: string]: {
@@ -90,6 +92,7 @@ interface AuthIncomingPayload {
 interface GameManagerLike {
   scoreGame(gameResult: GameResult): Promise<unknown>;
   voidGame(gameId: number, reason: string): Promise<unknown>;
+  strikePregameLeavers(igns: string[]): Promise<string[]>;
   retryWarp(gameId: number): Promise<{ attempts: number; maxAttempts: number }>;
   createPrivateGame(options: {
     partyId: string;
@@ -368,6 +371,12 @@ interface LeaderboardRequestPayload {
   page?: number;
 }
 
+interface DiscordLookupPayload {
+  type: 'discord_lookup';
+  request_id?: string;
+  igns?: unknown[];
+}
+
 interface StatsRequestPayload {
   type: 'stats_request';
   request_id?: string;
@@ -377,6 +386,12 @@ interface StatsRequestPayload {
 interface PermissionPayload {
   type: 'permission';
   [command: string]: string[] | 'permission';
+}
+
+interface PregameAbandonedPayload {
+  type: 'pregame_abandoned';
+  game_id: string;
+  left_players?: unknown[];
 }
 
 interface VoidingPayload {
@@ -426,6 +441,8 @@ type IncomingPayload =
   | StatsRequestPayload
   | PermissionPayload
   | VoidingPayload
+  | DiscordLookupPayload
+  | PregameAbandonedPayload
   | AuthIncomingPayload;
 
 export class WebSocketManager {
@@ -788,6 +805,9 @@ export class WebSocketManager {
       case 'stats_request':
         await this.handleStatsRequest(msg);
         break;
+      case 'discord_lookup':
+        await this.handleDiscordLookup(msg);
+        break;
       case 'permission':
         this.handlePermission(msg);
         break;
@@ -796,6 +816,9 @@ export class WebSocketManager {
         break;
       case 'voiding':
         this.handleVoiding(msg);
+        break;
+      case 'pregame_abandoned':
+        this.handlePregameAbandoned(msg);
         break;
       default:
         if (msg.type && this.listeners[msg.type]) {
@@ -974,6 +997,24 @@ export class WebSocketManager {
     this.send({ type: 'leaderboard_data', request_id: requestId, entries });
   }
 
+  private async handleDiscordLookup(msg: DiscordLookupPayload) {
+    const requestId = typeof msg.request_id === 'string' ? msg.request_id : '';
+    if (!requestId) return;
+    const igns = Array.isArray(msg.igns) ? msg.igns.filter((n): n is string => typeof n === 'string' && n.trim() !== '') : [];
+    const User = (await import('../models/User')).default;
+    const results = await lookupDiscordNames(igns, {
+      discordIdOf: async (ign) => {
+        const user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean() as { discordId?: string } | null;
+        return user?.discordId ?? null;
+      },
+      usernameOf: async (discordId) => {
+        const fetched = await this.discordClient?.users.fetch(discordId).catch(() => null);
+        return fetched?.username ?? null;
+      }
+    });
+    this.send({ type: 'discord_lookup_data', request_id: requestId, results });
+  }
+
   private async handleStatsRequest(msg: StatsRequestPayload) {
     const requestId = typeof msg.request_id === 'string' ? msg.request_id : '';
     const ign = typeof msg.ign === 'string' ? msg.ign.trim() : '';
@@ -988,6 +1029,17 @@ export class WebSocketManager {
         const copy = { ...user };
         delete copy._id;
         delete copy.__v;
+        delete copy.recentGames;
+        delete copy.dailyElo;
+        const { dailyStats, lifetimeStats } = await import('../utils/periodStats');
+        copy.daily = dailyStats(user.recentGames as Parameters<typeof dailyStats>[0]);
+        try {
+          const SeasonStats = (await import('../models/SeasonStats')).default;
+          const past = await SeasonStats.find({ discordId: user.discordId }).lean() as unknown as Record<string, unknown>[];
+          copy.lifetime = lifetimeStats(user, past);
+        } catch (error) {
+          console.error('[WebSocketManager] Past seasons for lifetime stats failed:', error);
+        }
         try {
           const EloRank = (await import('../models/EloRank')).default;
           const { rankProgressFor } = await import('../utils/rankInfo');
@@ -1130,6 +1182,27 @@ export class WebSocketManager {
         if (/already settled/i.test(message)) {
           this.send({ type: 'scoringsettled', game_id: gameIdNum } as ScoringSettledPayload);
         }
+      }
+    })();
+  }
+
+  private handlePregameAbandoned(msg: PregameAbandonedPayload) {
+    if (!this.gameManager) {
+      console.error('[WebSocketManager] GameManager not available for pregame_abandoned');
+      return;
+    }
+    const left = Array.isArray(msg.left_players) ? msg.left_players.filter((n): n is string => typeof n === 'string') : [];
+    const gameId = parseInt(String(msg.game_id), 10);
+    const reason = 'A player left before the game started';
+    (async () => {
+      try {
+        await settleAbandonedPregame(left, {
+          voidGame: () => this.gameManager!.voidGame(gameId, reason),
+          strike: (players) => this.gameManager!.strikePregameLeavers(players),
+          ackAlreadySettled: () => this.send({ type: 'gamevoided', game_id: gameId, reason, players: [] } as GameVoidedPayload)
+        });
+      } catch (error) {
+        console.error(`[WebSocketManager] Settling abandoned pregame ${gameId} failed:`, error);
       }
     })();
   }

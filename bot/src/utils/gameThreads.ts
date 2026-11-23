@@ -1,5 +1,6 @@
 import { ChannelType, type Guild, type GuildBasedChannel, type TextChannel, type ThreadChannel } from 'discord.js';
 import config from '../config/config';
+import { WorkersManager } from '../managers/WorkersManager';
 
 export type GameTextChannel = ThreadChannel | TextChannel;
 
@@ -25,6 +26,7 @@ export async function createGameThread(
   gameId: number,
   playerIds: string[],
   suffix?: string,
+  addMember?: (threadId: string, memberId: string) => Promise<unknown>,
 ): Promise<ThreadChannel> {
   const parent = await fetchGameThreadsParent(guild);
   if (!parent) {
@@ -40,7 +42,11 @@ export async function createGameThread(
   });
 
   const uniquePlayers = [...new Set(playerIds.filter(Boolean))];
-  await Promise.allSettled(uniquePlayers.map(playerId => thread.members.add(playerId)));
+  const workers = WorkersManager.getInstance();
+  const add = addMember ?? (workers
+    ? (threadId: string, memberId: string) => workers.addThreadMember(threadId, memberId)
+    : (_threadId: string, memberId: string) => thread.members.add(memberId));
+  await Promise.allSettled(uniquePlayers.map(playerId => add(thread.id, playerId)));
   return thread;
 }
 

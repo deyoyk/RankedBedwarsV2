@@ -11,6 +11,8 @@ export interface IQueue extends Document {
   isActive?: boolean;
   /** The Minecraft server's ruleset for this queue's games: its season rules and shop rules. */
   ruleset?: 'normal' | 'ppp';
+  /** Players per team on the maps this queue may use (4 = 4v4 maps). Unset: maps whose size matches maxPlayers. */
+  mapTeamSize?: number;
 }
 
 const QueueSchema: Schema = new Schema({
@@ -22,7 +24,8 @@ const QueueSchema: Schema = new Schema({
   isPicking: { type: Boolean, default: false },
   bypassRoles: [{ type: String, default: [] }],
   isActive: { type: Boolean, default: true, index: true },
-  ruleset: { type: String, enum: ['normal', 'ppp'], default: 'normal' }
+  ruleset: { type: String, enum: ['normal', 'ppp'], default: 'normal' },
+  mapTeamSize: { type: Number, min: 1, max: 4 }
 });
 
 QueueSchema.index({ isActive: 1, minElo: 1, maxElo: 1 });

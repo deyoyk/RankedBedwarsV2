@@ -299,7 +299,9 @@ export class CommandManager {
       { name: 'is_picking', description: 'Whether team picking is enabled', type: 5, required: true },
       { name: 'bypass_roles', description: 'Role IDs that can bypass restrictions (comma-separated)', type: 3, required: false },
       { name: 'ruleset', description: 'Rules for its games on the server (default normal)', type: 3, required: false,
-        choices: [{ name: 'normal', value: 'normal' }, { name: 'ppp', value: 'ppp' }] }
+        choices: [{ name: 'normal', value: 'normal' }, { name: 'ppp', value: 'ppp' }] },
+      { name: 'map', description: 'Only use maps of this size (default: maps matching max players)', type: 4, required: false,
+        choices: [{ name: '1v1', value: 1 }, { name: '2v2', value: 2 }, { name: '3v3', value: 3 }, { name: '4v4', value: 4 }] }
     ]);
     this.reg('removequeue', 'Remove a queue by channel ID', removequeue, [
       { name: 'channel_id', description: 'Channel ID of the queue to remove', type: 3, required: true }

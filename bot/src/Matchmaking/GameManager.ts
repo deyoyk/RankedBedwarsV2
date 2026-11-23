@@ -22,8 +22,10 @@ import { bountyForOpponentStreak, parseTiers, type ProgressionTier, streakBonusF
 import { limitBedBreakers, limitMvps } from '../utils/scoringLimits';
 import { embedsFor } from '../utils/betterembed';
 import { getPlayerIgns } from '../utils/playerDirectory';
-import { rankProgressFor } from '../utils/rankInfo';
+import { rankForElo, rankProgressFor } from '../utils/rankInfo';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
+import { leaversToStrikeOnGiveUp, OFFLINE_WARP_REASON, strikeLeavers } from './pregameStrikes';
+import { teamVoiceOverwrites } from './teamVoice';
 
 const { themedEmbed } = embedsFor('Scoring');
 
@@ -119,6 +121,7 @@ interface QueueLike {
 interface WarpEventMessage {
   type?: string;
   gameId?: string | number;
+  left_players?: unknown[];
 }
 
 interface FightStatRow {
@@ -1203,23 +1206,7 @@ export class GameManager {
         name: `Team 1 - Game ${gameId}`,
         type: ChannelType.GuildVoice,
         parent: config.categories.voiceCategory,
-        permissionOverwrites: [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-            allow: [PermissionFlagsBits.Speak]
-          },
-          ...allPlayers.map(playerId => ({
-            id: playerId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.Connect,
-              PermissionFlagsBits.Speak,
-              PermissionFlagsBits.UseVAD,
-              PermissionFlagsBits.Stream
-            ]
-          }))
-        ]
+        permissionOverwrites: teamVoiceOverwrites(guild.roles.everyone.id, allPlayers)
       }, 8);
       created.push(team1Voice);
 
@@ -1227,23 +1214,7 @@ export class GameManager {
         name: `Team 2 - Game ${gameId}`,
         type: ChannelType.GuildVoice,
         parent: config.categories.voiceCategory,
-        permissionOverwrites: [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
-            allow: [PermissionFlagsBits.Speak]
-          },
-          ...allPlayers.map(playerId => ({
-            id: playerId,
-            allow: [
-              PermissionFlagsBits.ViewChannel,
-              PermissionFlagsBits.Connect,
-              PermissionFlagsBits.Speak,
-              PermissionFlagsBits.UseVAD,
-              PermissionFlagsBits.Stream
-            ]
-          }))
-        ]
+        permissionOverwrites: teamVoiceOverwrites(guild.roles.everyone.id, allPlayers)
       }, 8);
       created.push(team2Voice);
 
@@ -1574,7 +1545,13 @@ export class GameManager {
     try {
       const { gameId } = msg;
       console.log(`[GameManager] Warp failed (offline players) for game ${gameId}`);
-      await this.handleWarpFailure(gameId as string, 'Some players are offline');
+      const warpData = this.warpRequests.get(String(gameId));
+      if (warpData) {
+        warpData.leftPlayers = Array.isArray(msg.left_players)
+          ? msg.left_players.filter((n): n is string => typeof n === 'string')
+          : [];
+      }
+      await this.handleWarpFailure(gameId as string, OFFLINE_WARP_REASON);
     } catch (error) {
       console.error('[GameManager] Error handling offline players:', error);
     }
@@ -1644,7 +1621,11 @@ export class GameManager {
       } else {
 
         console.log(`[GameManager] Max warp retries reached for game ${gameId}, voiding game`);
+        const leftPlayers = leaversToStrikeOnGiveUp(reason, warpData.leftPlayers);
         this.clearWarpRequest(gameId);
+        if (leftPlayers.length > 0) {
+          await this.strikePregameLeavers(leftPlayers);
+        }
         this.manualWarpRetries.delete(parseInt(gameId, 10));
         await this.voidGame(parseInt(gameId), `Warp failed: ${reason}`);
       }
@@ -1734,6 +1715,24 @@ export class GameManager {
       console.error(`[GameManager] Error cleaning up game ${gameId}:`, error);
       this.cleaningGames.delete(gameId);
     }
+  }
+
+  public async strikePregameLeavers(igns: string[]): Promise<string[]> {
+    const guild = await this.getGuild();
+    if (!guild) return [];
+    const { StrikeManager } = await import('../managers/StrikeManager');
+    const moderatorId = this.client.user?.id ?? 'system';
+    const struck = await strikeLeavers(igns, {
+      discordIdOf: async (ign) => {
+        const user = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('discordId').lean() as { discordId?: string } | null;
+        return user?.discordId ?? null;
+      },
+      strike: (discordId, reason) => StrikeManager.strike(guild, discordId, moderatorId, reason)
+    });
+    if (struck.length > 0) {
+      console.log(`[GameManager] Struck for leaving before the game started: ${struck.join(', ')}`);
+    }
+    return struck;
   }
 
   private async getGuild(): Promise<Guild | null> {
@@ -2041,7 +2040,7 @@ export class GameManager {
       const isMvp = context.mvpsIds.includes(player.discordId);
       const isBedBreaker = context.bedbreaksIds.includes(player.discordId);
 
-      const rank = context.eloRanks.find(r => player.elo >= r.startElo && player.elo <= r.endElo);
+      const rank = rankForElo(player.elo, context.eloRanks);
       const isPrivateGame = Boolean(context.game.isPrivate);
 
       let eloChange = 0;
