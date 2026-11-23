@@ -1,28 +1,25 @@
+import { resolveServerIp } from '../src/config/config';
+
 describe('server address setting', () => {
-  const saved = { ...process.env };
-
-  afterEach(() => {
-    process.env = { ...saved };
-    jest.resetModules();
-  });
-
-  function load(): { serverip: string } {
-    let cfg: { serverip: string } = { serverip: '' };
-    jest.isolateModules(() => {
-      cfg = require('../src/config/config').default;
-    });
-    return cfg;
-  }
-
   test('MINECRAFT_SERVER_IP wins over the SERVER_IP that Pterodactyl sets to the machine address', () => {
-    process.env.SERVER_IP = '139.180.187.162';
-    process.env.MINECRAFT_SERVER_IP = 'vrbw.club';
-    expect(load().serverip).toBe('vrbw.club');
+    expect(resolveServerIp(
+      { SERVER_IP: '203.0.113.10', MINECRAFT_SERVER_IP: 'vrbw.club' },
+      {}
+    )).toBe('vrbw.club');
   });
 
-  test('SERVER_IP still works when MINECRAFT_SERVER_IP is not set', () => {
-    process.env.SERVER_IP = 'rbw.example.net';
-    delete process.env.MINECRAFT_SERVER_IP;
-    expect(load().serverip).toBe('rbw.example.net');
+  test('.env SERVER_IP wins over the machine SERVER_IP Pterodactyl injects', () => {
+    expect(resolveServerIp(
+      { SERVER_IP: '203.0.113.10' },
+      { SERVER_IP: 'vrbw.club' }
+    )).toBe('vrbw.club');
+  });
+
+  test('falls back to the process SERVER_IP when there is no .env value', () => {
+    expect(resolveServerIp({ SERVER_IP: 'rbw.example.net' }, {})).toBe('rbw.example.net');
+  });
+
+  test('uses the default when nothing is configured', () => {
+    expect(resolveServerIp({}, {})).toBe('play.deyo.lol');
   });
 });

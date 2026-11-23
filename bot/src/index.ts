@@ -56,6 +56,13 @@ if (configErrors.length > 0) {
   process.exit(1);
 }
 
+console.log(`[Config] Minecraft join address: ${config.serverip}`);
+if (/^\d{1,3}(\.\d{1,3}){3}$/.test(config.serverip)) {
+  console.warn(
+    '[Config] Minecraft join address is a raw IP. Set MINECRAFT_SERVER_IP or SERVER_IP in .env to the address players actually join.'
+  );
+}
+
 const wsPort = parseInt(config.websocketport, 10) || 25565;
 const wsPath = '/rbw/websocket'; 
 

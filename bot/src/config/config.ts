@@ -1,9 +1,37 @@
-import { config as dotenvConfig } from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { config as dotenvConfig, parse as parseDotenv } from 'dotenv';
 import { parseDuration } from '../utils/parseDuration';
 
 dotenvConfig();
 
 const clean = (v: string | undefined): string => (v ?? '').trim();
+
+function readEnvFile(): Record<string, string> {
+  try {
+    return parseDotenv(fs.readFileSync(path.resolve(process.cwd(), '.env'), 'utf8'));
+  } catch {
+    return {};
+  }
+}
+
+const envFileValues = readEnvFile();
+
+/**
+ * The join address players see. Prefer MINECRAFT_SERVER_IP because Pterodactyl
+ * injects SERVER_IP as the machine address; the .env SERVER_IP wins over that
+ * injected value so an existing .env keeps working.
+ */
+export function resolveServerIp(
+  processEnv: NodeJS.ProcessEnv,
+  fileEnv: Record<string, string | undefined>
+): string {
+  return clean(processEnv.MINECRAFT_SERVER_IP)
+    || clean(fileEnv.MINECRAFT_SERVER_IP)
+    || clean(fileEnv.SERVER_IP)
+    || clean(processEnv.SERVER_IP)
+    || 'play.deyo.lol';
+}
 
 /** Builds the public game page URL from a site base such as https://www.vrbw.club. */
 export function buildGameResultUrl(base: string, gameId: number | string): string {
@@ -314,7 +342,7 @@ const configuration: Config = {
     4: clean(process.env.STRIKE_4_DURATION) || '48h',
     default: clean(process.env.STRIKE_DEFAULT_DURATION) || '48h'
   },
-  serverip: clean(process.env.MINECRAFT_SERVER_IP) || clean(process.env.SERVER_IP) || 'play.deyo.lol',
+  serverip: resolveServerIp(process.env, envFileValues),
   serverName: clean(process.env.SERVER_NAME) || 'deyo Ranked Bedwars',
   inviteLink: clean(process.env.INVITE_LINK) || 'discord.gg/deyobw',
   gameResultUrl: clean(process.env.GAME_RESULT_URL) || 'https://www.vrbw.club',
