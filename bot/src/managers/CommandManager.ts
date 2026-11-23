@@ -275,9 +275,9 @@ export class CommandManager {
     this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
     this.reg('rbwconfig', 'Command permissions and strike rules', rbwconfig, [], rbwconfigData);
-    this.reg('resetdb', 'Debug: take the ELO, muted and banned roles off one member or everyone (Discord only)', resetdb, [
-      { name: 'user', description: 'One member to clear', type: 6, required: false },
-      { name: 'global', description: 'Clear every member (asks to confirm)', type: 5, required: false }
+    this.reg('resetdb', 'Debug: wipe one player or everyone from the bot (account, punishments and roles; Discord only)', resetdb, [
+      { name: 'user', description: 'One player to wipe (asks to confirm)', type: 6, required: false },
+      { name: 'global', description: 'Wipe every player (asks to confirm)', type: 5, required: false }
     ]);
     this.reg('pgtourney', 'Tourney mode for private games: no spectating while it is on', pgtourney, [
       { name: 'mode', description: 'Turn it on or off; leave out to see whether it is on', type: 3, required: false, choices: [
