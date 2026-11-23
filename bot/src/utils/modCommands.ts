@@ -87,7 +87,10 @@ export async function executeModerationAction(
 export interface UnmoderationActionConfig {
   commandName: string;
   actionVerb: string;
-  managerCall: (guild: Guild, targetId: string, issuerId: string) => Promise<unknown>;
+  /** What the target has to be for the undo to apply ("banned"), for the reply when they aren't. */
+  activeWord: string;
+  /** False when the target wasn't banned/muted, so nothing was undone. */
+  managerCall: (guild: Guild, targetId: string, issuerId: string, reason?: string) => Promise<boolean>;
 }
 
 export async function executeUnmoderationAction(
@@ -106,9 +109,14 @@ export async function executeUnmoderationAction(
   }
 
   try {
-    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId);
+    const reason = interaction.options.getString('reason')?.trim() || undefined;
+    const undone = await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, reason);
+    if (!undone) {
+      await safeReply(interaction, errorEmbed(`<@${parsed.targetId}> isn't ${config.activeWord}.`, `${config.commandName} Error`));
+      return;
+    }
     await safeReply(interaction, successEmbed(
-      `${config.actionVerb} <@${parsed.targetId}>.`,
+      `${config.actionVerb} <@${parsed.targetId}>.${reason ? `\n**Reason:** ${reason}` : ''}`,
       `User ${config.actionVerb}`
     ));
   } catch (error) {
