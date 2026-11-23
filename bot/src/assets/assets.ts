@@ -218,8 +218,16 @@ async function loadCachedImage(
 export async function loadAvatarDataUrl(username: string): Promise<string> {
   const key = `avatar:${username.toLowerCase()}`;
   const img = await loadCachedImage(key, async () => {
-    const remote = await fetchImageDataUrl(`https://mineskin.eu/avatar/${encodeURIComponent(username)}/40`, 2000);
-    if (remote) return { dataUrl: remote, ok: true };
+    const encoded = encodeURIComponent(username);
+    const urls = [
+      `https://mc-heads.net/avatar/${encoded}/64`,
+      `https://mineskin.eu/avatar/${encoded}/64`,
+      `https://minotar.net/helm/${encoded}/64.png`,
+    ];
+    for (const url of urls) {
+      const remote = await fetchImageDataUrl(url, 2200);
+      if (remote) return { dataUrl: remote, ok: true };
+    }
     return { dataUrl: null, ok: false, negativeCache: staticImageDataUrl('fallbacks', 'steve.png') };
   });
   if (img) return img;
@@ -229,16 +237,16 @@ export async function loadAvatarDataUrl(username: string): Promise<string> {
 const MC_API = 'https://mc-api.io';
 const STEVE_UUID = '8667ba71-b85a-4004-af54-457a9734eed7';
 
-async function resolveSkinUuid(ign: string): Promise<string> {
+async function resolveSkinUuid(ign: string): Promise<string | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4000);
+  const timeout = setTimeout(() => controller.abort(), 2000);
   try {
     const res = await fetch(`${MC_API}/profile/${encodeURIComponent(ign)}/JAVA`, { signal: controller.signal });
-    if (!res.ok) return STEVE_UUID;
+    if (!res.ok) return null;
     const data = await res.json() as { uuid?: string };
-    return typeof data.uuid === 'string' && data.uuid ? data.uuid : STEVE_UUID;
+    return typeof data.uuid === 'string' && data.uuid ? data.uuid : null;
   } catch {
-    return STEVE_UUID;
+    return null;
   } finally {
     clearTimeout(timeout);
   }
@@ -247,9 +255,19 @@ async function resolveSkinUuid(ign: string): Promise<string> {
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {
   const key = `skin:${ign.toLowerCase()}`;
   return loadCachedImage(key, async () => {
+    const encoded = encodeURIComponent(ign);
     const uuid = await resolveSkinUuid(ign);
-    const remote = await fetchImageDataUrl(`${MC_API}/render/FULL/${uuid}`, 4000);
-    if (remote) return { dataUrl: remote, ok: true };
-    return { dataUrl: null, ok: false };
+    const urls = [
+      uuid ? `${MC_API}/render/FULL/${uuid}` : null,
+      `https://mc-heads.net/body/${encoded}/144`,
+      `https://nmsr.nickac.dev/fullbody/${encoded}`,
+      `https://mc-heads.net/body/${STEVE_UUID}/144`,
+    ].filter(Boolean) as string[];
+
+    for (const url of urls) {
+      const remote = await fetchImageDataUrl(url, 2000);
+      if (remote) return { dataUrl: remote, ok: true };
+    }
+    return { dataUrl: staticImageDataUrl('fallbacks', 'steve-full.png'), ok: false };
   });
 }

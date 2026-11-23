@@ -363,6 +363,28 @@ function metadata(input: ScoreTemplateInput): VNode[] {
   ];
 }
 
+function avatarOverlay(winners: ScoreTemplatePlayer[], losers: ScoreTemplatePlayer[]): VNode[] {
+  const rows = [
+    ...winners.map((player, index) => ({ player, top: WIN_TOP + HEADER_H + index * ROW_H })),
+    ...losers.map((player, index) => ({ player, top: LOSE_TOP + HEADER_H + index * ROW_H })),
+  ];
+
+  return rows.map(({ player, top }) => h('img', {
+    src: player.avatar,
+    width: 40,
+    height: 40,
+    style: {
+      position: 'absolute',
+      left: 80,
+      top: top + 10,
+      width: 40,
+      height: 40,
+      borderRadius: 6,
+      objectFit: 'cover',
+    },
+  }));
+}
+
 export function scoreTemplate(input: ScoreTemplateInput): { root: VNode; width: number; height: number } {
   const partyCounts = new Map<string, number>();
   for (const player of [...input.winners, ...input.losers]) {
@@ -418,6 +440,7 @@ export function scoreTemplate(input: ScoreTemplateInput): { root: VNode; width: 
     text(X + 20, 916, 700, 28, input.serverName, 20, '#FFFFFF', SEMIBOLD, 'left', 1.4),
     text(WIDTH - X - 720, 916, 700, 28, input.inviteLink, 20, '#E9D5FF', SEMIBOLD, 'right', 1.4),
     grainLayer(WIDTH, HEIGHT),
+    ...avatarOverlay(input.winners, input.losers),
   );
 
   return { root, width: WIDTH, height: HEIGHT };

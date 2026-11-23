@@ -50,7 +50,7 @@ function intEnv(name: string, fallback: number, min: number, max: number): numbe
 
 const STATS_IMAGE_TTL_MS = intEnv('IMAGE_STATS_CACHE_MS', 5000, 0, 600000);
 const STATS_IMAGE_CACHE_MAX = intEnv('IMAGE_STATS_CACHE_MAX', 100, 1, 2000);
-const SKIN_TIMEOUT_MS = intEnv('IMAGE_SKIN_TIMEOUT_MS', 5000, 500, 30000);
+const SKIN_TIMEOUT_MS = intEnv('IMAGE_SKIN_TIMEOUT_MS', 15000, 500, 30000);
 
 type StatsImageCacheEntry = {
   at: number;

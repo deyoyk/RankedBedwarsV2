@@ -31,16 +31,10 @@ export type PlayerLine = {
 };
 
 async function resolveAvatar(username: string): Promise<string> {
-  let timer: NodeJS.Timeout | undefined;
-  const fallback = new Promise<string>((resolve) => {
-    timer = setTimeout(() => resolve(staticImageDataUrl('fallbacks', 'steve.png')), 1500);
-  });
   try {
-    return await Promise.race([loadAvatarDataUrl(username), fallback]);
+    return await loadAvatarDataUrl(username);
   } catch {
     return staticImageDataUrl('fallbacks', 'steve.png');
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
   }
 }
 

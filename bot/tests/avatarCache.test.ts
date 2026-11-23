@@ -38,10 +38,10 @@ describe('avatar download cache', () => {
   });
 
   it('falls back to the bundled steve avatar when the CDN fails', async () => {
-    fetchMock.mockRejectedValueOnce(new Error('offline'));
+    fetchMock.mockRejectedValue(new Error('offline'));
     const first = await loadAvatarDataUrl('OfflineOlivia');
-    expect(first).toContain('data:image/png;base64,');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(first).toBe(staticImageDataUrl('fallbacks', 'steve.png'));
+    expect(fetchMock).toHaveBeenCalled();
   });
 
   it('fetches different usernames independently', async () => {
@@ -68,7 +68,7 @@ describe('avatar download cache', () => {
   });
 
   it('rejects oversized image responses and uses the fallback avatar', async () => {
-    fetchMock.mockResolvedValueOnce({
+    fetchMock.mockResolvedValue({
       ok: true,
       headers: {
         get: (name: string) => (name === 'content-type' ? 'image/png' : null),

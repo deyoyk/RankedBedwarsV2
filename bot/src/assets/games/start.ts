@@ -249,6 +249,23 @@ function teamSection(
   ];
 }
 
+function avatarOverlay(players: StartTemplatePlayer[], top: number): VNode[] {
+  return players.slice(0, 4).map((player, index) => h('img', {
+    src: player.avatar,
+    width: 40,
+    height: 40,
+    style: {
+      position: 'absolute',
+      left: 80,
+      top: top + HEADER_H + index * ROW_H + 10,
+      width: 40,
+      height: 40,
+      borderRadius: 6,
+      objectFit: 'cover',
+    },
+  }));
+}
+
 export function startTemplate(input: StartTemplateInput): { root: VNode; width: number; height: number } {
   const root = h('div', {
     style: {
@@ -291,6 +308,8 @@ export function startTemplate(input: StartTemplateInput): { root: VNode; width: 
     text(X + 20, 920, 700, 28, input.serverName, 20, '#FFFFFF', SEMIBOLD, 'left', 1.4),
     text(WIDTH - X - 720, 920, 700, 28, input.inviteLink, 20, '#E9D5FF', SEMIBOLD, 'right', 1.4),
     grainLayer(WIDTH, HEIGHT),
+    ...avatarOverlay(input.team1, GREEN_TOP),
+    ...avatarOverlay(input.team2, RED_TOP),
   );
 
   return { root, width: WIDTH, height: HEIGHT };

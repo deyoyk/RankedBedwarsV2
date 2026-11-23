@@ -73,7 +73,7 @@ function grainDataUrl(): string {
   return cachedGrain;
 }
 
-export function grainLayer(width: number, height: number, opacity = 0.35): VNode {
+export function grainLayer(width: number, height: number, opacity = 0.25): VNode {
   return h('img', {
     src: grainDataUrl(),
     width,

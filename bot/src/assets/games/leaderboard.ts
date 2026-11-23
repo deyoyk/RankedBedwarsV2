@@ -134,6 +134,23 @@ function footer(input: LeaderboardTemplateInput): VNode[] {
   ];
 }
 
+function avatarOverlay(entries: LeaderboardTemplateEntry[]): VNode[] {
+  return entries.slice(0, ROWS).map((entry, index) => h('img', {
+    src: entry.avatar,
+    width: 56,
+    height: 56,
+    style: {
+      position: 'absolute',
+      left: 160,
+      top: 40 + HEADER_H + index * ROW_H + 16,
+      width: 56,
+      height: 56,
+      borderRadius: 8,
+      objectFit: 'cover',
+    },
+  }));
+}
+
 export function leaderboardTemplate(input: LeaderboardTemplateInput): { root: VNode; width: number; height: number } {
   const root = h('div', {
     style: {
@@ -166,6 +183,7 @@ export function leaderboardTemplate(input: LeaderboardTemplateInput): { root: VN
     }).flat(),
     ...footer(input),
     grainLayer(WIDTH, HEIGHT),
+    ...avatarOverlay(input.entries),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
