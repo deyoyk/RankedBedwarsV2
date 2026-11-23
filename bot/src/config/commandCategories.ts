@@ -10,7 +10,7 @@ const CATEGORY_COMMANDS: Record<CommandCategory, string[]> = {
   admin: [
     'rbwconfig', 'queuecontrol', 'addqueue', 'removequeue', 'edit', 'unregister', 'fixall', 'addelo', 'removeelo',
     'wipe', 'wipeeveryone', 'startseason', 'endseason', 'forceregister', 'forcerename', 'gamescount', 'win', 'lose',
-    'preset', 'pgtourney',
+    'preset', 'pgtourney', 'resetdb',
   ],
   staff: [
     'score', 'void', 'forcevoid', 'retry', 'strike', 'unstrike', 'ban', 'unban', 'mute', 'unmute', 'history', 'ssclose',

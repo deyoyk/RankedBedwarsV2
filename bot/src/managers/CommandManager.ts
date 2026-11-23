@@ -1,5 +1,6 @@
 import { wipeeveryone } from '../commands/account/wipeeveryone';
 import { wipe } from '../commands/account/wipe';
+import { resetdb } from '../commands/account/resetdb';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
@@ -274,6 +275,10 @@ export class CommandManager {
     this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
     this.reg('rbwconfig', 'Command permissions and strike rules', rbwconfig, [], rbwconfigData);
+    this.reg('resetdb', 'Debug: take the ELO, muted and banned roles off one member or everyone (Discord only)', resetdb, [
+      { name: 'user', description: 'One member to clear', type: 6, required: false },
+      { name: 'global', description: 'Clear every member (asks to confirm)', type: 5, required: false }
+    ]);
     this.reg('pgtourney', 'Tourney mode for private games: no spectating while it is on', pgtourney, [
       { name: 'mode', description: 'Turn it on or off; leave out to see whether it is on', type: 3, required: false, choices: [
         { name: 'On', value: 'on' }, { name: 'Off', value: 'off' }
