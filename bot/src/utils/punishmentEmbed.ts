@@ -1,7 +1,9 @@
 import config from '../config/config';
 import User from '../models/User';
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, Guild, MessageCreateOptions, MessageFlags, TextChannel } from 'discord.js';
+import PunishmentAction, { PunishmentSource } from '../models/PunishmentAction';
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, Guild, GuildMember, MessageCreateOptions, MessageFlags, PermissionFlagsBits, TextChannel } from 'discord.js';
 import { embedsFor } from './betterembed';
+import { PermissionService } from '../services/PermissionService';
 
 const { themedEmbed } = embedsFor('Punishment');
 
@@ -17,7 +19,11 @@ interface PunishmentEmbedOptions {
   extraFields?: Array<{ label: string; value: string }>;
   /** The record's ID (for example "4840E"), shown next to the reason and used by the Details button */
   caseId?: string;
+  staff?: string;
+  source?: PunishmentSource;
 }
+
+const ANONYMOUS = new Set<PunishmentType>(['ban', 'unban']);
 
 const TYPE_CONFIG: Record<PunishmentType, { action: string; color: number }> = {
   ban: { action: 'has been 🔨 rank banned', color: 0x7b0606 },
@@ -41,7 +47,7 @@ function formatDuration(expires: Date): string {
   return `${Math.ceil(minutes / 1440)}d`;
 }
 
-export function buildPunishmentMessage(options: Omit<PunishmentEmbedOptions, 'guild'>): MessageCreateOptions {
+export function buildPunishmentMessage(options: Omit<PunishmentEmbedOptions, 'guild'>, issuerActionId?: string): MessageCreateOptions {
   const { targetId, moderatorId, reason, type, expires, extraFields, caseId } = options;
   const typeConfig = TYPE_CONFIG[type] || TYPE_CONFIG.ban;
   const isPositive = type.startsWith('un');
@@ -62,7 +68,9 @@ export function buildPunishmentMessage(options: Omit<PunishmentEmbedOptions, 'gu
     fields.push({ name: 'Duration', value: expires ? `\`${formatDuration(expires)}\`` : '`Permanent`', inline: true });
     fields.push({ name: 'Expires', value: expires ? `<t:${Math.floor(expires.getTime() / 1000)}:R>` : '`Never`', inline: true });
   }
-  fields.push({ name: isPositive && moderatorId === 'system' ? 'Expired' : 'Staff', value: `> ${moderatorText(moderatorId)}`, inline: true });
+  if (!ANONYMOUS.has(type)) {
+    fields.push({ name: isPositive && moderatorId === 'system' ? 'Expired' : 'Staff', value: `> ${moderatorText(moderatorId)}`, inline: true });
+  }
 
   const embed = themedEmbed(typeConfig.color)
     .setDescription(description)
@@ -70,11 +78,13 @@ export function buildPunishmentMessage(options: Omit<PunishmentEmbedOptions, 'gu
     .setTimestamp();
   if (!isPositive) embed.setFooter({ text: 'To appeal, open a ticket in the support channel' });
 
-  const components = caseId
-    ? [new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(`punishment:details:${type}:${targetId}:${caseId}`).setLabel('Details').setStyle(ButtonStyle.Secondary)
-      )]
-    : [];
+  const buttons: ButtonBuilder[] = [];
+  if (issuerActionId) {
+    buttons.push(new ButtonBuilder().setCustomId(`punishment:issuer:${issuerActionId}`).setLabel('Details').setEmoji('📖').setStyle(ButtonStyle.Secondary));
+  } else if (caseId && !ANONYMOUS.has(type)) {
+    buttons.push(new ButtonBuilder().setCustomId(`punishment:details:${type}:${targetId}:${caseId}`).setLabel('Details').setStyle(ButtonStyle.Secondary));
+  }
+  const components = buttons.length ? [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)] : [];
 
   return { content: userMention, embeds: [embed], components };
 }
@@ -102,7 +112,19 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
     return;
   }
 
-  const payload = buildPunishmentMessage(options);
+  let issuerActionId: string | undefined;
+  if (ANONYMOUS.has(type)) {
+    try {
+      const action = await PunishmentAction.create({
+        type, targetId: options.targetId, moderatorId: options.moderatorId, staff: options.staff,
+        source: options.source ?? 'discord', caseId: options.caseId
+      });
+      issuerActionId = String(action._id);
+    } catch (error) {
+      console.error(`[PunishmentEmbed] Couldn't record who issued the ${type}:`, error);
+    }
+  }
+  const payload = buildPunishmentMessage(options, issuerActionId);
   try {
     await channel.send(payload);
   } catch (error) {
@@ -141,7 +163,9 @@ export async function handlePunishmentDetails(interaction: ButtonInteraction): P
     if (typeof record.duration === 'number') {
       lines.push(`> **Duration:** \`${record.duration > 0 ? `${record.duration}m` : 'Permanent'}\``);
     }
-    lines.push(`> **Staff:** ${moderatorText(record.moderator)}`);
+    if (!ANONYMOUS.has(base as PunishmentType)) {
+      lines.push(`> **Staff:** ${moderatorText(record.moderator)}`);
+    }
   } else {
     lines.push(`-# ➡ Case \`#${caseId}\` is no longer on record`);
   }
@@ -154,4 +178,37 @@ export async function handlePunishmentDetails(interaction: ButtonInteraction): P
       { name: 'Bans', value: `\`${lists.ban.length}\``, inline: true },
     );
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+}
+
+export function canSeeIssuer(member: GuildMember | null, isAdmin: boolean): boolean {
+  if (isAdmin) return true;
+  const roles = PermissionService.rolesFor('ban');
+  return Boolean(member?.roles?.cache && roles.some(roleId => member.roles.cache.has(roleId)));
+}
+
+export async function handlePunishmentIssuer(interaction: ButtonInteraction): Promise<void> {
+  const isAdmin = Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.Administrator));
+  if (!canSeeIssuer(interaction.member as GuildMember | null, isAdmin)) {
+    const embed = themedEmbed('error').setDescription('Only staff can see who issued this.');
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const id = interaction.customId.split(':')[2] || '';
+  const action = await PunishmentAction.findById(id).lean().catch(() => null);
+  if (!action) {
+    const embed = themedEmbed('error').setDescription('Who issued this is no longer on record.');
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    return;
+  }
+  const when = Math.floor(new Date(action.date).getTime() / 1000);
+  const who = action.source === 'minecraft'
+    ? `\`${action.staff || 'Console'}\`${/^\d{17,20}$/.test(action.moderatorId) && action.moderatorId !== interaction.client.user?.id ? ` (<@${action.moderatorId}>)` : ''}`
+    : moderatorText(action.moderatorId);
+  const lines = [
+    `<@${action.targetId}> · ${action.type === 'unban' ? 'Unban' : 'Ban'}${action.caseId ? ` \`#${action.caseId}\`` : ''}`,
+    `> **Issued by:** ${who}`,
+    `> **When:** <t:${when}:f> (<t:${when}:R>)`,
+    `> **Where:** ${action.source === 'minecraft' ? 'Minecraft' : 'Discord'}`,
+  ];
+  await interaction.reply({ embeds: [themedEmbed('info').setDescription(lines.join('\n'))], flags: MessageFlags.Ephemeral });
 }

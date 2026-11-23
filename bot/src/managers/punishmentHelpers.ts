@@ -87,6 +87,8 @@ export function sendPunishmentNotification(
     expires?: Date;
     /** The record ID (for example "4840E"), shown next to the reason and used by the Details button */
     caseId?: string;
+    staff?: string;
+    source?: 'discord' | 'minecraft';
   }
 ): void {
   promises.push(
@@ -105,6 +107,8 @@ export function sendWebSocketNotification(
     reason: string;
     duration?: number | null;
     id: string;
+    preset?: string;
+    staff?: string;
   },
   typeName: string
 ): void {
@@ -116,7 +120,9 @@ export function sendWebSocketNotification(
         ign: user.ign,
         reason: params.reason.trim(),
         duration: params.duration ?? null,
-        id: params.id
+        id: params.id,
+        preset: params.preset ?? null,
+        staff: params.staff ?? null
       });
     }).catch(error => {
       console.warn(`[${typeName}Manager] Failed to send WebSocket ${typeName} notification:`, error.message);

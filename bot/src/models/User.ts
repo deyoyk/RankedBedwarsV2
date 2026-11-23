@@ -42,6 +42,7 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
     date: Date;
     duration: number;
     moderator: string;
+    preset?: string;
   }>;
   bans: Array<{
     id: string;
@@ -49,6 +50,7 @@ export interface IUser extends Document, Omit<IUserStats, 'kdr' | 'wlr'> {
     date: Date;
     duration: number;
     moderator: string;
+    preset?: string;
   }>;
   statResets: Array<{
     date: Date;
@@ -102,6 +104,7 @@ const UserSchema: Schema = new Schema({
     date: { type: Date, required: true },
     duration: { type: Number, required: true },
     moderator: { type: String, required: true },
+    preset: { type: String },
   }],
   bans: [{
     id: { type: Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
@@ -109,6 +112,7 @@ const UserSchema: Schema = new Schema({
     date: { type: Date, required: true },
     duration: { type: Number, required: true },
     moderator: { type: String, required: true },
+    preset: { type: String },
   }],
   statResets: [{
     date: { type: Date, required: true },

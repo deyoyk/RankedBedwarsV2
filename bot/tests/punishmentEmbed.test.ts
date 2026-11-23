@@ -1,5 +1,17 @@
-import { sendPunishmentEmbed } from '../src/utils/punishmentEmbed';
+import { handlePunishmentIssuer, sendPunishmentEmbed } from '../src/utils/punishmentEmbed';
 import { EMBED_THEME } from '../src/utils/betterembed';
+
+jest.mock('../src/models/PunishmentAction', () => ({
+  __esModule: true,
+  default: { create: jest.fn(), findById: jest.fn() },
+}));
+jest.mock('../src/services/PermissionService', () => ({
+  PermissionService: { rolesFor: jest.fn(() => ['staff-role']) },
+}));
+const PunishmentAction = require('../src/models/PunishmentAction').default;
+beforeEach(() => {
+  PunishmentAction.create.mockResolvedValue({ _id: 'act1' });
+});
 
 jest.mock('../src/config/config', () => ({
   __esModule: true,
@@ -91,6 +103,28 @@ describe('punishment embeds', () => {
     expect(embed.description).toContain('has been 🔨 rank banned.');
     expect(fields.Duration).toBe('`Permanent`');
     expect(fields.Expires).toBe('`Never`');
+    expect(fields.Staff).toBeUndefined();
+    expect(JSON.stringify(embed)).not.toContain('mod-1');
+    const button = sent(channel).components?.[0]?.toJSON().components[0];
+    expect(button.custom_id).toBe('punishment:issuer:act1');
+    expect(button.label).toBe('Details');
+    expect(button.emoji?.name).toBe('📖');
+    expect(PunishmentAction.create).toHaveBeenCalledWith(expect.objectContaining({ type: 'ban', moderatorId: 'mod-1', source: 'discord' }));
+  });
+
+  it('records an in-game ban as issued in Minecraft by the staff member', async () => {
+    const channel = channelMock();
+    await sendPunishmentEmbed({ guild: guildWith(channel), targetId: TARGET, moderatorId: 'bot', reason: 'x', type: 'ban',
+      caseId: 'C1', staff: 'Mod1', source: 'minecraft' });
+    expect(PunishmentAction.create).toHaveBeenCalledWith(expect.objectContaining({ staff: 'Mod1', source: 'minecraft', caseId: 'C1' }));
+    const ids = sent(channel).components?.[0]?.toJSON().components.map((c: any) => c.custom_id);
+    expect(ids).toEqual(['punishment:issuer:act1']);
+  });
+
+  it('still posts a ban when who issued it could not be recorded', async () => {
+    PunishmentAction.create.mockRejectedValue(new Error('db down'));
+    const channel = channelMock();
+    await sendPunishmentEmbed({ guild: guildWith(channel), targetId: TARGET, moderatorId: 'mod-1', reason: 'x', type: 'ban' });
     expect(sent(channel).components).toEqual([]);
   });
 
@@ -133,7 +167,7 @@ describe('punishment embeds', () => {
     expect(embed.description).toContain(`${phrase}.`);
     expect(embed.color).toBe(EMBED_THEME.successColor);
     expect(embed.footer).toBeUndefined();
-    expect(fieldsOf(embed).Expired).toBe('> System');
+    expect(fieldsOf(embed).Expired).toBe(type === 'unban' ? undefined : '> System');
   });
 
   it('does not throw when the punishments channel is missing', async () => {
@@ -154,5 +188,46 @@ describe('punishment embeds', () => {
     })).resolves.toBeUndefined();
 
     warn.mockRestore();
+  });
+});
+
+describe('the Details button on bans', () => {
+  const click = (roles: string[], admin = false) => ({
+    customId: 'punishment:issuer:act1',
+    memberPermissions: { has: () => admin },
+    member: { roles: { cache: { has: (id: string) => roles.includes(id) } } },
+    client: { user: { id: 'bot' } },
+    reply: jest.fn(),
+  }) as any;
+  const text = (i: any) => i.reply.mock.calls[0][0].embeds[0].toJSON().description as string;
+
+  it('is refused to anyone who is not staff', async () => {
+    const i = click(['member']);
+    await handlePunishmentIssuer(i);
+    expect(text(i)).toContain('Only staff');
+    expect(PunishmentAction.findById).not.toHaveBeenCalled();
+  });
+
+  it('shows staff who issued it, when and where', async () => {
+    PunishmentAction.findById.mockReturnValue({ lean: () => Promise.resolve({
+      type: 'unban', targetId: TARGET, moderatorId: 'bot', staff: 'Mod1', source: 'minecraft', date: new Date(1000000)
+    }) });
+    const i = click(['staff-role']);
+    await handlePunishmentIssuer(i);
+    expect(text(i)).toContain('**Issued by:** `Mod1`');
+    expect(text(i)).toContain('**Where:** Minecraft');
+    expect(text(i)).toContain('<t:1000:f>');
+    expect(i.reply.mock.calls[0][0].flags).toBeDefined();
+  });
+
+  it('shows admins a Discord ban by mention', async () => {
+    PunishmentAction.findById.mockReturnValue({ lean: () => Promise.resolve({
+      type: 'ban', targetId: TARGET, moderatorId: '222222222222222222', source: 'discord', caseId: 'C9', date: new Date()
+    }) });
+    const i = click([], true);
+    await handlePunishmentIssuer(i);
+    expect(text(i)).toContain('**Issued by:** <@222222222222222222>');
+    expect(text(i)).toContain('**Where:** Discord');
+    expect(text(i)).toContain('`#C9`');
   });
 });

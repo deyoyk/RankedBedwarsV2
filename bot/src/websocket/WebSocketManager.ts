@@ -1,3 +1,5 @@
+import { handleIngamePunish, IngamePunishPayload } from './ingamePunish';
+import { PunishmentPresets } from '../services/PunishmentPresets';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
@@ -403,6 +405,7 @@ interface VoidingPayload {
 }
 
 type IncomingPayload =
+  | IngamePunishPayload
   | WarpPlayersPayload
   | VerificationPayload
   | CheckPlayerPayload
@@ -606,6 +609,7 @@ export class WebSocketManager {
     this.discordClient = discordClient;
     
     global._wsManager = this;
+    PunishmentPresets.onChange(presets => this.send({ type: 'punish_presets', presets }));
     
     this.wss.on('connection', (ws, _req) => {
       console.log('[WebSocketManager] New WebSocket connection established');
@@ -649,6 +653,7 @@ export class WebSocketManager {
             PresenceService.setConnected(true);
             console.log('[WebSocketManager] Client authenticated successfully');
             ws.send(JSON.stringify({ type: 'auth_success', message: 'Authentication successful' }));
+            void this.sendPresets();
             void this.gameManager?.resumePendingWarps?.();
           } else {
             console.error('[WebSocketManager] Authentication failed for new connection');
@@ -731,6 +736,7 @@ export class WebSocketManager {
       if (process.env.AUTH_KEY && authMsg.auth_key === process.env.AUTH_KEY) {
         this.lastQueueStatusHash = null;
         this.send({ type: 'auth_success', message: 'Authentication successful' });
+        void this.sendPresets();
         console.log('[WebSocketManager] Authentication successful');
         void this.getPing().catch(() => null);
         const resumeTimer = setTimeout(() => {
@@ -808,6 +814,9 @@ export class WebSocketManager {
         break;
       case 'discord_lookup':
         await this.handleDiscordLookup(msg);
+        break;
+      case 'ingame_punish':
+        await this.handleIngamePunish(msg);
         break;
       case 'permission':
         this.handlePermission(msg);
@@ -996,6 +1005,26 @@ export class WebSocketManager {
       }
     }
     this.send({ type: 'leaderboard_data', request_id: requestId, entries });
+  }
+
+  private async handleIngamePunish(msg: IngamePunishPayload) {
+    const User = (await import('../models/User')).default;
+    const result = await handleIngamePunish(msg, {
+      findUser: async (ign) => await User.findOne({ ign }).collation({ locale: 'en', strength: 2 })
+        .select('discordId').lean() as { discordId: string } | null,
+      guild: () => this.discordClient?.guilds.cache.first() ?? null,
+      botId: () => this.discordClient?.user?.id ?? 'minecraft',
+      notifier: this
+    });
+    this.send(result);
+  }
+
+  private async sendPresets(): Promise<void> {
+    try {
+      this.send({ type: 'punish_presets', presets: await PunishmentPresets.wire() });
+    } catch (error) {
+      console.warn('[WebSocketManager] Could not send the punishment presets:', error instanceof Error ? error.message : error);
+    }
   }
 
   private async handleDiscordLookup(msg: DiscordLookupPayload) {

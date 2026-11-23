@@ -5,7 +5,7 @@ import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
 import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
-import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, SlashCommandBuilder } from 'discord.js';
+import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
 import { addelo } from '../commands/account/addelo';
@@ -19,6 +19,7 @@ import { retry } from '../commands/queue/retry';
 import { recentgames } from '../commands/stats/recentgames';
 import { maps } from '../commands/general/maps';
 import { ban } from '../commands/moderation/ban';
+import { preset, presetAutocomplete } from '../commands/moderation/preset';
 import { mute } from '../commands/moderation/mute';
 import { unmute } from '../commands/moderation/unmute';
 import { strike } from '../commands/moderation/strike';
@@ -38,7 +39,7 @@ import { forcevoid } from '../commands/scoring/forcevoid';
 import { refresh } from '../commands/account/refresh';
 import { gameinfo, handleGameInfoButton, handleGameInfoVoidModal } from '../commands/general/gameinfo';
 import { rbwconfig, rbwconfigData } from '../commands/general/rbwconfig';
-import { handlePunishmentDetails } from '../utils/punishmentEmbed';
+import { handlePunishmentDetails, handlePunishmentIssuer } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
 import { lose } from '../commands/scoring/lose';
@@ -71,6 +72,7 @@ interface Command {
   description: string;
   options?: ApplicationCommandOptionData[];
   apiData?: ReturnType<SlashCommandBuilder['toJSON']>;
+  defaultMemberPermissions?: string;
   execute: BotCommandFn;
 }
 
@@ -96,6 +98,13 @@ export class CommandManager {
 
         if (interaction.isChatInputCommand()) {
           await this.commandHandler.handleInteraction(interaction);
+          return;
+        }
+
+        if (interaction.isAutocomplete()) {
+          if (interaction.options.getFocused(true).name === 'preset' || interaction.commandName === 'preset') {
+            await presetAutocomplete(interaction);
+          }
           return;
         }
 
@@ -134,6 +143,11 @@ export class CommandManager {
 
         if (interaction.isButton() && interaction.customId.startsWith('punishment:details:')) {
           await handlePunishmentDetails(interaction);
+          return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('punishment:issuer:')) {
+          await handlePunishmentIssuer(interaction);
           return;
         }
       } catch (error) {
@@ -354,17 +368,34 @@ export class CommandManager {
   private registerModerationCommands() {
     this.reg('ban', 'Ban a user from ranked play', ban, [
       { name: 'user', description: 'User to ban (ID or mention)', type: 6, required: true },
-      { name: 'duration', description: 'Ban duration (e.g. 1d, 1h)', type: 3, required: true },
-      { name: 'reason', description: 'Reason for ban', type: 3, required: true }
+      { name: 'preset', description: 'A ban preset (/preset list); fills in the duration and reason', type: 3, required: false, autocomplete: true },
+      { name: 'duration', description: 'Ban duration (e.g. 1d, 1h, perm); overrides the preset', type: 3, required: false },
+      { name: 'reason', description: 'Reason for ban; overrides the preset', type: 3, required: false }
     ]);
+    this.reg('preset', 'Punishment presets for /ban and /mute, here and in game', preset, [
+      { name: 'add', description: 'Add or change a preset', type: 1, options: [
+        { name: 'name', description: 'Its name, like cheating', type: 3, required: true },
+        { name: 'type', description: 'Ban or mute', type: 3, required: true, choices: [
+          { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }
+        ]},
+        { name: 'durations', description: 'One per offence, like 1d, 7d, 30d, perm (a step can add :its own reason)', type: 3, required: true },
+        { name: 'reason', description: 'The reason given', type: 3, required: true }
+      ]},
+      { name: 'remove', description: 'Remove a preset', type: 1, options: [
+        { name: 'name', description: 'The preset', type: 3, required: true, autocomplete: true }
+      ]},
+      { name: 'list', description: 'Every preset and its steps', type: 1 }
+    ]);
+    this.commands.get('preset')!.defaultMemberPermissions = PermissionFlagsBits.Administrator.toString();
     this.reg('unban', 'Remove a rank-ban from a user', unban, [
       { name: 'user', description: 'User to unban (ID or mention)', type: 6, required: true },
       { name: 'reason', description: 'Reason for unban', type: 3, required: false }
     ]);
     this.reg('mute', 'Mute a user in the server', mute, [
       { name: 'user', description: 'User to mute (ID or mention)', type: 6, required: true },
-      { name: 'duration', description: 'Mute duration (e.g. 1d, 1h)', type: 3, required: true },
-      { name: 'reason', description: 'Reason for mute', type: 3, required: true }
+      { name: 'preset', description: 'A mute preset (/preset list); fills in the duration and reason', type: 3, required: false, autocomplete: true },
+      { name: 'duration', description: 'Mute duration (e.g. 1d, 1h); overrides the preset', type: 3, required: false },
+      { name: 'reason', description: 'Reason for mute; overrides the preset', type: 3, required: false }
     ]);
     this.reg('unmute', 'Unmute a user in the server', unmute, [
       { name: 'user_id', description: 'User ID to unmute', type: 3, required: true }
@@ -502,7 +533,8 @@ export class CommandManager {
         return {
           name: cmd.name,
           description: cmd.description,
-          options: cmd.options
+          options: cmd.options,
+          ...(cmd.defaultMemberPermissions ? { defaultMemberPermissions: BigInt(cmd.defaultMemberPermissions) } : {})
         };
       });
 

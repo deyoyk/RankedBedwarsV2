@@ -1,5 +1,5 @@
 import { Guild } from 'discord.js';
-import { TimedPunishmentKind, TimedPunishmentManager } from './timedPunishmentManager';
+import { ApplyOptions, TimedPunishmentKind, TimedPunishmentManager } from './timedPunishmentManager';
 import type { WebSocketNotifier } from './punishmentHelpers';
 
 const kind: TimedPunishmentKind = {
@@ -36,12 +36,12 @@ export class MuteManager extends TimedPunishmentManager {
     return MuteManager.instance;
   }
 
-  public static async mute(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<Date | undefined> {
-    return MuteManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager);
+  public static async mute(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null, options?: ApplyOptions): Promise<Date | undefined> {
+    return MuteManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager, options);
   }
 
-  public static async unmute(guild: Guild, targetId: string, moderatorId: string, reason = 'Unmuted', wsManager?: WebSocketNotifier | null): Promise<boolean> {
-    return MuteManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager);
+  public static async unmute(guild: Guild, targetId: string, moderatorId: string, reason = 'Unmuted', wsManager?: WebSocketNotifier | null, options?: ApplyOptions): Promise<boolean> {
+    return MuteManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager, options);
   }
 
   public static async autoUnmute(guild: Guild): Promise<number> {
