@@ -1,4 +1,4 @@
-import { ChannelType, Client, EmbedBuilder, Guild, type MessageCreateOptions, PermissionFlagsBits } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, EmbedBuilder, Guild, type MessageCreateOptions, PermissionFlagsBits } from 'discord.js';
 import Game, { IGame } from '../models/Game';
 import GameSettlement from '../models/GameSettlement';
 import User, { IUser } from '../models/User';
@@ -2451,7 +2451,13 @@ export class GameManager {
       const bonusLines = this.getProgressionBonusLines(playerScoreData, context);
       const notificationBody = bonusLines ? `${mentions}\n${bonusLines}` : mentions;
       const gameLink = buildGameResultUrl(config.gameResultUrl, context.game.gameId);
-      const notificationContent = notificationBody ? `${notificationBody}\n${gameLink}` : gameLink;
+      const notificationContent = notificationBody;
+      const resultButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('View result')
+          .setStyle(ButtonStyle.Link)
+          .setURL(gameLink),
+      );
 
       const winnersIds = new Set<string>(context.winningTeam === 1 ? context.game.team1 : context.game.team2);
       const toScored = (p: PlayerScoreData): ScoredPlayer => ({
@@ -2493,8 +2499,8 @@ export class GameManager {
         console.error('[GameManager] Failed generating score image, sending without it:', e);
       }
 
-      await this.sendToScoringChannel(guild, notificationContent, imageBuffer);
-      await this.sendToGameChannel(guild, context.game, this.createScoreEmbed(guild, context, winnerData, loserData, Boolean(imageBuffer)), notificationContent, imageBuffer);
+      await this.sendToScoringChannel(guild, notificationContent, imageBuffer, [resultButton]);
+      await this.sendToGameChannel(guild, context.game, this.createScoreEmbed(guild, context, winnerData, loserData, Boolean(imageBuffer)), notificationContent, imageBuffer, [resultButton]);
 
     } catch (error) {
       console.error('[GameManager] Error sending score notifications:', error);
@@ -2560,13 +2566,17 @@ export class GameManager {
   private async sendToScoringChannel(
     guild: Guild,
     mentions: string,
-    imageBuffer?: Buffer | null
+    imageBuffer?: Buffer | null,
+    components?: ActionRowBuilder<ButtonBuilder>[],
   ): Promise<void> {
     try {
       if (config.channels.scoringChannel) {
         const message: MessageCreateOptions = { content: mentions };
         if (imageBuffer) {
           message.files = [{ attachment: imageBuffer, name: `game_${Date.now()}_results.png` }];
+        }
+        if (components && components.length > 0) {
+          message.components = components;
         }
         await this.workersManager.sendMessage(config.channels.scoringChannel, message, 8);
       }
@@ -2580,7 +2590,8 @@ export class GameManager {
     game: IGame,
     embed?: EmbedBuilder | null,
     mentions?: string,
-    imageBuffer?: Buffer | null
+    imageBuffer?: Buffer | null,
+    components?: ActionRowBuilder<ButtonBuilder>[],
   ): Promise<void> {
     try {
       if (game.channels?.text) {
@@ -2590,6 +2601,9 @@ export class GameManager {
         }
         if (imageBuffer) {
           message.files = [{ attachment: imageBuffer, name: `game_${game.gameId}_results.png` }];
+        }
+        if (components && components.length > 0) {
+          message.components = components;
         }
         await this.workersManager.sendMessage(game.channels.text, message, 8);
       }

@@ -12,6 +12,12 @@ export function buildGameResultUrl(base: string, gameId: number | string): strin
   return `${withScheme}/game?id=${gameId}`;
 }
 
+export function buildPlayerResultUrl(base: string, query: string): string {
+  const root = clean(base).replace(/\/+$/, '');
+  const withScheme = /^https?:\/\//i.test(root) ? root : `https://${root}`;
+  return `${withScheme}/player?query=${encodeURIComponent(query)}`;
+}
+
 export function isSnowflake(v: string): boolean {
   return /^\d{17,20}$/.test(v);
 }

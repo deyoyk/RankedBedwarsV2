@@ -156,7 +156,8 @@ describe('GameManager race conditions', () => {
 
       const gameChannelCall = sendMessage.mock.calls.find(([channel]: [string]) => channel === 'text-1');
       expect(gameChannelCall).toBeDefined();
-      expect(gameChannelCall![1].content).toContain(buildGameResultUrl(config.gameResultUrl, 1));
+      const button = gameChannelCall![1].components[0].toJSON().components[0];
+      expect(button.url).toBe(buildGameResultUrl(config.gameResultUrl, 1));
     } finally {
       clientMock.guilds.cache.first.mockReturnValue(undefined);
     }

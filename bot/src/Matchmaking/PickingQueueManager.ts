@@ -1,8 +1,8 @@
-import { ActionRowBuilder, ChannelType, Client, ComponentType, EmbedBuilder, Guild, PermissionFlagsBits, StringSelectMenuBuilder, ThreadChannel, VoiceChannel } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, ComponentType, EmbedBuilder, Guild, PermissionFlagsBits, StringSelectMenuBuilder, ThreadChannel, VoiceChannel } from 'discord.js';
 import User from '../models/User';
 import Party from '../models/Party';
 import Game from '../models/Game';
-import config from '../config/config';
+import config, { buildGameResultUrl } from '../config/config';
 import { GameResources, PickingSession, QueueProcessingResult } from '../types/GameTypes';
 import { GameManager } from './GameManager';
 import { WebSocketManager } from '../websocket/WebSocketManager';
@@ -590,10 +590,17 @@ export class PickingQueueManager {
       console.error(`[PickingQueue] Failed to generate game start image for game ${gameId}:`, imageError);
     }
 
+    const gameButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('View game')
+        .setStyle(ButtonStyle.Link)
+        .setURL(buildGameResultUrl(config.gameResultUrl, gameId)),
+    );
+
     if (config.channels.gamesChannel) {
       await this.workersManager.sendMessage(
         config.channels.gamesChannel,
-        { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+        { embeds: [gameStartEmbed], components: [gameButton], ...(startImage ? { files: startImage } : {}) },
         8
       );
     }
@@ -601,7 +608,7 @@ export class PickingQueueManager {
     if (startChannelId) {
       await this.workersManager.sendMessage(
         startChannelId,
-        { embeds: [gameStartEmbed], ...(startImage ? { files: startImage } : {}) },
+        { embeds: [gameStartEmbed], components: [gameButton], ...(startImage ? { files: startImage } : {}) },
         8
       );
     }

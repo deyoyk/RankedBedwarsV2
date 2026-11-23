@@ -62,6 +62,11 @@ describe('stats card', () => {
     });
     await expect(helpers.calculatePosition()).resolves.toBe(7);
     expect(interaction.reply.mock.calls[0][0].files[0].name).toBe('wuwster_stats.png');
+    const button = interaction.reply.mock.calls[0][0].components[0].toJSON().components[0];
+    expect(button).toMatchObject({
+      label: 'View full stats',
+      url: 'https://www.vrbw.club/player?query=wuwster',
+    });
   });
 
   it('says so when the player is not registered', async () => {

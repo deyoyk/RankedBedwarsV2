@@ -1,10 +1,10 @@
-import { Client } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client } from 'discord.js';
 import User from '../models/User';
 import { QueueProcessingResult, TeamBalanceResult } from '../types/GameTypes';
 import { WebSocketManager } from '../websocket/WebSocketManager';
 import { MapService } from '../managers/MapManager';
 import { GameManager } from './GameManager';
-import config from '../config/config';
+import config, { buildGameResultUrl } from '../config/config';
 import { WorkersManager } from '../managers/WorkersManager';
 import { PresenceService } from '../services/PresenceService';
 import { MapVoteService } from '../services/MapVoteService';
@@ -422,17 +422,24 @@ export class RandomQueueManager {
         console.error(`[RandomQueue] Failed to generate game start image for game ${gameId}:`, imageError);
       }
 
+      const gameButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('View game')
+          .setStyle(ButtonStyle.Link)
+          .setURL(buildGameResultUrl(config.gameResultUrl, gameId)),
+      );
+
       if (config.channels.gamesChannel) {
         await this.workersManager.sendMessage(
           config.channels.gamesChannel,
-          { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
+          { embeds: [embed], components: [gameButton], ...(startImage ? { files: startImage } : {}) },
           8,
         );
       }
 
       await this.workersManager.sendMessage(
         gameChannelId,
-        { embeds: [embed], ...(startImage ? { files: startImage } : {}) },
+        { embeds: [embed], components: [gameButton], ...(startImage ? { files: startImage } : {}) },
         8,
       );
     } catch (error) {

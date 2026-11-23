@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
@@ -7,6 +7,7 @@ import User, { type IUser } from '../../models/User';
 import { resolveTheme } from '../../assets/stats-theme';
 import type { EnrichedPlayerData, PlayerData, RecentGame } from '../../assets/stats-theme/base';
 import { getRankInfo } from '../../utils/rankInfo';
+import config, { buildPlayerResultUrl } from '../../config/config';
 
 const { errorEmbed } = embedsFor('Player');
 
@@ -87,7 +88,17 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
 
     const image = await resolveTheme()(playerData, recentResults(user), helpers);
 
-    await safeReply(interaction, { files: [{ attachment: image, name: `${playerData.ign}_stats.png` }] });
+    const websiteButton = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('View full stats')
+        .setStyle(ButtonStyle.Link)
+        .setURL(buildPlayerResultUrl(config.gameResultUrl, playerData.ign)),
+    );
+
+    await safeReply(interaction, {
+      files: [{ attachment: image, name: `${playerData.ign}_stats.png` }],
+      components: [websiteButton],
+    });
   } catch (error) {
     await replyCommandError(interaction, error, 'load those stats', '[stats]');
   }
