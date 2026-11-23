@@ -178,7 +178,7 @@ describe('BanManager.unban', () => {
       return chainable({ discordId: user.discordId, ign: user.ign });
     });
 
-    await BanManager.unban(guildMock() as any, '123', 'mod', 'Expired');
+    await expect(BanManager.unban(guildMock() as any, '123', 'mod', 'Expired')).resolves.toBe(true);
 
     expect(user.isBanned).toBe(false);
     expect(mockSave).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe('BanManager.unban', () => {
       select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue(user) })
     });
 
-    await BanManager.unban(guildMock() as any, '123', 'mod');
+    await expect(BanManager.unban(guildMock() as any, '123', 'mod')).resolves.toBe(false);
     expect(mockSave).not.toHaveBeenCalled();
   });
 });

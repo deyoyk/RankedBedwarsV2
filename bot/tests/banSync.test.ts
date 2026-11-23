@@ -88,7 +88,7 @@ describe('Discord ban sync', () => {
 
   test('the /ban and /unban commands pass the server connection to BanManager', async () => {
     const banSpy = jest.spyOn(BanManager, 'ban').mockResolvedValue(undefined);
-    const unbanSpy = jest.spyOn(BanManager, 'unban').mockResolvedValue(undefined);
+    const unbanSpy = jest.spyOn(BanManager, 'unban').mockResolvedValue(true);
     const ws = { send: jest.fn() } as any;
     const { ban } = require('../src/commands/moderation/ban');
     const { unban } = require('../src/commands/moderation/unban');

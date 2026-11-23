@@ -40,7 +40,7 @@ export class MuteManager extends TimedPunishmentManager {
     return MuteManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager);
   }
 
-  public static async unmute(guild: Guild, targetId: string, moderatorId: string, reason = 'Unmuted', wsManager?: WebSocketNotifier | null): Promise<void> {
+  public static async unmute(guild: Guild, targetId: string, moderatorId: string, reason = 'Unmuted', wsManager?: WebSocketNotifier | null): Promise<boolean> {
     return MuteManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager);
   }
 

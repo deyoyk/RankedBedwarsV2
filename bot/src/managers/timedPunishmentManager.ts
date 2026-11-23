@@ -138,7 +138,7 @@ export abstract class TimedPunishmentManager {
     }
   }
 
-  public async undo(guild: Guild, targetId: string, moderatorId: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<void> {
+  public async undo(guild: Guild, targetId: string, moderatorId: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<boolean> {
     const kind = this.kind();
     const operation = createPendingOperation(targetId, moderatorId, reason);
     this.pendingOperations.set(operation.id, operation);
@@ -159,7 +159,7 @@ export abstract class TimedPunishmentManager {
           throw new Error(`User ${targetId} not found in database`);
         }
         console.warn(`[${kind.logName}] User ${targetId} is not currently ${kind.activeWord}`);
-        return;
+        return false;
       }
 
       const promises: Promise<unknown>[] = [];
@@ -180,6 +180,7 @@ export abstract class TimedPunishmentManager {
       this.stats.active = Math.max(0, this.stats.active - 1);
 
       console.log(`[${kind.logName}] Successfully ${kind.undoPastTense} ${user.ign || targetId}: ${reason}`);
+      return true;
 
     } catch (error) {
       handleOperationError(error, operation, this.stats, kind.undoType, targetId);

@@ -87,7 +87,8 @@ export async function executeModerationAction(
 export interface UnmoderationActionConfig {
   commandName: string;
   actionVerb: string;
-  managerCall: (guild: Guild, targetId: string, issuerId: string) => Promise<unknown>;
+  activeWord: string;
+  managerCall: (guild: Guild, targetId: string, issuerId: string, reason?: string) => Promise<boolean>;
 }
 
 export async function executeUnmoderationAction(
@@ -106,9 +107,14 @@ export async function executeUnmoderationAction(
   }
 
   try {
-    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId);
+    const reason = interaction.options.getString('reason')?.trim() || undefined;
+    const undone = await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, reason);
+    if (!undone) {
+      await safeReply(interaction, errorEmbed(`<@${parsed.targetId}> isn't ${config.activeWord}.`, `${config.commandName} Error`));
+      return;
+    }
     await safeReply(interaction, successEmbed(
-      `${config.actionVerb} <@${parsed.targetId}>.`,
+      `${config.actionVerb} <@${parsed.targetId}>.${reason ? `\n**Reason:** ${reason}` : ''}`,
       `User ${config.actionVerb}`
     ));
   } catch (error) {

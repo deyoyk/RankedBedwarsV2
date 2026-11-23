@@ -40,7 +40,7 @@ export class BanManager extends TimedPunishmentManager {
     return BanManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager);
   }
 
-  public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: WebSocketNotifier | null): Promise<void> {
+  public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: WebSocketNotifier | null): Promise<boolean> {
     return BanManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager);
   }
 

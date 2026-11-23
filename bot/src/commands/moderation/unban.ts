@@ -7,6 +7,7 @@ export async function unban(interaction: ChatInputCommandInteraction, _wsManager
   await executeUnmoderationAction(interaction, {
     commandName: 'unban',
     actionVerb: 'Unbanned',
-    managerCall: (guild, targetId, issuerId) => BanManager.unban(guild, targetId, issuerId, undefined, _wsManager)
+    activeWord: 'banned',
+    managerCall: (guild, targetId, issuerId, reason) => BanManager.unban(guild, targetId, issuerId, reason, _wsManager)
   });
 }

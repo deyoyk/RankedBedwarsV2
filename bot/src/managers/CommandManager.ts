@@ -358,7 +358,8 @@ export class CommandManager {
       { name: 'reason', description: 'Reason for ban', type: 3, required: true }
     ]);
     this.reg('unban', 'Remove a rank-ban from a user', unban, [
-      { name: 'user_id', description: 'User ID to unban', type: 3, required: true }
+      { name: 'user', description: 'User to unban (ID or mention)', type: 6, required: true },
+      { name: 'reason', description: 'Reason for unban', type: 3, required: false }
     ]);
     this.reg('mute', 'Mute a user in the server', mute, [
       { name: 'user', description: 'User to mute (ID or mention)', type: 6, required: true },
