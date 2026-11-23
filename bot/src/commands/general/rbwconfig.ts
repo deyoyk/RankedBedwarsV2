@@ -21,6 +21,7 @@ import { isServerAdmin } from '../../utils/permissions';
 import { PermissionService } from '../../services/PermissionService';
 import { CATEGORY_LABELS, CommandCategory, commandsIn } from '../../config/commandCategories';
 import { describeAction, StrikeRuleService } from '../../services/StrikeRuleService';
+import { CALL_ROLE_LABELS, CallRoleKey, CallRoleService } from '../../services/CallRoleService';
 
 const { themedEmbed, errorEmbed } = embedsFor('Config');
 
@@ -61,6 +62,7 @@ function sectionRow() {
         })),
         { label: 'Command Overview', value: 'overview', description: 'Who can use each category' },
         { label: 'Strike Rules', value: 'strikes', description: 'How many strikes lead to a rank ban, and for how long' },
+        { label: 'Call Roles', value: 'callroles', description: 'The Pups, Pugs Trial, Pugs and Premium roles /call open uses' },
       ),
   );
 }
@@ -119,6 +121,26 @@ export function overviewView(): View {
       value: `**${whoCanUse(category)}**\n${commandsIn(category).map(name => `\`/${name}\``).join(' ')}`.slice(0, 1024),
     })));
   return { embeds: [embed], components: [backRow()] };
+}
+
+const CALL_KEYS: CallRoleKey[] = ['pups', 'pugstrial', 'pugs', 'premium'];
+
+export function callRolesView(note?: string): View {
+  const settings = CallRoleService.current();
+  const lines = CALL_KEYS.map(key => `**${CALL_ROLE_LABELS[key]}** · ${settings[key] ? `<@&${settings[key]}>` : '*not set*'}`);
+  lines.push('-# `/call open pups` opens to Pups, Pugs Trial, Pugs and Premium; `pugs` to Pugs and Premium; `premium` to Premium only.');
+  if (note) lines.push(`-# ${note}`);
+  const embed = themedEmbed('info').setTitle('Call roles').setDescription(lines.join('\n'));
+  const pickers = CALL_KEYS.map(key => {
+    const picker = new RoleSelectMenuBuilder()
+      .setCustomId(`rbwcfg:callrole:${key}`)
+      .setPlaceholder(`${CALL_ROLE_LABELS[key]} role…`)
+      .setMinValues(0)
+      .setMaxValues(1);
+    if (settings[key]) picker.setDefaultRoles([settings[key] as string]);
+    return new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(picker);
+  });
+  return { embeds: [embed], components: [...pickers, backRow()] };
 }
 
 const plural = (n: number) => `${n} strike${n === 1 ? '' : 's'}`;
@@ -190,7 +212,13 @@ export async function handlePanelClick(click: MessageComponentInteraction): Prom
   if (action === 'section' && click.isStringSelectMenu()) {
     const choice = click.values[0];
     if (choice === 'strikes') return strikeView();
+    if (choice === 'callroles') return callRolesView();
     return choice === 'overview' ? overviewView() : categoryView(choice as CommandCategory);
+  }
+  if (action === 'callrole' && click.isRoleSelectMenu()) {
+    const key = category as CallRoleKey;
+    await CallRoleService.set(key, click.values[0] ?? null);
+    return callRolesView(`${CALL_ROLE_LABELS[key]} → ${click.values[0] ? `<@&${click.values[0]}>` : 'not set'}`);
   }
   if (action === 'strikedel' && click.isStringSelectMenu()) {
     await StrikeRuleService.removeRules(click.values.map(Number));

@@ -305,8 +305,26 @@ export class CommandManager {
       ]),
       sub('cancel', 'Cancel your party\'s private game')
     ]);
-    this.reg('call', 'Grant voice channel access to a user in game voice channels', call, [
-      { name: 'user', description: 'The user to grant voice channel access to', type: 6, required: true }
+    this.reg('call', 'Let people into your game voice channel, or open and close it', call, [
+      { name: 'add', description: 'Let someone into your game voice channel', type: 1, options: [
+        { name: 'user', description: 'Who to let in', type: 6, required: true },
+        { name: 'mute', description: 'They can listen but not talk', type: 5, required: false }
+      ]},
+      { name: 'remove', description: 'Lock someone out of your game voice channel and move them out', type: 1, options: [
+        { name: 'user', description: 'Who to lock out', type: 6, required: true }
+      ]},
+      { name: 'unmute', description: 'Let someone you added muted talk', type: 1, options: [
+        { name: 'user', description: 'Who can talk now', type: 6, required: true }
+      ]},
+      { name: 'open', description: 'Open your team voice channel to a group', type: 1, options: [
+        { name: 'to', description: 'Who can join (default everyone)', type: 3, required: false, choices: [
+          { name: 'Pups (with Pugs Trial, Pugs and Premium)', value: 'pups' },
+          { name: 'Pugs (with Premium)', value: 'pugs' },
+          { name: 'Premium', value: 'premium' },
+          { name: 'Everyone', value: 'everyone' }
+        ]}
+      ]},
+      { name: 'close', description: 'Close your team voice channel again and move out non-team members', type: 1 }
     ]);
     this.reg('retry', 'Retry a game', retry);
     this.reg('addqueue', 'Create a new queue', addqueue, [
