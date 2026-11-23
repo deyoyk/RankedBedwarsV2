@@ -1,6 +1,7 @@
 import { h, VNode } from '../renderer';
 import { MEDIUM, SEMIBOLD, text } from '../theme';
 import { staticImageDataUrl } from '../assets';
+import { grainLayer } from '../grain';
 
 export type ScoreTemplatePlayer = {
   username: string;
@@ -400,29 +401,28 @@ export function scoreTemplate(input: ScoreTemplateInput): { root: VNode; width: 
         objectFit: 'cover',
       },
     }),
-    h('img', {
-      src: staticImageDataUrl('backgrounds', 'grain.png'),
-      width: WIDTH,
-      height: HEIGHT,
-      style: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: WIDTH,
-        height: HEIGHT,
-        objectFit: 'cover',
-        opacity: 0.12,
-      },
-    }),
     ...section(input.winners, WIN_TOP, 'WINNERS', C.purple, partyColors),
     ...section(input.losers, LOSE_TOP, 'LOSERS', C.purpleSoft, partyColors),
     ...metadata(input),
-    text(X, 916, 700, 28, input.serverName, 20, C.mute, SEMIBOLD, 'left', 1.4),
-    text(WIDTH - X - 700, 916, 700, 28, input.inviteLink, 20, C.faint, SEMIBOLD, 'right', 1.4),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: X,
+        top: 908,
+        width: W,
+        height: 44,
+        borderRadius: 8,
+        backgroundColor: 'rgba(12, 10, 18, 0.55)',
+      },
+    }),
+    text(X + 20, 916, 700, 28, input.serverName, 20, '#FFFFFF', SEMIBOLD, 'left', 1.4),
+    text(WIDTH - X - 720, 916, 700, 28, input.inviteLink, 20, '#E9D5FF', SEMIBOLD, 'right', 1.4),
+    grainLayer(WIDTH, HEIGHT),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
 }
+
 
 
 

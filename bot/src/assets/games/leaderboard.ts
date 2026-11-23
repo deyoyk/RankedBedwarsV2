@@ -1,6 +1,7 @@
 import { h, VNode } from '../renderer';
 import { SEMIBOLD, text } from '../theme';
 import { staticImageDataUrl } from '../assets';
+import { grainLayer } from '../grain';
 
 export type LeaderboardTemplateEntry = {
   rank: number;
@@ -117,8 +118,19 @@ function footer(input: LeaderboardTemplateInput): VNode[] {
     ? `PAGE ${input.page + 1}/${input.totalPages}`
     : '';
   return [
-    text(X, 1016, 620, 28, input.serverName, 18, C.mute, SEMIBOLD, 'left', 1.4),
-    text(WIDTH - X - 620, 1016, 620, 28, [input.title.toUpperCase(), pageLabel].filter(Boolean).join('  ·  '), 16, C.faint, SEMIBOLD, 'right', 1.4),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: X,
+        top: 1006,
+        width: W,
+        height: 44,
+        borderRadius: 8,
+        backgroundColor: 'rgba(12, 10, 18, 0.55)',
+      },
+    }),
+    text(X + 20, 1016, 620, 28, input.serverName, 18, '#FFFFFF', SEMIBOLD, 'left', 1.4),
+    text(WIDTH - X - 640, 1016, 620, 28, [input.title.toUpperCase(), pageLabel].filter(Boolean).join('  ·  '), 16, '#E9D5FF', SEMIBOLD, 'right', 1.4),
   ];
 }
 
@@ -146,20 +158,6 @@ export function leaderboardTemplate(input: LeaderboardTemplateInput): { root: VN
         objectFit: 'cover',
       },
     }),
-    h('img', {
-      src: staticImageDataUrl('backgrounds', 'grain.png'),
-      width: WIDTH,
-      height: HEIGHT,
-      style: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: WIDTH,
-        height: HEIGHT,
-        objectFit: 'cover',
-        opacity: 0.12,
-      },
-    }),
     ...header(input.categoryLabel),
     ...Array.from({ length: ROWS }, (_, index) => {
       const entry = input.entries[index];
@@ -167,7 +165,9 @@ export function leaderboardTemplate(input: LeaderboardTemplateInput): { root: VN
       return row(entry, index);
     }).flat(),
     ...footer(input),
+    grainLayer(WIDTH, HEIGHT),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
 }
+

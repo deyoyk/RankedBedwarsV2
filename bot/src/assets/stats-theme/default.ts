@@ -1,6 +1,7 @@
 import { h, VNode } from '../renderer';
 import { MEDIUM, SEMIBOLD } from '../theme';
 import { staticImageDataUrl } from '../assets';
+import { grainLayer } from '../grain';
 
 export type MatchResult = 'win' | 'loss' | 'voided' | 'active' | 'unknown';
 
@@ -421,23 +422,11 @@ export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; wid
         objectFit: 'cover',
       },
     }),
-    h('img', {
-      src: staticImageDataUrl('backgrounds', 'grain.png'),
-      width: WIDTH,
-      height: HEIGHT,
-      style: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: WIDTH,
-        height: HEIGHT,
-        objectFit: 'cover',
-        opacity: 0.12,
-      },
-    }),
     ...card(input),
+    grainLayer(WIDTH, HEIGHT),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
 }
+
 

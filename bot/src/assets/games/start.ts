@@ -1,6 +1,7 @@
 import { h, VNode } from '../renderer';
 import { SEMIBOLD, text } from '../theme';
 import { staticImageDataUrl } from '../assets';
+import { grainLayer } from '../grain';
 
 export type StartTemplatePlayer = {
   username: string;
@@ -272,27 +273,26 @@ export function startTemplate(input: StartTemplateInput): { root: VNode; width: 
         objectFit: 'cover',
       },
     }),
-    h('img', {
-      src: staticImageDataUrl('backgrounds', 'grain.png'),
-      width: WIDTH,
-      height: HEIGHT,
-      style: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: WIDTH,
-        height: HEIGHT,
-        objectFit: 'cover',
-        opacity: 0.12,
-      },
-    }),
     ...infoHeader(),
     ...infoRow(input),
     ...teamSection(input.team1, GREEN_TOP, 'TEAM GREEN', C.green, input.team1Avg),
     ...teamSection(input.team2, RED_TOP, 'TEAM RED', C.red, input.team2Avg),
-    text(X, 920, 700, 28, input.serverName, 20, C.mute, SEMIBOLD, 'left', 1.4),
-    text(WIDTH - X - 700, 920, 700, 28, input.inviteLink, 20, C.faint, SEMIBOLD, 'right', 1.4),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: X,
+        top: 912,
+        width: W,
+        height: 44,
+        borderRadius: 8,
+        backgroundColor: 'rgba(12, 10, 18, 0.55)',
+      },
+    }),
+    text(X + 20, 920, 700, 28, input.serverName, 20, '#FFFFFF', SEMIBOLD, 'left', 1.4),
+    text(WIDTH - X - 720, 920, 700, 28, input.inviteLink, 20, '#E9D5FF', SEMIBOLD, 'right', 1.4),
+    grainLayer(WIDTH, HEIGHT),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
 }
+
