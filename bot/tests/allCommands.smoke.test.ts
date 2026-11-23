@@ -481,7 +481,23 @@ describe('CommandHandler routing, permissions, errors', () => {
     denied.commandName = 'ban';
     denied.member = { roles: { cache: { has: () => false } } };
     await handler.handleInteraction(denied);
-    expect(denied.deferReply).toHaveBeenCalled();
+    expect(denied.deferReply).not.toHaveBeenCalled();
+    expect(denied.reply).toHaveBeenCalledWith(expect.objectContaining({ flags: 64 }));
     jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['everyone']);
+  });
+
+  it('defers /history privately so its answer is only for the staff member who ran it', async () => {
+    const { CommandHandler } = await import('../src/handlers/CommandHandler');
+    const handler = new CommandHandler({} as any, wsManager);
+    handler.registerCommand('history', jest.fn().mockResolvedValue(undefined));
+    handler.registerCommand('stats', jest.fn().mockResolvedValue(undefined));
+    const staff = mockSlash({});
+    staff.commandName = 'history';
+    await handler.handleInteraction(staff);
+    expect(staff.deferReply).toHaveBeenCalledWith({ flags: 64 });
+    const player = mockSlash({});
+    player.commandName = 'stats';
+    await handler.handleInteraction(player);
+    expect(player.deferReply).toHaveBeenCalledWith(undefined);
   });
 });

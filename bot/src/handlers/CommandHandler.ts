@@ -12,6 +12,7 @@ const { errorEmbed } = embedsFor('Error');
 export type CommandFn = BotCommandFn;
 
 const REPLIES_ITSELF = new Set(['screenshare', 'rbwconfig']);
+const PRIVATE_REPLY = new Set(['history']);
 
 export class CommandHandler {
   private commands: Map<string, CommandFn>;
@@ -40,7 +41,7 @@ export class CommandHandler {
         'Permission Denied'
       ).builder;
 
-      await safeReply(interaction, { embeds: [embed] });
+      await safeReply(interaction, { embeds: [embed], flags: 64 });
     }
   }
 
@@ -69,13 +70,18 @@ export class CommandHandler {
     const command = this.commands.get(commandName)!;
 
     try {
+      if (!(await checkPermission(interaction, commandName))) {
+        await this.sendPermissionDenied(interaction, commandName);
+        return;
+      }
+
       if (
         !REPLIES_ITSELF.has(commandName) &&
         !interaction.deferred &&
         !interaction.replied
       ) {
         try {
-          await interaction.deferReply();
+          await interaction.deferReply(PRIVATE_REPLY.has(commandName) ? { flags: 64 } : undefined);
         } catch (deferError) {
           const code = (deferError as { code?: unknown })?.code;
           if (code === 10062) {
@@ -89,11 +95,6 @@ export class CommandHandler {
             deferError
           );
         }
-      }
-
-      if (!(await checkPermission(interaction, commandName))) {
-        await this.sendPermissionDenied(interaction, commandName);
-        return;
       }
 
       await command(interaction, this.wsManager);
