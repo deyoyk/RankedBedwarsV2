@@ -1,4 +1,4 @@
-name: Build and Release
+﻿name: Build, Release and Deploy
 
 on:
   workflow_dispatch:
@@ -8,6 +8,21 @@ on:
         required: false
         default: true
         type: boolean
+      deploy_sftp:
+        description: 'Deploy to SFTP'
+        required: false
+        default: false
+        type: boolean
+      remote_dir:
+        description: 'SFTP remote directory'
+        required: true
+        default: '/home/container'
+        type: string
+      port:
+        description: 'SFTP port'
+        required: true
+        default: '22'
+        type: string
 
 concurrency:
   group: build-release
@@ -119,3 +134,274 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-sftp:
+    name: Deploy bot to SFTP
+    needs: [build-bot]
+    if: inputs.deploy_sftp
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Validate inputs
+        env:
+          REMOTE_DIR: ${{ inputs.remote_dir }}
+          PORT: ${{ inputs.port }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$REMOTE_DIR" =~ ^/[A-Za-z0-9._/-]+$ ]] || [[ "$REMOTE_DIR" == *..* ]]; then
+            echo "remote_dir must be an absolute path without '..' or shell metacharacters" >&2
+            exit 1
+          fi
+          if [[ ! "$PORT" =~ ^[0-9]+$ ]] || (( PORT < 1 || PORT > 65535 )); then
+            echo "port must be a number between 1 and 65535" >&2
+            exit 1
+          fi
+
+      - name: Download bot artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rbw-bot
+          path: deploy
+
+      - name: Verify and extract archive
+        run: |
+          set -euo pipefail
+          unzip -l deploy/rbw-bot.zip | grep -qE ' package\.json$'
+          mkdir -p deploy/payload
+          unzip -oq deploy/rbw-bot.zip -d deploy/payload
+          test -f deploy/payload/package.json
+
+      - name: Install SFTP client
+        run: python3 -m pip install --quiet paramiko==3.5.1
+
+      - name: Upload files in parallel
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST || vars.SFTP_HOST }}
+          SFTP_USERNAME: ${{ secrets.SFTP_USERNAME || vars.SFTP_USERNAME }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD || vars.SFTP_PASSWORD }}
+          REMOTE_DIR: ${{ inputs.remote_dir }}
+          PORT: ${{ inputs.port }}
+          TAG: ${{ github.sha }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import posixpath
+          import socket
+          import sys
+          import time
+          import hashlib
+          import json
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from urllib.parse import urlparse
+
+          import paramiko
+
+          raw_host = (os.environ.get("SFTP_HOST") or "").strip()
+          username = os.environ.get("SFTP_USERNAME") or ""
+          password = os.environ.get("SFTP_PASSWORD") or ""
+          remote_dir = (os.environ.get("REMOTE_DIR") or "/").rstrip("/") or "/"
+          port = int(os.environ.get("PORT") or "22")
+          payload = os.path.abspath("deploy/payload")
+
+          if raw_host.startswith("sftp://") or raw_host.startswith("ssh://"):
+              parsed = urlparse(raw_host)
+              host = parsed.hostname or ""
+              if parsed.port:
+                  port = parsed.port
+          else:
+              host = raw_host.rstrip("/")
+              if host.count(":") == 1:
+                  maybe_host, maybe_port = host.rsplit(":", 1)
+                  if maybe_port.isdigit():
+                      host = maybe_host
+                      port = int(maybe_port)
+
+          if not host or not username or not password:
+              print("Missing SFTP_HOST, SFTP_USERNAME, or SFTP_PASSWORD", file=sys.stderr)
+              sys.exit(1)
+          if not os.path.isdir(payload):
+              print(f"Missing extracted payload: {payload}", file=sys.stderr)
+              sys.exit(1)
+
+          def connect(candidate_port, timeout=30):
+              sock = socket.create_connection((host, candidate_port), timeout=timeout)
+              transport = paramiko.Transport(sock)
+              transport.banner_timeout = timeout
+              transport.auth_timeout = timeout
+              transport.channel_timeout = timeout
+              transport.connect(username=username, password=password)
+              sftp = paramiko.SFTPClient.from_transport(transport)
+              sftp.get_channel().settimeout(120)
+              return transport, sftp
+
+          candidate_ports = [port]
+          if port == 22:
+              candidate_ports.append(2022)
+
+          transport = None
+          sftp = None
+          chosen_port = port
+          last_error = None
+          for candidate in candidate_ports:
+              print(f"Connecting to {host}:{candidate} as {username}...", flush=True)
+              try:
+                  transport, sftp = connect(candidate)
+                  chosen_port = candidate
+                  print(f"Connected on port {candidate}.", flush=True)
+                  break
+              except Exception as error:
+                  last_error = error
+                  print(f"Connection on port {candidate} failed: {error}", file=sys.stderr, flush=True)
+          if transport is None or sftp is None:
+              print(f"Could not connect to SFTP: {last_error}", file=sys.stderr)
+              sys.exit(1)
+
+          try:
+              def normalize_remote(requested):
+                  value = "/" + requested.strip("/") if requested.strip("/") else "/"
+                  sftp_home = sftp.normalize(".")
+                  root_names = {entry.filename for entry in sftp.listdir_attr("/")}
+                  markers = {".env", "package.json", "pterodactyl-start.sh", "src", "dist"}
+                  chrooted = sftp_home in ("/", ".") or bool(root_names & markers)
+                  if chrooted and (value == "/home/container" or value.startswith("/home/container/")):
+                      mapped = value[len("/home/container"):] or "/"
+                      print(f"SFTP root is chrooted; mapping {value} -> {mapped}", flush=True)
+                      return mapped
+                  return value
+
+              remote_dir = normalize_remote(remote_dir)
+              print(f"SFTP home: {sftp.normalize('.')}; deploying to: {remote_dir}", flush=True)
+
+              def ensure_dir(path):
+                  current = ""
+                  for part in path.strip("/").split("/"):
+                      if not part:
+                          continue
+                      current += "/" + part
+                      try:
+                          sftp.stat(current)
+                      except IOError:
+                          sftp.mkdir(current)
+
+              ensure_dir(remote_dir)
+
+              manifest_path = posixpath.join(remote_dir, ".rbw-manifest.json")
+              previous_files = {}
+              previous_dirs = set()
+              try:
+                  manifest_handle = sftp.file(manifest_path, "r")
+                  try:
+                      raw_manifest = json.loads(manifest_handle.read().decode("utf-8") or "{}")
+                  finally:
+                      manifest_handle.close()
+                  if isinstance(raw_manifest, dict):
+                      if isinstance(raw_manifest.get("files"), dict):
+                          previous_files = raw_manifest["files"]
+                          previous_dirs = set(raw_manifest.get("dirs") or [])
+                      else:
+                          previous_files = raw_manifest
+              except Exception:
+                  previous_files = {}
+                  previous_dirs = set()
+              previous_dirs.update(posixpath.dirname(key) or "." for key in previous_files)
+
+              def file_sha256(path):
+                  digest = hashlib.sha256()
+                  with open(path, "rb") as handle:
+                      for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                          digest.update(chunk)
+                  return digest.hexdigest()
+
+              uploads = []
+              directories = set()
+              manifest = {}
+              for root, _dirs, files in os.walk(payload):
+                  relative = os.path.relpath(root, payload)
+                  relative_dir = "." if relative == "." else relative.replace(os.sep, "/")
+                  directories.add(relative_dir)
+                  remote_root = remote_dir if relative_dir == "." else posixpath.join(remote_dir, relative_dir)
+                  for filename in files:
+                      local_path = os.path.join(root, filename)
+                      remote_path = posixpath.join(remote_root, filename)
+                      manifest_key = posixpath.relpath(remote_path, remote_dir)
+                      digest = file_sha256(local_path)
+                      manifest[manifest_key] = digest
+                      if previous_files.get(manifest_key) == digest:
+                          continue
+                      uploads.append((local_path, remote_path, filename.endswith(".sh")))
+
+              for directory in sorted(directories):
+                  if directory == "." or directory in previous_dirs:
+                      continue
+                  ensure_dir(posixpath.join(remote_dir, directory))
+
+              skipped = len(manifest) - len(uploads)
+              if skipped > 0:
+                  print(f"Skipping {skipped} unchanged file(s) from the previous deployment", flush=True)
+
+              started = time.time()
+              if uploads:
+                  worker_count = max(1, min(8, len(uploads)))
+                  chunks = [[] for _ in range(worker_count)]
+                  for index, item in enumerate(uploads):
+                      chunks[index % worker_count].append(item)
+
+                  print(f"Uploading {len(uploads)} changed file(s) with {worker_count} parallel connections...", flush=True)
+
+                  def upload_chunk(index, chunk):
+                      worker_transport, worker_sftp = connect(chosen_port)
+                      try:
+                          for local_path, remote_path, is_script in chunk:
+                              worker_sftp.put(local_path, remote_path, confirm=False)
+                              if is_script:
+                                  try:
+                                      worker_sftp.chmod(remote_path, 0o755)
+                                  except IOError:
+                                      pass
+                          return index, len(chunk)
+                      finally:
+                          worker_sftp.close()
+                          worker_transport.close()
+
+                  with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                      futures = [
+                          executor.submit(upload_chunk, index, chunk)
+                          for index, chunk in enumerate(chunks)
+                          if chunk
+                      ]
+                      for future in as_completed(futures):
+                          index, count = future.result()
+                          print(f"Worker {index + 1} uploaded {count} file(s)", flush=True)
+
+              manifest_data = json.dumps(
+                  {"files": manifest, "dirs": sorted(directories)},
+                  indent=2,
+                  sort_keys=True
+              ).encode("utf-8")
+              manifest_handle = sftp.file(manifest_path, "w")
+              try:
+                  manifest_handle.write(manifest_data)
+              finally:
+                  manifest_handle.close()
+
+              elapsed = time.time() - started
+              print(f"Uploaded {len(uploads)} changed file(s) from {os.environ.get('TAG', 'release')} to {username}@{host}:{remote_dir} in {elapsed:.1f}s")
+              print(f"Preserved: {posixpath.join(remote_dir, '.env')}, node_modules")
+          finally:
+              sftp.close()
+              transport.close()
+          PY
+
+          {
+            echo "### Bot deployment"
+            echo ""
+            echo "- Release: \`$TAG\`"
+            echo "- Server: \`$SFTP_HOST\`"
+            echo "- Directory: \`$REMOTE_DIR\`"
+            echo "- Mode: parallel file upload"
+            echo "- Preserved: \`.env\`, \`node_modules\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
