@@ -41,6 +41,16 @@ describe('errorReporter', () => {
     expect(body.embeds[0].footer.text).toContain(id);
   });
 
+  it('does not send Node deprecation warnings', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    reportError('[test]', '(node:103) [DEP0040] DeprecationWarning: The punycode module is deprecated.');
+    await new Promise(resolve => setTimeout(resolve, 25));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('routes console.error through the webhook after installation', async () => {
     installErrorReporting();
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 204 });
@@ -52,5 +62,15 @@ describe('errorReporter', () => {
     expect(fetchMock).toHaveBeenCalled();
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
     expect(body.embeds[0].description).toContain('from console');
+  });
+
+  it('ignores console deprecation warnings after installation', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    console.error('(node:103) [DEP0040] DeprecationWarning: The punycode module is deprecated.');
+    await new Promise(resolve => setTimeout(resolve, 25));
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

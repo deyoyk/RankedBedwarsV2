@@ -52,6 +52,10 @@ function truncate(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max - 1)}…` : value;
 }
 
+function isNodeWarning(value: string): boolean {
+  return /DeprecationWarning|ExperimentalWarning|\[DEP\d+\]|punycode module is deprecated|trace-deprecation|trace-warnings/i.test(value);
+}
+
 function webhookIntervalMs(): number {
   const parsed = parseInt(process.env.ERROR_WEBHOOK_INTERVAL_MS || '', 10);
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : DEFAULT_WEBHOOK_INTERVAL_MS;
@@ -143,7 +147,9 @@ export function reportError(context: string, error: unknown): string {
     at: new Date()
   };
   originalConsoleError(context, error);
-  enqueueReport(report);
+  if (!isNodeWarning(`${context} ${getErrorMessage(error)}`)) {
+    enqueueReport(report);
+  }
   return report.id;
 }
 
@@ -156,7 +162,9 @@ export function installErrorReporting(): void {
     const [first, ...rest] = args;
     const context = typeof first === 'string' ? first : 'Unhandled error';
     const error = rest.length === 0 ? first : rest.length === 1 ? rest[0] : rest;
-    enqueueReport({ id: newErrorId(), context, error, at: new Date() });
+    if (!isNodeWarning(`${context} ${getErrorMessage(error)}`)) {
+      enqueueReport({ id: newErrorId(), context, error, at: new Date() });
+    }
   };
   console.error = patched;
 }
