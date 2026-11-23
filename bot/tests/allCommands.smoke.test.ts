@@ -23,8 +23,8 @@ function chainable(value: any) {
     lean: jest.fn().mockResolvedValue(value),
     collation: jest.fn().mockReturnThis(),
     exec: jest.fn().mockResolvedValue(value),
+    then: (onFulfilled: any, onRejected: any) => Promise.resolve(value).then(onFulfilled, onRejected),
   };
-  q.select.mockReturnValue({ ...q, lean: jest.fn().mockResolvedValue(value), collation: jest.fn().mockReturnThis() });
   return q;
 }
 
@@ -56,11 +56,12 @@ jest.mock('../src/models/User', () => ({
   default: {
     findOne: jest.fn().mockImplementation(() => chainable({ ...mockUserDoc })),
     find: jest.fn().mockImplementation(() => chainable([])),
-    findOneAndUpdate: jest.fn().mockResolvedValue({ ...mockUserDoc }),
+    findOneAndUpdate: jest.fn().mockImplementation(() => chainable({ ...mockUserDoc })),
     updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     countDocuments: jest.fn().mockResolvedValue(5),
     create: jest.fn().mockResolvedValue({ ...mockUserDoc }),
+    deleteOne: jest.fn().mockResolvedValue({ deletedCount: 1 }),
     deleteMany: jest.fn().mockResolvedValue({}),
     aggregate: jest.fn().mockResolvedValue([]),
   },
@@ -70,7 +71,7 @@ jest.mock('../src/models/Game', () => ({
   default: {
     findOne: jest.fn().mockImplementation(() => chainable({ ...mockGameDoc })),
     find: jest.fn().mockImplementation(() => chainable([{ ...mockGameDoc }])),
-    findOneAndUpdate: jest.fn().mockResolvedValue({ ...mockGameDoc }),
+    findOneAndUpdate: jest.fn().mockImplementation(() => chainable({ ...mockGameDoc })),
     updateOne: jest.fn().mockResolvedValue({}),
     updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     countDocuments: jest.fn().mockResolvedValue(3),
@@ -85,6 +86,8 @@ function queueCtor(this: any, doc: any) {
 const queueStatics: any = {
   findOne: jest.fn().mockImplementation(() => chainable({ channelId: '1352587524475713619', maxPlayers: 8, minElo: 0, maxElo: 3000, isRanked: true, isPicking: false })),
   find: jest.fn().mockImplementation(() => chainable([])),
+  findOneAndDelete: jest.fn().mockResolvedValue({ channelId: '1352587524475713619' }),
+  findOneAndUpdate: jest.fn().mockImplementation(() => chainable({ channelId: '1352587524475713619' })),
   updateMany: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
   updateOne: jest.fn().mockResolvedValue({}),
   countDocuments: jest.fn().mockResolvedValue(1),
@@ -104,6 +107,8 @@ jest.mock('../src/models/EloRank', () => ({
   default: {
     findOne: jest.fn().mockImplementation(() => chainable({ roleId: '1', winElo: 10, loseElo: 5, mvpElo: 2, bedElo: 1 })),
     find: jest.fn().mockImplementation(() => chainable([])),
+    findOneAndDelete: jest.fn().mockResolvedValue({ roleId: '1' }),
+    findOneAndUpdate: jest.fn().mockImplementation(() => chainable({ roleId: '1' })),
     create: jest.fn().mockResolvedValue({}),
   },
 }));
@@ -249,7 +254,7 @@ function mockSlash(optionMap: Record<string, any> = {}, over: any = {}) {
     member: { voice: { channel: { id: CHAN19, name: 'queue-1' } }, roles: { cache: { has: () => false } } },
     guild: {
       id: 'guild1',
-      members: { cache: new Map(), fetch: jest.fn().mockResolvedValue({ id: ID19, user: { id: ID19 } }) },
+      members: { cache: new Map(), fetch: jest.fn().mockResolvedValue({ id: ID19, user: { id: ID19 }, voice: { channel: { id: CHAN19, name: 'queue-1' } }, roles: { cache: new Map() } }) },
       roles: { cache: new Map() },
       channels: { cache: new Map(), fetch: jest.fn().mockResolvedValue(null) },
     },

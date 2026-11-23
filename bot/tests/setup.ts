@@ -5,6 +5,8 @@ process.env.GUILD_ID = '1272163435467243612';
 process.env.MONGO_URI = '';
 process.env.WEBSOCKETPORT = '25530';
 process.env.MAP_SELECTION_ENABLED = 'false';
+process.env.ERROR_WEBHOOK_URL = '';
+process.env.ERROR_WEBHOOK_INTERVAL_MS = '0';
 
 jest.mock('../src/models/GameSettlement', () => ({
   __esModule: true,
