@@ -81,6 +81,7 @@ interface FightRowRaw {
 interface TimelineEvent {
   type: string;
   timestamp: number;
+  detail?: string;
   [key: string]: unknown;
 }
 

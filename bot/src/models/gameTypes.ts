@@ -4,6 +4,7 @@ export interface ITimelineEvent {
   target?: string;
   amount?: number;
   team?: string;
+  detail?: string;
   timestamp: number;
 }
 

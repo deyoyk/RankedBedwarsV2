@@ -164,10 +164,36 @@ describe('PublicApiManager', () => {
     new PublicApiManager(client, wsManager);
     const base = await boot(app);
 
-    for (const path of ['/user', '/game/1/timeline', '/queues', '/server/status', '/stats/global', '/maps']) {
+    for (const path of ['/user', '/queues', '/server/status', '/stats/global', '/maps']) {
       const res = await fetch(`${base}/public/rbw/api${path}`);
       expect(res.status).toBe(404);
     }
+  });
+
+  it('serves game timelines publicly with event details', async () => {
+    const GameModel = require('../src/models/Game').default;
+    GameModel.findOne.mockImplementation(() => mockQuery({
+      gameId: 7,
+      map: 'MapA',
+      state: 'scored',
+      startTime: new Date(),
+      endTime: new Date(),
+      winners: ['A'],
+      losers: ['B'],
+      timeline: [
+        { type: 'upgrade', player: 'A', team: 'RED', amount: 2, detail: 'Sharpened Swords II', timestamp: 1000 }
+      ]
+    }));
+    const { app, wsManager, client } = makeApp();
+    new PublicApiManager(client, wsManager);
+    const base = await boot(app);
+
+    const res = await fetch(`${base}/public/rbw/api/game/7/timeline`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.gameId).toBe(7);
+    expect(body.timeline[0].detail).toBe('Sharpened Swords II');
+    expect(body.timeline[0].amount).toBe(2);
   });
 
   it('rejects non-numeric game ids without querying the database', async () => {

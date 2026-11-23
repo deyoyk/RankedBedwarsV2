@@ -78,6 +78,7 @@ export const timelineEventSubdoc = {
   target: { type: String },
   amount: { type: Number },
   team: { type: String },
+  detail: { type: String },
   timestamp: { type: Number, required: true },
 };
 

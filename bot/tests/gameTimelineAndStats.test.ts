@@ -148,7 +148,8 @@ describe('GameManager timeline + new user stats', () => {
     const timeline = [
       { type: 'final_kill', player: 'A', target: 'C', timestamp: 1000 },
       { type: 'bed_broken', player: 'C', timestamp: 2000 },
-      { type: 'kill', player: 'B', amount: 1, timestamp: 3000 }
+      { type: 'kill', player: 'B', amount: 1, timestamp: 3000 },
+      { type: 'upgrade', player: 'A', team: 'RED', amount: 2, detail: 'Sharpened Swords II', timestamp: 4000 }
     ];
 
     await manager.scoreGame({

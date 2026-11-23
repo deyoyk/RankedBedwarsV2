@@ -331,6 +331,7 @@ export class ApiManager {
     app.get(`${prefix}/leaderboard`, this.getLeaderboard);
     app.get(`${prefix}/leaderboard/top-players`, this.getTopPlayers);
     app.get(`${prefix}/game/:gameid`, this.getGameById);
+    app.get(`${prefix}/game/:gameid/timeline`, this.getGameTimeline);
     app.get(`${prefix}/eloranks`, this.getEloRanks);
     app.get(`${prefix}/search/users`, this.searchUsers);
     app.get(`${prefix}/online-players`, this.getOnlinePlayers);

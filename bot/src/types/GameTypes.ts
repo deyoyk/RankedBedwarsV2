@@ -76,6 +76,7 @@ export interface GameResult {
     target?: string;
     amount?: number;
     team?: string;
+    detail?: string;
     timestamp: number;
   }>;
   reason?: string;

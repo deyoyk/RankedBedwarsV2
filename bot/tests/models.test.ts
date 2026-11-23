@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import UserModel from '../src/models/User';
 import QueueModel from '../src/models/Queue';
+import GameModel from '../src/models/Game';
 
 describe('User schema', () => {
   it('rejects a non-ObjectId punishment id', () => {
@@ -45,5 +46,13 @@ describe('Queue schema', () => {
       bypassRoles: []
     });
     expect(queue.isActive).toBe(true);
+  });
+});
+
+describe('Game schema', () => {
+  it('stores detail on timeline events', () => {
+    const detail = (GameModel.schema.path('timeline') as any).caster.schema.path('detail');
+    expect(detail).toBeDefined();
+    expect(detail.instance).toBe('String');
   });
 });

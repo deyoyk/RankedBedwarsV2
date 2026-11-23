@@ -234,7 +234,8 @@ describe('ApiManager', () => {
     const timeline = [
       { type: 'final_kill', player: 'A', target: 'C', timestamp: 1000 },
       { type: 'bed_broken', player: 'C', timestamp: 2000 },
-      { type: 'kill', player: 'B', amount: 1, timestamp: 3000 }
+      { type: 'kill', player: 'B', amount: 1, timestamp: 3000 },
+      { type: 'upgrade', player: 'A', team: 'RED', amount: 2, detail: 'Sharpened Swords II', timestamp: 4000 }
     ];
     GameModel.findOne.mockImplementation(() => mockQuery({
       gameId: 42,
@@ -257,8 +258,10 @@ describe('ApiManager', () => {
     expect(body.state).toBe('scored');
     expect(body.winners).toEqual(['A', 'B']);
     expect(body.losers).toEqual(['C', 'D']);
-    expect(body.timeline).toHaveLength(3);
+    expect(body.timeline).toHaveLength(4);
     expect(body.timeline[0]).toEqual({ type: 'final_kill', player: 'A', target: 'C', timestamp: 1000 });
+    expect(body.timeline[3].detail).toBe('Sharpened Swords II');
+    expect(body.timeline[3].amount).toBe(2);
   });
 
   it('hammering an endpoint repeatedly triggers the 429 rate limit', async () => {
