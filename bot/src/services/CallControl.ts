@@ -29,6 +29,25 @@ export function teamOf(game: CallGame, voiceId: string): string[] | null {
   return null;
 }
 
+export async function findTeamCall(guild: Guild, teammateId: string, requesterId: string): Promise<CallContext | { error: string }> {
+  const game = await Game.findOne({
+    state: { $in: ['pending', 'active'] },
+    $or: [{ team1: teammateId }, { team2: teammateId }],
+  }).sort({ startTime: -1 }).select('gameId team1 team2 channels').lean() as CallGame | null;
+  if (!game) {
+    return { error: "That player isn't in a game right now." };
+  }
+  const voiceId = game.team1.includes(teammateId) ? game.channels.team1Voice : game.channels.team2Voice;
+  const voice = guild.channels.cache.get(voiceId) ?? await guild.channels.fetch(voiceId).catch(() => null);
+  if (!voice?.isVoiceBased()) {
+    return { error: "That player's team voice channel is gone." };
+  }
+  if (game.team1.includes(requesterId) || game.team2.includes(requesterId)) {
+    return { error: "You're in that game already." };
+  }
+  return { guild, voice, game, requesterId };
+}
+
 export async function findCall(guild: Guild, requesterId: string, teamOnly: boolean): Promise<CallContext | { error: string }> {
   const member: GuildMember | null = guild.members.cache.get(requesterId) ?? await guild.members.fetch(requesterId).catch(() => null);
   const voice = member?.voice?.channel;
@@ -79,13 +98,23 @@ export async function removeFromCall(ctx: CallContext, targetId: string): Promis
 
 export async function unmuteInCall(ctx: CallContext, targetId: string): Promise<CallResult> {
   await ctx.voice.permissionOverwrites.edit(targetId, { ViewChannel: true, Connect: true, Speak: true, Stream: true });
+  await bounce(ctx, targetId);
+  return { ok: true, message: `<@${targetId}> can talk in <#${ctx.voice.id}> now.` };
+}
+
+export async function muteInCall(ctx: CallContext, targetId: string): Promise<CallResult> {
+  await ctx.voice.permissionOverwrites.edit(targetId, { ViewChannel: true, Connect: true, Speak: false, Stream: false });
+  await bounce(ctx, targetId);
+  return { ok: true, message: `<@${targetId}> can't talk in <#${ctx.voice.id}> now.` };
+}
+
+async function bounce(ctx: CallContext, targetId: string): Promise<void> {
   const inside = ctx.voice.members.get(targetId);
   const waiting = ctx.game.channels.picking ? ctx.guild.channels.cache.get(ctx.game.channels.picking) : null;
   if (inside && waiting?.isVoiceBased() && waiting.id !== ctx.voice.id) {
     await inside.voice.setChannel(waiting).catch(() => undefined);
     await inside.voice.setChannel(ctx.voice).catch(() => undefined);
   }
-  return { ok: true, message: `<@${targetId}> can talk in <#${ctx.voice.id}> now.` };
 }
 
 export async function openCall(ctx: CallContext, tier: OpenTier): Promise<CallResult> {

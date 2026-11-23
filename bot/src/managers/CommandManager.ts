@@ -32,7 +32,7 @@ import type { BotCommandFn } from '../types/commands';
 import { strikerequest } from '../commands/scoring/strikerequest';
 import { voidrequest } from '../commands/scoring/voidrequest';
 import { stats } from '../commands/stats/stats';
-import { call } from '../commands/queue/call';
+import { call, handleCallVote } from '../commands/queue/call';
 import { nick } from '../commands/account/nick';
 import { settings } from '../commands/account/settings';
 import { forcevoid } from '../commands/scoring/forcevoid';
@@ -144,6 +144,11 @@ export class CommandManager {
 
         if (interaction.isButton() && interaction.customId.startsWith('punishment:details:')) {
           await handlePunishmentDetails(interaction);
+          return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('call:vote:')) {
+          await handleCallVote(interaction);
           return;
         }
 
@@ -313,10 +318,16 @@ export class CommandManager {
       { name: 'remove', description: 'Lock someone out of your game voice channel and move them out', type: 1, options: [
         { name: 'user', description: 'Who to lock out', type: 6, required: true }
       ]},
-      { name: 'unmute', description: 'Let someone you added muted talk', type: 1, options: [
+      { name: 'mute', description: 'Stop someone in your game voice channel talking', type: 1, options: [
+        { name: 'user', description: 'Who to mute', type: 6, required: true }
+      ]},
+      { name: 'unmute', description: 'Ask your team to let someone talk again', type: 1, options: [
         { name: 'user', description: 'Who can talk now', type: 6, required: true }
       ]},
-      { name: 'open', description: 'Open your team voice channel to a group', type: 1, options: [
+      { name: 'request', description: "Ask a player's team to let you into their voice channel", type: 1, options: [
+        { name: 'user', description: 'A player on that team', type: 6, required: true }
+      ]},
+      { name: 'open', description: 'Ask your team to open your team voice channel to a group', type: 1, options: [
         { name: 'to', description: 'Who can join (default everyone)', type: 3, required: false, choices: [
           { name: 'Pups (with Pugs Trial, Pugs and Premium)', value: 'pups' },
           { name: 'Pugs (with Premium)', value: 'pugs' },
@@ -324,7 +335,7 @@ export class CommandManager {
           { name: 'Everyone', value: 'everyone' }
         ]}
       ]},
-      { name: 'close', description: 'Close your team voice channel again and move out non-team members', type: 1 }
+      { name: 'close', description: 'Ask your team to close your voice channel and move out non-team members', type: 1 }
     ]);
     this.reg('retry', 'Retry a game', retry);
     this.reg('addqueue', 'Create a new queue', addqueue, [
