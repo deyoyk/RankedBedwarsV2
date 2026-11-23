@@ -1,5 +1,6 @@
 import { handleIngamePunish, IngamePunishPayload } from './ingamePunish';
 import { PunishmentPresets } from '../services/PunishmentPresets';
+import { TourneyService, wire as tourneyWire } from '../services/TourneyService';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { PresenceService } from '../services/PresenceService';
 import { MapInfo, MapsJsonPayload } from '../types/MapInfoMemory';
@@ -404,7 +405,14 @@ interface VoidingPayload {
   reason: string;
 }
 
+interface TourneySetPayload {
+  type: 'pg_tourney_set';
+  enabled?: unknown;
+  by?: unknown;
+}
+
 type IncomingPayload =
+  | TourneySetPayload
   | IngamePunishPayload
   | WarpPlayersPayload
   | VerificationPayload
@@ -610,6 +618,7 @@ export class WebSocketManager {
     
     global._wsManager = this;
     PunishmentPresets.onChange(presets => this.send({ type: 'punish_presets', presets }));
+    TourneyService.onChange(state => this.send(tourneyWire(state)));
     
     this.wss.on('connection', (ws, _req) => {
       console.log('[WebSocketManager] New WebSocket connection established');
@@ -818,6 +827,9 @@ export class WebSocketManager {
       case 'ingame_punish':
         await this.handleIngamePunish(msg);
         break;
+      case 'pg_tourney_set':
+        await this.handleTourneySet(msg);
+        break;
       case 'permission':
         this.handlePermission(msg);
         break;
@@ -1019,7 +1031,21 @@ export class WebSocketManager {
     this.send(result);
   }
 
+  private async handleTourneySet(msg: TourneySetPayload) {
+    const by = typeof msg.by === 'string' && msg.by.trim() ? msg.by.trim() : 'Console';
+    try {
+      if (typeof msg.enabled === 'boolean' && msg.enabled !== TourneyService.current().enabled) {
+        await TourneyService.set(msg.enabled, by, 'minecraft');
+        return;
+      }
+    } catch (error) {
+      console.warn('[WebSocketManager] Could not change tourney mode:', error instanceof Error ? error.message : error);
+    }
+    this.send(tourneyWire(TourneyService.current()));
+  }
+
   private async sendPresets(): Promise<void> {
+    this.send(tourneyWire(TourneyService.current()));
     try {
       this.send({ type: 'punish_presets', presets: await PunishmentPresets.wire() });
     } catch (error) {

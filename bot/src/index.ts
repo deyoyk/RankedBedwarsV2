@@ -18,6 +18,7 @@ import type { GameManager } from './Matchmaking/GameManager';
 import { setBrandIcon } from './utils/betterembed';
 import { PermissionService } from './services/PermissionService';
 import { StrikeRuleService } from './services/StrikeRuleService';
+import { TourneyService } from './services/TourneyService';
 import { installErrorReporting } from './utils/errorReporter';
 
 installErrorReporting();
@@ -113,6 +114,7 @@ client.once('clientReady', async () => {
     console.log('[MongoDB] Connected to MongoDB');
     await PermissionService.load(config.guildId);
     await StrikeRuleService.load(config.guildId);
+    await TourneyService.load(config.guildId);
 
     workersManager = WorkersManager.getInstance(client);
     await workersManager.initialize();

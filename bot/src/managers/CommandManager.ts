@@ -39,6 +39,7 @@ import { forcevoid } from '../commands/scoring/forcevoid';
 import { refresh } from '../commands/account/refresh';
 import { gameinfo, handleGameInfoButton, handleGameInfoVoidModal } from '../commands/general/gameinfo';
 import { rbwconfig, rbwconfigData } from '../commands/general/rbwconfig';
+import { pgtourney } from '../commands/general/pgtourney';
 import { handlePunishmentDetails, handlePunishmentIssuer } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
@@ -268,6 +269,11 @@ export class CommandManager {
     this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
     this.reg('rbwconfig', 'Command permissions and strike rules', rbwconfig, [], rbwconfigData);
+    this.reg('pgtourney', 'Tourney mode for private games: no spectating while it is on', pgtourney, [
+      { name: 'mode', description: 'Turn it on or off; leave out to see whether it is on', type: 3, required: false, choices: [
+        { name: 'On', value: 'on' }, { name: 'Off', value: 'off' }
+      ]}
+    ]);
   }
 
   private registerQueueCommands() {
