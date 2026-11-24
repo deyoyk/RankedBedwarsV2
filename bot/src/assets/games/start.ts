@@ -73,10 +73,10 @@ function captainBadge(): VNode {
       paddingTop: 3,
       paddingBottom: 3,
       borderRadius: 4,
-      backgroundColor: '#F3E8FF',
+      backgroundColor: '#FCE7F3',
       borderWidth: 1,
       borderStyle: 'solid',
-      borderColor: '#C4B5FD',
+      borderColor: '#F9A8D4',
     },
   },
     h('div', {
@@ -241,16 +241,11 @@ function footer(input: StartTemplateInput): VNode[] {
     ? input.inviteLink.slice(input.inviteLink.lastIndexOf('.gg/'))
     : input.inviteLink;
   return [
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: IX,
-        top: FOOT_TOP,
-        width: IW,
-        height: FOOT_H,
-        backgroundColor: AX.block,
-      },
-    }),
+    h('svg', {
+      width: IW,
+      height: FOOT_H,
+      style: { position: 'absolute', left: IX, top: FOOT_TOP },
+    }, h('path', { d: `M0 0 H${IW} L${IW - 9.6} ${FOOT_H} H0 Z`, fill: AX.block })),
     h('div', {
       style: {
         position: 'absolute',
@@ -277,7 +272,7 @@ function header(input: StartTemplateInput): VNode[] {
   const metaW = 282;
   const queue = input.isRanked ? `${input.minElo ?? 0} - ${input.maxElo ?? 0}` : 'CASUAL';
   return [
-    text(IX + 660, SHEET_Y + 6, 860, 116, 'START', 110, 'rgba(124, 58, 237, 0.06)', SEMIBOLD, 'right', -2),
+    text(IX + 660, SHEET_Y + 6, 860, 116, 'START', 110, 'rgba(236, 72, 153, 0.06)', SEMIBOLD, 'right', -2),
     slash(IX, SHEET_Y + 22, 20, 6, AX.accent),
     text(IX + 30, SHEET_Y + 20, 300, 16, 'MATCH START', 11, AX.mute, SEMIBOLD, 'left', 2.2),
     text(IX, SHEET_Y + 40, 860, 58, input.mapName, 48, AX.ink, SEMIBOLD, 'left', -1.2),
@@ -320,7 +315,7 @@ export function startTemplate(input: StartTemplateInput): { root: VNode; width: 
         top: SHEET_Y + 10,
         width: SHEET_W,
         height: SHEET_H,
-        backgroundColor: 'rgba(124, 58, 237, 0.3)',
+        backgroundColor: 'rgba(236, 72, 153, 0.3)',
       },
     }),
     h('div', {

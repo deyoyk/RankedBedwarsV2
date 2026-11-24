@@ -12,7 +12,7 @@ type DivisionTagStyle = {
 
 export const DIVISION_TAG_STYLES: Record<DivisionTag, DivisionTagStyle> = {
   premium: { label: 'PREMIUM', color: '#8A5A00', background: '#FFF6DA', border: '#E7C96B' },
-  pugs: { label: 'PUGS', color: '#6D28D9', background: '#F3E8FF', border: '#C4B5FD' },
+  pugs: { label: 'PUGS', color: '#9D174D', background: '#FCE7F3', border: '#F9A8D4' },
   pups: { label: 'PUPS', color: '#075985', background: '#E0F2FE', border: '#7DD3FC' },
   pit: { label: 'PIT', color: '#475569', background: '#F1F5F9', border: '#CBD5E1' },
 };

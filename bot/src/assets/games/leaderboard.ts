@@ -207,7 +207,7 @@ function standings(input: LeaderboardTemplateInput): VNode[] {
     : 'SEASON 01';
 
   return [
-    text(X, 48, 460, 96, 'TOP 10', 84, 'rgba(234, 220, 248, 0.22)', SEMIBOLD, 'left', -2),
+    text(X, 48, 460, 96, 'TOP 10', 84, 'rgba(255, 228, 242, 0.24)', SEMIBOLD, 'left', -2),
     text(WIDTH - X - 300, 52, 300, 120, '01', 104, 'rgba(248, 243, 255, 0.08)', SEMIBOLD, 'right', 0),
     slash(X + 360, 82, 24, 7, AX.accentSoft),
     text(X + 400, 70, 420, 18, 'SEASON STANDINGS', 13, AX.blockMute, SEMIBOLD, 'left', 2.2),
@@ -256,16 +256,11 @@ function footer(input: LeaderboardTemplateInput): VNode[] {
   const buttonX = X + BOARD_W - buttonW;
 
   return [
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: X,
-        top: 984,
-        width: BOARD_W,
-        height: 48,
-        backgroundColor: AX.block,
-      },
-    }),
+    h('svg', {
+      width: BOARD_W,
+      height: 48,
+      style: { position: 'absolute', left: X, top: 984 },
+    }, h('path', { d: `M0 0 H${BOARD_W} L${BOARD_W - 10.67} 48 H0 Z`, fill: AX.block })),
     h('div', {
       style: {
         position: 'absolute',

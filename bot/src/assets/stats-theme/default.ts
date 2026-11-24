@@ -2,7 +2,7 @@ import { h, VNode } from '../renderer';
 import { MEDIUM, SEMIBOLD, text } from '../theme';
 import { grainLayer } from '../grain';
 import { DivisionTag, divisionTagBadge } from '../divisionTag';
-import { AX, axBrackets, axPanelGrid, axPage, axStamp } from '../themes/defaultTheme';
+import { AX, axBrackets, axPanelGrid, axPage } from '../themes/defaultTheme';
 
 export type MatchResult = 'win' | 'loss' | 'voided' | 'active' | 'unknown';
 
@@ -289,7 +289,7 @@ function card(input: DefaultTemplateInput): VNode[] {
         top: CARD_Y + 10,
         width: CARD_W,
         height: CARD_H,
-        backgroundColor: 'rgba(124, 58, 237, 0.3)',
+        backgroundColor: 'rgba(236, 72, 153, 0.3)',
       },
     }),
     h('div', {
@@ -305,7 +305,7 @@ function card(input: DefaultTemplateInput): VNode[] {
         borderColor: AX.ink,
       },
     }),
-    text(CARD_X + 470, CARD_Y + 14, 590, 120, 'ELO', 112, 'rgba(124, 58, 237, 0.06)', SEMIBOLD, 'right', -2),
+    text(CARD_X + 470, CARD_Y + 14, 590, 120, 'ELO', 112, 'rgba(236, 72, 153, 0.06)', SEMIBOLD, 'right', -2),
     text(CARD_X + GUTTER, CARD_Y + 18, 300, 16, 'PLAYER STATS', 11, AX.mute, SEMIBOLD, 'left', 2.2),
     text(CARD_X + CARD_W - 246, CARD_Y + 18, 216, 16, 'ELO', 12, AX.mute, SEMIBOLD, 'right', 2.2),
     text(CARD_X + CARD_W - 276, CARD_Y + 34, 246, 64, String(input.elo), 62, AX.ink, SEMIBOLD, 'right', -1.6),
@@ -418,7 +418,6 @@ function card(input: DefaultTemplateInput): VNode[] {
       }, `[  ${input.rankName.toUpperCase()}  ]`),
     ),
     ...axBrackets(CARD_X + 10, CARD_Y + 10, CARD_W - 20, CARD_H - 20, AX.lineSoft, 14, 2),
-    ...axStamp(CARD_X + CARD_W - 92, CARD_Y - 22, 'RBW', 56),
     h('svg', {
       width: buttonW,
       height: 34,

@@ -69,7 +69,7 @@ const ICONS = {
   arrowDown: 'M200,192a8,8,0,0,1-8,8H96a8,8,0,0,1,0-16h76.69L61.17,72.49A8,8,0,0,1,72.49,61.17L184,172.69V96a8,8,0,0,1,16,0Z',
 };
 
-const PARTY_COLORS = ['#7C3AED', '#0EA5E9', '#F59E0B', '#EC4899', '#10B981', '#EF4444'];
+const PARTY_COLORS = ['#DB2777', '#0EA5E9', '#F59E0B', '#EC4899', '#10B981', '#EF4444'];
 
 function icon(path: string, size: number, color: string): VNode {
   return h('svg', { width: size, height: size, viewBox: '0 0 256 256', fill: color, style: { display: 'block' } },
@@ -205,7 +205,7 @@ function row(player: ScoreTemplatePlayer, index: number, top: number, teamColor:
       }, player.username),
       divisionTagBadge(player.divisionTag, 13),
       player.mvp ? badge('MVP', '#8A5A00', '#FFF6DA', '#E7C96B') : null,
-      player.bedbreaker ? badge('BED', AX.accentDeep, '#F3E8FF', '#C4B5FD') : null,
+      player.bedbreaker ? badge('BED', AX.accentDeep, '#FCE7F3', '#F9A8D4') : null,
     ),
     text(COL.kills - 55, top, 110, ROW_H, String(player.kills), 28, AX.ink, SEMIBOLD, 'center', 0),
     text(COL.deaths - 55, top, 110, ROW_H, String(player.deaths), 28, AX.ink, SEMIBOLD, 'center', 0),
@@ -332,16 +332,11 @@ function footer(input: ScoreTemplateInput): VNode[] {
     ? input.inviteLink.slice(input.inviteLink.lastIndexOf('.gg/'))
     : input.inviteLink;
   return [
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: IX,
-        top: FOOT_TOP,
-        width: IW,
-        height: FOOT_H,
-        backgroundColor: AX.block,
-      },
-    }),
+    h('svg', {
+      width: IW,
+      height: FOOT_H,
+      style: { position: 'absolute', left: IX, top: FOOT_TOP },
+    }, h('path', { d: `M0 0 H${IW} L${IW - 9.6} ${FOOT_H} H0 Z`, fill: AX.block })),
     h('div', {
       style: {
         position: 'absolute',
@@ -367,7 +362,7 @@ function header(input: ScoreTemplateInput): VNode[] {
   const metaX = IX + IW - 382;
   const metaW = 282;
   return [
-    text(IX + 660, SHEET_Y + 6, 860, 116, 'RESULT', 110, 'rgba(124, 58, 237, 0.06)', SEMIBOLD, 'right', -2),
+    text(IX + 660, SHEET_Y + 6, 860, 116, 'RESULT', 110, 'rgba(236, 72, 153, 0.06)', SEMIBOLD, 'right', -2),
     slash(IX, SHEET_Y + 22, 20, 6, AX.accent),
     text(IX + 30, SHEET_Y + 20, 300, 16, 'GAME RESULT', 11, AX.mute, SEMIBOLD, 'left', 2.2),
     text(IX, SHEET_Y + 40, 860, 58, input.map, 48, AX.ink, SEMIBOLD, 'left', -1.2),
@@ -426,7 +421,7 @@ export function scoreTemplate(input: ScoreTemplateInput): { root: VNode; width: 
         top: SHEET_Y + 10,
         width: SHEET_W,
         height: SHEET_H,
-        backgroundColor: 'rgba(124, 58, 237, 0.3)',
+        backgroundColor: 'rgba(236, 72, 153, 0.3)',
       },
     }),
     h('div', {
