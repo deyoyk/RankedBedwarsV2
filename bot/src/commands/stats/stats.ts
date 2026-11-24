@@ -7,6 +7,7 @@ import User, { type IUser } from '../../models/User';
 import { resolveTheme } from '../../assets/stats-theme';
 import type { EnrichedPlayerData, PlayerData, RecentGame } from '../../assets/stats-theme/base';
 import { getRankInfo } from '../../utils/rankInfo';
+import { getDivisionTag } from '../../utils/divisionTags';
 import config, { buildPlayerResultUrl } from '../../config/config';
 
 const { errorEmbed } = embedsFor('Player');
@@ -47,7 +48,7 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
       return `#${higher + 1}`;
     };
     const streak = winstreak > 0 ? winstreak : losestreak > 0 ? -losestreak : 0;
-    const [eloPos, winsPos, lossesPos, wlrPos, mvpsPos, bedsPos, streakPos] = await Promise.all([
+    const [eloPos, winsPos, lossesPos, wlrPos, mvpsPos, bedsPos, streakPos, divisionTag] = await Promise.all([
       rankOf('elo', elo),
       rankOf('wins', wins),
       rankOf('losses', losses),
@@ -55,6 +56,7 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
       rankOf('mvps', user.mvps || 0),
       rankOf('bedBroken', user.bedBroken || 0),
       rankOf(winstreak > 0 ? 'winStreak' : 'loseStreak', Math.abs(streak)),
+      getDivisionTag(user.discordId),
     ]);
 
     const playerData: EnrichedPlayerData = {
@@ -70,6 +72,7 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
       wlr,
       beds: user.bedBroken || 0,
       streak,
+      divisionTag,
       positions: {
         elo: eloPos,
         wins: winsPos,

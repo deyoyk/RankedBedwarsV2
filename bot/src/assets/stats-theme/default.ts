@@ -2,6 +2,7 @@ import { h, VNode } from '../renderer';
 import { MEDIUM, SEMIBOLD } from '../theme';
 import { staticImageDataUrl } from '../assets';
 import { grainLayer } from '../grain';
+import { DivisionTag, divisionTagBadge } from '../divisionTag';
 
 export type MatchResult = 'win' | 'loss' | 'voided' | 'active' | 'unknown';
 
@@ -11,6 +12,7 @@ export type DefaultTemplateInput = {
   elo: number;
   rankName: string;
   rankColor: string;
+  divisionTag?: DivisionTag | null;
   wins: string;
   losses: string;
   wlr: string;
@@ -250,13 +252,24 @@ function card(input: DefaultTemplateInput): VNode[] {
         left: CONTENT_X,
         top: 66,
         width: CONTENT_W - 210,
-        fontFamily: SEMIBOLD,
-        fontSize: nameSize,
-        letterSpacing: -1.4,
-        lineHeight: `${nameSize + 4}px`,
-        color: C.ink,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
       },
-    }, input.ign),
+    },
+      h('div', {
+        style: {
+          fontFamily: SEMIBOLD,
+          fontSize: nameSize,
+          letterSpacing: -1.4,
+          lineHeight: `${nameSize + 4}px`,
+          color: C.ink,
+          whiteSpace: 'nowrap',
+        },
+      }, input.ign),
+      divisionTagBadge(input.divisionTag, 16),
+    ),
     h('div', {
       style: {
         position: 'absolute',

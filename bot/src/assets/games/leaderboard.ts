@@ -2,6 +2,7 @@ import { h, VNode } from '../renderer';
 import { SEMIBOLD, text } from '../theme';
 import { staticImageDataUrl } from '../assets';
 import { grainLayer } from '../grain';
+import { DivisionTag, divisionTagBadge } from '../divisionTag';
 
 export type LeaderboardTemplateEntry = {
   rank: number;
@@ -10,6 +11,7 @@ export type LeaderboardTemplateEntry = {
   avatar: string;
   rankName: string;
   rankColor: string;
+  divisionTag?: DivisionTag | null;
 };
 
 export type LeaderboardTemplateInput = {
@@ -107,7 +109,31 @@ function row(entry: LeaderboardTemplateEntry, index: number): VNode[] {
         objectFit: 'cover',
       },
     }),
-    text(232, top, 520, ROW_H, entry.ign, 28, C.ink, SEMIBOLD, 'left', -0.2),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: 232,
+        top,
+        width: 520,
+        height: ROW_H,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+      },
+    },
+      h('div', {
+        style: {
+          fontFamily: SEMIBOLD,
+          fontSize: 28,
+          letterSpacing: -0.2,
+          lineHeight: '34px',
+          color: C.ink,
+          whiteSpace: 'nowrap',
+        },
+      }, entry.ign),
+      divisionTagBadge(entry.divisionTag, 14),
+    ),
     text(790, top, 190, ROW_H, entry.rankName.toUpperCase(), 20, C.mute, SEMIBOLD, 'left', 1.2),
     text(980, top, 160, ROW_H, entry.value, 30, C.purple, SEMIBOLD, 'right', 0),
   ];

@@ -15,6 +15,10 @@ const mockDraw = jest.fn();
 jest.mock('../src/assets/stats-theme', () => ({
   resolveTheme: () => (...args: unknown[]) => mockDraw(...args),
 }));
+const mockDivisionTag = jest.fn();
+jest.mock('../src/utils/divisionTags', () => ({
+  getDivisionTag: (...args: unknown[]) => mockDivisionTag(...args),
+}));
 
 import { recentResults, stats } from '../src/commands/stats/stats';
 import { getRankInfo } from '../src/utils/rankInfo';
@@ -39,6 +43,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockRanks.mockResolvedValue([]);
   mockDraw.mockResolvedValue(Buffer.from('png'));
+  mockDivisionTag.mockResolvedValue(null);
 });
 
 describe('stats card', () => {
@@ -67,6 +72,17 @@ describe('stats card', () => {
       label: 'View full stats',
       url: 'https://www.vrbw.club/player?query=wuwster',
     });
+  });
+
+  it('passes the player division tag from the private api to the card', async () => {
+    mockFindOne.mockResolvedValue({ discordId: 'me', ign: 'wuwster', elo: 1234, wins: 4, losses: 2, mvps: 1, bedBroken: 3, winStreak: 2, recentGames: [] });
+    mockDivisionTag.mockResolvedValue('pugs');
+
+    await stats(slash());
+
+    const [playerData] = mockDraw.mock.calls[0];
+    expect(playerData.divisionTag).toBe('pugs');
+    expect(mockDivisionTag).toHaveBeenCalledWith('me');
   });
 
   it('says so when the player is not registered', async () => {

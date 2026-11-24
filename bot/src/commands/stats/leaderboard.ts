@@ -129,6 +129,7 @@ export async function leaderboard(interaction: ChatInputCommandInteraction, _wsM
       ign: user.ign || user.discordId,
       value: displayValue((user as Record<string, unknown>)[valueField]),
       elo: user.elo,
+      discordId: user.discordId,
       ...rankOf(user.elo),
     }));
     const totalPages = Math.max(1, Math.ceil(totalUsers / usersPerPage));

@@ -2,12 +2,14 @@ import { h, VNode } from '../renderer';
 import { SEMIBOLD, text } from '../theme';
 import { staticImageDataUrl } from '../assets';
 import { grainLayer } from '../grain';
+import { DivisionTag, divisionTagBadge } from '../divisionTag';
 
 export type StartTemplatePlayer = {
   username: string;
   elo: number;
   isCaptain: boolean;
   avatar: string;
+  divisionTag?: DivisionTag | null;
 };
 
 export type StartTemplateInput = {
@@ -203,6 +205,7 @@ function playerRow(player: StartTemplatePlayer, top: number): VNode[] {
           whiteSpace: 'nowrap',
         },
       }, player.username),
+      divisionTagBadge(player.divisionTag, 16),
       player.isCaptain
         ? h('div', {
           style: {

@@ -2,6 +2,7 @@ import { h, VNode } from '../renderer';
 import { MEDIUM, SEMIBOLD, text } from '../theme';
 import { staticImageDataUrl } from '../assets';
 import { grainLayer } from '../grain';
+import { DivisionTag, divisionTagBadge } from '../divisionTag';
 
 export type ScoreTemplatePlayer = {
   username: string;
@@ -16,6 +17,7 @@ export type ScoreTemplatePlayer = {
   mvp: boolean;
   bedbreaker: boolean;
   partyId?: string;
+  divisionTag?: DivisionTag | null;
 };
 
 export type ScoreTemplateInput = {
@@ -140,6 +142,7 @@ function nameCell(player: ScoreTemplatePlayer, top: number): VNode {
         whiteSpace: 'nowrap',
       },
     }, player.username),
+    divisionTagBadge(player.divisionTag, 16),
     player.mvp ? badge('MVP', C.gold, '#FFF6DA', '#E7C96B') : null,
     player.bedbreaker ? badge('BED', C.purple, '#F3E8FF', '#C4B5FD') : null,
   );

@@ -61,8 +61,8 @@ describe('leaderboard image', () => {
     expect(title).toBe('KDR Leaderboard');
     expect(label).toBe('KDR');
     expect(entries).toEqual([
-      { rank: 1, ign: 'Alpha', value: '2.50', elo: 1500, rankName: 'Unranked', rankColor: '#6B7174' },
-      { rank: 2, ign: 'Bravo', value: 1, elo: 1400, rankName: 'Unranked', rankColor: '#6B7174' },
+      { rank: 1, ign: 'Alpha', value: '2.50', elo: 1500, discordId: 'a', rankName: 'Unranked', rankColor: '#6B7174' },
+      { rank: 2, ign: 'Bravo', value: 1, elo: 1400, discordId: 'b', rankName: 'Unranked', rankColor: '#6B7174' },
     ]);
     expect([page, totalPages]).toEqual([0, 3]);
 

@@ -2,6 +2,7 @@ import { loadSkinDataUrl } from '../assets';
 import config from '../../config/config';
 import { renderPng } from '../renderer';
 import { defaultTemplate, MatchResult } from './default';
+import type { DivisionTag } from '../divisionTag';
 
 export type PlayerData = {
   discordid: string;
@@ -39,6 +40,7 @@ export type EnrichedPlayerData = PlayerData & {
   wlr?: string;
   beds?: number;
   streak?: number;
+  divisionTag?: DivisionTag | null;
   positions?: Partial<StatPositions>;
 };
 
@@ -120,7 +122,7 @@ export async function generateThemeImage(
     beds: enriched.positions?.beds ?? '#-',
     streak: enriched.positions?.streak ?? '#-',
   };
-  const cacheKey = `${playerData.discordid}|${playerData.ign}|${games}|${wins}|${losses}|${playerData.elo}|${playerData.mvps}|${rankName}|${rankColor}|${wlr}|${enriched.beds ?? 0}|${streak}|${matches.join(',')}|${config.inviteLink}|${Object.values(positions).join(',')}`;
+  const cacheKey = `${playerData.discordid}|${playerData.ign}|${games}|${wins}|${losses}|${playerData.elo}|${playerData.mvps}|${rankName}|${rankColor}|${wlr}|${enriched.beds ?? 0}|${streak}|${matches.join(',')}|${enriched.divisionTag ?? ''}|${config.inviteLink}|${Object.values(positions).join(',')}`;
 
   const cached = statsImageCache.get(cacheKey);
   if (cached && Date.now() - cached.at <= STATS_IMAGE_TTL_MS) {
@@ -144,6 +146,7 @@ export async function generateThemeImage(
       elo: playerData.elo || 0,
       rankName,
       rankColor,
+      divisionTag: enriched.divisionTag ?? null,
       wins: String(wins),
       losses: String(losses),
       wlr,

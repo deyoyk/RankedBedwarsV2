@@ -3,6 +3,7 @@ import { renderPng } from '../assets/renderer';
 import { scoreTemplate, ScoreTemplatePlayer } from '../assets/games/score';
 import { startTemplate, StartTemplatePlayer } from '../assets/games/start';
 import User from '../models/User';
+import { getDivisionTag } from './divisionTags';
 
 const GAME_IMAGE_TIMEOUT_MS = Math.max(
   1000,
@@ -39,7 +40,10 @@ async function resolveAvatar(username: string): Promise<string> {
 }
 
 async function toTemplatePlayer(player: PlayerLine): Promise<ScoreTemplatePlayer> {
-  const avatar = await resolveAvatar(player.username);
+  const [avatar, divisionTag] = await Promise.all([
+    resolveAvatar(player.username),
+    getDivisionTag(player.discordId),
+  ]);
   const kills = player.kills ?? 0;
   const deaths = player.deaths ?? 0;
   const kdrNum = typeof player.kdr === 'number'
@@ -58,6 +62,7 @@ async function toTemplatePlayer(player: PlayerLine): Promise<ScoreTemplatePlayer
     diamonds: player.diamonds ?? 0,
     emeralds: player.emeralds ?? 0,
     partyId: player.partyId,
+    divisionTag,
     eloBefore: player.elo_before ?? player.oldElo ?? 0,
     eloAfter: player.elo_after ?? player.newElo ?? 0,
     mvp: player.mvp,
@@ -164,12 +169,19 @@ export async function generateGameStartImageBuffer(
   team2: GameStartPlayerInput[],
   options: { mapName: string; modeLabel: string; serverName?: string; inviteLink?: string; isRanked?: boolean; minElo?: number; maxElo?: number }
 ): Promise<Buffer> {
-  const toStartPlayer = async (p: GameStartPlayerInput): Promise<StartTemplatePlayer> => ({
-    username: p.username,
-    elo: p.elo,
-    isCaptain: p.isCaptain,
-    avatar: await resolveAvatar(p.username),
-  });
+  const toStartPlayer = async (p: GameStartPlayerInput): Promise<StartTemplatePlayer> => {
+    const [avatar, divisionTag] = await Promise.all([
+      resolveAvatar(p.username),
+      getDivisionTag(p.discordId),
+    ]);
+    return {
+      username: p.username,
+      elo: p.elo,
+      isCaptain: p.isCaptain,
+      avatar,
+      divisionTag,
+    };
+  };
   const [team1Rows, team2Rows] = await Promise.all([
     Promise.all(team1.map(toStartPlayer)),
     Promise.all(team2.map(toStartPlayer)),

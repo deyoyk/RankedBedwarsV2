@@ -2,6 +2,7 @@ import { loadAvatarDataUrl, staticImageDataUrl } from '../assets/assets';
 import { renderPng } from '../assets/renderer';
 import { leaderboardTemplate, LeaderboardTemplateEntry } from '../assets/games/leaderboard';
 import config from '../config/config';
+import { getDivisionTag } from './divisionTags';
 
 export interface LeaderboardEntry {
   rank: number;
@@ -10,6 +11,7 @@ export interface LeaderboardEntry {
   elo?: number;
   rankName?: string;
   rankColor?: string;
+  discordId?: string;
 }
 
 const LEADERBOARD_IMAGE_TIMEOUT_MS = Math.max(
@@ -43,6 +45,7 @@ export async function generateLeaderboardImage(
       avatar: await resolveAvatar(entry.ign),
       rankName: entry.rankName || 'Unranked',
       rankColor: entry.rankColor || '#6B7174',
+      divisionTag: await getDivisionTag(entry.discordId),
     })),
   );
 
