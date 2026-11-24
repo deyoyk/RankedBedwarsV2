@@ -66,6 +66,7 @@ import { seasoninfo } from '../commands/season/seasoninfo';
 import { statreset } from '../commands/account/statreset';
 import { claimelo } from '../commands/account/claimelo';
 import { queuecontrol, queueControlData } from '../commands/queue/queuecontrol';
+import { audit } from '../commands/general/audit';
 
 const { errorEmbed, successEmbed } = embedsFor('Command');
 
@@ -275,6 +276,28 @@ export class CommandManager {
     this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
     this.reg('rbwconfig', 'Command permissions and strike rules', rbwconfig, [], rbwconfigData);
+    this.reg('audit', 'View the staff audit log', audit, [
+      { name: 'actor', description: 'Filter by who performed the action', type: 6, required: false },
+      { name: 'target', description: 'Filter by who the action was performed on', type: 6, required: false },
+      { name: 'action', description: 'Filter by action, for example punishment.ban or stats.edit', type: 3, required: false },
+      { name: 'category', description: 'Filter by category', type: 3, required: false, choices: [
+        { name: 'Command', value: 'command' },
+        { name: 'Stats', value: 'stats' },
+        { name: 'Scoring', value: 'scoring' },
+        { name: 'Moderation', value: 'moderation' },
+        { name: 'Account', value: 'account' },
+        { name: 'Queue', value: 'queue' },
+        { name: 'Season', value: 'season' },
+        { name: 'Config', value: 'config' },
+        { name: 'Screenshare', value: 'screenshare' },
+        { name: 'System', value: 'system' }
+      ]},
+      { name: 'result', description: 'Filter by result', type: 3, required: false, choices: [
+        { name: 'Success', value: 'success' }, { name: 'Failure', value: 'failure' }
+      ]},
+      { name: 'limit', description: 'Entries per page (default 10, max 25)', type: 4, required: false },
+      { name: 'page', description: 'Page number (default 1)', type: 4, required: false }
+    ]);
     this.reg('resetdb', 'Debug: wipe one player or everyone from the bot (account, punishments and roles; Discord only)', resetdb, [
       { name: 'user', description: 'One player to wipe (asks to confirm)', type: 6, required: false },
       { name: 'global', description: 'Wipe every player (asks to confirm)', type: 5, required: false }

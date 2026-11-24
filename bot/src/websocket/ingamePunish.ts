@@ -3,6 +3,7 @@ import { BanManager } from '../managers/BanManager';
 import { MuteManager } from '../managers/MuteManager';
 import type { WebSocketNotifier } from '../managers/punishmentHelpers';
 import { choosePunishment } from '../utils/modCommands';
+import { recordAudit } from '../services/AuditService';
 
 export interface IngamePunishPayload {
   type: 'ingame_punish';
@@ -49,11 +50,32 @@ export async function handleIngamePunish(msg: IngamePunishPayload, deps: IngameP
   const ign = String(msg.ign || '').trim();
   const staff = String(msg.staff || '').trim() || 'Console';
   if (!ign || !['ban', 'mute', 'unban', 'unmute'].includes(action)) {
+    await recordAudit({
+      action: 'punishment.in_game_invalid',
+      category: 'moderation',
+      source: 'minecraft',
+      success: false,
+      actorId: staff,
+      targetName: ign || undefined,
+      error: 'Missing player or action',
+      metadata: { action: msg.action, requestId: msg.request_id },
+    });
     return reply({ error: 'invalid', message: 'Missing player or action.' });
   }
   const guild = deps.guild();
   const target = await deps.findUser(ign);
   if (!guild || !target) {
+    await recordAudit({
+      action: 'punishment.in_game_failed',
+      category: 'moderation',
+      source: 'minecraft',
+      success: false,
+      actorId: staff,
+      guildId: guild?.id,
+      targetName: ign,
+      error: `${ign} isn't registered on the ranked bot`,
+      metadata: { action, requestId: msg.request_id },
+    });
     return reply({ error: 'not_registered', message: `${ign} isn't registered on the ranked bot.` });
   }
   const staffUser = staff === 'Console' ? null : await deps.findUser(staff);
@@ -64,8 +86,7 @@ export async function handleIngamePunish(msg: IngamePunishPayload, deps: IngameP
       const undone = action === 'unban'
         ? await BanManager.unban(guild, target.discordId, moderatorId, reason, deps.notifier, { staff })
         : await MuteManager.unmute(guild, target.discordId, moderatorId, reason, deps.notifier, { staff });
-      return undone ? reply({ ok: true, reason }) : reply({ error: 'not_punished', message: `${ign} isn't ${action === 'unban' ? 'banned' : 'muted'} on Discord.` });
-    }
+      return undone ? reply({ ok: true, reason }) : reply({ error: 'not_punished', message: `${ign} isn't ${action === 'unban' ? 'banned' : 'muted'} on Discord.` });    }
     const type = action as 'ban' | 'mute';
     const chosen = await choosePunishment(type, target.discordId, msg.preset ? String(msg.preset) : null,
       typedDuration(msg), String(msg.reason || '').trim());

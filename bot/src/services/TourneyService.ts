@@ -1,4 +1,5 @@
 import TourneyState, { ITourneyState } from '../models/TourneyState';
+import { recordAudit } from './AuditService';
 
 export type TourneyView = Omit<ITourneyState, 'guildId'>;
 
@@ -32,8 +33,19 @@ export class TourneyService {
       throw new Error('Tourney mode is not loaded yet');
     }
     const next: TourneyView = { enabled, by, source, at: new Date() };
+    const before = { ...TourneyService.state };
     await TourneyState.updateOne({ guildId: TourneyService.guildId }, { $set: next }, { upsert: true });
     TourneyService.state = next;
+    await recordAudit({
+      action: 'config.tourney',
+      category: 'config',
+      source,
+      success: true,
+      actorId: by,
+      guildId: TourneyService.guildId,
+      before: { enabled: before.enabled, by: before.by, source: before.source },
+      after: { enabled: next.enabled, by: next.by, source: next.source },
+    });
     for (const listener of TourneyService.listeners) {
       try {
         listener(next);

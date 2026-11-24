@@ -94,8 +94,8 @@ interface AuthIncomingPayload {
 }
 
 interface GameManagerLike {
-  scoreGame(gameResult: GameResult): Promise<unknown>;
-  voidGame(gameId: number, reason: string): Promise<unknown>;
+  scoreGame(gameResult: GameResult, recovery?: boolean, auditSource?: 'discord' | 'minecraft' | 'api' | 'system'): Promise<unknown>;
+  voidGame(gameId: number, reason: string, recovery?: boolean, force?: boolean, auditSource?: 'discord' | 'minecraft' | 'api' | 'system'): Promise<unknown>;
   strikePregameLeavers(igns: string[]): Promise<string[]>;
   retryWarp(gameId: number): Promise<{ attempts: number; maxAttempts: number }>;
   createPrivateGame(options: {
@@ -1230,7 +1230,7 @@ export class WebSocketManager {
           playerData,
           timeline,
           reason: 'Game completed'
-        });
+        }, false, 'minecraft');
         console.log(`[WebSocketManager] Successfully scored game ${gameid} via GameManager`);
       } catch (error) {
         console.error(`[WebSocketManager] Error scoring game ${gameid} via GameManager:`, error);
@@ -1272,7 +1272,7 @@ export class WebSocketManager {
     const { reason } = msg;
     (async () => {
       try {
-        await this.gameManager!.voidGame(parseInt(String(gameid)), reason || 'Voided via WebSocket');
+        await this.gameManager!.voidGame(parseInt(String(gameid)), reason || 'Voided via WebSocket', false, false, 'minecraft');
         console.log(`[WebSocketManager] Successfully voided game ${gameid} via GameManager`);
       } catch (error) {
         console.error(`[WebSocketManager] Error voiding game ${gameid} via GameManager:`, error);

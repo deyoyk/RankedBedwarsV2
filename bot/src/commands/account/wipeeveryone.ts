@@ -6,6 +6,7 @@ import { executeWithConfirmation } from '../../utils/confirmAction';
 import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { successEmbed } = embedsFor('Admin');
 
@@ -88,5 +89,17 @@ async function executeWipeEveryone(interaction: ChatInputCommandInteraction, tot
     `All user stats have been wiped and roles/nicknames updated.\n\nProcessed: **${total} / ${total}** (100%)`,
     'Wipe Everyone Complete'
   );
+  await recordAudit({
+    ...auditInteractionContext(interaction),
+    action: 'stats.wipe_everyone',
+    category: 'stats',
+    source: 'discord',
+    success: true,
+    targetType: 'database',
+    targetId: 'all',
+    reason: 'Staff wiped all user stats',
+    after: { usersProcessed: processed },
+    metadata: { total, durationMs: Date.now() - startTime },
+  });
   await safeReply(interaction, { embeds: [embed.builder] });
 }

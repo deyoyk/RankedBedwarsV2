@@ -9,6 +9,7 @@ import { getEloClaimEligibility, getEloClaimGrant } from '../../utils/eloClaim';
 import { getMemberRoleIds } from '../../utils/memberRoles';
 import { SeasonManager } from '../../managers/SeasonManager';
 import config from '../../config/config';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Player');
 
@@ -97,6 +98,19 @@ export async function claimelo(interaction: ChatInputCommandInteraction, _wsMana
     }
 
     await safeFix(interaction.guild, discordId);
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'stats.elo_claim',
+      category: 'stats',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: discordId,
+      before: { elo: user.elo ?? 0 },
+      after: { elo: claimed.elo },
+      metadata: { amount: grant.amount, roleId: grant.roleId, season: currentSeason.seasonNumber, chapter: currentSeason.chapterNumber },
+    });
 
     await safeReply(interaction, successEmbed(
       `You claimed **${grant.amount}** ELO for this season.\nYour ELO is now **${claimed.elo}**.`,

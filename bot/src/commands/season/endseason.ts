@@ -4,6 +4,7 @@ import { SeasonManager } from '../../managers/SeasonManager';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Season');
 
@@ -28,6 +29,23 @@ export async function endseason(interaction: ChatInputCommandInteraction, _wsMan
         } else {
             await safeReply(interaction, { embeds: [errorEmbed(result.message, 'Season End Failed').builder] });
         }
+
+        await recordAudit({
+          ...auditInteractionContext(interaction),
+          action: 'season.end',
+          category: 'season',
+          source: 'discord',
+          success: result.success,
+          targetType: 'season',
+          targetId: result.seasonInfo ? `${result.seasonInfo.seasonNumber}:${result.seasonInfo.chapterNumber}` : 'current',
+          reason: result.message,
+          after: result.success ? {
+            usersMigrated: result.usersMigrated,
+            gamesMigrated: result.gamesMigrated,
+            statsCreated: result.statsCreated,
+          } : undefined,
+          error: result.success ? undefined : result.message,
+        });
     } catch (error) {
       await replyCommandError(interaction, error, 'end the season', '[endseason]');
     }

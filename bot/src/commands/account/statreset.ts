@@ -10,6 +10,7 @@ import { countStatResetsInWindow, getStatResetAllowance } from '../../utils/stat
 import { getMemberRoleIds } from '../../utils/memberRoles';
 import { SeasonManager } from '../../managers/SeasonManager';
 import config from '../../config/config';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Player');
 
@@ -59,6 +60,21 @@ export async function statreset(interaction: ChatInputCommandInteraction, _wsMan
     }
 
     await safeFix(interaction.guild, discordId);
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'stats.self_reset',
+      category: 'stats',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: discordId,
+      targetName: interaction.user?.username,
+      reason: 'Donator stat reset',
+      before: { statResetsUsed: used },
+      after: { statResetsUsed: used + 1 },
+      metadata: { allowed, scope: config.statReset.scope, season: currentSeason?.seasonNumber, chapter: currentSeason?.chapterNumber },
+    });
 
     const windowText = config.statReset.scope === 'season' ? `this season` : `the last ${config.statReset.windowDays} days`;
     const remaining = allowed - (used + 1);

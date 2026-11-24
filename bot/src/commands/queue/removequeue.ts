@@ -5,6 +5,7 @@ import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 import Queue from '../../models/Queue';
 import { queuePlayers } from '../../types/queuePlayersMemory';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 export async function removequeue(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let channelId: string;
@@ -22,6 +23,17 @@ export async function removequeue(interaction: ChatInputCommandInteraction, _wsM
     }
 
     queuePlayers.delete(channelId);
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'queue.remove',
+      category: 'queue',
+      source: 'discord',
+      success: true,
+      targetType: 'queue',
+      targetId: channelId,
+      before: { channelId, maxPlayers: queue.maxPlayers, minElo: queue.minElo, maxElo: queue.maxElo, isRanked: queue.isRanked, isPicking: queue.isPicking },
+    });
 
     await safeReply(interaction, {
       embeds: [queueSystemEmbed([

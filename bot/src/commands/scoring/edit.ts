@@ -4,6 +4,7 @@ import { embedsFor } from '../../utils/betterembed';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import UserModel, { type IUser } from '../../models/User';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Admin');
 
@@ -112,6 +113,21 @@ export async function edit(interaction: ChatInputCommandInteraction, _wsManager?
       await safeReply(interaction, errorEmbed('User not found in the database. They need to register first.', 'Edit Command Error'));
       return;
     }
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'stats.edit',
+      category: 'stats',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: targetUserId,
+      targetName: targetUser.username,
+      reason: `Edited ${statToEdit}`,
+      before: { [statToEdit]: oldValue },
+      after: { [statToEdit]: convertedValue, ...(updatedKdr !== undefined ? { kdr: updatedKdr } : {}), ...(updatedWlr !== undefined ? { wlr: updatedWlr } : {}) },
+      metadata: { stat: statToEdit, oldValue, newValue: convertedValue },
+    });
 
     
     const embed = successEmbed('User stat updated successfully!', 'Stat Edited');

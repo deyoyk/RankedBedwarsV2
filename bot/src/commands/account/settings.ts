@@ -4,6 +4,7 @@ import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
 import UserModel from '../../models/User';
 import { fix } from '../../utils/fix';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { betterEmbed, errorEmbed, successEmbed } = embedsFor('Player');
 
@@ -106,6 +107,16 @@ export async function settings(interaction: ChatInputCommandInteraction, _wsMana
       }
       if (Object.keys(set).length > 0) {
         await UserModel.updateOne({ discordId: userId }, { $set: set });
+        await recordAudit({
+          ...auditInteractionContext(interaction),
+          action: 'account.settings',
+          category: 'account',
+          source: 'discord',
+          success: true,
+          targetType: 'user',
+          targetId: userId,
+          after: set,
+        });
       }
       if (interaction.guild) {
         await fix(interaction.guild, userId);

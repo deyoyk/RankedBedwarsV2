@@ -4,6 +4,7 @@ import UserModel from '../../models/User';
 import { fix } from '../../utils/fix';
 import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Player');
 
@@ -29,6 +30,16 @@ export async function nick(interaction: ChatInputCommandInteraction, _wsManager?
     if (interaction.guild) {
       await fix(interaction.guild, userId);
     }
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'account.nick_set',
+      category: 'account',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: userId,
+      after: { nick: nickname },
+    });
     await safeReply(interaction, successEmbed(`Your nickname has been set to: **${nickname}**`, 'Nickname Set'));
   } else if (action === 'remove') {
     const previous = await UserModel.findOneAndUpdate(
@@ -46,6 +57,17 @@ export async function nick(interaction: ChatInputCommandInteraction, _wsManager?
     if (interaction.guild) {
       await fix(interaction.guild, userId);
     }
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'account.nick_remove',
+      category: 'account',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: userId,
+      before: { nick: previous.settings?.nick },
+      after: { nick: '' },
+    });
     await safeReply(interaction, successEmbed('Your nickname has been removed.', 'Nickname Removed'));
   } else {
     await safeReply(interaction, errorEmbed('Invalid action! Use: set or remove', 'Nickname Error'));

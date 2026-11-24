@@ -6,6 +6,7 @@ import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
 import { computeWlr, ensureUserStats } from '../../utils/userStats';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { betterEmbed, errorEmbed, successEmbed } = embedsFor('Scoring');
 
@@ -51,6 +52,20 @@ export async function win(interaction: ChatInputCommandInteraction, _wsManager?:
     if (interaction.guild) {
       await fix(interaction.guild, user.discordId);
     }
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'stats.win',
+      category: 'scoring',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: targetUserId,
+      targetName: existing.ign,
+      before: { elo: existing.elo ?? 0, wins: existing.wins ?? 0, games: existing.games ?? 0, winStreak: existing.winStreak ?? 0 },
+      after: { elo: user.elo, wins: user.wins, games: user.games, winStreak: user.winStreak },
+      metadata: { eloDelta: eloRank.winElo },
+    });
 
     try {
       await safeReply(interaction, successEmbed(`Gave win to <@${targetUserId}> (+${eloRank.winElo} Elo).`, 'Win Given'));

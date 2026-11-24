@@ -6,6 +6,7 @@ import PunishmentAction from '../../models/PunishmentAction';
 import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
 import { safeReply } from '../../utils/safeReply';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed, warningEmbed } = embedsFor('Reset');
 const CONFIRM_MS = 60 * 1000;
@@ -104,6 +105,18 @@ export async function resetdb(interaction: ChatInputCommandInteraction, _wsManag
     const deleted = await wipeData(user.id);
     const member = await guild.members.fetch(user.id).catch(() => null);
     const removed = member ? await clearMember(member, roleIds, unregisteredRole).catch(() => -1) : 0;
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'account.resetdb',
+      category: 'account',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: user.id,
+      reason: 'Deleted account, punishments and roles with /resetdb',
+      before: { deletedAccounts: deleted },
+      after: { deletedAccounts: deleted, rolesRemoved: removed },
+    });
     const lines = [deleted ? `Deleted <@${user.id}>'s ranked account and punishments.` : `<@${user.id}> had no ranked account.`];
     if (removed > 0) lines.push(`Took ${removed} role${removed === 1 ? '' : 's'} off them.`);
     if (removed < 0) lines.push("-# Their roles couldn't be changed (check the bot's role is above those roles).");
@@ -115,6 +128,17 @@ export async function resetdb(interaction: ChatInputCommandInteraction, _wsManag
   }
   const deleted = await wipeData(null);
   const totals = await clearEveryone(guild, roleIds, unregisteredRole);
+  await recordAudit({
+    ...auditInteractionContext(interaction),
+    action: 'account.resetdb_all',
+    category: 'account',
+    source: 'discord',
+    success: true,
+    targetType: 'database',
+    targetId: 'all',
+    reason: 'Deleted every account, punishment and role with /resetdb global',
+    after: { deletedAccounts: deleted, rolesRemoved: totals.roles, membersChanged: totals.members, failed: totals.failed },
+  });
   await interaction.editReply({
     embeds: [successEmbed(`Deleted ${deleted} ranked account${deleted === 1 ? '' : 's'} and their punishments, `
       + `and took ${totals.roles} role${totals.roles === 1 ? '' : 's'} off ${totals.members} member${totals.members === 1 ? '' : 's'}.`

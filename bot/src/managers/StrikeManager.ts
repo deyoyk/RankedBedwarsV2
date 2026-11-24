@@ -5,6 +5,7 @@ import { StrikeRuleService } from '../services/StrikeRuleService';
 import { parseDuration } from '../utils/parseDuration';
 import { generatePunishmentId } from './punishmentBase';
 import { createPendingOperation, PunishmentOperation, PunishmentRecord, sendPunishmentNotification } from './punishmentHelpers';
+import { recordAudit } from '../services/AuditService';
 
 interface StrikeManagerStats {
   totalStrikes: number;
@@ -115,11 +116,38 @@ export class StrikeManager {
 
       console.log(`[StrikeManager] Successfully issued strike to ${user.ign || targetId} (${strikeId}): ${reason} - ${actionTaken}`);
 
+      await recordAudit({
+        action: 'moderation.strike',
+        category: 'moderation',
+        source: moderatorId === 'system' || moderatorId === 'auto' ? 'system' : 'discord',
+        success: true,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        targetName: user.ign,
+        reason,
+        metadata: { caseId: strikeId, strikeCount, actionTaken },
+      });
+
       return { strikeCount, actionTaken };
 
     } catch (error) {
       operation.status = 'failed';
       instance.stats.errors++;
+
+      await recordAudit({
+        action: 'moderation.strike',
+        category: 'moderation',
+        source: moderatorId === 'system' || moderatorId === 'auto' ? 'system' : 'discord',
+        success: false,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        reason,
+        error: error instanceof Error ? error.message : String(error),
+      });
 
       console.error(`[StrikeManager] Failed to issue strike to ${targetId}:`, error);
       const wrappedError = new Error(
@@ -181,11 +209,38 @@ export class StrikeManager {
 
       console.log(`[StrikeManager] Successfully removed strike from ${user.ign || targetId}: ${reason} (${strikeCount} strikes remaining)`);
 
+      await recordAudit({
+        action: 'moderation.unstrike',
+        category: 'moderation',
+        source: moderatorId === 'system' || moderatorId === 'auto' ? 'system' : 'discord',
+        success: true,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        targetName: user.ign,
+        reason,
+        metadata: { removedCaseId: removedStrike?.id, strikeCount },
+      });
+
       return { strikeCount, removedStrike };
 
     } catch (error) {
       operation.status = 'failed';
       instance.stats.errors++;
+
+      await recordAudit({
+        action: 'moderation.unstrike',
+        category: 'moderation',
+        source: moderatorId === 'system' || moderatorId === 'auto' ? 'system' : 'discord',
+        success: false,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        reason,
+        error: error instanceof Error ? error.message : String(error),
+      });
 
       console.error(`[StrikeManager] Failed to remove strike from ${targetId}:`, error);
       const wrappedError = new Error(

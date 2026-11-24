@@ -4,6 +4,7 @@ import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
 import Queue from '../../models/Queue';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 export async function addqueue(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
   let channelId: string;
@@ -116,6 +117,16 @@ export async function addqueue(interaction: ChatInputCommandInteraction, _wsMana
     }
 
     if (created) {
+      await recordAudit({
+        ...auditInteractionContext(interaction),
+        action: 'queue.create',
+        category: 'queue',
+        source: 'discord',
+        success: true,
+        targetType: 'queue',
+        targetId: channelId,
+        after: { channelId, maxPlayers, minElo, maxElo, isRanked, isPicking, bypassRoles, ruleset, mapTeamSize },
+      });
       await safeReply(interaction, {
         embeds: [queueSystemEmbed([
           'A new queue has been created successfully!',

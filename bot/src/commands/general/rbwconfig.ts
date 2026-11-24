@@ -22,6 +22,7 @@ import { PermissionService } from '../../services/PermissionService';
 import { CATEGORY_LABELS, CommandCategory, commandsIn } from '../../config/commandCategories';
 import { describeAction, StrikeRuleService } from '../../services/StrikeRuleService';
 import { CALL_ROLE_LABELS, CallRoleKey, CallRoleService } from '../../services/CallRoleService';
+import { recordAudit } from '../../services/AuditService';
 
 const { themedEmbed, errorEmbed } = embedsFor('Config');
 
@@ -192,14 +193,34 @@ export function strikeModal(customId: 'strikeadd' | 'strikeelse'): ModalBuilder 
   return modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(action));
 }
 
-export async function saveStrikeModal(customId: string, strikes: string, action: string): Promise<View> {
+export async function saveStrikeModal(customId: string, strikes: string, action: string, actorId?: string): Promise<View> {
   try {
     if (customId === 'strikeadd') {
       const count = Number(strikes.trim());
       await StrikeRuleService.setRule(count, action);
+      await recordAudit({
+        action: 'config.strike_rule',
+        category: 'config',
+        source: 'discord',
+        success: true,
+        actorId,
+        targetType: 'strike_rule',
+        targetId: String(count),
+        after: { strikes: count, action: StrikeRuleService.actionFor(count) },
+      });
       return strikeView(`${plural(count)} → ${describeAction(StrikeRuleService.actionFor(count))}`);
     }
     await StrikeRuleService.setOtherwise(action);
+    await recordAudit({
+      action: 'config.strike_rule_default',
+      category: 'config',
+      source: 'discord',
+      success: true,
+      actorId,
+      targetType: 'strike_rule',
+      targetId: 'otherwise',
+      after: { action: StrikeRuleService.current().otherwise },
+    });
     return strikeView(`Any other number → ${describeAction(StrikeRuleService.current().otherwise)}`);
   } catch (error) {
     return strikeView(`⚠ ${error instanceof Error ? error.message : 'That rule could not be saved.'}`);
@@ -218,20 +239,71 @@ export async function handlePanelClick(click: MessageComponentInteraction): Prom
   if (action === 'callrole' && click.isRoleSelectMenu()) {
     const key = category as CallRoleKey;
     await CallRoleService.set(key, click.values[0] ?? null);
+    await recordAudit({
+      action: 'config.call_role',
+      category: 'config',
+      source: 'discord',
+      success: true,
+      actorId: click.user?.id,
+      guildId: click.guildId ?? undefined,
+      channelId: click.channelId ?? undefined,
+      targetType: 'role',
+      targetId: click.values[0] ?? 'unset',
+      after: { key, roleId: click.values[0] ?? null },
+    });
     return callRolesView(`${CALL_ROLE_LABELS[key]} → ${click.values[0] ? `<@&${click.values[0]}>` : 'not set'}`);
   }
   if (action === 'strikedel' && click.isStringSelectMenu()) {
     await StrikeRuleService.removeRules(click.values.map(Number));
+    await recordAudit({
+      action: 'config.strike_rule_remove',
+      category: 'config',
+      source: 'discord',
+      success: true,
+      actorId: click.user?.id,
+      guildId: click.guildId ?? undefined,
+      channelId: click.channelId ?? undefined,
+      targetType: 'strike_rule',
+      targetId: click.values.join(','),
+      before: { strikes: click.values.map(Number) },
+    });
     return strikeView(`Removed ${click.values.map(v => plural(Number(v))).join(', ')}`);
   }
   if (action === 'roles' && click.isRoleSelectMenu()) {
     const target = category as CommandCategory;
+    const before = PermissionService.current()[target];
     await PermissionService.update({ [target]: click.values });
+    await recordAudit({
+      action: 'config.permissions',
+      category: 'config',
+      source: 'discord',
+      success: true,
+      actorId: click.user?.id,
+      guildId: click.guildId ?? undefined,
+      channelId: click.channelId ?? undefined,
+      targetType: 'permission_category',
+      targetId: target,
+      before: { roles: before },
+      after: { roles: click.values },
+    });
     return categoryView(target, `${CATEGORY_LABELS[target]} → ${mentions(click.values) || 'server administrators only'}`);
   }
   if (action === 'everyone') {
     const on = !PermissionService.current().playerEveryone;
     await PermissionService.update({ playerEveryone: on });
+    await recordAudit({
+      action: 'config.player_everyone',
+      category: 'config',
+      source: 'discord',
+      success: true,
+      actorId: click.user?.id,
+      guildId: click.guildId ?? undefined,
+      channelId: click.channelId ?? undefined,
+      targetType: 'permission_category',
+      targetId: 'player',
+      before: { playerEveryone: !on },
+      after: { playerEveryone: on },
+    });
     return categoryView('player', on ? 'Player commands are open to everyone' : 'Player commands now need one of the chosen roles');
   }
   return rootView();
@@ -257,7 +329,7 @@ export async function rbwconfig(interaction: ChatInputCommandInteraction, _wsMan
         const submit = await click.awaitModalSubmit({ filter: m => m.user.id === interaction.user.id, time: PANEL_TIMEOUT_MS }).catch(() => null);
         if (submit?.isFromMessage()) {
           const strikes = action === 'strikeadd' ? submit.fields.getTextInputValue('strikes') : '';
-          await submit.update(await saveStrikeModal(action, strikes, submit.fields.getTextInputValue('action')));
+          await submit.update(await saveStrikeModal(action, strikes, submit.fields.getTextInputValue('action'), submit.user.id));
         }
         return;
       }

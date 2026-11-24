@@ -7,6 +7,7 @@ import { embedsFor } from '../../utils/betterembed';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { bedBreakerLimitMessage, getMaxBedBreakersPerGame, getMaxMvpsPerGame, mvpLimitMessage, uniquePlayers } from '../../utils/scoringLimits';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Scoring');
 
@@ -86,6 +87,19 @@ export async function score(interaction: ChatInputCommandInteraction, _wsManager
 
     const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
     await gameManager.scoreGame({ gameId, winningTeam, mvps, bedbreaks, reason });
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'game.score',
+      category: 'scoring',
+      source: 'discord',
+      success: true,
+      targetType: 'game',
+      targetId: String(gameId),
+      reason,
+      after: { state: 'scored', winningTeam, mvps, bedbreaks },
+      metadata: { gameId, winningTeam, mvps, bedbreaks },
+    });
 
     await safeReply(interaction, successEmbed(
       `Game ${gameId} scored!\nReason: ${reason}\nWinning Team: Team ${winningTeam}` +

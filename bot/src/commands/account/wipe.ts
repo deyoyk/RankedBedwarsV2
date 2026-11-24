@@ -6,6 +6,7 @@ import { safeFix } from '../../utils/fix';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 import { resetUserStats } from '../../utils/userStats';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Admin');
 
@@ -34,6 +35,18 @@ export async function wipe(interaction: ChatInputCommandInteraction, _wsManager?
     }
 
     await safeFix(interaction.guild, wiped.discordId);
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'stats.wipe',
+      category: 'stats',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: targetId,
+      reason: 'Staff wiped all stats',
+      after: { statsReset: true },
+    });
 
     await safeReply(interaction, successEmbed(`All stats for ${targetMention} have been wiped.`, 'Wipe Successful'));
   } catch (error) {

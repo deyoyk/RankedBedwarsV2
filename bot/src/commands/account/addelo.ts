@@ -4,6 +4,7 @@ import { embedsFor } from '../../utils/betterembed';
 import EloRank from '../../models/EloRank';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Rank');
 
@@ -61,6 +62,17 @@ export async function addelo(interaction: ChatInputCommandInteraction, _wsManage
     });
 
     await rank.save();
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'config.elo_rank_add',
+      category: 'config',
+      source: 'discord',
+      success: true,
+      targetType: 'role',
+      targetId: roleId,
+      after: { roleId, startElo, endElo, winElo, loseElo, mvpElo, bedElo },
+    });
 
     const embed = successEmbed('A new ELO rank has been created successfully!', 'ELO Rank Created');
     embed.builder.addFields(

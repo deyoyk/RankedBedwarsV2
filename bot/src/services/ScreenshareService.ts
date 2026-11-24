@@ -7,6 +7,7 @@ import { embedsFor } from '../utils/betterembed';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 import { isTargetThreadAccess, screenshareThreadPing, TARGET_THREAD_ACCESS } from './screenshareAccess';
 import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareCreateOptions, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreensharePostOptions, ScreensharePostResult, ScreenshareSessionResult, ScreenshareValidationResult } from '../types/screenshare';
+import { recordAudit } from './AuditService';
 
 const { themedEmbed } = embedsFor('Screenshare');
 
@@ -212,6 +213,19 @@ export class ScreenshareService {
       }
 
       console.log(`[ScreenshareService] Created session ${sessionId} for ${targetUser.ign} by ${requesterId}`);
+      await recordAudit({
+        action: 'screenshare.create',
+        category: 'screenshare',
+        source: fromGame ? 'minecraft' : 'discord',
+        success: true,
+        actorId: requesterId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        targetName: targetUser.ign,
+        reason: reason.trim(),
+        metadata: { sessionId, expires: expireTime.toISOString(), fromGame },
+      });
       return { success: true, session, dontlogResult };
     } catch (error) {
       console.error('[ScreenshareService] Error creating session:', error);
@@ -306,6 +320,18 @@ export class ScreenshareService {
       }
 
       console.log(`[ScreenshareService] Frozen session ${session.sessionId}, created channel ${channel.name}`);
+      await recordAudit({
+        action: 'screenshare.freeze',
+        category: 'screenshare',
+        source: 'discord',
+        success: true,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId: session.targetId,
+        targetName: session.targetIgn,
+        metadata: { sessionId: session.sessionId, channelId: channel.id },
+      });
       return { success: true, channel };
     } catch (error) {
       console.error('[ScreenshareService] Error freezing session:', error);
@@ -337,6 +363,20 @@ export class ScreenshareService {
       }
 
       await this.cleanupSession(guild, closed);
+
+      await recordAudit({
+        action: 'screenshare.close',
+        category: 'screenshare',
+        source: userId === 'system' ? 'system' : 'discord',
+        success: true,
+        actorId: userId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId: closed.targetId,
+        targetName: closed.targetIgn,
+        reason: context,
+        metadata: { sessionId, status: closed.status },
+      });
 
       return { success: true };
     } catch (error) {
@@ -375,6 +415,19 @@ export class ScreenshareService {
       }
 
       console.log(`[ScreenshareService] Expired ${sessions.length} screenshare sessions`);
+      await Promise.allSettled(sessions.map(session => recordAudit({
+        action: 'screenshare.expire',
+        category: 'screenshare',
+        source: 'system',
+        success: true,
+        actorId: 'system',
+        guildId: guild.id,
+        targetType: 'user',
+        targetId: session.targetId,
+        targetName: session.targetIgn,
+        reason: 'Screenshare session expired',
+        metadata: { sessionId: session.sessionId },
+      })));
       return sessions.length;
     } catch (error) {
       console.error('[ScreenshareService] Error expiring sessions:', error);

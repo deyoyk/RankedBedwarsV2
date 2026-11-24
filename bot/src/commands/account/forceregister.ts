@@ -6,6 +6,7 @@ import { embedsFor } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
 import { isValidIgn } from '../../utils/inputValidation';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Admin');
 
@@ -39,6 +40,19 @@ export async function forceregister(interaction: ChatInputCommandInteraction, _w
 
     if (previous) {
       const oldIgn = previous.ign;
+
+      await recordAudit({
+        ...auditInteractionContext(interaction),
+        action: 'account.force_register',
+        category: 'account',
+        source: 'discord',
+        success: true,
+        targetType: 'user',
+        targetId: targetUser,
+        targetName: ign,
+        before: { ign: oldIgn || null },
+        after: { ign },
+      });
 
       const embed = successEmbed(`Successfully updated registration for <@${targetUser}>`, 'User Force Registered');
       embed.builder.addFields(
@@ -88,6 +102,18 @@ export async function forceregister(interaction: ChatInputCommandInteraction, _w
         return;
       }
       await safeFix(interaction.guild, targetUser);
+
+      await recordAudit({
+        ...auditInteractionContext(interaction),
+        action: 'account.force_register',
+        category: 'account',
+        source: 'discord',
+        success: true,
+        targetType: 'user',
+        targetId: targetUser,
+        targetName: ign,
+        after: { ign, created: true },
+      });
 
       const embed = successEmbed(`Successfully force registered <@${targetUser}>`, 'User Force Registered');
       embed.builder.addFields(

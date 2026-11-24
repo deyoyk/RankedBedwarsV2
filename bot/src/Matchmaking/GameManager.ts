@@ -26,6 +26,7 @@ import { rankForElo, rankProgressFor } from '../utils/rankInfo';
 import { closeGameTextChannel, createGameThread } from '../utils/gameThreads';
 import { leaversToStrikeOnGiveUp, OFFLINE_WARP_REASON, strikeLeavers } from './pregameStrikes';
 import { teamVoiceOverwrites } from './teamVoice';
+import { AuditSource, recordAudit } from '../services/AuditService';
 
 const { themedEmbed } = embedsFor('Scoring');
 
@@ -271,6 +272,15 @@ export class GameManager {
       this.registerPlayersInGame(gameId, [...team1, ...team2]);
       await this.movePlayersToVoiceChannels(guild, team1, team2, resources);
       this.activeGames.set(gameId, resources);
+      await recordAudit({
+        action: 'game.create',
+        category: 'scoring',
+        source: 'system',
+        success: true,
+        targetType: 'game',
+        targetId: String(gameId),
+        after: { gameId, map: selectedMap, team1, team2, queueId: effectiveQueue.channelId, isRanked: effectiveQueue.isRanked },
+      });
       console.log(`[GameManager] Successfully created game ${gameId}`);
       return resources;
     } catch (error) {
@@ -456,6 +466,16 @@ export class GameManager {
       }
 
       this.cleaningGames.delete(gameId);
+      await recordAudit({
+        action: 'game.abort',
+        category: 'scoring',
+        source: 'system',
+        success: true,
+        targetType: 'game',
+        targetId: String(gameId),
+        reason,
+        after: { state: GameState.VOIDED },
+      });
       console.log(`[GameManager] Aborted game ${gameId}: ${reason}`);
     } catch (error) {
       this.cleaningGames.delete(gameId);
@@ -822,7 +842,7 @@ export class GameManager {
     }
   }
 
-  public async scoreGame(gameResult: GameResult, recovery: boolean = false): Promise<{
+  public async scoreGame(gameResult: GameResult, recovery: boolean = false, auditSource: AuditSource = 'system'): Promise<{
     gameId: number;
     winningTeam: number;
     mvps: string[];
@@ -833,13 +853,13 @@ export class GameManager {
     }
     this.settlingGames.add(gameResult.gameId);
     try {
-      return await this.scoreGameInternal(gameResult, recovery);
+      return await this.scoreGameInternal(gameResult, recovery, auditSource);
     } finally {
       this.settlingGames.delete(gameResult.gameId);
     }
   }
 
-  private async scoreGameInternal(gameResult: GameResult, recovery: boolean = false): Promise<{
+  private async scoreGameInternal(gameResult: GameResult, recovery: boolean = false, auditSource: AuditSource = 'system'): Promise<{
     gameId: number;
     winningTeam: number;
     mvps: string[];
@@ -926,6 +946,22 @@ export class GameManager {
       await this.scheduleGameChannelCleanup(context.game, gameResult.gameId);
       await this.cleanupGame(gameResult.gameId);
       await this.markSettlementStatus(gameResult.gameId, 'completed');
+      await recordAudit({
+        action: 'game.scored',
+        category: 'scoring',
+        source: auditSource,
+        success: true,
+        targetType: 'game',
+        targetId: String(gameResult.gameId),
+        reason: gameResult.reason || '',
+        after: {
+          state: 'scored',
+          winningTeam: context.winningTeam,
+          mvps: context.mvpsIds,
+          bedbreaks: context.bedbreaksIds,
+        },
+        metadata: { recovery, playerIds: context.players.map(player => player.discordId) },
+      });
       console.log(`[GameManager] Successfully scored game ${gameResult.gameId}`);
       return {
         gameId: gameResult.gameId,
@@ -940,19 +976,19 @@ export class GameManager {
   }
 
   
-  public async voidGame(gameId: number, reason: string, recovery: boolean = false, force: boolean = false): Promise<VoidResult> {
+  public async voidGame(gameId: number, reason: string, recovery: boolean = false, force: boolean = false, auditSource: AuditSource = 'system'): Promise<VoidResult> {
     if (this.settlingGames.has(gameId)) {
       throw new Error(`Game ${gameId} is already settled (settlement in progress)`);
     }
     this.settlingGames.add(gameId);
     try {
-      return await this.voidGameInternal(gameId, reason, recovery, force);
+      return await this.voidGameInternal(gameId, reason, recovery, force, auditSource);
     } finally {
       this.settlingGames.delete(gameId);
     }
   }
 
-  private async voidGameInternal(gameId: number, reason: string, recovery: boolean = false, force: boolean = false): Promise<VoidResult> {
+  private async voidGameInternal(gameId: number, reason: string, recovery: boolean = false, force: boolean = false, auditSource: AuditSource = 'system'): Promise<VoidResult> {
     console.log(`[GameManager] Starting to void game ${gameId}: ${reason}`);
     try {
       if (!gameId || !reason) throw new Error('Invalid void parameters');
@@ -1011,6 +1047,17 @@ export class GameManager {
       await this.scheduleGameChannelCleanup(context.game, gameId);
       await this.cleanupGame(gameId);
       await this.markSettlementStatus(gameId, 'completed');
+      await recordAudit({
+        action: 'game.voided',
+        category: 'scoring',
+        source: auditSource,
+        success: true,
+        targetType: 'game',
+        targetId: String(gameId),
+        reason,
+        after: { state: 'voided' },
+        metadata: { recovery, force, playerIds: context.players.map(player => player.discordId) },
+      });
       console.log(`[GameManager] Successfully voided game ${gameId}`);
       return {
         gameId,

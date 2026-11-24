@@ -6,6 +6,7 @@ import User from '../../models/User';
 import EloRank from '../../models/EloRank';
 import { fix } from '../../utils/fix';
 import { computeWlr, ensureUserStats } from '../../utils/userStats';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Scoring');
 
@@ -58,6 +59,20 @@ export async function lose(interaction: ChatInputCommandInteraction, _wsManager?
     if (interaction.guild) {
       await fix(interaction.guild, user.discordId);
     }
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'stats.lose',
+      category: 'scoring',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: targetId,
+      targetName: existing.ign,
+      before: { elo: existing.elo ?? 0, losses: existing.losses ?? 0, games: existing.games ?? 0, loseStreak: existing.loseStreak ?? 0 },
+      after: { elo: user.elo, losses: user.losses, games: user.games, loseStreak: user.loseStreak },
+      metadata: { eloDelta: -eloRank.loseElo },
+    });
 
     await safeReply(interaction, successEmbed(`Gave loss to <@${targetId}> (-${eloRank.loseElo} Elo).`, 'Loss Given'));
   } catch {

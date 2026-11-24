@@ -6,6 +6,7 @@ import { embedsFor } from '../../utils/betterembed';
 import User from '../../models/User';
 import { safeFix } from '../../utils/fix';
 import { isValidIgn } from '../../utils/inputValidation';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Admin');
 
@@ -37,6 +38,19 @@ export async function forcerename(interaction: ChatInputCommandInteraction, _wsM
     const oldIgn = updated.ign;
 
     await safeFix(interaction.guild, targetUser);
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'account.force_rename',
+      category: 'account',
+      source: 'discord',
+      success: true,
+      targetType: 'user',
+      targetId: targetUser,
+      targetName: newIgn,
+      before: { ign: oldIgn || null },
+      after: { ign: newIgn },
+    });
 
     const embed = successEmbed(`Successfully renamed <@${targetUser}>`, 'User Force Renamed');
     embed.builder.addFields(

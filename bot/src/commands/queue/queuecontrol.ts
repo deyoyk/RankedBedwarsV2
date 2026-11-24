@@ -3,6 +3,7 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import Queue from '../../models/Queue';
 import { safeReply } from '../../utils/safeReply';
 import { queueSystemEmbed } from '../../utils/queueEmbed';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 function addQueueOptions(sub: SlashCommandSubcommandBuilder) {
   return sub
@@ -63,6 +64,18 @@ export async function queuecontrol(interaction: ChatInputCommandInteraction, _ws
     const message = result.modifiedCount > 0
       ? `Successfully ${verb} ${label} ${noun}`
       : `No matching ${label} ${noun} were updated`;
+
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: sub === 'enable' ? 'queue.enable' : 'queue.disable',
+      category: 'queue',
+      source: 'discord',
+      success: true,
+      targetType: 'queue',
+      targetId: type === 'specific' ? queueId || 'unknown' : type,
+      after: { filter, updated: result.modifiedCount },
+      metadata: { type, queueId, matched: result.matchedCount, modified: result.modifiedCount },
+    });
 
     await safeReply(interaction, {
       embeds: [queueSystemEmbed(message, result.modifiedCount > 0 ? 'success' : 'info')]

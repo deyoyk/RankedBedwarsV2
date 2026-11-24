@@ -4,6 +4,7 @@ import User from '../models/User';
 import { parseDuration } from '../utils/parseDuration';
 import { generatePunishmentId } from './punishmentBase';
 import { addPunishmentRole, autoExpirePunishments, createPendingOperation, handleOperationError, PunishmentManagerStats, PunishmentNotificationType, PunishmentOperation, PunishmentRecord, sendPunishmentNotification, sendWebSocketNotification, WebSocketNotifier } from './punishmentHelpers';
+import { AuditSource, recordAudit } from '../services/AuditService';
 
 export interface TimedPunishmentKind {
   type: PunishmentNotificationType;
@@ -24,6 +25,11 @@ export interface TimedPunishmentKind {
 export interface ApplyOptions {
   preset?: string;
   staff?: string;
+}
+
+function auditSource(moderatorId: string, staff?: string): AuditSource {
+  if (staff) return 'minecraft';
+  return moderatorId === 'system' || moderatorId === 'auto' ? 'system' : 'discord';
 }
 
 export abstract class TimedPunishmentManager {
@@ -112,6 +118,19 @@ export abstract class TimedPunishmentManager {
           staff: options.staff
         }, kind.type);
         await Promise.allSettled(resent);
+        await recordAudit({
+          action: `punishment.${kind.type}`,
+          category: 'moderation',
+          source: auditSource(moderatorId, options.staff),
+          success: true,
+          actorId: moderatorId,
+          guildId: guild.id,
+          targetType: 'user',
+          targetId,
+          targetName: existing.ign,
+          reason: reason.trim(),
+          metadata: { caseId: lastRecord.id, reapplied: true, preset: options.preset, staff: options.staff },
+        });
         return undefined;
       }
 
@@ -140,10 +159,44 @@ export abstract class TimedPunishmentManager {
       this.stats.total++;
       this.stats.active++;
 
+      await recordAudit({
+        action: `punishment.${kind.type}`,
+        category: 'moderation',
+        source: auditSource(moderatorId, options.staff),
+        success: true,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        targetName: user.ign,
+        reason: reason.trim(),
+        metadata: {
+          caseId: recordId,
+          duration: duration ? durationStr : null,
+          durationMinutes: duration ? Math.ceil(duration / 60000) : null,
+          expires: expires?.toISOString(),
+          preset: options.preset,
+          staff: options.staff,
+        },
+      });
+
       console.log(`[${kind.logName}] Successfully ${kind.pastTense} ${user.ign || targetId} (${recordId}) for ${durationStr || 'permanent'}: ${reason}`);
       return expires;
 
     } catch (error) {
+      await recordAudit({
+        action: `punishment.${kind.type}`,
+        category: 'moderation',
+        source: auditSource(moderatorId, options.staff),
+        success: false,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        reason: reason.trim(),
+        error: error instanceof Error ? error.message : String(error),
+        metadata: { duration: durationStr, preset: options.preset, staff: options.staff },
+      });
       handleOperationError(error, operation, this.stats, kind.type, targetId);
     } finally {
       this.pendingOperations.delete(operation.id);
@@ -192,10 +245,37 @@ export abstract class TimedPunishmentManager {
       operation.status = 'completed';
       this.stats.active = Math.max(0, this.stats.active - 1);
 
+      await recordAudit({
+        action: `punishment.${kind.undoType}`,
+        category: 'moderation',
+        source: auditSource(moderatorId, options.staff),
+        success: true,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        targetName: user.ign,
+        reason,
+        metadata: { staff: options.staff },
+      });
+
       console.log(`[${kind.logName}] Successfully ${kind.undoPastTense} ${user.ign || targetId}: ${reason}`);
       return true;
 
     } catch (error) {
+      await recordAudit({
+        action: `punishment.${kind.undoType}`,
+        category: 'moderation',
+        source: auditSource(moderatorId, options.staff),
+        success: false,
+        actorId: moderatorId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId,
+        reason,
+        error: error instanceof Error ? error.message : String(error),
+        metadata: { staff: options.staff },
+      });
       handleOperationError(error, operation, this.stats, kind.undoType, targetId);
     } finally {
       this.pendingOperations.delete(operation.id);

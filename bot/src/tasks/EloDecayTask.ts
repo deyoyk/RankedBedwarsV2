@@ -3,6 +3,7 @@ import User from '../models/User';
 import config from '../config/config';
 import { decayAmountForElo, isDecayProtected } from '../utils/eloProgression';
 import { updateDailyElo } from '../utils/userStats';
+import { recordAudit } from '../services/AuditService';
 
 export class EloDecayTask {
   private client: Client;
@@ -116,6 +117,16 @@ export class EloDecayTask {
 
       if (decayed > 0) {
         console.log(`[EloDecayTask] Applied decay to ${decayed} users (total -${totalLost} Elo)`);
+        await recordAudit({
+          action: 'stats.elo_decay',
+          category: 'stats',
+          source: 'system',
+          success: true,
+          targetType: 'database',
+          targetId: 'all',
+          reason: 'Inactivity ELO decay',
+          after: { decayed, totalLost },
+        });
       }
       return { decayed, totalLost };
     } catch (error) {

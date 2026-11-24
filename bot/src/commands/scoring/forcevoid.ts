@@ -5,6 +5,7 @@ import { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed } = embedsFor('Scoring');
 
@@ -40,8 +41,20 @@ export async function forcevoid(interaction: ChatInputCommandInteraction, wsMana
     const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
     await gameManager.voidGame(game.gameId, reason, false, true);
     
-    
-      await safeReply(interaction, successEmbed(
+    await recordAudit({
+      ...auditInteractionContext(interaction),
+      action: 'game.force_void',
+      category: 'scoring',
+      source: 'discord',
+      success: true,
+      targetType: 'game',
+      targetId: String(game.gameId),
+      reason,
+      after: { state: 'voided' },
+      metadata: { gameId: game.gameId },
+    });
+
+    await safeReply(interaction, successEmbed(
         `Game ${game.gameId} has been force voided.\nReason: ${reason}\nStats and ELO changes have been reverted. Game threads will be archived in 30 seconds.`,
         'Game Force Voided',
         true

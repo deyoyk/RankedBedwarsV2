@@ -5,6 +5,7 @@ import { fix } from '../../utils/fix';
 import User from '../../models/User';
 import { executeWithConfirmation } from '../../utils/confirmAction';
 import { embedsFor } from '../../utils/betterembed';
+import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { themedEmbed } = embedsFor('Admin');
 
@@ -120,6 +121,17 @@ async function executeFixAll(interaction: ChatInputCommandInteraction, total: nu
   }
 
   const finalEmbed = createFinalEmbed(progress);
+  await recordAudit({
+    ...auditInteractionContext(interaction),
+    action: 'account.fix_all',
+    category: 'account',
+    source: 'discord',
+    success: progress.failed === 0,
+    targetType: 'database',
+    targetId: 'all',
+    after: { total, successful: progress.successful, failed: progress.failed },
+    metadata: { durationMs: Date.now() - progress.startTime },
+  });
   await safeReply(interaction, { embeds: [finalEmbed] });
 
   console.log(`[FixAll] Completed fix for ${total} users. Success: ${progress.successful}, Failed: ${progress.failed}`);

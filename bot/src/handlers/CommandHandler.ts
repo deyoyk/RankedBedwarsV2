@@ -6,6 +6,7 @@ import { safeReply } from '../utils/safeReply';
 import { replyCommandError } from '../utils/errorReporter';
 import type { BotCommandFn } from '../types/commands';
 import { embedsFor } from '../utils/betterembed';
+import { auditInteractionContext, auditTargetFromOptions, describeCommandOptions, recordAudit } from '../services/AuditService';
 
 const { errorEmbed } = embedsFor('Error');
 
@@ -68,9 +69,27 @@ export class CommandHandler {
     }
 
     const command = this.commands.get(commandName)!;
+    const startedAt = Date.now();
+    const context = auditInteractionContext(interaction);
+    const target = auditTargetFromOptions(interaction);
+    const base = {
+      ...context,
+      ...(target ? { targetType: target.targetType, targetId: target.targetId, targetName: target.targetName } : {}),
+      commandName,
+      category: 'command',
+      source: 'discord' as const,
+      metadata: { options: describeCommandOptions(interaction) },
+    };
 
     try {
       if (!(await checkPermission(interaction, commandName))) {
+        await recordAudit({
+          ...base,
+          action: 'command.denied',
+          success: false,
+          error: 'Permission denied',
+          metadata: { ...base.metadata, requiredRoles: PermissionService.rolesFor(commandName) },
+        });
         await this.sendPermissionDenied(interaction, commandName);
         return;
       }
@@ -88,6 +107,12 @@ export class CommandHandler {
             console.warn(
               `[CommandHandler] Interaction for /${commandName} expired before acknowledgement; skipping command`
             );
+            await recordAudit({
+              ...base,
+              action: 'command.expired',
+              success: false,
+              error: 'Interaction expired before acknowledgement',
+            });
             return;
           }
           console.error(
@@ -98,7 +123,20 @@ export class CommandHandler {
       }
 
       await command(interaction, this.wsManager);
+      await recordAudit({
+        ...base,
+        action: 'command.execute',
+        success: true,
+        metadata: { ...base.metadata, durationMs: Date.now() - startedAt },
+      });
     } catch (error) {
+      await recordAudit({
+        ...base,
+        action: 'command.failed',
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        metadata: { ...base.metadata, durationMs: Date.now() - startedAt },
+      });
       await replyCommandError(
         interaction,
         error,

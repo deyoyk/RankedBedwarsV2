@@ -6,6 +6,7 @@ import User from '../../models/User';
 import { fix } from '../../utils/fix';
 import { WebSocketManager } from '../../websocket/WebSocketManager';
 import config from '../../config/config';
+import { recordAudit } from '../../services/AuditService';
 
 const { betterEmbed, errorEmbed, successEmbed } = embedsFor('Player');
 
@@ -131,6 +132,21 @@ export async function register(interaction: ChatInputCommandInteraction, wsManag
           if (interaction.guild) {
             await fix(interaction.guild, discordId);
           }
+
+          await recordAudit({
+            action: 'account.register',
+            category: 'account',
+            source: 'discord',
+            success: true,
+            actorId: discordId,
+            actorName: interaction.user?.tag,
+            guildId: interaction.guildId ?? undefined,
+            channelId: interaction.channelId ?? undefined,
+            targetType: 'user',
+            targetId: discordId,
+            targetName: ign,
+            after: { ign },
+          });
           
           try {
             await (sentMessage as Message).edit({

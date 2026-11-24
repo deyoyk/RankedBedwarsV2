@@ -33,3 +33,17 @@ jest.mock('../src/models/PickingSessionState', () => ({
     }),
   },
 }));
+
+jest.mock('../src/models/AuditLog', () => ({
+  __esModule: true,
+  default: {
+    create: jest.fn().mockResolvedValue({}),
+    find: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([]),
+    }),
+    countDocuments: jest.fn().mockResolvedValue(0),
+  },
+}));
