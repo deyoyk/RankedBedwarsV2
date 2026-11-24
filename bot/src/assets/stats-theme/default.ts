@@ -1,8 +1,8 @@
 import { h, VNode } from '../renderer';
-import { MEDIUM, SEMIBOLD } from '../theme';
-import { staticImageDataUrl } from '../assets';
+import { MEDIUM, SEMIBOLD, text } from '../theme';
 import { grainLayer } from '../grain';
 import { DivisionTag, divisionTagBadge } from '../divisionTag';
+import { AX, axBrackets, axPanelGrid, axPage, axStamp } from '../themes/defaultTheme';
 
 export type MatchResult = 'win' | 'loss' | 'voided' | 'active' | 'unknown';
 
@@ -34,31 +34,15 @@ export type DefaultTemplateInput = {
 
 const WIDTH = 1200;
 const HEIGHT = 685;
-const CARD_X = 30;
-const CARD_Y = 30;
+const CARD_X = 44;
+const CARD_Y = 44;
 const CARD_W = WIDTH - CARD_X * 2;
 const CARD_H = HEIGHT - CARD_Y * 2;
-const CONTENT_X = 372;
-const CONTENT_W = 760;
-const SKIN_X = 55;
-const SKIN_Y = 92;
-const SKIN_W = 262;
-const SKIN_H = 536;
-
-const C = {
-  page: '#C4C8CE',
-  paper: '#FBF8FF',
-  ink: '#1B1327',
-  mute: '#56486A',
-  line: '#1B132740',
-  accent: '#7C3AED',
-  onAccent: '#FFFFFF',
-  unknownBar: '#BCBEC8',
-  voidedBar: '#D9DBE2',
-  winBar: '#2C854D',
-  lossBar: '#C0392B',
-  activeBar: '#E0B400',
-};
+const GUTTER = 24;
+const SKIN_W = 236;
+const SKIN_H = 330;
+const CONTENT_X = CARD_X + GUTTER + SKIN_W + 24;
+const CONTENT_W = CARD_W - GUTTER * 2 - SKIN_W - 24;
 
 const ICONS = {
   trophy: 'M232,60H212V48a12,12,0,0,0-12-12H56A12,12,0,0,0,44,48V60H24A20,20,0,0,0,4,80V96a44.05,44.05,0,0,0,44,44h.77A84.18,84.18,0,0,0,116,195.15V212H96a12,12,0,0,0,0,24h64a12,12,0,0,0,0-24H140V195.11c30.94-4.51,56.53-26.2,67-55.11h1a44.05,44.05,0,0,0,44-44V80A20,20,0,0,0,232,60ZM28,96V84H44v28c0,1.21,0,2.41.09,3.61A20,20,0,0,1,28,96Zm160,15.1c0,33.33-26.71,60.65-59.54,60.9A60,60,0,0,1,68,112V60H188ZM228,96a20,20,0,0,1-16.12,19.62c.08-1.5.12-3,.12-4.52V84h16Z',
@@ -81,9 +65,12 @@ function cell(label: string, value: string, iconPath: string, position: string):
       flex: 1,
       display: 'flex',
       flexDirection: 'column',
-      gap: 12,
-      padding: '18px 20px',
-      backgroundColor: C.paper,
+      justifyContent: 'space-between',
+      paddingTop: 13,
+      paddingBottom: 13,
+      paddingLeft: 16,
+      paddingRight: 16,
+      backgroundColor: AX.paper,
     },
   },
     h('div', {
@@ -91,34 +78,34 @@ function cell(label: string, value: string, iconPath: string, position: string):
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 7,
         fontFamily: MEDIUM,
-        fontSize: 15,
-        letterSpacing: 1.2,
-        lineHeight: '18px',
-        color: C.mute,
+        fontSize: 11,
+        letterSpacing: 1.1,
+        lineHeight: '14px',
+        color: AX.mute,
       },
     },
-      icon(iconPath, 18, C.mute),
+      icon(iconPath, 14, AX.mute),
       label,
       h('div', {
         style: {
           marginLeft: 'auto',
           fontFamily: MEDIUM,
-          fontSize: 12,
+          fontSize: 10,
           letterSpacing: 0.6,
-          lineHeight: '18px',
-          color: C.mute,
-          transform: 'translateY(4px)',
+          lineHeight: '12px',
+          color: AX.accentDeep,
         },
       }, position),
     ),
     h('div', {
       style: {
         fontFamily: SEMIBOLD,
-        fontSize: 34,
-        lineHeight: '38px',
-        color: C.ink,
+        fontSize: 30,
+        lineHeight: '34px',
+        color: AX.ink,
+        whiteSpace: 'nowrap',
       },
     }, value),
   );
@@ -126,111 +113,76 @@ function cell(label: string, value: string, iconPath: string, position: string):
 
 function matchBar(result: MatchResult): VNode {
   const backgroundColor = result === 'win'
-    ? C.winBar
+    ? AX.win
     : result === 'loss'
-      ? C.lossBar
+      ? AX.loss
       : result === 'voided'
-        ? C.voidedBar
+        ? AX.voided
         : result === 'active'
-          ? C.activeBar
-          : C.unknownBar;
+          ? AX.active
+          : AX.unknown;
   return h('div', {
     style: {
       flex: 1,
-      height: 42,
+      height: 38,
       backgroundColor,
       borderWidth: 1,
       borderStyle: 'solid',
-      borderColor: C.line,
+      borderColor: AX.lineSoft,
       transform: 'skewX(-20deg)',
     },
   });
 }
 
-function card(input: DefaultTemplateInput): VNode[] {
-  const nameSize = input.ign.length > 12 ? 50 : 60;
-  const inviteLabel = input.inviteLink.includes('.gg/')
-    ? input.inviteLink.slice(input.inviteLink.lastIndexOf('.gg/'))
-    : input.inviteLink;
-  const buttonW = Math.max(180, Math.min(300, 100 + inviteLabel.length * 14));
+function legendDot(color: string): VNode {
+  return h('div', { style: { width: 7, height: 7, backgroundColor: color, transform: 'rotate(45deg)' } });
+}
 
+function legendEntry(color: string, label: string): VNode {
+  return h('div', {
+    style: {
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      fontFamily: MEDIUM,
+      fontSize: 9,
+      letterSpacing: 1.2,
+      lineHeight: '12px',
+      color: AX.mute,
+    },
+  }, legendDot(color), label);
+}
+
+function skinPlate(input: DefaultTemplateInput): VNode[] {
+  const x = CARD_X + GUTTER;
+  const y = CARD_Y + 154;
   return [
     h('div', {
       style: {
         position: 'absolute',
-        left: CARD_X,
-        top: CARD_Y,
-        width: CARD_W,
-        height: CARD_H,
-        backgroundColor: C.paper,
-        borderWidth: 2,
-        borderStyle: 'solid',
-        borderColor: C.ink,
-      },
-    }),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: SKIN_X,
-        top: SKIN_Y,
+        left: x,
+        top: y,
         width: SKIN_W,
         height: SKIN_H,
+        backgroundColor: AX.panel,
         borderWidth: 1,
         borderStyle: 'solid',
-        borderColor: C.line,
+        borderColor: AX.lineSoft,
       },
     }),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: SKIN_X + 10,
-        top: SKIN_Y + 10,
-        width: 20,
-        height: 2,
-        backgroundColor: C.mute,
-      },
-    }),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: SKIN_X + 10,
-        top: SKIN_Y + 10,
-        width: 2,
-        height: 20,
-        backgroundColor: C.mute,
-      },
-    }),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: SKIN_X + SKIN_W - 30,
-        top: SKIN_Y + SKIN_H - 12,
-        width: 20,
-        height: 2,
-        backgroundColor: C.mute,
-      },
-    }),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: SKIN_X + SKIN_W - 12,
-        top: SKIN_Y + SKIN_H - 30,
-        width: 2,
-        height: 20,
-        backgroundColor: C.mute,
-      },
-    }),
+    ...axPanelGrid(x, y, SKIN_W, SKIN_H, 26),
     input.skin
       ? h('img', {
         src: input.skin,
-        width: 220,
-        height: 472,
+        width: 190,
+        height: 272,
         style: {
           position: 'absolute',
-          left: SKIN_X + 21,
-          top: SKIN_Y + 40,
-          width: 220,
-          height: 472,
+          left: x + 23,
+          top: y + 28,
+          width: 190,
+          height: 272,
           objectFit: 'contain',
           filter: 'grayscale(1) contrast(1.08)',
         },
@@ -238,180 +190,252 @@ function card(input: DefaultTemplateInput): VNode[] {
       : h('div', {
         style: {
           position: 'absolute',
-          left: SKIN_X + 56,
-          top: SKIN_Y + 130,
-          width: 150,
-          height: 280,
+          left: x + 66,
+          top: y + 72,
+          width: 104,
+          height: 170,
           backgroundColor: '#D8CBE8',
         },
       }),
+    ...axBrackets(x + 9, y + 9, SKIN_W - 18, SKIN_H - 18, AX.mute, 13, 2),
+  ];
+}
 
+function statGrid(input: DefaultTemplateInput): VNode[] {
+  const x = CONTENT_X;
+  const y = CARD_Y + 154;
+  return [
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: x,
+        top: y,
+        width: CONTENT_W,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+        backgroundColor: AX.lineSoft,
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: AX.lineSoft,
+        borderTopWidth: 4,
+        borderTopColor: AX.accent,
+      },
+    },
+      h('div', { style: { display: 'flex', flexDirection: 'row', gap: 1, height: 112 } },
+        cell('WINS', input.wins, ICONS.trophy, input.positions.wins),
+        cell('LOSSES', input.losses, ICONS.skull, input.positions.losses),
+        cell('W/L', input.wlr, ICONS.sword, input.positions.wlr),
+      ),
+      h('div', { style: { display: 'flex', flexDirection: 'row', gap: 1, height: 112 } },
+        cell('MVPS', input.mvps, ICONS.crown, input.positions.mvps),
+        cell('BEDS', input.beds, ICONS.bed, input.positions.beds),
+        cell('STREAK', input.streak, ICONS.flame, input.positions.streak),
+      ),
+    ),
+  ];
+}
+
+function matches(input: DefaultTemplateInput): VNode[] {
+  const x = CONTENT_X;
+  const y = CARD_Y + 420;
+  return [
+    text(x, y, 400, 16, 'LAST 10 MATCHES', 11, AX.mute, SEMIBOLD, 'left', 1.6),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: x + CONTENT_W - 250,
+        top: y,
+        width: 250,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 14,
+      },
+    },
+      legendEntry(AX.win, 'WIN'),
+      legendEntry(AX.loss, 'LOSS'),
+      legendEntry(AX.active, 'LIVE'),
+    ),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: x,
+        top: y + 24,
+        width: CONTENT_W,
+        height: 38,
+        display: 'flex',
+        flexDirection: 'row',
+        gap: 7,
+      },
+    }, ...Array.from({ length: 10 }, (_, index) => matchBar(input.matches[index] ?? 'unknown'))),
+  ];
+}
+
+function card(input: DefaultTemplateInput): VNode[] {
+  const nameSize = input.ign.length > 12 ? 44 : 52;
+  const inviteLabel = input.inviteLink.includes('.gg/')
+    ? input.inviteLink.slice(input.inviteLink.lastIndexOf('.gg/'))
+    : input.inviteLink;
+  const buttonW = 236;
+
+  return [
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: CARD_X + 10,
+        top: CARD_Y + 10,
+        width: CARD_W,
+        height: CARD_H,
+        backgroundColor: 'rgba(124, 58, 237, 0.3)',
+      },
+    }),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: CARD_X,
+        top: CARD_Y,
+        width: CARD_W,
+        height: CARD_H,
+        backgroundColor: AX.paper,
+        borderWidth: 2,
+        borderStyle: 'solid',
+        borderColor: AX.ink,
+      },
+    }),
+    text(CARD_X + 470, CARD_Y + 14, 590, 120, 'ELO', 112, 'rgba(124, 58, 237, 0.06)', SEMIBOLD, 'right', -2),
+    text(CARD_X + GUTTER, CARD_Y + 18, 300, 16, 'PLAYER STATS', 11, AX.mute, SEMIBOLD, 'left', 2.2),
+    text(CARD_X + CARD_W - 246, CARD_Y + 18, 216, 16, 'ELO', 12, AX.mute, SEMIBOLD, 'right', 2.2),
+    text(CARD_X + CARD_W - 276, CARD_Y + 34, 246, 64, String(input.elo), 62, AX.ink, SEMIBOLD, 'right', -1.6),
+    text(CARD_X + CARD_W - 216, CARD_Y + 100, 186, 16, input.positions.elo, 12, AX.accent, SEMIBOLD, 'right', 0.8),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: CARD_X + GUTTER,
+        top: CARD_Y + 132,
+        width: CARD_W - GUTTER * 2,
+        height: 2,
+        backgroundColor: AX.ink,
+      },
+    }),
+    ...skinPlate(input),
+    ...statGrid(input),
+    ...matches(input),
     h('div', {
       style: {
         position: 'absolute',
         left: CONTENT_X,
-        top: 66,
-        width: CONTENT_W - 210,
+        top: CARD_Y + CARD_H - 60,
+        width: CONTENT_W,
+        height: 36,
+        backgroundColor: AX.block,
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 14,
+      },
+    },
+      h('div', { style: { width: 4, height: 36, backgroundColor: AX.accent } }),
+      h('div', {
+        style: {
+          marginLeft: 14,
+          fontFamily: SEMIBOLD,
+          fontSize: 10,
+          letterSpacing: 2,
+          lineHeight: '12px',
+          color: AX.blockText,
+        },
+      }, 'VRBW.CLUB  /  RANKED BEDWARS'),
+      h('div', {
+        style: {
+          marginLeft: 'auto',
+          marginRight: 14,
+          fontFamily: MEDIUM,
+          fontSize: 10,
+          letterSpacing: 1.6,
+          lineHeight: '12px',
+          color: AX.blockMute,
+        },
+      }, 'SEASON 01  ·  UPDATED LIVE'),
+    ),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: CARD_X + 24,
+        top: CARD_Y + 34,
+        width: 620,
+        height: 62,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
       },
     },
       h('div', {
         style: {
           fontFamily: SEMIBOLD,
           fontSize: nameSize,
-          letterSpacing: -1.4,
-          lineHeight: `${nameSize + 4}px`,
-          color: C.ink,
+          letterSpacing: -1.6,
+          lineHeight: `${nameSize + 6}px`,
+          color: AX.ink,
           whiteSpace: 'nowrap',
         },
       }, input.ign),
-      divisionTagBadge(input.divisionTag, 16),
+      divisionTagBadge(input.divisionTag, 15),
     ),
     h('div', {
       style: {
         position: 'absolute',
-        left: CONTENT_X,
-        top: 130,
-        fontFamily: MEDIUM,
-        fontSize: 18,
-        letterSpacing: 1.4,
-        color: C.mute,
-      },
-    }, `[  ${input.rankName.toUpperCase()}  ]`),
-
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: CONTENT_X + CONTENT_W - 190,
-        top: 56,
-        width: 190,
-        textAlign: 'right',
-        fontFamily: MEDIUM,
-        fontSize: 14,
-        letterSpacing: 2,
-        color: C.mute,
-      },
-    }, 'ELO'),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: CONTENT_X + CONTENT_W - 220,
-        top: 78,
-        width: 220,
-        textAlign: 'right',
-        fontFamily: SEMIBOLD,
-        fontSize: 54,
-        letterSpacing: -1.5,
-        lineHeight: '60px',
-        color: C.ink,
-      },
-    }, String(input.elo)),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: CONTENT_X + CONTENT_W - 170,
-        top: 144,
-        width: 170,
-        textAlign: 'right',
-        fontFamily: SEMIBOLD,
-        fontSize: 14,
-        letterSpacing: 1,
-        color: C.accent,
-      },
-    }, input.positions.elo),
-
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: CONTENT_X,
-        top: 172,
-        width: CONTENT_W,
-        height: 2,
-        backgroundColor: C.ink,
-      },
-    }),
-
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: CONTENT_X,
-        top: 194,
-        width: CONTENT_W,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1,
-        backgroundColor: C.line,
-        borderWidth: 1,
-        borderStyle: 'solid',
-        borderColor: C.line,
-        borderTopWidth: 5,
-        borderTopColor: C.accent,
-      },
-    },
-      h('div', { style: { display: 'flex', flexDirection: 'row', gap: 1, height: 124 } },
-        cell('WINS', input.wins, ICONS.trophy, input.positions.wins),
-        cell('LOSSES', input.losses, ICONS.skull, input.positions.losses),
-        cell('W/L', input.wlr, ICONS.sword, input.positions.wlr),
-      ),
-      h('div', { style: { display: 'flex', flexDirection: 'row', gap: 1, height: 124 } },
-        cell('MVPS', input.mvps, ICONS.crown, input.positions.mvps),
-        cell('BEDS', input.beds, ICONS.bed, input.positions.beds),
-        cell('STREAK', input.streak, ICONS.flame, input.positions.streak),
-      ),
-    ),
-
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: CONTENT_X,
-        top: 495,
-        fontFamily: MEDIUM,
-        fontSize: 13,
-        letterSpacing: 1.2,
-        color: C.mute,
-      },
-    }, 'LAST 10 MATCHES'),
-
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: CONTENT_X,
-        top: 523,
-        width: CONTENT_W,
-        height: 42,
+        left: CARD_X + 26,
+        top: CARD_Y + 98,
         display: 'flex',
         flexDirection: 'row',
+        alignItems: 'center',
         gap: 8,
       },
-    }, ...Array.from({ length: 10 }, (_, index) => matchBar(input.matches[index] ?? 'unknown'))),
-
+    },
+      h('div', {
+        style: {
+          width: 9,
+          height: 9,
+          backgroundColor: input.rankColor,
+          transform: 'rotate(45deg)',
+        },
+      }),
+      h('div', {
+        style: {
+          fontFamily: MEDIUM,
+          fontSize: 14,
+          letterSpacing: 2,
+          lineHeight: '18px',
+          color: AX.mute,
+        },
+      }, `[  ${input.rankName.toUpperCase()}  ]`),
+    ),
+    ...axBrackets(CARD_X + 10, CARD_Y + 10, CARD_W - 20, CARD_H - 20, AX.lineSoft, 14, 2),
+    ...axStamp(CARD_X + CARD_W - 92, CARD_Y - 22, 'RBW', 56),
     h('svg', {
       width: buttonW,
-      height: 52,
-      style: { position: 'absolute', left: CONTENT_X + CONTENT_W - buttonW, top: 588 },
-    }, h('path', { d: `M10 0 H${buttonW} L${buttonW - 10} 52 H0 Z`, fill: C.accent })),
+      height: 34,
+      style: { position: 'absolute', left: CARD_X + CARD_W - buttonW - 12, top: CARD_Y + CARD_H - 59 },
+    }, h('path', { d: `M8 0 H${buttonW} L${buttonW - 8} 34 H0 Z`, fill: AX.accent })),
+    text(CARD_X + CARD_W - buttonW - 4, CARD_Y + CARD_H - 59, buttonW - 16, 34, inviteLabel, 12, AX.white, SEMIBOLD, 'center', 1.2),
     h('div', {
       style: {
         position: 'absolute',
-        left: CONTENT_X + CONTENT_W - buttonW,
-        top: 588,
-        width: buttonW,
-        height: 52,
-        textAlign: 'center',
-        fontFamily: SEMIBOLD,
-        fontSize: 18,
-        letterSpacing: 1.2,
-        lineHeight: '52px',
-        color: C.onAccent,
+        left: CARD_X + 24,
+        top: CARD_Y + CARD_H - 48,
+        fontFamily: MEDIUM,
+        fontSize: 11,
+        letterSpacing: 2,
+        lineHeight: '14px',
+        color: AX.mute,
       },
-    }, inviteLabel),
-  ].filter(Boolean) as VNode[];
+    }, 'PLAYER CARD'),
+  ];
 }
 
-export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; width: number; height: number } {
+export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; height: number; width: number } {
   const root = h('div', {
     style: {
       display: 'flex',
@@ -419,27 +443,13 @@ export function defaultTemplate(input: DefaultTemplateInput): { root: VNode; wid
       width: WIDTH,
       height: HEIGHT,
       overflow: 'hidden',
-      backgroundColor: C.page,
+      backgroundColor: AX.pageBottom,
     },
   },
-    h('img', {
-      src: staticImageDataUrl('backgrounds', 'halftone.png'),
-      width: WIDTH,
-      height: HEIGHT,
-      style: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: WIDTH,
-        height: HEIGHT,
-        objectFit: 'cover',
-      },
-    }),
+    ...axPage(WIDTH, HEIGHT),
     ...card(input),
-    grainLayer(WIDTH, HEIGHT),
+    grainLayer(WIDTH, HEIGHT, 0.16),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
 }
-
-

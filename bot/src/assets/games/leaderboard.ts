@@ -1,8 +1,8 @@
 import { h, VNode } from '../renderer';
-import { SEMIBOLD, text } from '../theme';
-import { staticImageDataUrl } from '../assets';
+import { MEDIUM, SEMIBOLD, text } from '../theme';
 import { grainLayer } from '../grain';
 import { DivisionTag, divisionTagBadge } from '../divisionTag';
+import { AX, axPage } from '../themes/defaultTheme';
 
 export type LeaderboardTemplateEntry = {
   rank: number;
@@ -26,59 +26,74 @@ export type LeaderboardTemplateInput = {
 
 const WIDTH = 1200;
 const HEIGHT = 1080;
-const X = 40;
-const W = WIDTH - X * 2;
-const HEADER_H = 60;
-const ROW_H = 88;
+const X = 48;
+const BOARD_W = WIDTH - X * 2;
+const BOARD_TOP = 208;
+const HEAD_H = 46;
+const ROW_H = 72;
 const ROWS = 10;
+const ROWS_TOP = BOARD_TOP + HEAD_H;
 
-const C = {
-  bgTop: '#E3E5E9',
-  bgBottom: '#CFD2D8',
-  ink: '#14161A',
-  mute: '#5E6470',
-  faint: '#8A909B',
-  line: '#C2C6CE',
-  rowA: '#EDEFF3',
-  rowB: '#F8F9FB',
-  header: '#16181D',
-  headerLine: '#7C3AED',
-  purple: '#7C3AED',
-  white: '#FFFFFF',
+const COL = {
+  rank: X + 22,
+  rankW: 54,
+  avatar: X + 96,
+  name: X + 154,
+  nameW: 470,
+  rankName: X + 660,
+  rankNameW: 190,
+  value: X + BOARD_W - 196,
+  valueW: 176,
 };
 
-function header(categoryLabel: string): VNode[] {
-  return [
-    h('div', {
+function slash(x: number, y: number, width: number, height: number, color: string): VNode {
+  return h('div', {
+    style: {
+      position: 'absolute',
+      left: x,
+      top: y,
+      width,
+      height,
+      backgroundColor: color,
+      transform: 'skewX(-30deg)',
+    },
+  });
+}
+
+function avatar(entry: LeaderboardTemplateEntry, top: number): VNode {
+  const accent = entry.rank <= 3 ? AX.accent : AX.line;
+  return h('div', {
+    style: {
+      position: 'absolute',
+      left: COL.avatar,
+      top: top + 12,
+      width: 48,
+      height: 48,
+      borderWidth: 2,
+      borderStyle: 'solid',
+      borderColor: accent,
+      backgroundColor: AX.panel,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  },
+    h('img', {
+      src: entry.avatar,
+      width: 44,
+      height: 44,
       style: {
-        position: 'absolute',
-        left: X,
-        top: 40,
-        width: W,
-        height: HEADER_H,
-        backgroundColor: C.header,
+        width: 44,
+        height: 44,
+        objectFit: 'cover',
       },
     }),
-    h('div', {
-      style: {
-        position: 'absolute',
-        left: X,
-        top: 40 + HEADER_H - 2,
-        width: W,
-        height: 2,
-        backgroundColor: C.headerLine,
-      },
-    }),
-    text(60, 40, 80, HEADER_H, '#', 18, C.white, SEMIBOLD, 'left', 1.6),
-    text(170, 40, 500, HEADER_H, 'PLAYER', 18, C.white, SEMIBOLD, 'left', 1.6),
-    text(780, 40, 300, HEADER_H, 'RANK', 18, C.white, SEMIBOLD, 'left', 1.6),
-    text(980, 40, 160, HEADER_H, categoryLabel.toUpperCase(), 18, C.white, SEMIBOLD, 'right', 1.6),
-  ];
+  );
 }
 
 function row(entry: LeaderboardTemplateEntry, index: number): VNode[] {
-  const top = 40 + HEADER_H + index * ROW_H;
-  const background = index % 2 === 0 ? C.rowA : C.rowB;
+  const top = ROWS_TOP + index * ROW_H;
+  const background = index % 2 === 0 ? AX.paper : AX.paperDim;
   const rankLabel = String(entry.rank).padStart(2, '0');
 
   return [
@@ -87,34 +102,21 @@ function row(entry: LeaderboardTemplateEntry, index: number): VNode[] {
         position: 'absolute',
         left: X,
         top,
-        width: W,
+        width: BOARD_W,
         height: ROW_H,
         backgroundColor: background,
         borderBottomWidth: 1,
-        borderBottomColor: C.line,
+        borderBottomColor: AX.lineSoft,
       },
     }),
-    text(60, top, 80, ROW_H, rankLabel, 30, C.purple, SEMIBOLD, 'left', 0),
-    h('img', {
-      src: entry.avatar,
-      width: 56,
-      height: 56,
-      style: {
-        position: 'absolute',
-        left: 160,
-        top: top + 16,
-        width: 56,
-        height: 56,
-        borderRadius: 8,
-        objectFit: 'cover',
-      },
-    }),
+    text(COL.rank, top, COL.rankW, ROW_H, rankLabel, 28, entry.rank <= 3 ? AX.accent : AX.ink, SEMIBOLD, 'left', 0),
+    avatar(entry, top),
     h('div', {
       style: {
         position: 'absolute',
-        left: 232,
+        left: COL.name,
         top,
-        width: 520,
+        width: COL.nameW,
         height: ROW_H,
         display: 'flex',
         flexDirection: 'row',
@@ -125,17 +127,121 @@ function row(entry: LeaderboardTemplateEntry, index: number): VNode[] {
       h('div', {
         style: {
           fontFamily: SEMIBOLD,
-          fontSize: 28,
-          letterSpacing: -0.2,
-          lineHeight: '34px',
-          color: C.ink,
+          fontSize: 27,
+          letterSpacing: -0.4,
+          lineHeight: '32px',
+          color: AX.ink,
           whiteSpace: 'nowrap',
         },
       }, entry.ign),
-      divisionTagBadge(entry.divisionTag, 14),
+      divisionTagBadge(entry.divisionTag, 13),
     ),
-    text(790, top, 190, ROW_H, entry.rankName.toUpperCase(), 20, C.mute, SEMIBOLD, 'left', 1.2),
-    text(980, top, 160, ROW_H, entry.value, 30, C.purple, SEMIBOLD, 'right', 0),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: COL.rankName,
+        top,
+        width: COL.rankNameW,
+        height: ROW_H,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 9,
+      },
+    },
+      h('div', {
+        style: {
+          width: 9,
+          height: 9,
+          backgroundColor: entry.rankColor,
+          transform: 'rotate(45deg)',
+        },
+      }),
+      h('div', {
+        style: {
+          fontFamily: MEDIUM,
+          fontSize: 14,
+          letterSpacing: 1.5,
+          lineHeight: '18px',
+          color: AX.mute,
+          whiteSpace: 'nowrap',
+        },
+      }, entry.rankName.toUpperCase()),
+    ),
+    text(COL.value, top, COL.valueW, ROW_H, entry.value, 30, AX.accentDeep, SEMIBOLD, 'right', 0),
+  ].filter(Boolean) as VNode[];
+}
+
+function headerRow(): VNode[] {
+  return [
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: X,
+        top: BOARD_TOP - 3,
+        width: BOARD_W,
+        height: 3,
+        backgroundColor: AX.accent,
+      },
+    }),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: X,
+        top: BOARD_TOP,
+        width: BOARD_W,
+        height: HEAD_H,
+        backgroundColor: AX.block,
+      },
+    }),
+    text(COL.rank, BOARD_TOP, COL.rankW, HEAD_H, '#', 18, AX.blockMute, SEMIBOLD, 'left', 1.4),
+    text(COL.name, BOARD_TOP, 300, HEAD_H, 'PLAYER', 18, AX.blockText, SEMIBOLD, 'left', 1.4),
+    text(COL.rankName, BOARD_TOP, COL.rankNameW, HEAD_H, 'RANK', 18, AX.blockText, SEMIBOLD, 'left', 1.4),
+    text(COL.value - 120, BOARD_TOP, COL.valueW + 120, HEAD_H, 'ELO', 18, AX.blockText, SEMIBOLD, 'right', 1.4),
+  ];
+}
+
+function standings(input: LeaderboardTemplateInput): VNode[] {
+  const pageLabel = input.totalPages && input.totalPages > 1
+    ? `PAGE ${input.page + 1}/${input.totalPages}`
+    : 'SEASON 01';
+
+  return [
+    text(X, 48, 460, 96, 'TOP 10', 84, 'rgba(234, 220, 248, 0.22)', SEMIBOLD, 'left', -2),
+    text(WIDTH - X - 300, 52, 300, 120, '01', 104, 'rgba(248, 243, 255, 0.08)', SEMIBOLD, 'right', 0),
+    slash(X + 360, 82, 24, 7, AX.accentSoft),
+    text(X + 400, 70, 420, 18, 'SEASON STANDINGS', 13, AX.blockMute, SEMIBOLD, 'left', 2.2),
+    text(X + 360, 92, 700, 36, input.title.toUpperCase(), 30, AX.blockText, SEMIBOLD, 'left', -0.6),
+    text(X + 360, 130, 700, 20, `RANKED BY ${input.categoryLabel.toUpperCase()}  /  LIVE FROM THE BOARD`, 12, AX.blockMute, MEDIUM, 'left', 1.6),
+    h('div', {
+      style: {
+        position: 'absolute',
+        right: X,
+        top: 94,
+        height: 34,
+        paddingLeft: 14,
+        paddingRight: 14,
+        backgroundColor: AX.block,
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderColor: AX.blockLine,
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+      },
+    },
+      h('div', { style: { width: 14, height: 5, backgroundColor: AX.accent, transform: 'skewX(-30deg)' } }),
+      h('div', {
+        style: {
+          fontFamily: SEMIBOLD,
+          fontSize: 11,
+          letterSpacing: 2,
+          lineHeight: '14px',
+          color: AX.blockText,
+        },
+      }, pageLabel),
+    ),
   ];
 }
 
@@ -143,38 +249,46 @@ function footer(input: LeaderboardTemplateInput): VNode[] {
   const pageLabel = input.totalPages && input.totalPages > 1
     ? `PAGE ${input.page + 1}/${input.totalPages}`
     : '';
+  const inviteLabel = input.inviteLink.includes('.gg/')
+    ? input.inviteLink.slice(input.inviteLink.lastIndexOf('.gg/'))
+    : input.inviteLink;
+  const buttonW = 236;
+  const buttonX = X + BOARD_W - buttonW - 8;
+
   return [
     h('div', {
       style: {
         position: 'absolute',
         left: X,
-        top: 1006,
-        width: W,
-        height: 44,
-        borderRadius: 8,
-        backgroundColor: 'rgba(12, 10, 18, 0.55)',
+        top: 984,
+        width: BOARD_W,
+        height: 48,
+        backgroundColor: AX.block,
       },
     }),
-    text(X + 20, 1016, 620, 28, input.serverName, 18, '#FFFFFF', SEMIBOLD, 'left', 1.4),
-    text(WIDTH - X - 640, 1016, 620, 28, [input.title.toUpperCase(), pageLabel].filter(Boolean).join('  ·  '), 16, '#E9D5FF', SEMIBOLD, 'right', 1.4),
+    h('div', {
+      style: {
+        position: 'absolute',
+        left: X,
+        top: 984,
+        width: 4,
+        height: 48,
+        backgroundColor: AX.accent,
+      },
+    }),
+    text(X + 20, 984, 460, 48, input.serverName, 20, AX.blockText, SEMIBOLD, 'left', 1.4),
+    text(X + 380, 984, 340, 48, [input.title.toUpperCase(), pageLabel].filter(Boolean).join('  /  '), 14, AX.blockMute, MEDIUM, 'center', 1.4),
+    h('svg', {
+      width: buttonW,
+      height: 36,
+      style: { position: 'absolute', left: buttonX, top: 990 },
+    }, h('path', { d: `M8 0 H${buttonW} L${buttonW - 8} 36 H0 Z`, fill: AX.accent })),
+    text(buttonX + 6, 990, buttonW - 12, 36, inviteLabel, 15, AX.white, SEMIBOLD, 'center', 1.2),
   ];
 }
 
 function avatarOverlay(entries: LeaderboardTemplateEntry[]): VNode[] {
-  return entries.slice(0, ROWS).map((entry, index) => h('img', {
-    src: entry.avatar,
-    width: 56,
-    height: 56,
-    style: {
-      position: 'absolute',
-      left: 160,
-      top: 40 + HEADER_H + index * ROW_H + 16,
-      width: 56,
-      height: 56,
-      borderRadius: 8,
-      objectFit: 'cover',
-    },
-  }));
+  return entries.slice(0, ROWS).map((entry, index) => avatar(entry, ROWS_TOP + index * ROW_H));
 }
 
 export function leaderboardTemplate(input: LeaderboardTemplateInput): { root: VNode; width: number; height: number } {
@@ -185,33 +299,21 @@ export function leaderboardTemplate(input: LeaderboardTemplateInput): { root: VN
       width: WIDTH,
       height: HEIGHT,
       overflow: 'hidden',
-      backgroundColor: C.bgBottom,
+      backgroundColor: AX.pageBottom,
     },
   },
-    h('img', {
-      src: staticImageDataUrl('backgrounds', 'halftone.png'),
-      width: WIDTH,
-      height: HEIGHT,
-      style: {
-        position: 'absolute',
-        left: 0,
-        top: 0,
-        width: WIDTH,
-        height: HEIGHT,
-        objectFit: 'cover',
-      },
-    }),
-    ...header(input.categoryLabel),
+    ...axPage(WIDTH, HEIGHT),
+    ...standings(input),
+    ...headerRow(),
     ...Array.from({ length: ROWS }, (_, index) => {
       const entry = input.entries[index];
       if (!entry) return [];
       return row(entry, index);
     }).flat(),
     ...footer(input),
-    grainLayer(WIDTH, HEIGHT),
+    grainLayer(WIDTH, HEIGHT, 0.16),
     ...avatarOverlay(input.entries),
   );
 
   return { root, width: WIDTH, height: HEIGHT };
 }
-
