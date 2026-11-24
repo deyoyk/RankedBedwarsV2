@@ -24,7 +24,7 @@ async function main(): Promise<void> {
       mode: 'RANKED',
       isRanked: true,
       serverName: 'DEYO RANKED BEDWARS',
-      inviteLink: 'play.deyo.lol',
+      inviteLink: 'discord.gg/vrbw',
     },
   );
 

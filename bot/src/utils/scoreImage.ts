@@ -3,6 +3,7 @@ import { renderPng } from '../assets/renderer';
 import { scoreTemplate, ScoreTemplatePlayer } from '../assets/games/score';
 import { startTemplate, StartTemplatePlayer } from '../assets/games/start';
 import User from '../models/User';
+import config from '../config/config';
 import { getDivisionTag } from './divisionTags';
 
 const GAME_IMAGE_TIMEOUT_MS = Math.max(
@@ -110,7 +111,7 @@ export async function generateScoreImageBuffer(
     ];
   });
   const serverName = options?.serverName || process.env.SERVER_NAME || '';
-  const inviteLink = options?.inviteLink || process.env.INVITE_LINK || '';
+  const inviteLink = options?.inviteLink || config.inviteLink;
   const now = new Date();
   const tpl = scoreTemplate({
     gameId,
@@ -191,7 +192,7 @@ export async function generateGameStartImageBuffer(
     return Math.round(team.reduce((sum, p) => sum + (p.elo || 0), 0) / team.length);
   };
   const serverName = options?.serverName || process.env.SERVER_NAME || '';
-  const inviteLink = options?.inviteLink || process.env.INVITE_LINK || '';
+  const inviteLink = options?.inviteLink || config.inviteLink;
   const tpl = startTemplate({
     gameId,
     mapName: options?.mapName || 'Unknown Map',

@@ -48,10 +48,10 @@ const WIN_TOP = SHEET_Y + 138;
 const WIN_ROWS = WIN_TOP + SEC_HEAD;
 const LOSE_TOP = WIN_ROWS + 4 * ROW_H + 16;
 const LOSE_ROWS = LOSE_TOP + SEC_HEAD;
-const META_TOP = SHEET_Y + 726;
+const META_TOP = SHEET_Y + 760;
 const META_HEAD = 42;
 const META_ROW = 52;
-const FOOT_TOP = SHEET_Y + 838;
+const FOOT_TOP = SHEET_Y + 864;
 const FOOT_H = 48;
 
 const COL = {

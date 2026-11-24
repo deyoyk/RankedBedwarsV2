@@ -253,7 +253,7 @@ function footer(input: LeaderboardTemplateInput): VNode[] {
     ? input.inviteLink.slice(input.inviteLink.lastIndexOf('.gg/'))
     : input.inviteLink;
   const buttonW = 236;
-  const buttonX = X + BOARD_W - buttonW - 8;
+  const buttonX = X + BOARD_W - buttonW;
 
   return [
     h('div', {

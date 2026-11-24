@@ -279,6 +279,7 @@ function card(input: DefaultTemplateInput): VNode[] {
     ? input.inviteLink.slice(input.inviteLink.lastIndexOf('.gg/'))
     : input.inviteLink;
   const buttonW = 236;
+  const buttonX = CONTENT_X + CONTENT_W - buttonW;
 
   return [
     h('div', {
@@ -417,9 +418,9 @@ function card(input: DefaultTemplateInput): VNode[] {
     h('svg', {
       width: buttonW,
       height: 34,
-      style: { position: 'absolute', left: CARD_X + CARD_W - buttonW - 12, top: CARD_Y + CARD_H - 59 },
+      style: { position: 'absolute', left: buttonX, top: CARD_Y + CARD_H - 59 },
     }, h('path', { d: `M8 0 H${buttonW} L${buttonW - 8} 34 H0 Z`, fill: AX.accent })),
-    text(CARD_X + CARD_W - buttonW - 4, CARD_Y + CARD_H - 59, buttonW - 16, 34, inviteLabel, 12, AX.white, SEMIBOLD, 'center', 1.2),
+    text(buttonX + 8, CARD_Y + CARD_H - 59, buttonW - 16, 34, inviteLabel, 12, AX.white, SEMIBOLD, 'center', 1.2),
     h('div', {
       style: {
         position: 'absolute',

@@ -118,8 +118,8 @@ interface CachedImageEntry {
 const IMAGE_TTL_MS = 24 * 60 * 60 * 1000;
 const IMAGE_NEGATIVE_TTL_MS = 60 * 1000;
 const IMAGE_MAX_ENTRIES = 5000;
-const IMAGE_MAX_CONCURRENT = 4;
-const IMAGE_ACQUIRE_TIMEOUT_MS = 5000;
+const IMAGE_MAX_CONCURRENT = 6;
+const IMAGE_ACQUIRE_TIMEOUT_MS = 10000;
 const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 const IMAGE_ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 
@@ -228,6 +228,11 @@ export async function loadAvatarDataUrl(username: string): Promise<string> {
       const remote = await fetchImageDataUrl(url, 2200);
       if (remote) return { dataUrl: remote, ok: true };
     }
+    const uuid = await resolveSkinUuid(username);
+    if (uuid) {
+      const remote = await fetchImageDataUrl(`${MC_API}/render/HEAD/${uuid}`, 2200);
+      if (remote) return { dataUrl: remote, ok: true };
+    }
     return { dataUrl: null, ok: false, negativeCache: staticImageDataUrl('fallbacks', 'steve.png') };
   });
   if (img) return img;
@@ -236,20 +241,32 @@ export async function loadAvatarDataUrl(username: string): Promise<string> {
 
 const MC_API = 'https://mc-api.io';
 const STEVE_UUID = '8667ba71-b85a-4004-af54-457a9734eed7';
+const UUID_TTL_MS = 24 * 60 * 60 * 1000;
+const UUID_NEGATIVE_TTL_MS = 5 * 60 * 1000;
+const uuidCache = new Map<string, { at: number; uuid: string | null }>();
 
 async function resolveSkinUuid(ign: string): Promise<string | null> {
+  const key = ign.toLowerCase();
+  const cached = uuidCache.get(key);
+  if (cached && Date.now() - cached.at < (cached.uuid ? UUID_TTL_MS : UUID_NEGATIVE_TTL_MS)) {
+    return cached.uuid;
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 2000);
+  let uuid: string | null = null;
   try {
     const res = await fetch(`${MC_API}/profile/${encodeURIComponent(ign)}/JAVA`, { signal: controller.signal });
-    if (!res.ok) return null;
-    const data = await res.json() as { uuid?: string };
-    return typeof data.uuid === 'string' && data.uuid ? data.uuid : null;
+    if (res.ok) {
+      const data = await res.json() as { uuid?: string };
+      if (typeof data.uuid === 'string' && data.uuid) uuid = data.uuid;
+    }
   } catch {
-    return null;
+    uuid = null;
   } finally {
     clearTimeout(timeout);
   }
+  uuidCache.set(key, { at: Date.now(), uuid });
+  return uuid;
 }
 
 export async function loadSkinDataUrl(ign: string): Promise<string | null> {

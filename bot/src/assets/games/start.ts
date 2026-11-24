@@ -42,10 +42,10 @@ const GREEN_TOP = SHEET_Y + 138;
 const GREEN_ROWS = GREEN_TOP + SEC_HEAD;
 const RED_TOP = GREEN_ROWS + 4 * ROW_H + 16;
 const RED_ROWS = RED_TOP + SEC_HEAD;
-const INFO_TOP = SHEET_Y + 726;
+const INFO_TOP = SHEET_Y + 760;
 const INFO_HEAD = 42;
 const INFO_ROW = 52;
-const FOOT_TOP = SHEET_Y + 838;
+const FOOT_TOP = SHEET_Y + 864;
 const FOOT_H = 48;
 
 function slash(x: number, y: number, width: number, height: number, color: string): VNode {

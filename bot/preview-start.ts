@@ -23,7 +23,7 @@ async function main(): Promise<void> {
       minElo: 0,
       maxElo: 1000,
       serverName: 'DEYO RANKED BEDWARS',
-      inviteLink: 'discord.gg/deyobw',
+      inviteLink: 'discord.gg/vrbw',
     },
   );
 
