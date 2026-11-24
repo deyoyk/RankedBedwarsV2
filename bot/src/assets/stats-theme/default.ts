@@ -323,6 +323,11 @@ function card(input: DefaultTemplateInput): VNode[] {
     ...skinPlate(input),
     ...statGrid(input),
     ...matches(input),
+    h('svg', {
+      width: CONTENT_W,
+      height: 36,
+      style: { position: 'absolute', left: CONTENT_X, top: CARD_Y + CARD_H - 60 },
+    }, h('path', { d: `M0 0 H${CONTENT_W} L${CONTENT_W - 8.5} 36 H0 Z`, fill: AX.block })),
     h('div', {
       style: {
         position: 'absolute',
@@ -330,7 +335,6 @@ function card(input: DefaultTemplateInput): VNode[] {
         top: CARD_Y + CARD_H - 60,
         width: CONTENT_W,
         height: 36,
-        backgroundColor: AX.block,
         display: 'flex',
         flexDirection: 'row',
         alignItems: 'center',
