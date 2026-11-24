@@ -380,10 +380,28 @@ describe('StrikeManager.strike', () => {
     expect(user.bans).toHaveLength(1);
   });
 
+  it('keeps a rank ban from strikes on Discord and out of the Minecraft server', async () => {
+    const user = mockUser();
+    user.strikes = [
+      { id: new mongoose.Types.ObjectId().toString(), reason: 'a', date: new Date(), moderator: 'm1' }
+    ];
+    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(user));
+    const server = { send: jest.fn() };
+    const before = global._wsManager;
+    global._wsManager = server as any;
+    try {
+      await StrikeManager.strike(guildMock() as any, '123', 'mod', 'Cheating');
+    } finally {
+      global._wsManager = before;
+    }
+    expect(user.isBanned).toBe(true);
+    expect(server.send).not.toHaveBeenCalled();
+  });
+
   it('rejects without recording when the strike action is invalid', async () => {
-    const configMock = require('../src/config/config').default;
-    const prev = configMock.strikes;
-    configMock.strikes = { 1: 'bogus', default: 'warn' };
+    const { StrikeRuleService } = require('../src/services/StrikeRuleService');
+    const rule = jest.spyOn(StrikeRuleService, 'actionFor').mockReturnValue('bogus');
     try {
       const user = mockUser();
       UserModel.findOne.mockResolvedValue(user);
@@ -399,7 +417,7 @@ describe('StrikeManager.strike', () => {
         { $pull: { strikes: { id: expect.any(String) } } }
       );
     } finally {
-      configMock.strikes = prev;
+      rule.mockRestore();
     }
   });
 });

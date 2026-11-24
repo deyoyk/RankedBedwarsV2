@@ -1,11 +1,12 @@
 import { wipeeveryone } from '../commands/account/wipeeveryone';
 import { wipe } from '../commands/account/wipe';
+import { resetdb } from '../commands/account/resetdb';
 import { gamescount } from '../commands/scoring/gamescount';
 import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
 import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
-import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, SlashCommandBuilder } from 'discord.js';
+import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { register } from '../commands/account/register';
 import { addqueue } from '../commands/queue/addqueue';
 import { addelo } from '../commands/account/addelo';
@@ -19,6 +20,7 @@ import { retry } from '../commands/queue/retry';
 import { recentgames } from '../commands/stats/recentgames';
 import { maps } from '../commands/general/maps';
 import { ban } from '../commands/moderation/ban';
+import { preset, presetAutocomplete } from '../commands/moderation/preset';
 import { mute } from '../commands/moderation/mute';
 import { unmute } from '../commands/moderation/unmute';
 import { strike } from '../commands/moderation/strike';
@@ -31,14 +33,15 @@ import type { BotCommandFn } from '../types/commands';
 import { strikerequest } from '../commands/scoring/strikerequest';
 import { voidrequest } from '../commands/scoring/voidrequest';
 import { stats } from '../commands/stats/stats';
-import { call } from '../commands/queue/call';
+import { call, handleCallVote } from '../commands/queue/call';
 import { nick } from '../commands/account/nick';
 import { settings } from '../commands/account/settings';
 import { forcevoid } from '../commands/scoring/forcevoid';
 import { refresh } from '../commands/account/refresh';
 import { gameinfo, handleGameInfoButton, handleGameInfoVoidModal } from '../commands/general/gameinfo';
 import { rbwconfig, rbwconfigData } from '../commands/general/rbwconfig';
-import { handlePunishmentDetails } from '../utils/punishmentEmbed';
+import { pgtourney } from '../commands/general/pgtourney';
+import { handlePunishmentDetails, handlePunishmentIssuer } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
 import { lose } from '../commands/scoring/lose';
@@ -71,6 +74,7 @@ interface Command {
   description: string;
   options?: ApplicationCommandOptionData[];
   apiData?: ReturnType<SlashCommandBuilder['toJSON']>;
+  defaultMemberPermissions?: string;
   execute: BotCommandFn;
 }
 
@@ -96,6 +100,13 @@ export class CommandManager {
 
         if (interaction.isChatInputCommand()) {
           await this.commandHandler.handleInteraction(interaction);
+          return;
+        }
+
+        if (interaction.isAutocomplete()) {
+          if (interaction.options.getFocused(true).name === 'preset' || interaction.commandName === 'preset') {
+            await presetAutocomplete(interaction);
+          }
           return;
         }
 
@@ -134,6 +145,16 @@ export class CommandManager {
 
         if (interaction.isButton() && interaction.customId.startsWith('punishment:details:')) {
           await handlePunishmentDetails(interaction);
+          return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('call:vote:')) {
+          await handleCallVote(interaction);
+          return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('punishment:issuer:')) {
+          await handlePunishmentIssuer(interaction);
           return;
         }
       } catch (error) {
@@ -253,7 +274,16 @@ export class CommandManager {
     this.reg('ranks', 'Show the list of ELO ranks', ranks);
     this.reg('bonus', 'Show all available ELO bonuses', bonus);
     this.reg('help', 'Show help menu', help);
-    this.reg('rbwconfig', 'Choose which roles can use which commands', rbwconfig, [], rbwconfigData);
+    this.reg('rbwconfig', 'Command permissions and strike rules', rbwconfig, [], rbwconfigData);
+    this.reg('resetdb', 'Debug: wipe one player or everyone from the bot (account, punishments and roles; Discord only)', resetdb, [
+      { name: 'user', description: 'One player to wipe (asks to confirm)', type: 6, required: false },
+      { name: 'global', description: 'Wipe every player (asks to confirm)', type: 5, required: false }
+    ]);
+    this.reg('pgtourney', 'Tourney mode for private games: no spectating while it is on', pgtourney, [
+      { name: 'mode', description: 'Turn it on or off; leave out to see whether it is on', type: 3, required: false, choices: [
+        { name: 'On', value: 'on' }, { name: 'Off', value: 'off' }
+      ]}
+    ]);
   }
 
   private registerQueueCommands() {
@@ -285,8 +315,32 @@ export class CommandManager {
       ]),
       sub('cancel', 'Cancel your party\'s private game')
     ]);
-    this.reg('call', 'Grant voice channel access to a user in game voice channels', call, [
-      { name: 'user', description: 'The user to grant voice channel access to', type: 6, required: true }
+    this.reg('call', 'Let people into your game voice channel, or open and close it', call, [
+      { name: 'add', description: 'Let someone into your game voice channel', type: 1, options: [
+        { name: 'user', description: 'Who to let in', type: 6, required: true },
+        { name: 'mute', description: 'They can listen but not talk', type: 5, required: false }
+      ]},
+      { name: 'remove', description: 'Lock someone out of your game voice channel and move them out', type: 1, options: [
+        { name: 'user', description: 'Who to lock out', type: 6, required: true }
+      ]},
+      { name: 'mute', description: 'Stop someone in your game voice channel talking', type: 1, options: [
+        { name: 'user', description: 'Who to mute', type: 6, required: true }
+      ]},
+      { name: 'unmute', description: 'Ask your team to let someone talk again', type: 1, options: [
+        { name: 'user', description: 'Who can talk now', type: 6, required: true }
+      ]},
+      { name: 'request', description: "Ask a player's team to let you into their voice channel", type: 1, options: [
+        { name: 'user', description: 'A player on that team', type: 6, required: true }
+      ]},
+      { name: 'open', description: 'Ask your team to open your team voice channel to a group', type: 1, options: [
+        { name: 'to', description: 'Who can join (default everyone)', type: 3, required: false, choices: [
+          { name: 'Pups (with Pugs Trial, Pugs and Premium)', value: 'pups' },
+          { name: 'Pugs (with Premium)', value: 'pugs' },
+          { name: 'Premium', value: 'premium' },
+          { name: 'Everyone', value: 'everyone' }
+        ]}
+      ]},
+      { name: 'close', description: 'Ask your team to close your voice channel and move out non-team members', type: 1 }
     ]);
     this.reg('retry', 'Retry a game', retry);
     this.reg('addqueue', 'Create a new queue', addqueue, [
@@ -354,24 +408,42 @@ export class CommandManager {
   private registerModerationCommands() {
     this.reg('ban', 'Ban a user from ranked play', ban, [
       { name: 'user', description: 'User to ban (ID or mention)', type: 6, required: true },
-      { name: 'duration', description: 'Ban duration (e.g. 1d, 1h)', type: 3, required: true },
-      { name: 'reason', description: 'Reason for ban', type: 3, required: true }
+      { name: 'preset', description: 'A ban preset (/preset list); fills in the duration and reason', type: 3, required: false, autocomplete: true },
+      { name: 'duration', description: 'Ban duration (e.g. 1d, 1h, perm); overrides the preset', type: 3, required: false },
+      { name: 'reason', description: 'Reason for ban; overrides the preset', type: 3, required: false }
     ]);
+    this.reg('preset', 'Punishment presets for /ban and /mute, here and in game', preset, [
+      { name: 'add', description: 'Add or change a preset', type: 1, options: [
+        { name: 'name', description: 'Its name, like cheating', type: 3, required: true },
+        { name: 'type', description: 'Ban, mute or strike', type: 3, required: true, choices: [
+          { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }, { name: 'Strike', value: 'strike' }
+        ]},
+        { name: 'reason', description: 'The reason given', type: 3, required: true },
+        { name: 'durations', description: 'Bans and mutes: one per offence, like 1d, 7d, 30d, perm (a step can add :its own reason)', type: 3, required: false }
+      ]},
+      { name: 'remove', description: 'Remove a preset', type: 1, options: [
+        { name: 'name', description: 'The preset', type: 3, required: true, autocomplete: true }
+      ]},
+      { name: 'list', description: 'Every preset and its steps', type: 1 }
+    ]);
+    this.commands.get('preset')!.defaultMemberPermissions = PermissionFlagsBits.Administrator.toString();
     this.reg('unban', 'Remove a rank-ban from a user', unban, [
       { name: 'user', description: 'User to unban (ID or mention)', type: 6, required: true },
       { name: 'reason', description: 'Reason for unban', type: 3, required: false }
     ]);
     this.reg('mute', 'Mute a user in the server', mute, [
       { name: 'user', description: 'User to mute (ID or mention)', type: 6, required: true },
-      { name: 'duration', description: 'Mute duration (e.g. 1d, 1h)', type: 3, required: true },
-      { name: 'reason', description: 'Reason for mute', type: 3, required: true }
+      { name: 'preset', description: 'A mute preset (/preset list); fills in the duration and reason', type: 3, required: false, autocomplete: true },
+      { name: 'duration', description: 'Mute duration (e.g. 1d, 1h); overrides the preset', type: 3, required: false },
+      { name: 'reason', description: 'Reason for mute; overrides the preset', type: 3, required: false }
     ]);
     this.reg('unmute', 'Unmute a user in the server', unmute, [
       { name: 'user_id', description: 'User ID to unmute', type: 3, required: true }
     ]);
     this.reg('strike', 'Issue a strike to a user', strike, [
       { name: 'user', description: 'User to strike (ID or mention)', type: 6, required: true },
-      { name: 'reason', description: 'Reason for strike', type: 3, required: false }
+      { name: 'preset', description: 'A strike preset (/preset list); fills in the reason', type: 3, required: false, autocomplete: true },
+      { name: 'reason', description: 'Reason for strike; overrides the preset', type: 3, required: false }
     ]);
     this.reg('unstrike', 'Remove a strike from a user', unstrike, [
       { name: 'user', description: 'User to remove strike from (ID or mention)', type: 6, required: true },
@@ -502,7 +574,8 @@ export class CommandManager {
         return {
           name: cmd.name,
           description: cmd.description,
-          options: cmd.options
+          options: cmd.options,
+          ...(cmd.defaultMemberPermissions ? { defaultMemberPermissions: BigInt(cmd.defaultMemberPermissions) } : {})
         };
       });
 

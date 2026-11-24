@@ -3,6 +3,9 @@ import { safeReply } from './safeReply';
 import { embedsFor } from './betterembed';
 import { parseDuration } from './parseDuration';
 import { parseDiscordId } from './inputValidation';
+import User from '../models/User';
+import type { ApplyOptions } from '../managers/timedPunishmentManager';
+import { PunishmentPresets, resolvePreset } from '../services/PunishmentPresets';
 
 const { errorEmbed, successEmbed } = embedsFor('Punishment');
 
@@ -30,8 +33,46 @@ function parseTarget(interaction: ChatInputCommandInteraction): ParsedTarget | {
 export interface ModerationActionConfig {
   commandName: string;
   actionVerb: string;
-  managerCall: (guild: Guild, targetId: string, issuerId: string, duration: string, reason: string) => Promise<unknown>;
+  managerCall: (guild: Guild, targetId: string, issuerId: string, duration: string, reason: string, options: ApplyOptions) => Promise<unknown>;
   hasDuration: boolean;
+}
+
+interface Chosen {
+  duration: string;
+  reason: string;
+  options: ApplyOptions;
+  note: string;
+}
+
+export async function choosePunishment(
+  type: 'ban' | 'mute',
+  targetId: string,
+  presetName: string | null,
+  typedDuration: string,
+  typedReason: string
+): Promise<Chosen | { error: string }> {
+  if (!presetName) {
+    if (!typedDuration) {
+      return { error: `Give a duration or a preset. \`/preset list\` shows the presets.` };
+    }
+    return { duration: typedDuration, reason: typedReason || 'No reason provided', options: {}, note: '' };
+  }
+  const preset = await PunishmentPresets.get(presetName);
+  if (!preset) {
+    return { error: `There's no preset called \`${presetName}\`. \`/preset list\` shows them.` };
+  }
+  if (preset.type !== type) {
+    return { error: `\`${preset.name}\` is a ${preset.type} preset, not a ${type} one.` };
+  }
+  const user = await User.findOne({ discordId: targetId }).select(type === 'ban' ? 'bans' : 'mutes').lean() as
+    { bans?: Array<{ preset?: string }>; mutes?: Array<{ preset?: string }> } | null;
+  const resolved = resolvePreset(preset, (type === 'ban' ? user?.bans : user?.mutes) ?? []);
+  return {
+    duration: typedDuration || resolved.duration,
+    reason: typedReason || resolved.reason,
+    options: { preset: preset.name },
+    note: `\n**Preset:** ${preset.name} (offence ${resolved.offence})`
+  };
 }
 
 export async function executeModerationAction(
@@ -49,8 +90,15 @@ export async function executeModerationAction(
     return;
   }
 
-  const duration = config.hasDuration ? (interaction.options.getString('duration') || '') : '';
-  const reason = interaction.options.getString('reason') || 'No reason provided';
+  const chosen = config.hasDuration && (config.commandName === 'ban' || config.commandName === 'mute')
+    ? await choosePunishment(config.commandName, parsed.targetId, interaction.options.getString('preset'),
+      interaction.options.getString('duration') || '', interaction.options.getString('reason') || '')
+    : { duration: '', reason: interaction.options.getString('reason') || 'No reason provided', options: {}, note: '' };
+  if ('error' in chosen) {
+    await safeReply(interaction, errorEmbed(chosen.error, `${config.commandName} Error`));
+    return;
+  }
+  const { duration, reason } = chosen;
 
   if (config.hasDuration && duration) {
     try {
@@ -70,10 +118,10 @@ export async function executeModerationAction(
   }
 
   try {
-    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, duration, reason);
+    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, duration, reason, chosen.options);
     const durationText = config.hasDuration && duration ? `\n**Duration:** ${duration}` : '';
     const embed = successEmbed(
-      `${config.actionVerb} <@${parsed.targetId}>.${durationText}\n**Reason:** ${reason}`,
+      `${config.actionVerb} <@${parsed.targetId}>.${durationText}\n**Reason:** ${reason}${chosen.note}`,
       undefined,
       false
     );
@@ -144,7 +192,19 @@ export async function executeStrikeAction(
     return;
   }
 
-  const reason = interaction.options.getString('reason') || 'No reason provided';
+  const presetName = config.commandName === 'strike' ? interaction.options.getString('preset') : null;
+  let reason = interaction.options.getString('reason') || '';
+  if (presetName) {
+    const preset = await PunishmentPresets.get(presetName);
+    if (!preset || preset.type !== 'strike') {
+      await safeReply(interaction, errorEmbed(preset
+        ? `\`${preset.name}\` is a ${preset.type} preset, not a strike one.`
+        : `There's no preset called \`${presetName}\`. \`/preset list\` shows them.`, `${config.commandName} Error`));
+      return;
+    }
+    reason = reason || preset.reason;
+  }
+  reason = reason || 'No reason provided';
 
   try {
     await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, reason);

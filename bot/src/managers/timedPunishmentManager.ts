@@ -21,6 +21,11 @@ export interface TimedPunishmentKind {
   expiryReason: string;
 }
 
+export interface ApplyOptions {
+  preset?: string;
+  staff?: string;
+}
+
 export abstract class TimedPunishmentManager {
   protected pendingOperations: Map<string, PunishmentOperation> = new Map();
   protected stats: PunishmentManagerStats = {
@@ -35,7 +40,7 @@ export abstract class TimedPunishmentManager {
   protected discordApply(_promises: Promise<unknown>[], _guild: Guild, _targetId: string, _reason: string, _moderatorId: string, _duration: number | null): void {}
   protected discordUndo(_promises: Promise<unknown>[], _guild: Guild, _targetId: string, _reason: string, _moderatorId: string): void {}
 
-  public async apply(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<Date | undefined> {
+  public async apply(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null, options: ApplyOptions = {}): Promise<Date | undefined> {
     const kind = this.kind();
     const operation = createPendingOperation(targetId, moderatorId, reason);
     this.pendingOperations.set(operation.id, operation);
@@ -59,7 +64,8 @@ export abstract class TimedPunishmentManager {
         reason: reason.trim(),
         date: new Date(),
         duration: duration ? Math.ceil(duration / 60000) : 0,
-        moderator: moderatorId
+        moderator: moderatorId,
+        ...(options.preset ? { preset: options.preset } : {})
       };
 
       const updated = await User.findOneAndUpdate(
@@ -88,7 +94,8 @@ export abstract class TimedPunishmentManager {
               [`${kind.recordsField}.$.reason`]: reason.trim(),
               [`${kind.recordsField}.$.moderator`]: moderatorId,
               [`${kind.recordsField}.$.date`]: new Date(),
-              [`${kind.recordsField}.$.duration`]: duration ? Math.ceil(duration / 60000) : 0
+              [`${kind.recordsField}.$.duration`]: duration ? Math.ceil(duration / 60000) : 0,
+              ...(options.preset ? { [`${kind.recordsField}.$.preset`]: options.preset } : {})
             }
           }
         );
@@ -100,7 +107,9 @@ export abstract class TimedPunishmentManager {
           type: kind.type,
           reason,
           duration: duration ? Math.ceil(duration / 60000) : null,
-          id: lastRecord.id
+          id: lastRecord.id,
+          preset: options.preset,
+          staff: options.staff
         }, kind.type);
         await Promise.allSettled(resent);
         return undefined;
@@ -114,12 +123,15 @@ export abstract class TimedPunishmentManager {
       addPunishmentRole(promises, guild, targetId, config.roles[kind.roleKey], 'add', kind.type);
       this.discordApply(promises, guild, targetId, reason, moderatorId, duration);
 
-      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.type, expires, caseId: recordId });
+      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.type, expires, caseId: recordId,
+        staff: options.staff, source: options.staff ? 'minecraft' : 'discord' });
       sendWebSocketNotification(promises, wsManager, user, {
         type: kind.type,
         reason,
         duration: duration ? Math.ceil(duration / 60000) : null,
-        id: recordId
+        id: recordId,
+        preset: options.preset,
+        staff: options.staff
       }, kind.type);
 
       await Promise.allSettled(promises);
@@ -138,7 +150,7 @@ export abstract class TimedPunishmentManager {
     }
   }
 
-  public async undo(guild: Guild, targetId: string, moderatorId: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<boolean> {
+  public async undo(guild: Guild, targetId: string, moderatorId: string, reason: string, wsManager?: WebSocketNotifier | null, options: ApplyOptions = {}): Promise<boolean> {
     const kind = this.kind();
     const operation = createPendingOperation(targetId, moderatorId, reason);
     this.pendingOperations.set(operation.id, operation);
@@ -167,7 +179,8 @@ export abstract class TimedPunishmentManager {
       addPunishmentRole(promises, guild, targetId, config.roles[kind.roleKey], 'remove', kind.type);
       this.discordUndo(promises, guild, targetId, reason, moderatorId);
 
-      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.undoType });
+      sendPunishmentNotification(promises, { guild, targetId, moderatorId, reason, type: kind.undoType,
+        staff: options.staff, source: options.staff ? 'minecraft' : 'discord' });
       sendWebSocketNotification(promises, wsManager, user, {
         type: kind.undoType,
         reason,

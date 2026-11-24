@@ -8,6 +8,6 @@ export async function unmute(interaction: ChatInputCommandInteraction, _wsManage
     commandName: 'unmute',
     actionVerb: 'Unmuted',
     activeWord: 'muted',
-    managerCall: (guild, targetId, issuerId) => MuteManager.unmute(guild, targetId, issuerId)
+    managerCall: (guild, targetId, issuerId) => MuteManager.unmute(guild, targetId, issuerId, undefined, _wsManager)
   });
 }
