@@ -7,6 +7,7 @@ export async function unmute(interaction: ChatInputCommandInteraction, _wsManage
   await executeUnmoderationAction(interaction, {
     commandName: 'unmute',
     actionVerb: 'Unmuted',
-    managerCall: (guild, targetId, issuerId) => MuteManager.unmute(guild, targetId, issuerId)
+    activeWord: 'muted',
+    managerCall: (guild, targetId, issuerId) => MuteManager.unmute(guild, targetId, issuerId, undefined, _wsManager)
   });
 }

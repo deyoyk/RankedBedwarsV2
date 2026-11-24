@@ -21,7 +21,7 @@ jest.mock('../src/utils/punishmentEmbed', () => ({
 }));
 
 jest.mock('../src/utils/modCommands', () => ({
-  executeModerationAction: jest.fn((_interaction: unknown, cfg: any) => cfg.managerCall('guild', 'target', 'issuer', '1d', 'cheating')),
+  executeModerationAction: jest.fn((_interaction: unknown, cfg: any) => cfg.managerCall('guild', 'target', 'issuer', '1d', 'cheating', { preset: 'cheating' })),
   executeUnmoderationAction: jest.fn((_interaction: unknown, cfg: any) => cfg.managerCall('guild', 'target', 'issuer'))
 }));
 
@@ -55,7 +55,7 @@ describe('Discord ban sync', () => {
     });
     const ws = { send: jest.fn() };
     await BanManager.ban(guildMock() as any, '123', 'mod', '1h', 'cheating', ws);
-    expect(ws.send).toHaveBeenCalledWith({ type: 'botban', ign: 'Steve', reason: 'cheating', duration: 60, id: u.bans[0].id });
+    expect(ws.send).toHaveBeenCalledWith({ type: 'botban', ign: 'Steve', reason: 'cheating', duration: 60, id: u.bans[0].id, preset: null, staff: null });
   });
 
   test('re-ban of an already banned user still sends botban with the updated reason', async () => {
@@ -67,7 +67,7 @@ describe('Discord ban sync', () => {
     UserModel.updateOne.mockResolvedValue({ matchedCount: 1 });
     const ws = { send: jest.fn() };
     await BanManager.ban(guildMock() as any, '123', 'mod', '2h', 'new reason', ws);
-    expect(ws.send).toHaveBeenCalledWith({ type: 'botban', ign: 'Steve', reason: 'new reason', duration: 120, id: 'case1' });
+    expect(ws.send).toHaveBeenCalledWith({ type: 'botban', ign: 'Steve', reason: 'new reason', duration: 120, id: 'case1', preset: null, staff: null });
   });
 
   test('ban without a websocket (strike path) sends nothing and does not throw', async () => {
@@ -88,13 +88,13 @@ describe('Discord ban sync', () => {
 
   test('the /ban and /unban commands pass the server connection to BanManager', async () => {
     const banSpy = jest.spyOn(BanManager, 'ban').mockResolvedValue(undefined);
-    const unbanSpy = jest.spyOn(BanManager, 'unban').mockResolvedValue(undefined);
+    const unbanSpy = jest.spyOn(BanManager, 'unban').mockResolvedValue(true);
     const ws = { send: jest.fn() } as any;
     const { ban } = require('../src/commands/moderation/ban');
     const { unban } = require('../src/commands/moderation/unban');
     await ban({} as any, ws);
     await unban({} as any, ws);
-    expect(banSpy).toHaveBeenCalledWith('guild', 'target', 'issuer', '1d', 'cheating', ws);
+    expect(banSpy).toHaveBeenCalledWith('guild', 'target', 'issuer', '1d', 'cheating', ws, { preset: 'cheating' });
     expect(unbanSpy).toHaveBeenCalledWith('guild', 'target', 'issuer', undefined, ws);
   });
 });

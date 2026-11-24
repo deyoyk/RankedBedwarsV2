@@ -1,95 +1,51 @@
-import { ChatInputCommandInteraction, VoiceChannel } from 'discord.js';
+import { ButtonInteraction, ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
 import { replyCommandError } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
-import Game from '../../models/Game';
 import User from '../../models/User';
+import type { OpenTier } from '../../services/CallRoleService';
+import { CallAction, CallFlow } from '../../services/CallFlow';
 
 const { errorEmbed, successEmbed } = embedsFor('VC Access');
+const NEEDS_USER = new Set(['add', 'remove', 'mute', 'unmute', 'request']);
 
 export async function call(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager) {
-  let targetUser: string;
-  let senderId: string;
-
-  
-    const targetUserOption = interaction.options.getUser('user', true);
-    targetUser = targetUserOption.id;
-    senderId = interaction.user.id;
-  
-
+  const sub = (interaction.options.getSubcommand(false) ?? 'add') as CallAction;
   try {
-    
     const guild = interaction.guild;
     if (!guild) {
       await safeReply(interaction, errorEmbed('This command can only be used in a server.', 'Error'));
       return;
     }
-
-    const [senderMember, targetUserDoc, targetMember] = await Promise.all([
-      guild.members.cache?.get(senderId) ?? guild.members.fetch(senderId).catch(() => null),
-      User.findOne({ discordId: targetUser }).select('_id').lean(),
-      guild.members.cache?.get(targetUser) ?? guild.members.fetch(targetUser).catch(() => null)
-    ]);
-    const senderVoiceState = senderMember?.voice;
-
-    if (!senderVoiceState?.channel) {
-      await safeReply(interaction, errorEmbed('You must be in a voice channel to use this command.', 'Not in Voice Channel'));
-      return;
+    const target = interaction.options.getUser('user')?.id;
+    if (NEEDS_USER.has(sub)) {
+      if (!target) {
+        await safeReply(interaction, errorEmbed('Choose a user.', 'Call'));
+        return;
+      }
+      const registered = await User.findOne({ discordId: target }).select('_id').lean();
+      if (!registered) {
+        await safeReply(interaction, errorEmbed('The target user is not registered in the system.', 'User Not Found'));
+        return;
+      }
     }
-
-    const voiceChannel = senderVoiceState.channel as VoiceChannel;
-
-    const game = await Game.findOne({
-      $or: [
-        { 'channels.team1Voice': voiceChannel.id },
-        { 'channels.team2Voice': voiceChannel.id },
-        { 'channels.picking': voiceChannel.id }
-      ]
-    }).select('gameId').lean();
-
-    if (!game) {
-      await safeReply(interaction, errorEmbed('You must be in a game voice channel to use this command.', 'Invalid Voice Channel'));
-      return;
-    }
-
-    if (!targetUserDoc) {
-      await safeReply(interaction, errorEmbed('The target user is not registered in the system.', 'User Not Found'));
-      return;
-    }
-
-    if (!targetMember) {
-      await safeReply(interaction, errorEmbed('The target user is not a member of this server.', 'User Not Found'));
-      return;
-    }
-    
-
-    try {
-      await voiceChannel.permissionOverwrites.create(targetUser, {
-        ViewChannel: true,
-        Connect: true,
-        Speak: true,
-        Stream: true,
-        UseVAD: true
-      });
-
-      const embedObj = successEmbed(
-        `<@${targetUser}> has been granted access to join and speak in ${voiceChannel.name}.`,
-        'Call Access Granted'
-      );
-      embedObj.builder.addFields(
-        { name: 'Voice Channel', value: `<#${voiceChannel.id}>`, inline: true },
-        { name: 'Game ID', value: `#${game.gameId}`, inline: true },
-        { name: 'Granted by', value: `<@${senderId}>`, inline: true }
-      );
-      await safeReply(interaction, { embeds: [embedObj.builder] });
-      const { CallBridge } = await import('../../services/CallBridge');
-      await CallBridge.announce(interaction.client, targetUser, voiceChannel.id, true);
-    } catch (permError) {
-      await replyCommandError(interaction, permError, 'grant voice channel permissions', '[call:permissions]');
-    }
-
+    const result = await CallFlow.run(guild, interaction.user.id, sub, {
+      targetId: target,
+      muted: sub === 'add' ? Boolean(interaction.options.getBoolean('mute')) : undefined,
+      tier: sub === 'open' ? (interaction.options.getString('to') || 'everyone') as OpenTier : undefined,
+    });
+    await safeReply(interaction, result.ok
+      ? successEmbed(result.message, 'Call', true)
+      : errorEmbed(result.message, 'Call', true));
   } catch (error) {
-    await replyCommandError(interaction, error, 'process the call command', '[call]');
+    await replyCommandError(interaction, error, `${sub} the call`, '[call]');
   }
+}
+
+export async function handleCallVote(interaction: ButtonInteraction): Promise<void> {
+  const id = interaction.customId.split(':')[2] || '';
+  const result = await CallFlow.vote(id, interaction.user.id);
+  const reply = result.ok ? successEmbed(result.message, 'Call') : errorEmbed(result.message, 'Call');
+  await interaction.reply({ embeds: [reply.builder], flags: MessageFlags.Ephemeral });
 }

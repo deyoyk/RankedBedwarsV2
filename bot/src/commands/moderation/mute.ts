@@ -7,7 +7,7 @@ export async function mute(interaction: ChatInputCommandInteraction, _wsManager?
   await executeModerationAction(interaction, {
     commandName: 'mute',
     actionVerb: 'Muted',
-    managerCall: (guild, targetId, issuerId, duration, reason) => MuteManager.mute(guild, targetId, issuerId, duration, reason),
+    managerCall: (guild, targetId, issuerId, duration, reason, options) => MuteManager.mute(guild, targetId, issuerId, duration, reason, _wsManager, options),
     hasDuration: true
   });
 }

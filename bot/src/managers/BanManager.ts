@@ -1,5 +1,5 @@
 import { Guild } from 'discord.js';
-import { TimedPunishmentKind, TimedPunishmentManager } from './timedPunishmentManager';
+import { ApplyOptions, TimedPunishmentKind, TimedPunishmentManager } from './timedPunishmentManager';
 import type { WebSocketNotifier } from './punishmentHelpers';
 
 const kind: TimedPunishmentKind = {
@@ -36,12 +36,12 @@ export class BanManager extends TimedPunishmentManager {
     return BanManager.instance;
   }
 
-  public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null): Promise<Date | undefined> {
-    return BanManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager);
+  public static async ban(guild: Guild, targetId: string, moderatorId: string, durationStr: string, reason: string, wsManager?: WebSocketNotifier | null, options?: ApplyOptions): Promise<Date | undefined> {
+    return BanManager.getInstance().apply(guild, targetId, moderatorId, durationStr, reason, wsManager, options);
   }
 
-  public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: WebSocketNotifier | null): Promise<void> {
-    return BanManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager);
+  public static async unban(guild: Guild, targetId: string, moderatorId: string, reason = 'Unbanned', wsManager?: WebSocketNotifier | null, options?: ApplyOptions): Promise<boolean> {
+    return BanManager.getInstance().undo(guild, targetId, moderatorId, reason, wsManager, options);
   }
 
   public static async autoUnban(guild: Guild): Promise<number> {

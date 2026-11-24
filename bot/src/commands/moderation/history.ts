@@ -1,8 +1,8 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, Message, MessageFlags } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { embedsFor } from '../../utils/betterembed';
-import { replyCommandError } from '../../utils/errorReporter';
+import { commandErrorDetails } from '../../utils/errorReporter';
 import { safeReply } from '../../utils/safeReply';
 
 const { betterEmbed, errorEmbed, infoEmbed } = embedsFor('Punishment');
@@ -25,7 +25,7 @@ export async function history(interaction: ChatInputCommandInteraction, _wsManag
   
 
   if (!['ban', 'mute', 'strike'].includes(historyType)) {
-    await safeReply(interaction, errorEmbed('Valid types are: `ban`, `mute`, `strike`.', 'Invalid History Type'));
+    await safeReply(interaction, errorEmbed('Valid types are: `ban`, `mute`, `strike`.', 'Invalid History Type', true));
     return;
   }
   const recordsField = historyType === 'ban' ? 'bans' : historyType === 'mute' ? 'mutes' : 'strikes';
@@ -38,7 +38,8 @@ export async function history(interaction: ChatInputCommandInteraction, _wsManag
 
     if (!idRow) {
       await safeReply(interaction, {
-        embeds: [errorEmbed('No user found with the specified ID, mention, or IGN.', 'History Not Found').builder]
+        embeds: [errorEmbed('No user found with the specified ID, mention, or IGN.', 'History Not Found').builder],
+        flags: MessageFlags.Ephemeral
       });
       return;
     }
@@ -71,7 +72,7 @@ export async function history(interaction: ChatInputCommandInteraction, _wsManag
     let currentPage = 0;
     let { items: pageItems, total: totalCount, totalPages } = await loadPage(0);
     if (totalCount === 0) {
-      await safeReply(interaction, infoEmbed(`No ${historyType}s found for <@${discordId}>.`, 'No History Found'));
+      await safeReply(interaction, infoEmbed(`No ${historyType}s found for <@${discordId}>.`, 'No History Found', true));
       return;
     }
 
@@ -112,7 +113,7 @@ Moderator: ${item.moderator}
     const embed = generateEmbed(currentPage, pageItems, totalPages, totalCount);
     const row = buildPaginationRow(currentPage, totalPages);
 
-    const message = await safeReply(interaction, { embeds: [embed], components: [row], fetchReply: true });
+    const message = await safeReply(interaction, { embeds: [embed], components: [row], fetchReply: true, flags: MessageFlags.Ephemeral });
     const ownerId = interaction.user.id;
     const collector = (message as unknown as Message | undefined)?.createMessageComponentCollector({
       filter: (i) => i.user.id === ownerId,
@@ -151,9 +152,10 @@ Moderator: ${item.moderator}
     });
 
     collector?.on('end', async () => {
-      await (message as unknown as Message | undefined)?.edit({ components: [] }).catch(() => undefined);
+      await interaction.editReply({ components: [] }).catch(() => undefined);
     });
   } catch (error) {
-    await replyCommandError(interaction, error, 'retrieve the user history', '[history]');
+    const { description } = commandErrorDetails('retrieve the user history', error, '[history]');
+    await safeReply(interaction, { embeds: [errorEmbed(description, 'Command Error').builder], flags: MessageFlags.Ephemeral });
   }
 }
