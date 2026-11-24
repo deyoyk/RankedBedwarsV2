@@ -41,6 +41,7 @@ import { refresh } from '../commands/account/refresh';
 import { gameinfo, handleGameInfoButton, handleGameInfoVoidModal } from '../commands/general/gameinfo';
 import { rbwconfig, rbwconfigData } from '../commands/general/rbwconfig';
 import { pgtourney } from '../commands/general/pgtourney';
+import { sstoggle } from '../commands/moderation/sstoggle';
 import { handlePunishmentDetails, handlePunishmentIssuer } from '../utils/punishmentEmbed';
 import { queues } from '../commands/general/queues';
 import { win } from '../commands/scoring/win';
@@ -302,6 +303,11 @@ export class CommandManager {
     this.reg('resetdb', 'Debug: wipe one player or everyone from the bot (account, punishments and roles; Discord only)', resetdb, [
       { name: 'user', description: 'One player to wipe (asks to confirm)', type: 6, required: false },
       { name: 'global', description: 'Wipe every player (asks to confirm)', type: 5, required: false }
+    ]);
+    this.reg('sstoggle', 'Turn screensharing on or off for everyone, on Discord and in game', sstoggle, [
+      { name: 'mode', description: 'Turn it on or off; leave out to see whether it is on', type: 3, required: false, choices: [
+        { name: 'On', value: 'on' }, { name: 'Off', value: 'off' }
+      ]}
     ]);
     this.reg('pgtourney', 'Tourney mode for private games: no spectating while it is on', pgtourney, [
       { name: 'mode', description: 'Turn it on or off; leave out to see whether it is on', type: 3, required: false, choices: [

@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, EmbedBuilder, Guild, GuildMember, OverwriteResolvable, TextChannel } from 'discord.js';
+import { SCREENSHARE_OFF_MESSAGE, ScreenshareSwitch } from './ScreenshareSwitch';
 import ScreenshareSession, { IScreenshareSession } from '../models/ScreenshareSession';
 import User from '../models/User';
 import config from '../config/config';
@@ -122,6 +123,9 @@ export class ScreenshareService {
     options: ScreenshareCreateOptions = {}
   ): Promise<ScreenshareSessionResult> {
     const fromGame = options.fromGame === true;
+    if (!ScreenshareSwitch.current().enabled) {
+      return { success: false, error: SCREENSHARE_OFF_MESSAGE };
+    }
     try {
       
       const validation = this.validateScreenshareRequest(targetId, requesterId, reason, imageUrl, fromGame);
