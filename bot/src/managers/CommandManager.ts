@@ -443,12 +443,16 @@ export class CommandManager {
           { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }, { name: 'Strike', value: 'strike' }
         ]},
         { name: 'reason', description: 'The reason given', type: 3, required: true },
-        { name: 'durations', description: 'Bans and mutes: one per offence, like 1d, 7d, 30d, perm (a step can add :its own reason)', type: 3, required: false }
+        { name: 'durations', description: 'Bans and mutes: one per offence, like 1d, 7d, 30d, perm (a step can add :its own reason)', type: 3, required: false },
+        { name: 'strikes', description: 'Strike presets: how many strikes it gives (default 1)', type: 4, required: false, minValue: 1, maxValue: 10 }
       ]},
       { name: 'remove', description: 'Remove a preset', type: 1, options: [
         { name: 'name', description: 'The preset', type: 3, required: true, autocomplete: true }
       ]},
-      { name: 'list', description: 'Every preset and its steps', type: 1 }
+      { name: 'list', description: 'Every preset and its steps', type: 1 },
+      { name: 'import', description: 'Add presets (and strike rules) from a JSON file; replaces presets with the same names', type: 1, options: [
+        { name: 'file', description: 'A .json file with a presets list and optional strikeRules', type: 11, required: true }
+      ]}
     ]);
     this.commands.get('preset')!.defaultMemberPermissions = PermissionFlagsBits.Administrator.toString();
     this.reg('unban', 'Remove a rank-ban from a user', unban, [

@@ -3,7 +3,9 @@ import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { safeReply } from '../../utils/safeReply';
 import { embedsFor } from '../../utils/betterembed';
 import type { PresetType } from '../../models/PunishmentPreset';
-import { describeSteps, parseSteps, PunishmentPresets } from '../../services/PunishmentPresets';
+import { checkStrikes, describeSteps, parseSteps, PunishmentPresets } from '../../services/PunishmentPresets';
+import { StrikeRuleService, describeAction } from '../../services/StrikeRuleService';
+import { MAX_IMPORT_BYTES, parsePresetFile } from '../../services/PresetImport';
 import { auditInteractionContext, recordAudit } from '../../services/AuditService';
 
 const { errorEmbed, successEmbed, infoEmbed } = embedsFor('Presets');
@@ -23,8 +25,9 @@ export async function preset(interaction: ChatInputCommandInteraction, _wsManage
         return;
       }
       const steps = type === 'strike' ? [] : parseSteps(durations);
+      const strikes = type === 'strike' ? checkStrikes(interaction.options.getInteger('strikes') ?? 1) : undefined;
       const saved = await PunishmentPresets.save(interaction.options.getString('name', true), type, steps,
-        interaction.options.getString('reason', true), interaction.user.id);
+        interaction.options.getString('reason', true), interaction.user.id, strikes);
       await recordAudit({
         ...auditInteractionContext(interaction),
         action: 'config.preset_save',
@@ -33,11 +36,49 @@ export async function preset(interaction: ChatInputCommandInteraction, _wsManage
         success: true,
         targetType: 'preset',
         targetId: saved.name,
-        after: { name: saved.name, type: saved.type, steps, reason: saved.reason },
+        after: { name: saved.name, type: saved.type, steps, strikes, reason: saved.reason },
       });
       await safeReply(interaction, successEmbed(
         `Saved the **${saved.type}** preset \`${saved.name}\`.\n**Steps:** ${describeSteps(saved)}\n**Reason:** ${saved.reason}\n\n`
-        + `Use it with \`/${saved.type} preset:${saved.name}\` here, or \`/${saved.type} <player> ${saved.name}\` in game.`));
+        + `Use it with \`/${saved.type} preset:${saved.name}\` here`
+        + (saved.type === 'strike' ? '.' : `, or pick it from the menu \`/${saved.type} <player>\` opens in game.`)));
+      return;
+    }
+    if (sub === 'import') {
+      const file = interaction.options.getAttachment('file', true);
+      if (file.size > MAX_IMPORT_BYTES) {
+        await safeReply(interaction, errorEmbed('That file is too big. Presets fit in well under 256 KB.'));
+        return;
+      }
+      const response = await fetch(file.url, { signal: AbortSignal.timeout(10000) });
+      if (!response.ok) {
+        await safeReply(interaction, errorEmbed("Couldn't download that file from Discord. Try again."));
+        return;
+      }
+      const parsed = parsePresetFile(await response.text());
+      const count = await PunishmentPresets.saveAll(parsed.presets, interaction.user.id);
+      const rules = parsed.strikeRules ? await StrikeRuleService.replace(parsed.strikeRules) : null;
+      await recordAudit({
+        ...auditInteractionContext(interaction),
+        action: 'config.preset_import',
+        category: 'config',
+        source: 'discord',
+        success: true,
+        targetType: 'preset',
+        targetId: file.name,
+        after: { presets: parsed.presets.map(p => p.name), strikeRules: rules },
+      });
+      const byType = (type: string) => parsed.presets.filter(p => p.type === type).length;
+      const lines = [
+        `Imported **${count}** presets: ${byType('ban')} ban, ${byType('mute')} mute and ${byType('strike')} strike.`,
+        'Presets with the same names were replaced; your other presets were left alone.',
+      ];
+      if (rules) {
+        const ruleLines = rules.rules.map(r => `${r.strikes} → ${describeAction(r.action)}`).join(', ');
+        lines.push('', `**Strike rules:** ${ruleLines || 'none'}; any other number → ${describeAction(rules.otherwise)}.`);
+      }
+      lines.push('-# `/preset list` shows them all.');
+      await safeReply(interaction, successEmbed(lines.join('\n')));
       return;
     }
     if (sub === 'remove') {
