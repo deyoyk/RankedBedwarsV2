@@ -10,7 +10,7 @@ jest.mock('../src/services/PermissionService', () => ({
   PermissionService: { current: () => ({ admin: [], staff: [], player: [], playerEveryone: true }), rolesFor: () => [] },
 }));
 
-import { actionFor, checkAction, defaultsFromConfig, describeAction, StrikeRuleService } from '../src/services/StrikeRuleService';
+import { actionFor, checkAction, compactDuration, defaultsFromConfig, describeAction, StrikeRuleService } from '../src/services/StrikeRuleService';
 import { saveStrikeModal, strikeView } from '../src/commands/general/rbwconfig';
 
 const StrikeRules = require('../src/models/StrikeRules').default;
@@ -83,5 +83,39 @@ describe('the /rbwconfig strike rules page', () => {
     expect(StrikeRuleService.actionFor(6)).toBe('perm');
     expect(text(await saveStrikeModal('strikeadd', 'six', '1d'))).toContain('⚠');
     expect(text(await saveStrikeModal('strikeelse', '', 'warn'))).toContain('Any other number → warning only');
+  });
+
+  test('+duration past the last rule adds that much for every extra strike, and below it is a warning', () => {
+    const settings = { rules: [{ strikes: 3, action: '1h' }, { strikes: 4, action: '1d' }], otherwise: '+2d' };
+    expect(actionFor(settings, 1)).toBe('warn');
+    expect(actionFor(settings, 3)).toBe('1h');
+    expect(actionFor(settings, 4)).toBe('1d');
+    expect(actionFor(settings, 5)).toBe('3d');
+    expect(actionFor(settings, 7)).toBe('7d');
+    expect(describeAction('+2d')).toBe('2d more per strike after the last rule');
+  });
+
+  test('a +duration needs to be a real duration of at least a minute', () => {
+    expect(checkAction('+ 14d')).toBe('+14d');
+    expect(() => checkAction('+10s')).toThrow('at least a minute');
+    expect(() => checkAction('+perm')).toThrow('at least a minute');
+  });
+
+  test('a permanent last rule stays permanent with +duration', () => {
+    expect(actionFor({ rules: [{ strikes: 3, action: 'perm' }], otherwise: '+1d' }, 5)).toBe('perm');
+  });
+
+  test('added-up bans read as days or hours', () => {
+    expect(compactDuration(28 * 86400000)).toBe('28d');
+    expect(compactDuration(36 * 3600000)).toBe('36h');
+    expect(compactDuration(90 * 60000)).toBe('90m');
+  });
+
+  test('a whole set of strike rules can be saved at once', async () => {
+    const saved = await StrikeRuleService.replace({ rules: [{ strikes: 4, action: '1d' }, { strikes: 2, action: '1h' }], otherwise: '+ 1d' });
+    expect(saved.rules.map(r => r.strikes)).toEqual([2, 4]);
+    expect(saved.otherwise).toBe('+1d');
+    expect(StrikeRuleService.actionFor(6)).toBe('3d');
+    expect(text(strikeView())).toContain('1d more per strike after the last rule (fewer strikes: warning only)');
   });
 });

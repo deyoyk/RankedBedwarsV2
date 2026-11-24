@@ -149,7 +149,7 @@ const plural = (n: number) => `${n} strike${n === 1 ? '' : 's'}`;
 export function strikeView(note?: string): View {
   const { rules, otherwise } = StrikeRuleService.current();
   const lines = rules.map(rule => `**${plural(rule.strikes)}** → ${describeAction(rule.action)}`);
-  lines.push(`**Any other number** → ${describeAction(otherwise)}`);
+  lines.push(`**Any other number** → ${describeAction(otherwise)}${otherwise.startsWith('+') ? ' (fewer strikes: warning only)' : ''}`);
   lines.push('-# Each strike a player gets is checked against these. A rule is the total number of strikes they have.');
   if (note) lines.push(`-# ${note}`);
   const embed = themedEmbed('info').setTitle('Strike rules').setDescription(lines.join('\n'));
@@ -188,7 +188,7 @@ export function strikeModal(customId: 'strikeadd' | 'strikeelse'): ModalBuilder 
       .setMaxLength(4);
     modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(strikes));
   } else {
-    action.setValue(StrikeRuleService.current().otherwise);
+    action.setLabel('warn, ban time, perm, or +14d per strike').setValue(StrikeRuleService.current().otherwise);
   }
   return modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(action));
 }

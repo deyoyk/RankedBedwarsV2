@@ -18,8 +18,15 @@ export function defaultsFromConfig(strikes: Record<string, string> = config.stri
 }
 
 export function checkAction(action: string): string {
-  const clean = action.trim().toLowerCase();
+  const clean = action.trim().toLowerCase().replace(/^\+\s*/, '+');
   if (clean === 'warn') {
+    return clean;
+  }
+  if (clean.startsWith('+')) {
+    const step = parseDuration(clean.slice(1));
+    if (step === null || step < 60000) {
+      throw new Error('Adding per strike needs a duration of at least a minute, like `+14d`.');
+    }
     return clean;
   }
   const ms = parseDuration(clean);
@@ -30,12 +37,38 @@ export function checkAction(action: string): string {
 }
 
 export function actionFor(settings: StrikeRuleSettings, strikeCount: number): string {
-  return settings.rules.find(rule => rule.strikes === strikeCount)?.action ?? settings.otherwise;
+  const exact = settings.rules.find(rule => rule.strikes === strikeCount);
+  if (exact) {
+    return exact.action;
+  }
+  if (!settings.otherwise.startsWith('+')) {
+    return settings.otherwise;
+  }
+  const last = settings.rules[settings.rules.length - 1];
+  if (!last || strikeCount < last.strikes) {
+    return 'warn';
+  }
+  const base = parseDuration(last.action);
+  if (base === null) {
+    return last.action;
+  }
+  const step = parseDuration(settings.otherwise.slice(1)) ?? 0;
+  return compactDuration(base + step * (strikeCount - last.strikes));
+}
+
+export function compactDuration(ms: number): string {
+  const minutes = Math.round(ms / 60000);
+  if (minutes % 1440 === 0) return `${minutes / 1440}d`;
+  if (minutes % 60 === 0) return `${minutes / 60}h`;
+  return `${minutes}m`;
 }
 
 export function describeAction(action: string): string {
   if (action === 'warn') {
     return 'warning only';
+  }
+  if (action.startsWith('+')) {
+    return `${action.slice(1)} more per strike after the last rule`;
   }
   return parseDuration(action) === null ? 'permanent rank ban' : `rank ban for ${action}`;
 }
@@ -74,6 +107,16 @@ export class StrikeRuleService {
   static async removeRules(strikes: number[]): Promise<StrikeRuleSettings> {
     const rules = StrikeRuleService.settings.rules.filter(rule => !strikes.includes(rule.strikes));
     return StrikeRuleService.save({ ...StrikeRuleService.settings, rules });
+  }
+
+  static async replace(settings: StrikeRuleSettings): Promise<StrikeRuleSettings> {
+    if (settings.rules.length > MAX_RULES) {
+      throw new Error(`There can be at most ${MAX_RULES} rules.`);
+    }
+    return StrikeRuleService.save({
+      rules: settings.rules.map(rule => ({ strikes: rule.strikes, action: checkAction(rule.action) })),
+      otherwise: checkAction(settings.otherwise),
+    });
   }
 
   static async setOtherwise(action: string): Promise<StrikeRuleSettings> {
