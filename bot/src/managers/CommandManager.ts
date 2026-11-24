@@ -53,6 +53,7 @@ import { removeelo } from '../commands/account/removeelo';
 import { edit } from '../commands/scoring/edit';
 import { queue } from '../commands/queue/queue';
 import { history } from '../commands/moderation/history';
+import { punishment } from '../commands/moderation/punishment';
 import { screenshare } from '../commands/moderation/screenshare';
 import { ssclose } from '../commands/moderation/ssclose';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
@@ -477,6 +478,9 @@ export class CommandManager {
       { name: 'type', description: 'The type of history to view (ban, mute, strike)', type: 3, required: true, choices: [
         { name: 'Ban', value: 'ban' }, { name: 'Mute', value: 'mute' }, { name: 'Strike', value: 'strike' }
       ]}
+    ]);
+    this.reg('punishment', 'See your own punishments', punishment, [
+      { name: 'view', description: 'See your current ban, mute and strikes (only you can see it)', type: 1 } as unknown as ApplicationCommandOptionData
     ]);
     this.reg('screenshare', 'Request a screenshare on a user', screenshare, [
       { name: 'user', description: 'User to screenshare', type: 6, required: true },

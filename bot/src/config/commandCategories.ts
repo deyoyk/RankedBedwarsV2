@@ -18,7 +18,7 @@ const CATEGORY_COMMANDS: Record<CommandCategory, string[]> = {
   player: [
     'help', 'register', 'queues', 'queue', 'games', 'gameinfo', 'maps', 'ranks', 'bonus', 'party', 'call', 'nick',
     'refresh', 'settings', 'statreset', 'claimelo', 'stats', 'leaderboard', 'recentgames', 'level', 'listseasons',
-    'seasoninfo', 'strikerequest', 'voidrequest', 'screenshare',
+    'seasoninfo', 'strikerequest', 'voidrequest', 'screenshare', 'punishment',
   ],
 };
 
