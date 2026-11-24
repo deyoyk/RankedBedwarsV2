@@ -28,7 +28,7 @@ function chainable<T>(result: T): any {
 function mirrorUpdate(user: any) {
   return async (filter: any, update: any) => {
     if (update.$push) {
-      for (const [arr, rec] of Object.entries<any>(update.$push)) user[arr].push(rec);
+      for (const [arr, rec] of Object.entries<any>(update.$push)) user[arr].push(...(rec && rec.$each ? rec.$each : [rec]));
     }
     if (update.$set) {
       for (const [path, value] of Object.entries(update.$set)) {
@@ -335,7 +335,7 @@ describe('StrikeManager.strike', () => {
     const user = mockUser();
     UserModel.findOne.mockResolvedValue(user);
     UserModel.findOneAndUpdate.mockImplementation(async (_filter: unknown, update: any) => {
-      user.strikes.push(update.$push.strikes);
+      user.strikes.push(...update.$push.strikes.$each);
       return user;
     });
 
@@ -406,7 +406,7 @@ describe('StrikeManager.strike', () => {
       const user = mockUser();
       UserModel.findOne.mockResolvedValue(user);
       UserModel.findOneAndUpdate.mockImplementation(async (_filter: unknown, update: any) => {
-        user.strikes.push(update.$push.strikes);
+        user.strikes.push(...update.$push.strikes.$each);
         return user;
       });
 
@@ -414,7 +414,7 @@ describe('StrikeManager.strike', () => {
         .rejects.toThrow('Invalid strike action for strike 1');
       expect(UserModel.updateOne).toHaveBeenCalledWith(
         { discordId: '123' },
-        { $pull: { strikes: { id: expect.any(String) } } }
+        { $pull: { strikes: { id: { $in: [expect.any(String)] } } } }
       );
     } finally {
       rule.mockRestore();

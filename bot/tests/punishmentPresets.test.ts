@@ -30,9 +30,10 @@ const cheating: IPunishmentPreset = {
 };
 const spam: IPunishmentPreset = { name: 'spam', type: 'mute', reason: 'Spam', steps: [{ duration: '1h' }], createdBy: '1', updatedAt: new Date(0) };
 const toxic: IPunishmentPreset = { name: 'toxic', type: 'strike', reason: 'Toxicity', steps: [], createdBy: '1', updatedAt: new Date(0) };
+const throwing: IPunishmentPreset = { name: 'throwing', type: 'strike', reason: 'Throwing', steps: [], strikes: 4, createdBy: '1', updatedAt: new Date(0) };
 
 beforeEach(async () => {
-  PresetModel.find.mockReturnValue(lean([cheating, spam, toxic]));
+  PresetModel.find.mockReturnValue(lean([cheating, spam, toxic, throwing]));
   PresetModel.deleteOne.mockResolvedValue({ deletedCount: 1 });
   await PunishmentPresets.remove('nothing');
 });
@@ -155,8 +156,9 @@ describe('strike presets', () => {
     },
   }) as any;
 
-  test('have no duration and never reach the Minecraft server as a usable preset', () => {
-    expect(describeSteps(toxic)).toBe('no duration');
+  test('show how many strikes they give and never reach the Minecraft server as a usable preset', () => {
+    expect(describeSteps(toxic)).toBe('1 strike');
+    expect(describeSteps(throwing)).toBe('4 strikes');
     expect(toWire(toxic).steps).toEqual([]);
   });
 
@@ -164,9 +166,17 @@ describe('strike presets', () => {
     const managerCall = jest.fn().mockResolvedValue(undefined);
     const config = { commandName: 'strike', successMessage: () => 'ok', managerCall };
     await executeStrikeAction(strikeWith({ preset: 'Toxic' }), config);
-    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'Toxicity');
+    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'Toxicity', 1);
     await executeStrikeAction(strikeWith({ preset: 'toxic', reason: 'Slurs in chat' }), config);
-    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'Slurs in chat');
+    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'Slurs in chat', 1);
+  });
+
+  test('a preset worth several strikes gives them all at once', async () => {
+    const managerCall = jest.fn().mockResolvedValue(undefined);
+    await executeStrikeAction(strikeWith({ preset: 'throwing' }), { commandName: 'strike', successMessage: () => 'ok', managerCall });
+    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'Throwing', 4);
+    await executeStrikeAction(strikeWith({ reason: 'typed' }), { commandName: 'strike', successMessage: () => 'ok', managerCall });
+    expect(managerCall).toHaveBeenLastCalledWith({}, '10', 'mod', 'typed', 1);
   });
 
   test('a ban preset or an unknown one is refused by /strike', async () => {

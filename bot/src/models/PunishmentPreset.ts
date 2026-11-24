@@ -12,6 +12,7 @@ export interface IPunishmentPreset {
   type: PresetType;
   reason: string;
   steps: IPresetStep[];
+  strikes?: number;
   createdBy: string;
   updatedAt: Date;
 }
@@ -25,6 +26,7 @@ const PunishmentPresetSchema = new Schema<IPunishmentPreset>({
     duration: { type: String, required: true },
     reason: { type: String }
   }],
+  strikes: { type: Number, min: 1, max: 10 },
   createdBy: { type: String, required: true },
   updatedAt: { type: Date, default: () => new Date() }
 });

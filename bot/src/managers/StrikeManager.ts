@@ -35,7 +35,7 @@ export class StrikeManager {
     return StrikeManager.instance;
   }
 
-  public static async strike(guild: Guild, targetId: string, moderatorId: string, reason: string): Promise<{ strikeCount: number; actionTaken: string }> {
+  public static async strike(guild: Guild, targetId: string, moderatorId: string, reason: string, count = 1): Promise<{ strikeCount: number; actionTaken: string }> {
     const instance = StrikeManager.getInstance();
     const operation = createPendingOperation(targetId, moderatorId, reason);
 
@@ -47,17 +47,19 @@ export class StrikeManager {
         throw new Error('Invalid strike parameters');
       }
 
-      const strikeId = generatePunishmentId();
-      const strikeRecord = {
-        id: strikeId,
+      const given = Math.max(1, Math.min(10, Math.floor(count)));
+      const date = new Date();
+      const strikeRecords = Array.from({ length: given }, () => ({
+        id: generatePunishmentId(),
         reason: reason.trim(),
-        date: new Date(),
+        date,
         moderator: moderatorId
-      };
+      }));
+      const strikeId = strikeRecords[0].id;
 
       const updated = await User.findOneAndUpdate(
         { discordId: targetId },
-        { $push: { strikes: strikeRecord } },
+        { $push: { strikes: { $each: strikeRecords } } },
         { new: true }
       );
       if (!updated) {
@@ -74,7 +76,7 @@ export class StrikeManager {
           parseDuration(action);
           banDuration = action;
         } catch {
-          await User.updateOne({ discordId: targetId }, { $pull: { strikes: { id: strikeId } } });
+          await User.updateOne({ discordId: targetId }, { $pull: { strikes: { id: { $in: strikeRecords.map(r => r.id) } } } });
           throw new Error(`Invalid strike action for strike ${strikeCount}: "${action}" (expected "warn" or a duration)`);
         }
       }

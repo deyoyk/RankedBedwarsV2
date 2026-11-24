@@ -174,7 +174,7 @@ export async function executeUnmoderationAction(
 export interface StrikeActionConfig {
   commandName: string;
   successMessage: (targetId: string, reason: string) => string;
-  managerCall: (guild: Guild, targetId: string, issuerId: string, reason: string) => Promise<unknown>;
+  managerCall: (guild: Guild, targetId: string, issuerId: string, reason: string, count: number) => Promise<unknown>;
 }
 
 export async function executeStrikeAction(
@@ -194,6 +194,7 @@ export async function executeStrikeAction(
 
   const presetName = config.commandName === 'strike' ? interaction.options.getString('preset') : null;
   let reason = interaction.options.getString('reason') || '';
+  let count = 1;
   if (presetName) {
     const preset = await PunishmentPresets.get(presetName);
     if (!preset || preset.type !== 'strike') {
@@ -203,13 +204,14 @@ export async function executeStrikeAction(
       return;
     }
     reason = reason || preset.reason;
+    count = preset.strikes ?? 1;
   }
   reason = reason || 'No reason provided';
 
   try {
-    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, reason);
+    await config.managerCall(parsed.guild, parsed.targetId, parsed.issuerId, reason, count);
     await safeReply(interaction, successEmbed(
-      config.successMessage(parsed.targetId, reason),
+      config.successMessage(parsed.targetId, reason) + (count > 1 ? `\n**Strikes given:** ${count}` : ''),
       undefined,
       false
     ));

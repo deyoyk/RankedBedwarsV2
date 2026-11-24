@@ -1,3 +1,4 @@
+import type { UpdateQuery } from 'mongoose';
 import PunishmentPreset, { IPresetStep, IPunishmentPreset, PresetType } from '../models/PunishmentPreset';
 import { parseDuration } from '../utils/parseDuration';
 
@@ -65,7 +66,35 @@ export function toWire(preset: IPunishmentPreset): WirePreset {
   };
 }
 
+export function cleanPresetName(name: string): string {
+  const clean = name.trim().toLowerCase();
+  if (!PRESET_NAME.test(clean)) {
+    throw new Error('A preset name is 1-32 letters, numbers, `-` or `_`, like `cheating`.');
+  }
+  return clean;
+}
+
+export function checkStrikes(strikes: number | undefined): number | undefined {
+  if (strikes === undefined) return undefined;
+  if (!Number.isInteger(strikes) || strikes < 1 || strikes > 10) {
+    throw new Error('A strike preset gives 1 to 10 strikes.');
+  }
+  return strikes;
+}
+
+function presetUpdate(type: PresetType, steps: IPresetStep[], reason: string, createdBy: string,
+                      strikes?: number): UpdateQuery<IPunishmentPreset> {
+  const set = { type, steps, reason: reason.trim(), createdBy, updatedAt: new Date() };
+  return type === 'strike' && strikes !== undefined
+    ? { $set: { ...set, strikes: checkStrikes(strikes) } }
+    : { $set: set, $unset: { strikes: 1 as const } };
+}
+
 export function describeSteps(preset: IPunishmentPreset): string {
+  if (preset.type === 'strike') {
+    const count = preset.strikes ?? 1;
+    return `${count} strike${count === 1 ? '' : 's'}`;
+  }
   if (preset.steps.length === 0) {
     return 'no duration';
   }
@@ -88,18 +117,29 @@ export class PunishmentPresets {
     return (await this.all()).find(preset => preset.name === wanted) ?? null;
   }
 
-  static async save(name: string, type: PresetType, steps: IPresetStep[], reason: string, createdBy: string): Promise<IPunishmentPreset> {
-    const cleanName = name.trim().toLowerCase();
-    if (!PRESET_NAME.test(cleanName)) {
-      throw new Error('A preset name is 1-32 letters, numbers, `-` or `_`, like `cheating`.');
-    }
+  static async save(name: string, type: PresetType, steps: IPresetStep[], reason: string, createdBy: string,
+                    strikes?: number): Promise<IPunishmentPreset> {
     const saved = await PunishmentPreset.findOneAndUpdate(
-      { name: cleanName },
-      { $set: { type, steps, reason: reason.trim(), createdBy, updatedAt: new Date() } },
+      { name: cleanPresetName(name) },
+      presetUpdate(type, steps, reason, createdBy, strikes),
       { upsert: true, new: true }
     ).lean<IPunishmentPreset>();
     await this.changed();
     return saved as IPunishmentPreset;
+  }
+
+  static async saveAll(presets: Array<{ name: string; type: PresetType; steps: IPresetStep[]; reason: string; strikes?: number }>,
+                       createdBy: string): Promise<number> {
+    const operations = presets.map(p => ({
+      updateOne: {
+        filter: { name: cleanPresetName(p.name) },
+        update: presetUpdate(p.type, p.steps, p.reason, createdBy, p.strikes),
+        upsert: true,
+      },
+    }));
+    await PunishmentPreset.bulkWrite(operations);
+    await this.changed();
+    return operations.length;
   }
 
   static async remove(name: string): Promise<boolean> {

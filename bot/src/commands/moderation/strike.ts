@@ -7,6 +7,6 @@ export async function strike(interaction: ChatInputCommandInteraction, _wsManage
   await executeStrikeAction(interaction, {
     commandName: 'strike',
     successMessage: (targetId, reason) => `Strike issued to <@${targetId}>.\n**Reason:** ${reason}`,
-    managerCall: (guild, targetId, issuerId, reason) => StrikeManager.strike(guild, targetId, issuerId, reason)
+    managerCall: (guild, targetId, issuerId, reason, count) => StrikeManager.strike(guild, targetId, issuerId, reason, count)
   });
 }
