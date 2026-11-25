@@ -731,6 +731,12 @@ export class WorkersManager {
     return err.code === 429 || err.status === 429 || err.rawError?.code === 429;
   }
 
+  private isUnknownChannelError(error: unknown): boolean {
+    const err = this.asErrorRecord(error);
+    if (!err) return false;
+    return (err.code ?? err.rawError?.code) === 10003;
+  }
+
   private asErrorRecord(error: unknown): {
     code?: unknown;
     status?: unknown;
@@ -799,10 +805,15 @@ export class WorkersManager {
   private async executeChannelStatus(client: Client, data: WorkerTaskData): Promise<void> {
     const channelId = data.channelId as string;
     if (!channelId) throw new Error('Channel id is required');
-    await client.rest.put(`/channels/${channelId}/voice-status`, {
-      body: { status: data.status as string | null },
-      reason: 'Queue channel status update',
-    });
+    try {
+      await client.rest.put(`/channels/${channelId}/voice-status`, {
+        body: { status: data.status as string | null },
+        reason: 'Queue channel status update',
+      });
+    } catch (error) {
+      if (this.isUnknownChannelError(error)) return;
+      throw error;
+    }
   }
 
   private async executeThreadMemberAdd(client: Client, data: WorkerTaskData): Promise<void> {

@@ -102,6 +102,21 @@ describe('WorkersManager race conditions', () => {
     );
   });
 
+  it('drops a voice status update for a channel that was already deleted', async () => {
+    const client: any = {
+      guilds: { cache: { first: () => ({}) } },
+      rest: {
+        put: jest.fn().mockRejectedValue(Object.assign(new Error('Unknown Channel'), { code: 10003, status: 404 }))
+      }
+    };
+    const manager = new (WorkersManager as any)(client) as WorkersManager;
+    managers.push(manager);
+    (manager as any).isEnabled = false;
+
+    await expect(manager.setChannelStatus('channel-1', '3/8')).resolves.toBeUndefined();
+    expect(client.rest.put).toHaveBeenCalledTimes(1);
+  });
+
   it('concurrent addTask calls each get a unique task id', async () => {
     const manager = makeManager();
     (manager as any).isEnabled = true;
