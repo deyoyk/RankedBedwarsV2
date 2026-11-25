@@ -76,6 +76,8 @@ const FAILURE_QUARANTINE_MS = intEnv('WORKER_FAILURE_QUARANTINE_MS', 15000, 1000
 const DEFAULT_RATE_LIMIT_WAIT_MS = intEnv('WORKER_RATE_LIMIT_WAIT_MS', 1500, 250, 60000);
 const RATE_LIMIT_MEMORY_MS = intEnv('WORKER_RATE_LIMIT_MEMORY_MS', 30000, 1000, 300000);
 const MAX_QUEUE_SIZE = intEnv('WORKER_QUEUE_MAX', 500, 50, 100000);
+const WORKER_LOGIN_ATTEMPTS = intEnv('WORKER_LOGIN_ATTEMPTS', 4, 1, 10);
+const WORKER_LOGIN_RETRY_BASE_MS = intEnv('WORKER_LOGIN_RETRY_BASE_MS', 2000, 100, 60000);
 const ROUTE_IDLE_CLEANUP_MS = 300000;
 
 export class WorkersManager {
@@ -143,39 +145,10 @@ export class WorkersManager {
 
     try {
       const initPromises = config.workers.tokens.map(async (token, index) => {
-        try {
-          const client = new Client({
-            intents: [
-              'Guilds',
-              'GuildMessages',
-              'GuildVoiceStates',
-              'MessageContent',
-              'GuildMembers',
-            ],
-          });
-
-          const workerClient = this.createWorkerClient(client);
-
-          client.once('clientReady', () => {
-            workerClient.isReady = true;
-            console.log(`[WorkersManager] Worker ${index + 1} ready: ${client.user?.tag}`);
-          });
-
-          client.on('error', (error) => {
-            console.error(`[WorkersManager] Worker ${index + 1} error:`, error);
-          });
-
-          client.rest.on('rateLimited', (info: RateLimitInfo) => {
-            this.handleRateLimit(workerClient, info);
-          });
-
-          await client.login(token);
-          this.workers.push(workerClient);
-
-          console.log(`[WorkersManager] Worker ${index + 1} initialized successfully`);
-        } catch (error) {
-          console.error(`[WorkersManager] Failed to initialize worker ${index + 1}:`, error);
-        }
+        const workerClient = await this.loginWorker(token, index);
+        if (!workerClient) return;
+        this.workers.push(workerClient);
+        console.log(`[WorkersManager] Worker ${index + 1} initialized successfully`);
       });
 
       await Promise.allSettled(initPromises);
@@ -197,6 +170,63 @@ export class WorkersManager {
       console.error('[WorkersManager] Failed to initialize workers:', error);
       this.isEnabled = false;
     }
+  }
+
+  private async loginWorker(token: string, index: number): Promise<WorkerClient | null> {
+    for (let attempt = 1; attempt <= WORKER_LOGIN_ATTEMPTS; attempt += 1) {
+      const client = new Client({
+        intents: [
+          'Guilds',
+          'GuildMessages',
+          'GuildVoiceStates',
+          'MessageContent',
+          'GuildMembers',
+        ],
+      });
+
+      const workerClient = this.createWorkerClient(client);
+
+      client.once('clientReady', () => {
+        workerClient.isReady = true;
+        console.log(`[WorkersManager] Worker ${index + 1} ready: ${client.user?.tag}`);
+      });
+
+      client.on('error', (error) => {
+        console.error(`[WorkersManager] Worker ${index + 1} error:`, error);
+      });
+
+      client.rest.on('rateLimited', (info: RateLimitInfo) => {
+        this.handleRateLimit(workerClient, info);
+      });
+
+      try {
+        await client.login(token);
+        return workerClient;
+      } catch (error) {
+        client.destroy();
+
+        if (attempt >= WORKER_LOGIN_ATTEMPTS) {
+          console.warn(
+            `[WorkersManager] Worker ${index + 1} could not log in after ${attempt} attempt(s); continuing without it:`,
+            error,
+          );
+          return null;
+        }
+
+        const delay = WORKER_LOGIN_RETRY_BASE_MS * 2 ** (attempt - 1);
+        console.warn(
+          `[WorkersManager] Worker ${index + 1} login attempt ${attempt}/${WORKER_LOGIN_ATTEMPTS} failed, retrying in ${delay}ms:`,
+          error,
+        );
+        await this.sleep(delay);
+      }
+    }
+
+    return null;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private createWorkerClient(client: Client): WorkerClient {
