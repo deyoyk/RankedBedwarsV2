@@ -21,9 +21,24 @@ describe('WorkersManager race conditions', () => {
     }
   });
 
-  it('a task that stays queued (no workers) times out and is removed, never executed later', async () => {
+  it('a task that waits too long in the queue runs on the main client instead of being dropped', async () => {
     jest.useFakeTimers();
-    const manager = makeManager();
+    const deleted: string[] = [];
+    const guild: any = {
+      channels: {
+        cache: {
+          get: (id: string) => ({
+            isVoiceBased: () => false,
+            delete: async () => {
+              deleted.push(id);
+            },
+          }),
+        },
+      },
+    };
+    const client: any = { guilds: { cache: { first: () => guild } } };
+    const manager = new (WorkersManager as any)(client) as WorkersManager;
+    managers.push(manager);
     (manager as any).isEnabled = true;
     (manager as any).workers = [];
 
@@ -31,10 +46,25 @@ describe('WorkersManager race conditions', () => {
     expect((manager as any).taskQueue.get(5)).toHaveLength(1);
 
     jest.advanceTimersByTime(31000);
-    await expect(taskPromise).rejects.toThrow('Task timeout');
+    await expect(taskPromise).resolves.toBeUndefined();
+    expect(deleted).toEqual(['x']);
     expect((manager as any).taskQueue.get(5)).toHaveLength(0);
 
     jest.advanceTimersByTime(60000);
+    expect(deleted).toEqual(['x']);
+    jest.useRealTimers();
+  });
+
+  it('still rejects a channel creation that timed out before it started', async () => {
+    jest.useFakeTimers();
+    const manager = makeManager();
+    (manager as any).isEnabled = true;
+    (manager as any).workers = [];
+
+    const taskPromise = manager.createChannel({ name: 'x' } as any, 5).catch((error) => error);
+    jest.advanceTimersByTime(31000);
+
+    await expect(taskPromise).resolves.toEqual(expect.objectContaining({ message: 'Task timeout (channel_create)' }));
     expect((manager as any).taskQueue.get(5)).toHaveLength(0);
     jest.useRealTimers();
   });

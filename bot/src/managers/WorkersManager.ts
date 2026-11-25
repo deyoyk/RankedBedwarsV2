@@ -702,9 +702,28 @@ export class WorkersManager {
 
   private handleTaskTimeout(task: WorkerTask): void {
     if (task.state !== 'queued') return;
-    task.state = 'done';
     this.detachTask(task);
-    task.reject?.(new Error(`Task timeout (${task.type})`));
+    task.timeout = undefined;
+
+    if (task.type === 'channel_create' || task.type === 'message_send') {
+      task.state = 'done';
+      task.reject?.(new Error(`Task timeout (${task.type})`));
+      return;
+    }
+
+    console.warn(
+      `[WorkersManager] Task ${task.id} (${task.type}) waited too long for a worker; running it on the main client`,
+    );
+    task.state = 'running';
+    this.executeTaskOnMainClient(task.type, task.data)
+      .then((result) => {
+        task.state = 'done';
+        task.resolve?.(result);
+      })
+      .catch((error) => {
+        task.state = 'done';
+        task.reject?.(error);
+      });
   }
 
   private async resolveGuild(client: Client): Promise<Guild> {

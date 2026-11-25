@@ -59,14 +59,16 @@ export async function fix(guild: Guild, discordId: string, preloaded?: FixUserIn
   const nonRegisteredRole = config.roles.nonRegistered;
   const eloRanks = await getEloRanks();
   const eloRoleIds = eloRanks.map(r => r.roleId);
+  const existingRoles = (roleIds: string[]): string[] =>
+    [...new Set(roleIds)].filter(roleId => roleId.length > 0 && guild.roles.cache.has(roleId));
 
   if (!user) {
 
-    const rolesToAdd = member.roles.cache.has(nonRegisteredRole) ? [] : [nonRegisteredRole];
-    const rolesToRemove = [
+    const rolesToAdd = existingRoles(member.roles.cache.has(nonRegisteredRole) ? [] : [nonRegisteredRole]);
+    const rolesToRemove = existingRoles([
       ...(member.roles.cache.has(registeredRole) ? [registeredRole] : []),
       ...eloRoleIds.filter(roleId => member.roles.cache.has(roleId))
-    ];
+    ]);
 
     if (rolesToAdd.length > 0 || rolesToRemove.length > 0) {
       await workersManager.updateMemberRoles(discordId, rolesToAdd, rolesToRemove, 6);
@@ -103,8 +105,10 @@ export async function fix(guild: Guild, discordId: string, preloaded?: FixUserIn
   }
 
 
-  if (rolesToAdd.length > 0 || rolesToRemove.length > 0) {
-    await workersManager.updateMemberRoles(discordId, rolesToAdd, rolesToRemove, 6);
+  const validAdd = existingRoles(rolesToAdd);
+  const validRemove = existingRoles(rolesToRemove);
+  if (validAdd.length > 0 || validRemove.length > 0) {
+    await workersManager.updateMemberRoles(discordId, validAdd, validRemove, 6);
   }
 
 
