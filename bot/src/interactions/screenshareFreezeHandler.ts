@@ -91,7 +91,7 @@ export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
     
     try {
       const targetMention = `<@${session.targetId}>`;
-      const freezeEmbed = ScreenshareService.createFreezeEmbed(session.targetId);
+      const freezeEmbed = ScreenshareService.createFreezeEmbed(session.targetId, session.waitingForGame === true);
       
       await channel.send({ 
         content: targetMention, 

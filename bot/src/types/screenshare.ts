@@ -13,6 +13,7 @@ export interface ScreenshareSessionResult {
 
 export interface ScreenshareCreateOptions {
   fromGame?: boolean;
+  untilGameEnd?: boolean;
 }
 
 export interface ScreensharePostResult {

@@ -11,6 +11,8 @@ export interface IScreenshareSession extends Document {
   freezeTime?: Date;
   takenBy?: string;
   takenTime?: Date;
+  waitingForGame?: boolean;
+  threadId?: string;
   expireTime: Date;
   actions: Array<{
     action: 'freeze' | 'take' | 'admit' | 'deny' | 'close' | 'expire' | 'cancel';
@@ -34,6 +36,8 @@ const ScreenshareSessionSchema: Schema = new Schema({
   freezeTime: { type: Date },
   takenBy: { type: String },
   takenTime: { type: Date },
+  waitingForGame: { type: Boolean },
+  threadId: { type: String },
   expireTime: { type: Date, required: true },
   actions: [
     {

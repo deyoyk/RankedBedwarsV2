@@ -4,6 +4,7 @@ jest.mock('../src/models/ScreenshareSession', () => ({
     create: jest.fn(),
     findOne: jest.fn(),
     findOneAndUpdate: jest.fn(),
+    updateOne: jest.fn().mockResolvedValue({}),
     countDocuments: jest.fn()
   }
 }));
@@ -137,6 +138,32 @@ describe('in-game screenshare requests (autoss)', () => {
       expiresAt: created.expireTime.getTime()
     });
     expect(sent(ws)).toEqual([{ type: 'autoss_success', uuid: 'u-1' }]);
+  });
+
+  it('opens the ticket at once during the game and holds its timer until the game ends', async () => {
+    const { guild, requestsChannel, thread } = makeGuild();
+    const ws = makeWs(guild);
+    const before = Date.now();
+
+    await ws.handleAutoSS({ type: 'autoss', targetign: 'Steve', requestign: 'Mod', uuid: 'u-2', reason: 'reach', untilgameend: true });
+
+    const created = SessionModel.create.mock.calls[0][0];
+    expect(created.waitingForGame).toBe(true);
+    expect(created.expireTime.getTime()).toBeGreaterThanOrEqual(before + 2 * 60 * 60 * 1000);
+    expect(requestsChannel.send).toHaveBeenCalledTimes(1);
+    expect(requestsChannel.send.mock.calls[0][0].embeds[0].toJSON().description).toContain('10 minutes after the game ends');
+    expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({ content: '<@&ssrole> <@mod1> <@target1>' }));
+    expect(sent(ws)).toEqual([{ type: 'autoss_success', uuid: 'u-2' }]);
+  });
+
+  it('starts the timer straight away for a request made after the game', async () => {
+    const { guild } = makeGuild();
+    const ws = makeWs(guild);
+
+    await ws.handleAutoSS({ type: 'autoss', targetign: 'Steve', requestign: 'Mod', uuid: 'u-3', reason: 'reach' });
+
+    const created = SessionModel.create.mock.calls[0][0];
+    expect(created.waitingForGame).toBeUndefined();
   });
 
   it('leaves the request channel alone for a target who can already see it', async () => {
@@ -385,6 +412,8 @@ describe('screenshare session expiry', () => {
 
     expect(posted).toEqual({ success: true, threadId: 'thread1' });
     expect(register).toHaveBeenCalledWith({ ign: 'Steve', sessionId: 'S1', threadId: 'thread1', expiresAt: expireTime.getTime() });
+    expect(require('../src/models/ScreenshareSession').default.updateOne)
+      .toHaveBeenCalledWith({ sessionId: 'S1' }, { $set: { threadId: 'thread1' } });
     global._wsManager = undefined;
   });
 });

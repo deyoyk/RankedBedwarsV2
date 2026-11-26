@@ -16,6 +16,8 @@ export class ScreenshareService {
   static readonly SESSION_TIMEOUT = 15 * 60 * 1000;
   static readonly FREEZE_TIMEOUT = 10 * 60 * 1000;
   static readonly TAKEN_TIMEOUT = 105 * 60 * 1000;
+  static readonly GAME_END_TIMEOUT = 10 * 60 * 1000;
+  static readonly GAME_WAIT_LIMIT = 2 * 60 * 60 * 1000;
   private static readonly MAX_ACTIVE_SESSIONS_PER_USER = 1;
   private static readonly MAX_REASON_LENGTH = 500;
   private static readonly MIN_REASON_LENGTH = 10;
@@ -172,7 +174,8 @@ export class ScreenshareService {
 
       
       const sessionId = this.generateSessionId();
-      const expireTime = new Date(Date.now() + this.SESSION_TIMEOUT);
+      const waitingForGame = fromGame && options.untilGameEnd === true;
+      const expireTime = new Date(Date.now() + (waitingForGame ? this.GAME_WAIT_LIMIT : this.SESSION_TIMEOUT));
 
       let session;
       try {
@@ -184,6 +187,7 @@ export class ScreenshareService {
           reason: reason.trim(),
           imageUrl,
           status: 'pending',
+          ...(waitingForGame ? { waitingForGame: true } : {}),
           expireTime,
           actions: [{
             action: 'freeze',
@@ -300,7 +304,7 @@ export class ScreenshareService {
             status: 'frozen',
             freezeTime: new Date(),
             channelId: channel.id,
-            expireTime: new Date(Date.now() + this.FREEZE_TIMEOUT)
+            expireTime: session.waitingForGame ? session.expireTime : new Date(Date.now() + this.FREEZE_TIMEOUT)
           },
           $push: {
             actions: {
@@ -390,6 +394,60 @@ export class ScreenshareService {
     }
   }
 
+  static async startAfterGame(guild: Guild, targetIgns: string[]): Promise<number> {
+    const igns = targetIgns.filter(ign => typeof ign === 'string' && ign.length > 0);
+    if (igns.length === 0) return 0;
+    try {
+      const sessions = await ScreenshareSession.find({
+        status: { $in: ['pending', 'frozen'] },
+        waitingForGame: true,
+        targetIgn: { $in: igns }
+      }).collation({ locale: 'en', strength: 2 });
+
+      let started = 0;
+      for (const session of sessions) {
+        if (session.takenBy) {
+          await ScreenshareSession.updateOne({ sessionId: session.sessionId }, { $unset: { waitingForGame: '' } });
+          continue;
+        }
+        const expireTime = new Date(Date.now() + this.GAME_END_TIMEOUT);
+        const updated = await ScreenshareSession.findOneAndUpdate(
+          { sessionId: session.sessionId, status: { $in: ['pending', 'frozen'] }, waitingForGame: true, takenBy: { $exists: false } },
+          { $set: { expireTime }, $unset: { waitingForGame: '' } },
+          { new: true }
+        );
+        if (!updated) continue;
+        started++;
+
+        const wsManager = global._wsManager;
+        if (updated.threadId && wsManager && typeof wsManager.registerScreenshareThread === 'function') {
+          wsManager.registerScreenshareThread({
+            ign: updated.targetIgn,
+            sessionId: updated.sessionId,
+            threadId: updated.threadId,
+            expiresAt: expireTime.getTime()
+          });
+        }
+
+        const closes = Math.floor(expireTime.getTime() / 1000);
+        const notice = `The game is over. This screenshare closes <t:${closes}:R> unless a screensharer takes it.`;
+        for (const channelId of [updated.threadId, updated.channelId]) {
+          if (!channelId) continue;
+          const channel = guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
+          if (channel && channel.isTextBased()) {
+            await channel.send(notice).catch(error => {
+              console.warn(`[ScreenshareService] Could not post the game-end notice in ${channelId}:`, error);
+            });
+          }
+        }
+      }
+      return started;
+    } catch (error) {
+      console.error('[ScreenshareService] Error starting screenshare timers after the game:', error);
+      return 0;
+    }
+  }
+
   static async expireSessions(guild: Guild): Promise<number> {
     try {
       const now = new Date();
@@ -469,7 +527,7 @@ export class ScreenshareService {
     }
   }
 
-  static createFreezeEmbed(_targetId: string): EmbedBuilder {
+  static createFreezeEmbed(_targetId: string, waitingForGame = false): EmbedBuilder {
     return themedEmbed('error')
       .setTitle('Screenshare Freeze')
       .setDescription(
@@ -481,7 +539,9 @@ export class ScreenshareService {
         `- Admitting to cheating results in a 14 day ban.\n` +
         `- If broken rules are found during screenshare, you will be punished.\n\n` +
         `**AnyDesk:** https://anydesk.com/en\n\n` +
-        `-# The ticket closes in ${this.FREEZE_TIMEOUT / 60000} minutes unless a screensharer takes it.`
+        (waitingForGame
+          ? `-# The game is still going. The ticket closes ${this.GAME_END_TIMEOUT / 60000} minutes after it ends unless a screensharer takes it.`
+          : `-# The ticket closes in ${this.FREEZE_TIMEOUT / 60000} minutes unless a screensharer takes it.`)
       );
   }
 
@@ -557,7 +617,9 @@ export class ScreenshareService {
         `**Target:** <@${session.targetId}>\n` +
         `**Requester:** <@${session.requesterId}>\n` +
         `**Reason:** ${session.reason}\n` +
-        `**Expires:** ${this.SESSION_TIMEOUT / 60000} minutes`
+        (session.waitingForGame
+          ? `**Expires:** ${this.GAME_END_TIMEOUT / 60000} minutes after the game ends`
+          : `**Expires:** ${this.SESSION_TIMEOUT / 60000} minutes`)
       );
     if (imageUrl) {
       embed.setImage(imageUrl);
@@ -644,6 +706,9 @@ export class ScreenshareService {
         await thread.send(`**${options.targetName}** left the server.`);
       }
       threadId = thread.id;
+      await ScreenshareSession.updateOne({ sessionId: session.sessionId }, { $set: { threadId } }).catch(error => {
+        console.warn(`[ScreenshareService] Could not save thread ${threadId} for ${session.sessionId}:`, error);
+      });
     } catch (error) {
       console.error('[ScreenshareService] Failed to create request thread:', error);
       return fail('Failed to create screenshare thread.');

@@ -188,6 +188,12 @@ interface AutoSSPayload {
   uuid: string;
   reason?: string;
   loggedoff?: boolean;
+  untilgameend?: boolean;
+}
+
+interface AutoSSGameEndPayload {
+  type: 'autoss_game_end';
+  targetigns: string[];
 }
 
 interface PlayerStatusUpdatePayload {
@@ -425,6 +431,7 @@ type IncomingPayload =
   | QueueStatusPayload
   | PrivateFromInGamePayload
   | AutoSSPayload
+  | AutoSSGameEndPayload
   | PlayerStatusUpdatePayload
   | ScreenShareDontLogPayload
   | ScreenShareDontLogSuccessPayload
@@ -459,6 +466,13 @@ type IncomingPayload =
 
 export class WebSocketManager {
   
+  private async handleAutoSSGameEnd(msg: AutoSSGameEndPayload) {
+    const guild = this.discordClient?.guilds.cache.first();
+    if (!guild || !Array.isArray(msg.targetigns)) return;
+    const { ScreenshareService } = await import('../services/ScreenshareService');
+    await ScreenshareService.startAfterGame(guild, msg.targetigns);
+  }
+
   private async handleAutoSS(msg: AutoSSPayload) {
     const { targetign, requestign, uuid } = msg;
     const fail = (error: string) => this.send({ type: 'autoss_fail', uuid, error });
@@ -496,7 +510,7 @@ export class WebSocketManager {
         requesterUser.discordId,
         reason,
         '',
-        { fromGame: true }
+        { fromGame: true, untilGameEnd: msg.untilgameend === true }
       );
       if (!result.success) {
         fail(result.error ?? 'Failed to create screenshare session');
@@ -775,6 +789,9 @@ export class WebSocketManager {
     switch (msg.type) {
       case 'autoss':
         await this.handleAutoSS(msg);
+        break;
+      case 'autoss_game_end':
+        await this.handleAutoSSGameEnd(msg);
         break;
       case 'player_status_update':
         await this.handlePlayerStatusUpdate(msg);
