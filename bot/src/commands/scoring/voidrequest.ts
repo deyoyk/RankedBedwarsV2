@@ -132,8 +132,8 @@ function createVoidRequestEmbed(data: VoidRequestData, game: IGame): EmbedBuilde
       { name: 'Map', value: `\`${game?.map ? formatMapName(game.map) : 'Unknown'}\``, inline: true },
       { name: 'Status', value: `\`${game?.state || 'unknown'}\``, inline: true },
       { name: 'Needed', value: `\`${needed} votes\``, inline: true },
-      { name: 'Team 1 · Red', value: mentions(game?.team1), inline: true },
-      { name: 'Team 2 · Green', value: mentions(game?.team2), inline: true }
+      { name: 'Team 1 · Green', value: mentions(game?.team1), inline: true },
+      { name: 'Team 2 · Red', value: mentions(game?.team2), inline: true }
     )
     .setTimestamp();
 }

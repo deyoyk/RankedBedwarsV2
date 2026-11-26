@@ -97,7 +97,7 @@ function buildEmbed(game: IGame, players: Map<string, PlayerView>, guild: Guild 
   };
 
   const teamField = (team: number, ids: string[]) => ({
-    name: `Team ${team} · ${team === 1 ? 'Red' : 'Green'}${winningTeam === team ? ' 🏆' : ''}`,
+    name: `Team ${team} · ${team === 1 ? 'Green' : 'Red'}${winningTeam === team ? ' 🏆' : ''}`,
     value: ids.length ? ids.map(id => playerLine(id, team)).join('\n') : '*None*',
     inline: false,
   });
