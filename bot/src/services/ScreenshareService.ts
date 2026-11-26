@@ -7,14 +7,15 @@ import { v4 as uuidv4 } from 'uuid';
 import { embedsFor } from '../utils/betterembed';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 import { isTargetThreadAccess, screenshareThreadPing, TARGET_THREAD_ACCESS } from './screenshareAccess';
-import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareCreateOptions, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreensharePostOptions, ScreensharePostResult, ScreenshareSessionResult, ScreenshareValidationResult } from '../types/screenshare';
+import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareCreateOptions, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreensharePostOptions, ScreensharePostResult, ScreenshareSessionResult, ScreenshareTakeResult, ScreenshareValidationResult } from '../types/screenshare';
 import { recordAudit } from './AuditService';
 
 const { themedEmbed } = embedsFor('Screenshare');
 
 export class ScreenshareService {
   static readonly SESSION_TIMEOUT = 15 * 60 * 1000;
-  private static readonly FREEZE_TIMEOUT = 5 * 60 * 1000; 
+  static readonly FREEZE_TIMEOUT = 10 * 60 * 1000;
+  static readonly TAKEN_TIMEOUT = 105 * 60 * 1000;
   private static readonly MAX_ACTIVE_SESSIONS_PER_USER = 1;
   private static readonly MAX_REASON_LENGTH = 500;
   private static readonly MIN_REASON_LENGTH = 10;
@@ -395,7 +396,7 @@ export class ScreenshareService {
       const sessions = await ScreenshareSession.find({
         status: { $in: ['pending', 'frozen'] },
         expireTime: { $lte: now }
-      }).select('sessionId targetId targetIgn channelId').lean();
+      }).select('sessionId targetId targetIgn requesterId channelId').lean();
 
       if (sessions.length === 0) return 0;
 
@@ -472,15 +473,80 @@ export class ScreenshareService {
     return themedEmbed('error')
       .setTitle('Screenshare Freeze')
       .setDescription(
-        `You have 5 minutes to download AnyDesk and follow the instructions below.\n\n` +
+        `You have ${this.FREEZE_TIMEOUT / 60000} minutes to download AnyDesk and follow the instructions below.\n\n` +
         `- Do not log out of the server.\n` +
         `- Do not unplug or plug in any devices.\n` +
         `- Do not delete, rename, or modify any files.\n` +
         `- Refusing screenshare results in a 14 day ban.\n` +
         `- Admitting to cheating results in a 14 day ban.\n` +
         `- If broken rules are found during screenshare, you will be punished.\n\n` +
-        `**AnyDesk:** https://anydesk.com/en`
+        `**AnyDesk:** https://anydesk.com/en\n\n` +
+        `-# The ticket closes in ${this.FREEZE_TIMEOUT / 60000} minutes unless a screensharer takes it.`
       );
+  }
+
+  static createTakeButton(sessionId: string): ActionRowBuilder<ButtonBuilder> {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`ss_take_${sessionId}`)
+        .setLabel('Take screenshare')
+        .setStyle(ButtonStyle.Success)
+    );
+  }
+
+  static createTakenEmbed(session: IScreenshareSession, screensharerId: string, expireTime: Date): EmbedBuilder {
+    const closes = Math.floor(expireTime.getTime() / 1000);
+    return themedEmbed('success')
+      .setTitle('Screenshare Taken')
+      .setDescription(
+        `<@${screensharerId}> is screensharing <@${session.targetId}>.\n` +
+        `**Ticket closes:** <t:${closes}:R> (<t:${closes}:t>)\n\n` +
+        `-# Close it earlier with /ssclose when the screenshare is done.`
+      );
+  }
+
+  static async takeSession(guild: Guild, sessionId: string, screensharerId: string): Promise<ScreenshareTakeResult> {
+    try {
+      const permissionCheck = await this.checkScreensharePermissions(guild, screensharerId);
+      if (!permissionCheck.hasPermission) {
+        return { success: false, error: permissionCheck.error };
+      }
+
+      const now = new Date(Date.now());
+      const expireTime = new Date(now.getTime() + this.TAKEN_TIMEOUT);
+      const taken = await ScreenshareSession.findOneAndUpdate(
+        { sessionId, status: 'frozen', takenBy: { $exists: false }, expireTime: { $gt: now } },
+        {
+          $set: { takenBy: screensharerId, takenTime: now, expireTime },
+          $push: { actions: { action: 'take', userId: screensharerId, timestamp: now, context: 'Screenshare taken' } }
+        },
+        { new: true }
+      );
+      if (!taken) {
+        const existing = await ScreenshareSession.findOne({ sessionId });
+        if (!existing) return { success: false, error: 'Session not found' };
+        if (existing.takenBy) return { success: false, error: `<@${existing.takenBy}> already took this screenshare` };
+        if (existing.status !== 'frozen') return { success: false, error: `This screenshare session is ${existing.status}` };
+        return { success: false, error: 'This screenshare session has expired' };
+      }
+
+      await recordAudit({
+        action: 'screenshare.take',
+        category: 'screenshare',
+        source: 'discord',
+        success: true,
+        actorId: screensharerId,
+        guildId: guild.id,
+        targetType: 'user',
+        targetId: taken.targetId,
+        targetName: taken.targetIgn,
+        metadata: { sessionId, expires: expireTime.toISOString() },
+      });
+      return { success: true, expireTime };
+    } catch (error) {
+      console.error('[ScreenshareService] Error taking session:', error);
+      return { success: false, error: 'Failed to take screenshare session' };
+    }
   }
 
   static createSessionEmbed(session: IScreenshareSession, imageUrl?: string): EmbedBuilder {
@@ -563,11 +629,16 @@ export class ScreenshareService {
         await thread.setLocked(false);
       }
 
-      await this.letTargetIntoThread(channel, session);
-      await thread.send({ ...screenshareThreadPing(screensharerRoleId, session.targetId), embeds: [embed] });
-      await thread.members.add(session.targetId).catch(error => {
-        console.warn(`[ScreenshareService] Could not add ${session.targetId} to thread ${thread.id}:`, error);
-      });
+      const people = [session.requesterId, session.targetId];
+      for (const userId of people) {
+        await this.letIntoThread(channel, userId, session.sessionId);
+      }
+      await thread.send({ ...screenshareThreadPing(screensharerRoleId, session.targetId, session.requesterId), embeds: [embed] });
+      for (const userId of people) {
+        await thread.members.add(userId).catch(error => {
+          console.warn(`[ScreenshareService] Could not add ${userId} to thread ${thread.id}:`, error);
+        });
+      }
       // The server's "left" update came before this thread existed, so it couldn't be posted here.
       if (options.loggedOff) {
         await thread.send(`**${options.targetName}** left the server.`);
@@ -596,14 +667,14 @@ export class ScreenshareService {
   }
 
   // Discord only adds people to a thread if they can see its parent channel, and the requests channel is staff-only.
-  private static async letTargetIntoThread(channel: TextChannel, session: IScreenshareSession): Promise<void> {
-    if (channel.permissionsFor(session.targetId)?.has('ViewChannel')) return;
+  private static async letIntoThread(channel: TextChannel, userId: string, sessionId: string): Promise<void> {
+    if (channel.permissionsFor(userId)?.has('ViewChannel')) return;
     try {
-      await channel.permissionOverwrites.edit(session.targetId, TARGET_THREAD_ACCESS, {
-        reason: `Screenshare ${session.sessionId}: let the target into the thread`
+      await channel.permissionOverwrites.edit(userId, TARGET_THREAD_ACCESS, {
+        reason: `Screenshare ${sessionId}: let them into the thread`
       });
     } catch (error) {
-      console.warn(`[ScreenshareService] Could not give ${session.targetId} access to the requests channel:`, error);
+      console.warn(`[ScreenshareService] Could not give ${userId} access to the requests channel:`, error);
     }
   }
 
@@ -612,9 +683,17 @@ export class ScreenshareService {
     if (!channelId) return;
     const channel = guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
     if (!channel || !('permissionOverwrites' in channel)) return;
-    const overwrite = channel.permissionOverwrites.cache.get(session.targetId);
-    if (overwrite && isTargetThreadAccess(overwrite.allow.bitfield, overwrite.deny.bitfield)) {
-      await channel.permissionOverwrites.delete(session.targetId, `Screenshare ${session.sessionId} ended`);
+    for (const userId of [session.targetId, session.requesterId]) {
+      if (!userId) continue;
+      const overwrite = channel.permissionOverwrites.cache.get(userId);
+      if (!overwrite || !isTargetThreadAccess(overwrite.allow.bitfield, overwrite.deny.bitfield)) continue;
+      const stillOpen = await ScreenshareSession.countDocuments({
+        sessionId: { $ne: session.sessionId },
+        status: { $in: ['pending', 'frozen'] },
+        $or: [{ targetId: userId }, { requesterId: userId }]
+      });
+      if (stillOpen > 0) continue;
+      await channel.permissionOverwrites.delete(userId, `Screenshare ${session.sessionId} ended`);
     }
   }
 

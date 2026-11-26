@@ -8,6 +8,12 @@ describe('screenshare thread access', () => {
     expect(ping.allowedMentions).toEqual({ roles: ['role-1'], users: ['user-9'] });
   });
 
+  test('the thread ping also mentions the requester', () => {
+    const ping = screenshareThreadPing('role-1', 'user-9', 'mod-2');
+    expect(ping.content).toBe('<@&role-1> <@mod-2> <@user-9>');
+    expect(ping.allowedMentions).toEqual({ roles: ['role-1'], users: ['mod-2', 'user-9'] });
+  });
+
   test('without an SS team role only the target is pinged', () => {
     expect(screenshareThreadPing(undefined, 'user-9')).toEqual({ content: '<@user-9>', allowedMentions: { roles: [], users: ['user-9'] } });
   });

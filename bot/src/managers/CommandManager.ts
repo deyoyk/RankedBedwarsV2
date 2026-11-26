@@ -58,6 +58,7 @@ import { punishment } from '../commands/moderation/punishment';
 import { screenshare } from '../commands/moderation/screenshare';
 import { ssclose } from '../commands/moderation/ssclose';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
+import { handleScreenshareTake } from '../interactions/screenshareTakeHandler';
 import { ScreenshareService } from '../services/ScreenshareService';
 import { fixall } from '../commands/account/fixall';
 import { startseason } from '../commands/season/startseason';
@@ -128,6 +129,11 @@ export class CommandManager {
 
         if (interaction.isButton() && interaction.customId.startsWith('ss_freeze_')) {
           await handleScreenshareFreeze(interaction);
+          return;
+        }
+
+        if (interaction.isButton() && interaction.customId.startsWith('ss_take_')) {
+          await handleScreenshareTake(interaction);
           return;
         }
 

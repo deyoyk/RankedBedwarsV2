@@ -9,9 +9,11 @@ export interface IScreenshareSession extends Document {
   imageUrl?: string;
   status: 'pending' | 'frozen' | 'closed' | 'expired' | 'cancelled';
   freezeTime?: Date;
+  takenBy?: string;
+  takenTime?: Date;
   expireTime: Date;
   actions: Array<{
-    action: 'freeze' | 'admit' | 'deny' | 'close' | 'expire' | 'cancel';
+    action: 'freeze' | 'take' | 'admit' | 'deny' | 'close' | 'expire' | 'cancel';
     userId: string;
     timestamp: Date;
     context?: string;
@@ -30,10 +32,12 @@ const ScreenshareSessionSchema: Schema = new Schema({
   imageUrl: { type: String },
   status: { type: String, enum: ['pending', 'frozen', 'closed', 'expired', 'cancelled'], default: 'pending' },
   freezeTime: { type: Date },
+  takenBy: { type: String },
+  takenTime: { type: Date },
   expireTime: { type: Date, required: true },
   actions: [
     {
-      action: { type: String, enum: ['freeze', 'admit', 'deny', 'close', 'expire', 'cancel'], required: true },
+      action: { type: String, enum: ['freeze', 'take', 'admit', 'deny', 'close', 'expire', 'cancel'], required: true },
       userId: { type: String, required: true },
       timestamp: { type: Date, required: true },
       context: { type: String }

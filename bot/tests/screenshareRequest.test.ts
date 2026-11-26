@@ -118,7 +118,12 @@ describe('in-game screenshare requests (autoss)', () => {
     expect(embed.image).toBeUndefined();
     expect(embed.fields?.map((f: any) => f.name)).not.toContain('Logged off');
     expect(message.startThread).toHaveBeenCalledWith(expect.objectContaining({ name: expect.stringContaining('SS: Steve |') }));
-    expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({ content: '<@&ssrole> <@target1>' }));
+    expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({
+      content: '<@&ssrole> <@mod1> <@target1>',
+      allowedMentions: { roles: ['ssrole'], users: ['mod1', 'target1'] }
+    }));
+    expect(thread.members.add).toHaveBeenCalledWith('mod1');
+    expect(thread.members.add).toHaveBeenCalledWith('target1');
     expect(thread.send).not.toHaveBeenCalledWith(expect.stringContaining('left the server'));
     expect(requestsChannel.permissionOverwrites.edit).toHaveBeenCalledWith('target1',
       { ViewChannel: true, ReadMessageHistory: true, SendMessagesInThreads: true, SendMessages: false }, expect.anything());
@@ -158,6 +163,34 @@ describe('in-game screenshare requests (autoss)', () => {
     second.requestsChannel.permissionOverwrites.cache.set('target1', own);
     await ScreenshareService.closeSession(second.guild as any, 'S1', 'mod1');
     expect(second.requestsChannel.permissionOverwrites.delete).not.toHaveBeenCalled();
+  });
+
+  it('lets an in-game requester into the thread and takes it back when the session closes', async () => {
+    const { PermissionFlagsBits } = require('discord.js');
+    const given = { allow: { bitfield: PermissionFlagsBits.ViewChannel | PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.SendMessagesInThreads }, deny: { bitfield: PermissionFlagsBits.SendMessages } };
+
+    const { guild, requestsChannel } = makeGuild();
+    const ws = makeWs(guild);
+    await ws.handleAutoSS({ type: 'autoss', targetign: 'Steve', requestign: 'Mod', uuid: 'u-7', reason: 'reach' });
+    expect(requestsChannel.permissionOverwrites.edit).toHaveBeenCalledWith('mod1', expect.objectContaining({ ViewChannel: true }), expect.anything());
+
+    SessionModel.findOneAndUpdate.mockResolvedValueOnce({ sessionId: 'S1', targetId: 'target1', requesterId: 'mod1' });
+    requestsChannel.permissionOverwrites.cache.set('mod1', given);
+    await ScreenshareService.closeSession(guild as any, 'S1', 'mod1');
+    expect(requestsChannel.permissionOverwrites.delete).toHaveBeenCalledWith('mod1', expect.any(String));
+  });
+
+  it('keeps thread access for someone still in another open screenshare', async () => {
+    const { PermissionFlagsBits } = require('discord.js');
+    const given = { allow: { bitfield: PermissionFlagsBits.ViewChannel | PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.SendMessagesInThreads }, deny: { bitfield: PermissionFlagsBits.SendMessages } };
+    const { guild, requestsChannel } = makeGuild();
+    requestsChannel.permissionOverwrites.cache.set('mod1', given);
+    SessionModel.countDocuments.mockResolvedValue(1);
+    SessionModel.findOneAndUpdate.mockResolvedValueOnce({ sessionId: 'S1', targetId: 'target1', requesterId: 'mod1' });
+
+    await ScreenshareService.closeSession(guild as any, 'S1', 'mod1');
+
+    expect(requestsChannel.permissionOverwrites.delete).not.toHaveBeenCalledWith('mod1', expect.any(String));
   });
 
   it('falls back to a default reason and shows that the target logged off', async () => {

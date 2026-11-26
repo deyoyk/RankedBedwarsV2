@@ -14,10 +14,11 @@ export function isTargetThreadAccess(allow: bigint, deny: bigint): boolean {
   return allow === TARGET_ALLOW && deny === TARGET_DENY;
 }
 
-export function screenshareThreadPing(roleId: string | undefined, targetId: string) {
+export function screenshareThreadPing(roleId: string | undefined, targetId: string, requesterId?: string) {
   const roles = roleId ? [roleId] : [];
+  const users = [...new Set([requesterId, targetId].filter((id): id is string => !!id))];
   return {
-    content: [...roles.map(id => `<@&${id}>`), `<@${targetId}>`].join(' '),
-    allowedMentions: { roles, users: [targetId] }
+    content: [...roles.map(id => `<@&${id}>`), ...users.map(id => `<@${id}>`)].join(' '),
+    allowedMentions: { roles, users }
   };
 }

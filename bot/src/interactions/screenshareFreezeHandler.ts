@@ -95,7 +95,8 @@ export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
       
       await channel.send({ 
         content: targetMention, 
-        embeds: [freezeEmbed] 
+        embeds: [freezeEmbed],
+        components: [ScreenshareService.createTakeButton(session.sessionId)]
       });
 
       

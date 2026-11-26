@@ -34,6 +34,12 @@ export interface ScreenshareFreezeResult {
   error?: string;
 }
 
+export interface ScreenshareTakeResult {
+  success: boolean;
+  expireTime?: Date;
+  error?: string;
+}
+
 export interface ScreenshareCloseResult {
   success: boolean;
   error?: string;
