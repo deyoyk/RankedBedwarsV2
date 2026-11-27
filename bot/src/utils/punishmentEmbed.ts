@@ -1,7 +1,12 @@
+import fs from 'fs';
+import path from 'path';
 import config from '../config/config';
 import User from '../models/User';
 import PunishmentAction, { PunishmentSource } from '../models/PunishmentAction';
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, Guild, GuildMember, MessageCreateOptions, MessageFlags, PermissionFlagsBits, TextChannel } from 'discord.js';
+import {
+  ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ContainerBuilder, Guild, GuildMember,
+  MessageCreateOptions, MessageFlags, PermissionFlagsBits, SectionBuilder, TextChannel, TextDisplayBuilder, ThumbnailBuilder
+} from 'discord.js';
 import { embedsFor } from './betterembed';
 import { PermissionService } from '../services/PermissionService';
 
@@ -21,62 +26,78 @@ interface PunishmentEmbedOptions {
   caseId?: string;
   staff?: string;
   source?: PunishmentSource;
+  /** The player's Minecraft name, shown after their mention; looked up when left out. */
+  ign?: string;
+  /** Shown as Staff on bans and unbans, which hide who issued them. */
+  botId?: string;
 }
 
 const ANONYMOUS = new Set<PunishmentType>(['ban', 'unban']);
 
-const TYPE_CONFIG: Record<PunishmentType, { action: string; color: number }> = {
-  ban: { action: 'has been 🔨 rank banned', color: 0x7b0606 },
-  unban: { action: 'has been ✅ unbanned', color: 0x00aaaa },
-  mute: { action: 'has been 🔇 muted', color: 0xff9900 },
-  unmute: { action: 'has been 🔊 unmuted', color: 0x00aaaa },
-  strike: { action: 'has been issued a ⭐ strike', color: 0xcda12f },
-  unstrike: { action: 'had a ⭐ strike removed', color: 0x00aaaa },
+const TYPE_CONFIG: Record<PunishmentType, { title: string; color: number; icon: string }> = {
+  ban: { title: 'Rank Ban', color: 0xa50e1e, icon: 'ban.png' },
+  unban: { title: 'Rank Unban', color: 0x2ecc71, icon: 'unbanunmute.png' },
+  mute: { title: 'Mute', color: 0xff9900, icon: 'mute.png' },
+  unmute: { title: 'Unmute', color: 0x2ecc71, icon: 'unbanunmute.png' },
+  strike: { title: 'Strike', color: 0xcda12f, icon: 'strike.png' },
+  unstrike: { title: 'Strike Removed', color: 0x2ecc71, icon: 'unbanunmute.png' },
 };
 
 const FIELD_LABELS: Record<string, string> = { 'Elo Lost': 'Penalty', 'Elo Refunded': 'Refund' };
 
+const ICON_DIR = path.resolve(process.cwd(), 'src', 'assets', 'punishments');
+
 const moderatorText = (moderatorId: string) =>
   moderatorId === 'system' ? 'System' : moderatorId === 'auto' ? 'Auto-Moderation' : `<@${moderatorId}>`;
 
-function formatDuration(expires: Date): string {
-  const remainingMs = Math.max(0, expires.getTime() - Date.now());
-  const minutes = Math.ceil(remainingMs / 60000);
-  if (minutes < 60) return `${minutes}m`;
-  if (minutes < 1440) return `${Math.ceil(minutes / 60)}h`;
-  return `${Math.ceil(minutes / 1440)}d`;
+const code = (text: string) => `\`${text.replace(/`/g, "'")}\``;
+
+function expiryText(expires: Date | null | undefined): string {
+  if (!expires) return code('Never');
+  const date = expires.toLocaleDateString('en-GB', { timeZone: 'UTC' });
+  return `${code(date)} [<t:${Math.floor(expires.getTime() / 1000)}:R>]`;
+}
+
+function staffText(options: Pick<PunishmentEmbedOptions, 'type' | 'moderatorId' | 'botId'>): string {
+  const automatic = options.moderatorId === 'system' || options.moderatorId === 'auto';
+  if (ANONYMOUS.has(options.type) && !automatic) return options.botId ? `<@${options.botId}>` : 'Staff Team';
+  return moderatorText(options.moderatorId);
+}
+
+function iconFile(type: PunishmentType): { attachment: string; name: string } | null {
+  const name = TYPE_CONFIG[type].icon;
+  const full = path.join(ICON_DIR, name);
+  return fs.existsSync(full) ? { attachment: full, name } : null;
 }
 
 export function buildPunishmentMessage(options: Omit<PunishmentEmbedOptions, 'guild'>, issuerActionId?: string): MessageCreateOptions {
-  const { targetId, moderatorId, reason, type, expires, extraFields, caseId } = options;
+  const { targetId, moderatorId, reason, type, expires, extraFields, caseId, ign } = options;
   const typeConfig = TYPE_CONFIG[type] || TYPE_CONFIG.ban;
   const isPositive = type.startsWith('un');
-  const userMention = `<@${targetId}>`;
   const reasonText = reason?.trim() || 'No reason provided';
 
-  const description = [
-    `${userMention} ${typeConfig.action}.`,
-    `> **Reason:** ${reasonText}${caseId ? ` \`#${caseId}\`` : ''}`,
-  ].join('\n');
-
-  const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+  const player = [
+    `> **Player:** <@${targetId}>${ign ? ` (${ign})` : ''}`,
+    `> **Reason:** ${code(reasonText)}${caseId ? ` \`#${caseId}\`` : ''}`,
+  ];
+  const details: string[] = [];
   for (const field of extraFields || []) {
-    const value = /elo/i.test(field.label) ? `*${field.value} ELO*` : `\`${field.value}\``;
-    fields.push({ name: FIELD_LABELS[field.label] || field.label, value, inline: true });
+    const value = /elo/i.test(field.label) ? `*${field.value} ELO*` : code(field.value);
+    details.push(`> **${FIELD_LABELS[field.label] || field.label}:** ${value}`);
   }
-  if (!isPositive && (type === 'ban' || type === 'mute')) {
-    fields.push({ name: 'Duration', value: expires ? `\`${formatDuration(expires)}\`` : '`Permanent`', inline: true });
-    fields.push({ name: 'Expires', value: expires ? `<t:${Math.floor(expires.getTime() / 1000)}:R>` : '`Never`', inline: true });
-  }
-  if (!ANONYMOUS.has(type)) {
-    fields.push({ name: isPositive && moderatorId === 'system' ? 'Expired' : 'Staff', value: `> ${moderatorText(moderatorId)}`, inline: true });
-  }
+  details.push(`> **${isPositive && moderatorId === 'system' ? 'Expired' : 'Staff'}:** ${staffText(options)}`);
+  if (type === 'ban' || type === 'mute') details.push(`> **Expires:** ${expiryText(expires)}`);
 
-  const embed = themedEmbed(typeConfig.color)
-    .setDescription(description)
-    .addFields(fields)
-    .setTimestamp();
-  if (!isPositive) embed.setFooter({ text: 'To appeal, open a ticket in the support channel' });
+  const body = new TextDisplayBuilder().setContent([`### ${typeConfig.title}`, ...player, '', ...details].join('\n'));
+  const icon = iconFile(type);
+  const container = new ContainerBuilder().setAccentColor(typeConfig.color);
+  if (icon) {
+    container.addSectionComponents(new SectionBuilder()
+      .addTextDisplayComponents(body)
+      .setThumbnailAccessory(new ThumbnailBuilder().setURL(`attachment://${icon.name}`)));
+  } else {
+    container.addTextDisplayComponents(body);
+  }
 
   const buttons: ButtonBuilder[] = [];
   if (issuerActionId) {
@@ -84,9 +105,38 @@ export function buildPunishmentMessage(options: Omit<PunishmentEmbedOptions, 'gu
   } else if (caseId && !ANONYMOUS.has(type)) {
     buttons.push(new ButtonBuilder().setCustomId(`punishment:details:${type}:${targetId}:${caseId}`).setLabel('Details').setStyle(ButtonStyle.Secondary));
   }
-  const components = buttons.length ? [new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons)] : [];
 
-  return { content: userMention, embeds: [embed], components };
+  if (!isPositive) {
+    const support = config.channels?.supportChannel;
+    const appeal = new TextDisplayBuilder()
+      .setContent(`-# If you wish to appeal, open a ticket in ${support ? `<#${support}>` : 'the support channel'}`);
+    const store = (type === 'ban' || type === 'mute') ? config.storeUrl : '';
+    const accessory = store
+      ? new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(store).setLabel(type === 'ban' ? 'Buy Unban' : 'Buy Unmute')
+      : buttons.shift();
+    if (accessory) {
+      container.addSectionComponents(new SectionBuilder().addTextDisplayComponents(appeal).setButtonAccessory(accessory));
+    } else {
+      container.addTextDisplayComponents(appeal);
+    }
+  }
+  if (buttons.length) container.addActionRowComponents(new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons));
+
+  return {
+    components: [container],
+    files: icon ? [icon] : [],
+    flags: MessageFlags.IsComponentsV2,
+    allowedMentions: { users: [targetId] },
+  };
+}
+
+async function lookupIgn(discordId: string): Promise<string | undefined> {
+  const timeout = new Promise<null>(resolve => setTimeout(() => resolve(null), 2000).unref?.());
+  const user = await Promise.race([
+    Promise.resolve(User.findOne({ discordId }).select('ign').lean()).catch(() => null),
+    timeout,
+  ]) as { ign?: string } | null;
+  return user?.ign || undefined;
 }
 
 export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Promise<void> {
@@ -124,7 +174,9 @@ export async function sendPunishmentEmbed(options: PunishmentEmbedOptions): Prom
       console.error(`[PunishmentEmbed] Couldn't record who issued the ${type}:`, error);
     }
   }
-  const payload = buildPunishmentMessage(options, issuerActionId);
+  const ign = options.ign ?? await lookupIgn(options.targetId);
+  const botId = options.botId ?? guild.client?.user?.id;
+  const payload = buildPunishmentMessage({ ...options, ign, botId }, issuerActionId);
   try {
     await channel.send(payload);
   } catch (error) {

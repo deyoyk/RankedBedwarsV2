@@ -193,6 +193,8 @@ interface Config {
     botCommandsChannel: string;
     /** "@user has been given access to VC" after /call (defaults to the bot commands channel). */
     callNotifyChannel: string;
+    /** Linked in the appeal line under punishment posts. */
+    supportChannel: string;
   };
   voicechannels: {
     waitingvc: string;
@@ -225,6 +227,8 @@ interface Config {
   inviteLink: string;
   /** Base URL of the public website; the game result path is appended to it. */
   gameResultUrl: string;
+  /** Link for the "Buy Unban" button on bans and mutes; no button when empty. */
+  storeUrl: string;
   bot_stats_text: string;
 
   eloDecay: {
@@ -313,6 +317,7 @@ const configuration: Config = {
     botstatusChannel: clean(process.env.BOT_STATUS_CHANNEL_ID),
     botCommandsChannel: clean(process.env.BOT_COMMANDS_CHANNEL_ID),
     callNotifyChannel: clean(process.env.CALL_NOTIFY_CHANNEL_ID),
+    supportChannel: clean(process.env.SUPPORT_CHANNEL_ID),
   },
   voicechannels: {
     waitingvc: clean(process.env.WAITING_ROOM_ID),
@@ -346,6 +351,7 @@ const configuration: Config = {
   serverName: clean(process.env.SERVER_NAME) || 'deyo Ranked Bedwars',
   inviteLink: clean(process.env.INVITE_LINK) || 'discord.gg/deyobw',
   gameResultUrl: clean(process.env.GAME_RESULT_URL) || 'https://www.vrbw.club',
+  storeUrl: clean(process.env.STORE_URL),
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',
   eloDecay: {
     enabled: clean(process.env.ELO_DECAY_ENABLED) !== 'false',
