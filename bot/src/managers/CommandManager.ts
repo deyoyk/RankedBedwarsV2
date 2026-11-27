@@ -265,7 +265,8 @@ export class CommandManager {
       { name: 'page', description: 'Page number', type: 4, required: false }
     ]);
     this.reg('games', 'Show a list of games', games, [
-      { name: 'page', description: 'Page number', type: 4, required: false }
+      { name: 'page', description: 'Page number', type: 4, required: false },
+      { name: 'user', description: 'Only show games this player was in', type: 6, required: false }
     ]);
     this.reg('gameinfo', 'Show detailed info for a game by game ID', gameinfo, [
       { name: 'game_id', description: 'The ID of the game', type: 4, required: true }
