@@ -73,12 +73,14 @@ export async function statreset(interaction: ChatInputCommandInteraction, _wsMan
       reason: 'Donator stat reset',
       before: { statResetsUsed: used },
       after: { statResetsUsed: used + 1 },
-      metadata: { allowed, scope: config.statReset.scope, season: currentSeason?.seasonNumber, chapter: currentSeason?.chapterNumber },
+      metadata: { allowed: Number.isFinite(allowed) ? allowed : 'unlimited', scope: config.statReset.scope, season: currentSeason?.seasonNumber, chapter: currentSeason?.chapterNumber },
     });
 
     const windowText = config.statReset.scope === 'season' ? `this season` : `the last ${config.statReset.windowDays} days`;
-    const remaining = allowed - (used + 1);
-    await safeReply(interaction, successEmbed(`Your stats have been reset.\nResets left for ${windowText}: **${remaining}** (used ${used + 1}/${allowed}).`, 'Stat Reset Successful'));
+    const left = Number.isFinite(allowed)
+      ? `Resets left for ${windowText}: **${allowed - (used + 1)}** (used ${used + 1}/${allowed}).`
+      : 'You have unlimited resets.';
+    await safeReply(interaction, successEmbed(`Your stats have been reset.\n${left}`, 'Stat Reset Successful'));
   } catch (error) {
     await replyCommandError(interaction, error, 'reset your stats', '[statreset]');
   }

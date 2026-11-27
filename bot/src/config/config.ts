@@ -50,6 +50,10 @@ export function isSnowflake(v: string): boolean {
   return /^\d{17,20}$/.test(v);
 }
 
+function parseResetCount(text: string): number {
+  return /^unlimited$/i.test(text) ? Infinity : parseInt(text, 10);
+}
+
 export function parseStatResetRoles(raw: string | undefined): Record<string, number> {
   const roles: Record<string, number> = {};
   if (!raw) return roles;
@@ -59,8 +63,8 @@ export function parseStatResetRoles(raw: string | undefined): Record<string, num
     const idx = trimmed.lastIndexOf(':');
     if (idx <= 0) continue;
     const roleId = trimmed.slice(0, idx).trim();
-    const count = parseInt(trimmed.slice(idx + 1).trim(), 10);
-    if (!isSnowflake(roleId) || !Number.isInteger(count) || count <= 0) continue;
+    const count = parseResetCount(trimmed.slice(idx + 1).trim());
+    if (!isSnowflake(roleId) || !(count === Infinity || (Number.isInteger(count) && count > 0))) continue;
     roles[roleId] = count;
   }
   return roles;
@@ -117,9 +121,11 @@ export function validateStatResetRolesRaw(raw: string | undefined): string[] {
       continue;
     }
     const roleId = trimmed.slice(0, idx).trim();
-    const count = parseInt(trimmed.slice(idx + 1).trim(), 10);
+    const count = parseResetCount(trimmed.slice(idx + 1).trim());
     if (!isSnowflake(roleId)) errors.push(`STAT_RESET_ROLES role "${roleId}" is not a valid Discord snowflake`);
-    if (!Number.isInteger(count) || count <= 0) errors.push(`STAT_RESET_ROLES entry "${trimmed}" must have a positive resets count`);
+    if (!(count === Infinity || (Number.isInteger(count) && count > 0))) {
+      errors.push(`STAT_RESET_ROLES entry "${trimmed}" must have a positive resets count or unlimited`);
+    }
   }
   return errors;
 }

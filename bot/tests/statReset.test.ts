@@ -111,3 +111,21 @@ describe('countStatResetsInWindow', () => {
     expect(countStatResetsInWindow(resets, 'season', 30, { seasonNumber: 1, chapterNumber: 1 }, now)).toBe(2);
   });
 });
+
+describe('unlimited stat resets', () => {
+  const VIP = '1562975115644502027';
+  const PRIME = '1396112212778684606';
+
+  it('a role can have unlimited resets, and it beats any number', () => {
+    const roles = parseStatResetRoles(`${PRIME}:1,${VIP}:unlimited`);
+    expect(roles[VIP]).toBe(Infinity);
+    expect(getStatResetAllowance([PRIME, VIP], roles)).toBe(Infinity);
+    expect(getStatResetAllowance([PRIME], roles)).toBe(1);
+  });
+
+  it('unlimited passes validation, other words do not', () => {
+    expect(validateStatResetRolesRaw(`${VIP}:unlimited`)).toEqual([]);
+    expect(validateStatResetRolesRaw(`${VIP}:UNLIMITED`)).toEqual([]);
+    expect(validateStatResetRolesRaw(`${VIP}:lots`)).toHaveLength(1);
+  });
+});
