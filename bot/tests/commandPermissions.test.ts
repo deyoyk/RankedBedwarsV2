@@ -87,7 +87,7 @@ describe('/rbwconfig panel', () => {
 
   it('opens on a section menu with the three categories and the overview', () => {
     const { components } = json(rootView());
-    expect(components[0][0].options.map((o: any) => o.value)).toEqual(['admin', 'staff', 'player', 'overview', 'strikes', 'callroles']);
+    expect(components[0][0].options.map((o: any) => o.value)).toEqual(['admin', 'staff', 'player', 'overview', 'strikes', 'callroles', 'partysize']);
   });
 
   it('shows a category with its roles and commands, and a role picker', () => {

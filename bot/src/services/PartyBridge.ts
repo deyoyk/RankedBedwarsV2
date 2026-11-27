@@ -84,7 +84,7 @@ export class PartyBridge {
       open: !party.isPrivate,
       private_games: Boolean(party.privateGames),
       auto_warp: Boolean(party.autoWarp),
-      max: party.maxMembers ?? 8,
+      max: PartyService.memberLimit(party),
     };
   }
 

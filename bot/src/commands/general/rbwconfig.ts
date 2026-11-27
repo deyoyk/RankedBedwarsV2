@@ -23,6 +23,7 @@ import { CATEGORY_LABELS, CommandCategory, commandsIn } from '../../config/comma
 import { describeAction, StrikeRuleService } from '../../services/StrikeRuleService';
 import { CALL_ROLE_LABELS, CallRoleKey, CallRoleService } from '../../services/CallRoleService';
 import { recordAudit } from '../../services/AuditService';
+import { PARTY_SIZE_LABELS, PARTY_SIZES, PartySizeService } from '../../services/PartySizeService';
 
 const { themedEmbed, errorEmbed } = embedsFor('Config');
 
@@ -64,6 +65,7 @@ function sectionRow() {
         { label: 'Command Overview', value: 'overview', description: 'Who can use each category' },
         { label: 'Strike Rules', value: 'strikes', description: 'How many strikes lead to a rank ban, and for how long' },
         { label: 'Call Roles', value: 'callroles', description: 'The Pups, Pugs Trial, Pugs and Premium roles /call open uses' },
+        { label: 'Party Size', value: 'partysize', description: 'Solo season, parties of 2 or parties of 4' },
       ),
   );
 }
@@ -142,6 +144,25 @@ export function callRolesView(note?: string): View {
     return new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(picker);
   });
   return { embeds: [embed], components: [...pickers, backRow()] };
+}
+
+export function partySizeView(note?: string): View {
+  const size = PartySizeService.current();
+  const lines = [
+    `**Now** · ${PARTY_SIZE_LABELS[size]}`,
+    '-# Parties with private games on (`/party private`) can always have 16. Parties already bigger keep their players but can\'t invite more.',
+  ];
+  if (note) lines.push(`-# ${note}`);
+  const embed = themedEmbed('info').setTitle('Party size').setDescription(lines.join('\n'));
+  const picker = new StringSelectMenuBuilder()
+    .setCustomId('rbwcfg:partysize')
+    .setPlaceholder('Party size…')
+    .addOptions(PARTY_SIZES.map(option => ({
+      label: PARTY_SIZE_LABELS[option],
+      value: String(option),
+      default: option === size,
+    })));
+  return { embeds: [embed], components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(picker), backRow()] };
 }
 
 const plural = (n: number) => `${n} strike${n === 1 ? '' : 's'}`;
@@ -234,7 +255,26 @@ export async function handlePanelClick(click: MessageComponentInteraction): Prom
     const choice = click.values[0];
     if (choice === 'strikes') return strikeView();
     if (choice === 'callroles') return callRolesView();
+    if (choice === 'partysize') return partySizeView();
     return choice === 'overview' ? overviewView() : categoryView(choice as CommandCategory);
+  }
+  if (action === 'partysize' && click.isStringSelectMenu()) {
+    const before = PartySizeService.current();
+    const size = await PartySizeService.set(Number(click.values[0]));
+    await recordAudit({
+      action: 'config.party_size',
+      category: 'config',
+      source: 'discord',
+      success: true,
+      actorId: click.user?.id,
+      guildId: click.guildId ?? undefined,
+      channelId: click.channelId ?? undefined,
+      targetType: 'party_size',
+      targetId: String(size),
+      before: { size: before },
+      after: { size },
+    });
+    return partySizeView(`Party size → ${PARTY_SIZE_LABELS[size]}`);
   }
   if (action === 'callrole' && click.isRoleSelectMenu()) {
     const key = category as CallRoleKey;

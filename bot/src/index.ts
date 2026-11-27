@@ -21,6 +21,7 @@ import { StrikeRuleService } from './services/StrikeRuleService';
 import { TourneyService } from './services/TourneyService';
 import { ScreenshareSwitch } from './services/ScreenshareSwitch';
 import { CallRoleService } from './services/CallRoleService';
+import { PartySizeService } from './services/PartySizeService';
 import { installErrorReporting } from './utils/errorReporter';
 
 installErrorReporting();
@@ -119,6 +120,7 @@ client.once('clientReady', async () => {
     await TourneyService.load(config.guildId);
     await ScreenshareSwitch.load(config.guildId);
     await CallRoleService.load(config.guildId);
+    await PartySizeService.load(config.guildId);
 
     workersManager = WorkersManager.getInstance(client);
     await workersManager.initialize();

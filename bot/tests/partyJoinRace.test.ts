@@ -73,7 +73,7 @@ describe('PartyService atomic join', () => {
       {
         partyId: 'P',
         members: { $ne: 'u9' },
-        $expr: { $lt: [{ $size: '$members' }, '$maxMembers'] }
+        $expr: { $lt: [{ $size: '$members' }, 2] }
       },
       { $push: { members: 'u9' } },
       { new: true }

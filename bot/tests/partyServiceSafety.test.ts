@@ -13,6 +13,7 @@ jest.mock('../src/models/User', () => ({
 }));
 
 import { PartyService } from '../src/services/PartyService';
+import { PartySizeService } from '../src/services/PartySizeService';
 
 const PartyModel = require('../src/models/Party').default;
 const UserModel = require('../src/models/User').default;
@@ -66,12 +67,24 @@ describe('PartyService safety checks', () => {
   });
 
   it('rejects maxMembers below the current member count', async () => {
+    jest.spyOn(PartySizeService, 'current').mockReturnValue(4);
     UserModel.findOne.mockResolvedValue({ discordId: 'leader', partyId: 'P' });
     PartyModel.findOne.mockResolvedValue(party());
 
     const result = await PartyService.updatePartySettings('leader', 'maxmembers', '2');
 
-    expect(result).toEqual({ success: false, message: 'Max members must be between 3 and 8' });
+    expect(result).toEqual({ success: false, message: 'Max members must be between 3 and 4' });
+    expect(PartyModel.updateOne).not.toHaveBeenCalled();
+  });
+
+  it('rejects maxMembers when the party is already over the party size', async () => {
+    jest.spyOn(PartySizeService, 'current').mockReturnValue(2);
+    UserModel.findOne.mockResolvedValue({ discordId: 'leader', partyId: 'P' });
+    PartyModel.findOne.mockResolvedValue(party());
+
+    const result = await PartyService.updatePartySettings('leader', 'maxmembers', '3');
+
+    expect(result).toEqual({ success: false, message: 'Parties can have at most 2 players right now' });
     expect(PartyModel.updateOne).not.toHaveBeenCalled();
   });
 
@@ -143,7 +156,12 @@ describe('PartyService safety checks', () => {
     expect(result.success).toBe(true);
     expect(PartyModel.find).toHaveBeenCalledWith({
       isPrivate: false,
-      $expr: { $lt: [{ $size: { $ifNull: ['$members', []] } }, '$maxMembers'] },
+      $expr: {
+        $lt: [
+          { $size: { $ifNull: ['$members', []] } },
+          { $cond: ['$privateGames', 16, { $min: ['$maxMembers', 2] }] },
+        ],
+      },
     });
   });
 });

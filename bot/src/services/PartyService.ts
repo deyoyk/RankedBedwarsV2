@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Guild } fro
 import Party from '../models/Party';
 import UserModel from '../models/User';
 import config from '../config/config';
+import { PartySizeService } from './PartySizeService';
 import { embedsFor } from '../utils/betterembed';
 
 const { themedEmbed } = embedsFor('Party');
@@ -91,13 +92,29 @@ export class PartyService {
       return { success: false, message: validation.error };
     }
     const party = validation.party!;
+    const limit = PartySizeService.current();
+    if (flag === 'privateGames' && !value && party.members.length > Math.max(1, limit)) {
+      return {
+        success: false,
+        message: limit === 0
+          ? "It's a solo season, so only a party with private games can have more than one player. Kick everyone first."
+          : `Parties without private games can have ${limit} players. Kick some first.`,
+      };
+    }
     await Party.updateOne({ partyId: party.partyId, leader: leaderId }, { $set: { [flag]: value } });
     party[flag] = value;
     await this.updatePartyActivity(party.partyId);
     return { success: true, party };
   }
-  private static readonly MAX_MEMBERS = 8;
   private static readonly MIN_MEMBERS = 2;
+
+  static memberLimit(party: { maxMembers?: number; privateGames?: boolean }): number {
+    if (party.privateGames) {
+      return config.privatePartyMaxMembers;
+    }
+    const limit = PartySizeService.current();
+    return Math.min(party.maxMembers ?? limit, limit);
+  }
 
   static async validatePartyAccess(userId: string, requireLeader: boolean = false): Promise<PartyValidationResult> {
     try {
@@ -150,7 +167,7 @@ export class PartyService {
         leader: userId,
         members: [userId],
         lastActiveTime: new Date(),
-        maxMembers: this.MAX_MEMBERS,
+        maxMembers: PartySizeService.current(),
         isPrivate: options.isPrivate ?? false,
         description: ''
       });
@@ -213,7 +230,7 @@ export class PartyService {
         return { success: false, message: 'User already in party' };
       }
 
-      if (party.members.length >= party.maxMembers) {
+      if (party.members.length >= this.memberLimit(party)) {
         return { success: false, message: 'Party is full' };
       }
 
@@ -317,7 +334,8 @@ export class PartyService {
       return { success: false, message: 'Already in this party' };
     }
 
-    if (party.members.length >= party.maxMembers) {
+    const limit = this.memberLimit(party);
+    if (party.members.length >= limit) {
       return { success: false, message: 'Party is full' };
     }
 
@@ -325,7 +343,7 @@ export class PartyService {
       {
         partyId: party.partyId,
         members: { $ne: userId },
-        $expr: { $lt: [{ $size: '$members' }, '$maxMembers'] }
+        $expr: { $lt: [{ $size: '$members' }, limit] }
       },
       { $push: { members: userId } },
       { new: true }
@@ -500,9 +518,13 @@ export class PartyService {
             return { success: false, message: 'Max members must be a whole number' };
           }
           const maxMembers = Number(trimmed);
+          const limit = PartySizeService.current();
           const minAllowed = Math.max(this.MIN_MEMBERS, party.members.length);
-          if (maxMembers < minAllowed || maxMembers > this.MAX_MEMBERS) {
-            return { success: false, message: `Max members must be between ${minAllowed} and ${this.MAX_MEMBERS}` };
+          if (limit < minAllowed) {
+            return { success: false, message: `Parties can have at most ${limit} players right now` };
+          }
+          if (maxMembers < minAllowed || maxMembers > limit) {
+            return { success: false, message: `Max members must be between ${minAllowed} and ${limit}` };
           }
           update = { maxMembers };
           break;
@@ -587,7 +609,12 @@ export class PartyService {
     try {
       const parties = await Party.find({
         isPrivate: false,
-        $expr: { $lt: [{ $size: { $ifNull: ['$members', []] } }, '$maxMembers'] }
+        $expr: {
+          $lt: [
+            { $size: { $ifNull: ['$members', []] } },
+            { $cond: ['$privateGames', config.privatePartyMaxMembers, { $min: ['$maxMembers', PartySizeService.current()] }] }
+          ]
+        }
       }).sort({ lastActiveTime: -1 }).limit(50).lean();
       return { success: true, parties: parties as unknown as PartyDocument[] };
     } catch (error) {

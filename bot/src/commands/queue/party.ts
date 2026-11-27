@@ -122,7 +122,7 @@ async function handleCreateParty(interaction: ChatInputCommandInteraction, userI
   const embedObj = successEmbed(`You have created party \`${result.party!.partyId}\`.\n-# ➡ Invite players with \`/party invite <player>\``);
   embedObj.builder.addFields(
     { name: 'Leader', value: `<@${userId}>`, inline: true },
-    { name: 'Members', value: `\`1/${result.party!.maxMembers}\``, inline: true }
+    { name: 'Members', value: `\`1/${PartyService.memberLimit(result.party!)}\``, inline: true }
   ).setTimestamp();
 
   await safeReply(interaction, { embeds: [embedObj.builder] });
@@ -251,7 +251,7 @@ function renderPartyList(party: PartyDocument, viewerId: string) {
 
   const embedObj = betterEmbed(`-# ➡ Party \`${party.partyId}\`\n${roster}`, 'info');
   embedObj.builder.addFields(
-    { name: 'Players', value: `\`${members.length}/${party.maxMembers}\``, inline: true },
+    { name: 'Players', value: `\`${members.length}/${PartyService.memberLimit(party)}\``, inline: true },
     { name: 'Privacy', value: party.isPrivate ? '`Private`' : '`Public`', inline: true },
   ).setTimestamp();
   if (party.description) embedObj.builder.addFields({ name: 'Description', value: party.description, inline: false });
@@ -311,7 +311,7 @@ async function handlePartySettings(interaction: ChatInputCommandInteraction, use
     const party = result.party!;
     const embedObj = betterEmbed(`Party settings for <@${party.leader}>.`, 'info', 'Party Settings');
     embedObj.builder.addFields(
-      { name: 'Max Members', value: party.maxMembers.toString(), inline: true },
+      { name: 'Max Members', value: PartyService.memberLimit(party).toString(), inline: true },
       { name: 'Private', value: party.isPrivate ? 'Yes' : 'No', inline: true },
       { name: 'Description', value: party.description || 'No description set', inline: false }
     ).setTimestamp();
