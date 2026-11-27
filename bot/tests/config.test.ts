@@ -99,6 +99,17 @@ describe('validateConfig', () => {
     expect(validateConfig(base)).toEqual([]);
   });
 
+  it('closes the map vote after 20 seconds unless configured otherwise', () => {
+    delete process.env.MAP_SELECTION_TIMEOUT_SECONDS;
+    jest.isolateModules(() => {
+      expect(require('../src/config/config').default.mapSelection.timeoutSeconds).toBe(20);
+    });
+    process.env.MAP_SELECTION_TIMEOUT_SECONDS = '45';
+    jest.isolateModules(() => {
+      expect(require('../src/config/config').default.mapSelection.timeoutSeconds).toBe(45);
+    });
+  });
+
   it('accepts valid ELO claim roles', () => {
     process.env.AUTH_KEY = 'secret';
     process.env.ELO_CLAIM_ROLES = '1341829830924046346:100,1396112212778684606:300';

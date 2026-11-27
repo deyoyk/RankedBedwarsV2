@@ -7,7 +7,7 @@ import { bonus } from '../commands/general/bonus';
 import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
 import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
-import { register } from '../commands/account/register';
+import { link } from '../commands/account/link';
 import { addqueue } from '../commands/queue/addqueue';
 import { addelo } from '../commands/account/addelo';
 import { forceregister } from '../commands/account/forceregister';
@@ -500,8 +500,8 @@ export class CommandManager {
   }
 
   private registerAccountCommands() {
-    this.reg('register', 'Register your account', register, [
-      { name: 'ign', description: 'Your in-game name', type: 3, required: true }
+    this.reg('link', 'Link your Minecraft account with the code from /link in game', link, [
+      { name: 'code', description: 'The code /link gave you in game', type: 3, required: true }
     ]);
     this.reg('forceregister', 'Force register a user with an IGN', forceregister, [
       { name: 'user', description: 'User to force register', type: 6, required: true },

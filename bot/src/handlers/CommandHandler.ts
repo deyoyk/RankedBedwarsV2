@@ -13,7 +13,7 @@ const { errorEmbed } = embedsFor('Error');
 export type CommandFn = BotCommandFn;
 
 const REPLIES_ITSELF = new Set(['screenshare', 'rbwconfig']);
-const PRIVATE_REPLY = new Set(['history', 'resetdb', 'punishment']);
+const PRIVATE_REPLY = new Set(['history', 'resetdb', 'punishment', 'link']);
 
 export class CommandHandler {
   private commands: Map<string, CommandFn>;

@@ -373,7 +373,7 @@ const configuration: Config = {
   },
   mapSelection: {
     enabled: clean(process.env.MAP_SELECTION_ENABLED) === 'true',
-    timeoutSeconds: parsedPositiveInt(process.env.MAP_SELECTION_TIMEOUT_SECONDS, 60),
+    timeoutSeconds: parsedPositiveInt(process.env.MAP_SELECTION_TIMEOUT_SECONDS, 20),
   },
   statReset: {
     roles: parseStatResetRoles(process.env.STAT_RESET_ROLES),

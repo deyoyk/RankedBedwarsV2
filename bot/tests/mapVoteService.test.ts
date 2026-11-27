@@ -85,7 +85,7 @@ describe('MapVoteService in game', () => {
         { name: 'Aquarium', votes: 0 }, { name: 'Sanctum', votes: 0 },
       ],
       picks: {},
-      seconds_left: 60,
+      seconds_left: 20,
     });
 
     ws.cast(204, 'ign_p1', 'Archway');
@@ -125,7 +125,7 @@ describe('MapVoteService', () => {
     await flush();
 
     expect(channel.createMessageComponentCollector).toHaveBeenCalledWith(
-      expect.objectContaining({ time: 60_000 }),
+      expect.objectContaining({ time: 20_000 }),
     );
     const sent = channel.send.mock.calls[0][0];
     const json = sent.embeds[0].toJSON();

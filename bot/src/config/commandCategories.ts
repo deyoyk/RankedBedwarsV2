@@ -16,7 +16,7 @@ const CATEGORY_COMMANDS: Record<CommandCategory, string[]> = {
     'score', 'void', 'forcevoid', 'retry', 'strike', 'unstrike', 'ban', 'unban', 'mute', 'unmute', 'history', 'ssclose',
   ],
   player: [
-    'help', 'register', 'queues', 'queue', 'games', 'gameinfo', 'maps', 'ranks', 'bonus', 'party', 'call', 'nick',
+    'help', 'link', 'queues', 'queue', 'games', 'gameinfo', 'maps', 'ranks', 'bonus', 'party', 'call', 'nick',
     'refresh', 'settings', 'statreset', 'claimelo', 'stats', 'leaderboard', 'recentgames', 'level', 'listseasons',
     'seasoninfo', 'strikerequest', 'voidrequest', 'screenshare', 'punishment',
   ],

@@ -88,7 +88,7 @@ describe('/resetdb', () => {
     expect(warningText('5')).toContain('ELO, IGN, stats and every ban, mute and strike');
     expect(warningText(null)).toContain("**every player's**");
     expect(warningText('5')).toContain("can't be undone");
-    expect(warningText('5')).toContain('/register');
+    expect(warningText('5')).toContain('/link');
   });
 
   test('needs exactly one of user or global', async () => {

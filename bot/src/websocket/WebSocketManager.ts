@@ -16,6 +16,8 @@ import { maxPartySizeForQueue } from '../utils/partyQueue';
 import { recentQueueId } from '../utils/lastQueue';
 import { getPlayerIgns } from '../utils/playerDirectory';
 import { lookupDiscordNames } from '../utils/discordLookup';
+import { isValidIgn } from '../utils/inputValidation';
+import { LINK_CODE_TTL, linkCodes } from '../services/LinkCodes';
 import { settleAbandonedPregame } from '../Matchmaking/pregameStrikes';
 
 const activeScreenshareThreads: {
@@ -120,10 +122,10 @@ interface WarpPlayersPayload {
   team2: WarpTeam;
 }
 
-interface VerificationPayload {
-  type: 'verification';
+interface LinkRequestPayload {
+  type: 'link_request';
+  uuid: string;
   ign: string;
-  code: string;
 }
 
 interface CheckPlayerPayload {
@@ -421,7 +423,7 @@ type IncomingPayload =
   | TourneySetPayload
   | IngamePunishPayload
   | WarpPlayersPayload
-  | VerificationPayload
+  | LinkRequestPayload
   | CheckPlayerPayload
   | ScoringPayload
   | PingPayload
@@ -820,6 +822,9 @@ export class WebSocketManager {
         break;
       case 'queuefromingame':
         this.handleQueueFromInGame(msg);
+        break;
+      case 'link_request':
+        void this.handleLinkRequest(msg);
         break;
       case 'privatefromingame':
         this.handlePrivateFromInGame(msg);
@@ -1698,6 +1703,26 @@ export class WebSocketManager {
         call_id: msg.call_id ?? msg.callId ?? '',
         reason: 'Internal server error'
       } as CallFailurePayload);
+    }
+  }
+
+  public async handleLinkRequest(msg: LinkRequestPayload): Promise<void> {
+    const { uuid, ign } = msg;
+    if (!uuid || !isValidIgn(ign)) {
+      this.send({ type: 'link_code_fail', uuid, reason: 'That name can\'t be linked.' });
+      return;
+    }
+    try {
+      const User = (await import('../models/User')).default;
+      const owner = await User.findOne({ ign }).collation({ locale: 'en', strength: 2 }).select('_id').lean();
+      if (owner) {
+        this.send({ type: 'link_code_fail', uuid, reason: 'This account is already linked to a Discord account. Ask staff if that\'s wrong.' });
+        return;
+      }
+      this.send({ type: 'link_code', uuid, ign, code: linkCodes.create(ign), expires_in: LINK_CODE_TTL / 1000 });
+    } catch (error) {
+      console.error(`[WebSocketManager] Couldn't make a link code for ${ign}:`, error);
+      this.send({ type: 'link_code_fail', uuid, reason: 'Something went wrong. Try again in a minute.' });
     }
   }
 

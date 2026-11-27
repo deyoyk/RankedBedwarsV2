@@ -28,7 +28,7 @@ export async function stats(interaction: ChatInputCommandInteraction, _wsManager
     const user = await User.findOne({ discordId: targetId });
     if (!user) {
       await safeReply(interaction, errorEmbed(targetId === interaction.user.id
-        ? "You're not registered yet. Use `/register` first."
+        ? "You're not registered yet. Run `/link` in game, then `/link` here with the code."
         : `<@${targetId}> isn't registered.`));
       return;
     }

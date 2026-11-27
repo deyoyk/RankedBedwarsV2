@@ -60,7 +60,7 @@ export function warningText(target: string | null): string {
   const who = target ? `<@${target}>'s` : "**every player's**";
   return `This deletes ${who} ranked account from the bot: ELO, IGN, stats and every ban, mute and strike. `
     + `It also takes the ELO rank, registered, muted and banned roles off ${target ? 'them' : 'everyone'} on Discord.\n\n`
-    + `⚠ It can't be undone. ${target ? 'They' : 'Everyone'} would have to \`/register\` again, and anyone banned or muted is let back in on Discord. `
+    + `⚠ It can't be undone. ${target ? 'They' : 'Everyone'} would have to \`/link\` again, and anyone banned or muted is let back in on Discord. `
     + 'The Minecraft server is not touched.';
 }
 

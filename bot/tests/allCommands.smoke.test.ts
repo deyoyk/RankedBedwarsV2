@@ -288,7 +288,7 @@ const wsManager: any = {
 jest.spyOn(PermissionService, 'rolesFor').mockReturnValue(['everyone']);
 
 import { help } from '../src/commands/help';
-import { register } from '../src/commands/account/register';
+import { link } from '../src/commands/account/link';
 import { forceregister } from '../src/commands/account/forceregister';
 import { forcerename } from '../src/commands/account/forcerename';
 import { unregister } from '../src/commands/account/unregister';
@@ -348,7 +348,7 @@ const discordUser = { id: ID19, username: 'Steve', displayAvatarURL: () => 'http
 type Row = { name: string; fn: any; slash: Record<string, any> };
 const ROWS: Row[] = [
   { name: 'help', fn: help, slash: {} },
-  { name: 'register', fn: register, slash: { ign: 'Steve' } },
+  { name: 'link', fn: link, slash: { code: 'ABCDEF' } },
   { name: 'forceregister', fn: forceregister, slash: { user: discordUser, ign: 'Steve' } },
   { name: 'forcerename', fn: forcerename, slash: { user: discordUser, new_ign: 'Alex' } },
   { name: 'unregister', fn: unregister, slash: { user: discordUser } },

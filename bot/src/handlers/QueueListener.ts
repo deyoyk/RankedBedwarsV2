@@ -962,7 +962,7 @@ export class QueueListener {
       );
       if (!user) {
         console.log(`[QueueListener] Join rejected for ${userId}: not registered`);
-        await this.moveToWaiting(state, 'You are not registered. Please run `/register` to participate.');
+        await this.moveToWaiting(state, 'You are not registered. Run `/link` in game, then `/link` on Discord with the code.');
         return;
       }
 

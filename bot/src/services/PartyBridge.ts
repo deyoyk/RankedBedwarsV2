@@ -110,7 +110,7 @@ export class PartyBridge {
     switch (error) {
       case 'Not in a party': return "You're not in a party.";
       case 'Not party leader': return 'Only the party leader can do that.';
-      case 'User not registered': return "You're not registered. Use /register on Discord.";
+      case 'User not registered': return "You're not registered. Run /link to get a code for Discord.";
       case 'Target user not registered': return "That player isn't registered on Discord.";
       case 'Target user already in party': return 'That player is already in a party.';
       case 'User has party invites disabled': return 'That player has party invites turned off.';
@@ -131,7 +131,7 @@ export class PartyBridge {
     try {
       const me = await this.userByIgn(msg.ign || '');
       if (!me) {
-        this.reply(msg, false, "You're not registered. Use /register on Discord first.");
+        this.reply(msg, false, "You're not registered. Run /link to get a code for Discord.");
         return;
       }
       const guild = this.guild();
