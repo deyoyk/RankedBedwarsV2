@@ -580,7 +580,11 @@ export class CommandManager {
     ]);
     this.reg('endseason', 'End the current active season and migrate data', endseason);
     this.reg('listseasons', 'List all seasons', listseasons);
-    this.reg('seasoninfo', 'Show current season information and allowed items', seasoninfo);
+    this.reg('seasoninfo', 'Show current season information and allowed items', seasoninfo, [
+      { name: 'rules', description: 'Which rules to show', type: 3, required: false, choices: [
+        { name: 'Season Rules', value: 'season' }, { name: 'PPP Rules', value: 'ppp' }
+      ]}
+    ]);
   }
 
   public async registerSlashCommands() {

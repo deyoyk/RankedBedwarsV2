@@ -102,6 +102,16 @@ jest.mock('../src/models/Season', () => ({
     countDocuments: jest.fn().mockResolvedValue(0),
   },
 }));
+jest.mock('../src/models/SeasonRules', () => ({
+  __esModule: true,
+  default: {
+    findOne: jest.fn().mockImplementation(() => chainable({
+      season: ['&a&lAlways Allowed', '&a• &fLadders'],
+      ppp: ['&a&lAlways Allowed', '&a• &fLadders'],
+    })),
+    updateOne: jest.fn().mockResolvedValue({}),
+  },
+}));
 jest.mock('../src/models/EloRank', () => ({
   __esModule: true,
   default: {
@@ -400,7 +410,7 @@ const ROWS: Row[] = [
   { name: 'startseason', fn: startseason, slash: { season: 2, chapter: 1, name: 'S2' } },
   { name: 'endseason', fn: endseason, slash: {} },
   { name: 'listseasons', fn: listseasons, slash: {} },
-  { name: 'seasoninfo', fn: seasoninfo, slash: {} },
+  { name: 'seasoninfo', fn: seasoninfo, slash: { rules: 'season' } },
 ];
 
 describe('command contract: exports + canonical signature', () => {

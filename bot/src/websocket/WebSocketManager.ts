@@ -1,5 +1,6 @@
 import { handleIngamePunish, IngamePunishPayload } from './ingamePunish';
 import { PunishmentPresets } from '../services/PunishmentPresets';
+import { SeasonRulesService } from '../services/SeasonRulesService';
 import { TourneyService, wire as tourneyWire } from '../services/TourneyService';
 import { RawData, WebSocket, WebSocketServer } from 'ws';
 import { PresenceService } from '../services/PresenceService';
@@ -338,6 +339,12 @@ interface MapsInfoPayload {
   disabled: MapEntry[];
 }
 
+interface SeasonRulesPayload {
+  type: 'season_rules';
+  season?: unknown;
+  ppp?: unknown;
+}
+
 interface PlayerStatusPayload {
   type: 'player_status';
   ign: string;
@@ -455,6 +462,7 @@ type IncomingPayload =
   | GameVoidedPayload
   | GameStartPayload
   | MapsInfoPayload
+  | SeasonRulesPayload
   | PlayerStatusPayload
   | BedwarsPlayersStatusPayload
   | HostPrivateGameResultPayload
@@ -835,6 +843,9 @@ export class WebSocketManager {
       case 'maps_info':
         this.handleMapsInfo(msg);
         break;
+      case 'season_rules':
+        await this.handleSeasonRules(msg);
+        break;
       case 'player_status':
         this.handlePlayerStatus(msg);
         break;
@@ -956,6 +967,14 @@ export class WebSocketManager {
         console.error('[WebSocketManager] Error handling game_start:', err);
       }
     })();
+  }
+
+  private async handleSeasonRules(msg: SeasonRulesPayload) {
+    try {
+      await SeasonRulesService.save(msg.season, msg.ppp);
+    } catch (error) {
+      console.error('[WebSocketManager] Could not save the season rules:', error instanceof Error ? error.message : error);
+    }
   }
 
   private handleMapsInfo(payload: MapsJsonPayload) {
