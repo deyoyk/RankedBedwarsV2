@@ -5,9 +5,9 @@ const mockSave = jest.fn().mockImplementation(() => Promise.resolve());
 
 let nextClaimAvailable = true;
 
-function makeGameDoc(state = 'pending') {
+function makeGameDoc(state = 'pending', gameId = 1) {
   return {
-    gameId: 1,
+    gameId,
     map: 'MapA',
     queueId: 'queue-1',
     isRanked: true,
@@ -218,7 +218,59 @@ describe('GameManager race conditions', () => {
     expect(failed[0].reason).toMatch(/already settled/);
 
     const reverted = players.find(p => p.discordId === 'c');
-    expect(reverted!.elo).toBe(1200);
+    expect(reverted!.elo).toBe(1220);
+  });
+
+  it('voiding a loss that hit zero elo restores only the applied loss', async () => {
+    const entry = {
+      gameId: 1, map: 'MapA', eloGain: -30, elo_before: 10, elo_after: 0,
+      kills: 0, deaths: 0, bedBroken: 0, finalKills: 0, finalDeaths: 0,
+      won: false, isMvp: false, date: new Date(), state: 'scored',
+      startTime: new Date(), diamonds: 0, irons: 0, gold: 0, emeralds: 0, blocksPlaced: 0
+    };
+    const player: any = makeUser('a', 50);
+    player.losses = 1;
+    player.loseStreak = 1;
+    player.recentGames = [entry];
+    const players = [player, makeUser('b'), makeUser('c'), makeUser('d')];
+    const gameDoc = makeGameDoc('scored');
+    gameDoc.winners = ['c', 'd'];
+    gameDoc.losers = ['a', 'b'];
+    setupGame(players, gameDoc);
+    const manager = makeManager();
+
+    await manager.voidGame(1, 'false ban', false, true);
+
+    expect(player.elo).toBe(60);
+    expect(player.losses).toBe(0);
+    expect(player.loseStreak).toBe(0);
+  });
+
+  it('voiding an old game keeps elo and streaks from games played after it', async () => {
+    const players = [makeUser('a'), makeUser('b'), makeUser('c'), makeUser('d')];
+    const manager = makeManager();
+    const game1 = makeGameDoc('pending', 1);
+    setupGame(players, game1);
+    await manager.scoreGame({ gameId: 1, winningTeam: 1, mvps: ['A'], bedbreaks: [] });
+
+    const game2 = makeGameDoc('pending', 2);
+    setupGame(players, game2);
+    await manager.scoreGame({ gameId: 2, winningTeam: 2, mvps: [], bedbreaks: [] });
+
+    const player: any = players[0];
+    expect(player.elo).toBe(1020);
+    expect(player.winStreak).toBe(0);
+    expect(player.loseStreak).toBe(1);
+
+    setupGame(players, game1);
+    await manager.voidGame(1, 'false ban', false, true);
+
+    expect(player.elo).toBe(980);
+    expect(player.wins).toBe(0);
+    expect(player.losses).toBe(1);
+    expect(player.winStreak).toBe(0);
+    expect(player.loseStreak).toBe(1);
+    expect(player.recentGames.find((g: any) => g.gameId === 1).state).toBe('voided');
   });
 
   it('scoreGame and voidGame racing: exactly one wins', async () => {

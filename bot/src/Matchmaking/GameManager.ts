@@ -2682,7 +2682,6 @@ export class GameManager {
 
       const elo_before = player.elo;
       let eloChange = 0;
-      let restoredElo: number | null = null;
       let gameStats: VoidableGameStats | null = null;
       let experienceToRevert = 0;
 
@@ -2693,12 +2692,7 @@ export class GameManager {
         gameStats = recentGame;
 
         if (recentGame.state === 'scored') {
-          const before = recentGame.elo_before ?? recentGame.oldElo;
-          if (typeof before === 'number') {
-            restoredElo = before;
-          } else {
-            eloChange = -recentGame.eloGain;
-          }
+          eloChange = -this.recentGameEloGain(recentGame);
 
           experienceToRevert = this.calculateExperienceGained(
             recentGame.won || false,
@@ -2717,7 +2711,7 @@ export class GameManager {
         experienceToRevert = 0;
       }
 
-      const elo_after = restoredElo !== null ? restoredElo : Math.max(0, player.elo + eloChange);
+      const elo_after = Math.max(0, player.elo + eloChange);
 
       const currentExperience = player.experience || 0;
       const newExperience = Math.max(0, currentExperience - experienceToRevert);
@@ -2746,13 +2740,39 @@ export class GameManager {
 
   private applyVoidDataToPlayer(voidData: PlayerVoidData, gameId?: number): { targetGameId: number | null; hadExisting: boolean } {
     const player = voidData.player;
+    const revertedScoredGame = voidData.gameStats?.state === 'scored';
     player.elo = voidData.elo_after;
-    player.lastPlayedAt = new Date();
 
     this.applyRevertPlayerGameStats(player, voidData);
     const result = this.applyRecentGamesForVoid(player, voidData, gameId);
+    if (revertedScoredGame) this.recomputeCurrentStreak(player);
     this.updatePlayerDailyEloSync(player);
     return result;
+  }
+
+  private recentGameEloGain(gameStats: VoidableGameStats): number {
+    const before = gameStats.elo_before ?? gameStats.oldElo;
+    const after = gameStats.elo_after ?? gameStats.newElo;
+    if (typeof before === 'number' && typeof after === 'number') return after - before;
+    return typeof gameStats.eloGain === 'number' && Number.isFinite(gameStats.eloGain) ? gameStats.eloGain : 0;
+  }
+
+  private recomputeCurrentStreak(player: IUser): void {
+    let won: boolean | null = null;
+    let streak = 0;
+    for (const game of player.recentGames || []) {
+      if (game.state !== 'scored' || typeof game.won !== 'boolean') continue;
+      if (won === null) {
+        won = game.won;
+        streak = 1;
+      } else if (game.won === won) {
+        streak += 1;
+      } else {
+        break;
+      }
+    }
+    player.winStreak = won === true ? streak : 0;
+    player.loseStreak = won === false ? streak : 0;
   }
 
   private applyRevertPlayerGameStats(player: IUser, voidData: PlayerVoidData): void {
@@ -2962,10 +2982,8 @@ export class GameManager {
     }
     if (gameStats.won === true) {
       player.wins = Math.max(0, (player.wins || 0) - 1);
-      player.winStreak = Math.max(0, (player.winStreak || 0) - 1);
     } else if (gameStats.won === false) {
       player.losses = Math.max(0, (player.losses || 0) - 1);
-      player.loseStreak = Math.max(0, (player.loseStreak || 0) - 1);
     }
     if (gameStats.isMvp ?? gameStats.ismvp) {
       player.mvps = Math.max(0, (player.mvps || 0) - 1);
