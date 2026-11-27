@@ -28,7 +28,7 @@ interface PunishmentEmbedOptions {
   source?: PunishmentSource;
   /** The player's Minecraft name, shown after their mention; looked up when left out. */
   ign?: string;
-  /** Shown as Staff on bans and unbans, which hide who issued them. */
+  /** Shown as Staff when no PUNISHMENT_STAFF_ID is set, so posts never name the moderator. */
   botId?: string;
 }
 
@@ -60,8 +60,9 @@ function expiryText(expires: Date | null | undefined): string {
 
 function staffText(options: Pick<PunishmentEmbedOptions, 'type' | 'moderatorId' | 'botId'>): string {
   const automatic = options.moderatorId === 'system' || options.moderatorId === 'auto';
-  if (ANONYMOUS.has(options.type) && !automatic) return options.botId ? `<@${options.botId}>` : 'Staff Team';
-  return moderatorText(options.moderatorId);
+  if (automatic) return moderatorText(options.moderatorId);
+  const shown = config.punishmentStaffId || options.botId;
+  return shown ? `<@${shown}>` : 'Staff Team';
 }
 
 function iconFile(type: PunishmentType): { attachment: string; name: string } | null {
@@ -215,7 +216,8 @@ export async function handlePunishmentDetails(interaction: ButtonInteraction): P
     if (typeof record.duration === 'number') {
       lines.push(`> **Duration:** \`${record.duration > 0 ? `${record.duration}m` : 'Permanent'}\``);
     }
-    if (!ANONYMOUS.has(base as PunishmentType)) {
+    const isAdmin = Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.Administrator));
+    if (!ANONYMOUS.has(base as PunishmentType) && canSeeIssuer(interaction.member as GuildMember | null, isAdmin)) {
       lines.push(`> **Staff:** ${moderatorText(record.moderator)}`);
     }
   } else {

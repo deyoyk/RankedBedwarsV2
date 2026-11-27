@@ -229,6 +229,8 @@ interface Config {
   gameResultUrl: string;
   /** Link for the "Buy Unban" button on bans and mutes; no button when empty. */
   storeUrl: string;
+  /** Shown as Staff on every punishment post instead of the moderator who issued it. */
+  punishmentStaffId: string;
   bot_stats_text: string;
 
   eloDecay: {
@@ -352,6 +354,7 @@ const configuration: Config = {
   inviteLink: clean(process.env.INVITE_LINK) || 'discord.gg/deyobw',
   gameResultUrl: clean(process.env.GAME_RESULT_URL) || 'https://www.vrbw.club',
   storeUrl: clean(process.env.STORE_URL),
+  punishmentStaffId: clean(process.env.PUNISHMENT_STAFF_ID) || '1564013842395177080',
   bot_stats_text: clean(process.env.BOT_STATS_TEXT) || 'DEYO RANKED BEDWARS',
   eloDecay: {
     enabled: clean(process.env.ELO_DECAY_ENABLED) !== 'false',

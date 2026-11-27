@@ -1,5 +1,5 @@
 import { MessageFlags } from 'discord.js';
-import { handlePunishmentIssuer, sendPunishmentEmbed } from '../src/utils/punishmentEmbed';
+import { handlePunishmentDetails, handlePunishmentIssuer, sendPunishmentEmbed } from '../src/utils/punishmentEmbed';
 
 jest.mock('../src/models/PunishmentAction', () => ({
   __esModule: true,
@@ -20,6 +20,7 @@ beforeEach(() => {
   User.findOne.mockReset().mockReturnValue({ select: () => ({ lean: () => Promise.resolve({ ign: 'TTSBot' }) }) });
   mockConfig.channels.supportChannel = 'support-1';
   mockConfig.storeUrl = '';
+  mockConfig.punishmentStaffId = 'staff-shown';
 });
 
 jest.mock('../src/config/config', () => ({
@@ -27,6 +28,7 @@ jest.mock('../src/config/config', () => ({
   default: {
     channels: { punishmentsChannel: 'punish-channel', supportChannel: 'support-1' },
     storeUrl: '',
+    punishmentStaffId: 'staff-shown',
   },
 }));
 
@@ -106,7 +108,8 @@ describe('punishment posts', () => {
     expect(text).toContain('### Mute');
     expect(text).toContain(`> **Player:** <@${TARGET}> (TTSBot)`);
     expect(text).toContain('> **Reason:** `Racism, Slurs or Hate Speech` `#A1B2C`');
-    expect(text).toContain('> **Staff:** <@mod-1>');
+    expect(text).toContain('> **Staff:** <@staff-shown>');
+    expect(text).not.toContain('mod-1');
     expect(text).toContain(`> **Expires:** \`18/11/2026\` [<t:${Math.floor(EXPIRY.getTime() / 1000)}:R>]`);
     expect(text).toContain('-# If you wish to appeal, open a ticket in <#support-1>');
     expect(thumbnail).toBe('attachment://mute.png');
@@ -114,7 +117,7 @@ describe('punishment posts', () => {
     expect(buttons.map(b => b.custom_id)).toEqual([`punishment:details:mute:${TARGET}:A1B2C`]);
   });
 
-  it('shows the bot as staff on a permanent rank ban', async () => {
+  it('hides the moderator on a permanent rank ban', async () => {
     const channel = channelMock();
 
     await sendPunishmentEmbed({
@@ -128,7 +131,7 @@ describe('punishment posts', () => {
     const { container, text, buttons, thumbnail } = card(sent(channel));
     expect(container.accent_color).toBe(0xa50e1e);
     expect(text).toContain('### Rank Ban');
-    expect(text).toContain('> **Staff:** <@bot-1>');
+    expect(text).toContain('> **Staff:** <@staff-shown>');
     expect(text).toContain('> **Expires:** `Never`');
     expect(text).not.toContain('mod-1');
     expect(thumbnail).toBe('attachment://ban.png');
@@ -171,6 +174,13 @@ describe('punishment posts', () => {
     const channel = channelMock();
     await sendPunishmentEmbed({ guild: guildWith(channel), targetId: TARGET, moderatorId: 'mod-1', reason: 'x', type: 'strike' });
     expect(card(sent(channel)).text).toContain(`> **Player:** <@${TARGET}>\n`);
+  });
+
+  it('falls back to the bot as staff when no staff account is set', async () => {
+    mockConfig.punishmentStaffId = '';
+    const channel = channelMock();
+    await sendPunishmentEmbed({ guild: guildWith(channel), targetId: TARGET, moderatorId: 'mod-1', reason: 'x', type: 'strike' });
+    expect(card(sent(channel)).text).toContain('> **Staff:** <@bot-1>');
   });
 
   it('renders a strike without an expiry', async () => {
@@ -273,5 +283,33 @@ describe('the Details button on bans', () => {
     expect(text(i)).toContain('**Issued by:** <@222222222222222222>');
     expect(text(i)).toContain('**Where:** Discord');
     expect(text(i)).toContain('`#C9`');
+  });
+});
+
+describe('the Details button on mutes and strikes', () => {
+  const click = (roles: string[]) => ({
+    customId: `punishment:details:mute:${TARGET}:M1`,
+    memberPermissions: { has: () => false },
+    member: { roles: { cache: { has: (id: string) => roles.includes(id) } } },
+    reply: jest.fn(),
+  }) as any;
+  const text = (i: any) => i.reply.mock.calls[0][0].embeds[0].toJSON().description as string;
+  beforeEach(() => {
+    User.findOne.mockReturnValue({ select: () => ({ lean: () => Promise.resolve({
+      ign: 'Parady', mutes: [{ id: 'M1', reason: 'Toxicity', date: new Date(), moderator: 'mod-1', duration: 60 }]
+    }) }) });
+  });
+
+  it('hides who issued it from players', async () => {
+    const i = click(['member']);
+    await handlePunishmentDetails(i);
+    expect(text(i)).toContain('**Reason:** Toxicity');
+    expect(text(i)).not.toContain('mod-1');
+  });
+
+  it('shows staff who issued it', async () => {
+    const i = click(['staff-role']);
+    await handlePunishmentDetails(i);
+    expect(text(i)).toContain('**Staff:** <@mod-1>');
   });
 });
