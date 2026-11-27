@@ -95,16 +95,18 @@ describe('ScreenshareService concurrency guards', () => {
     );
   });
 
-  it('cleans up the fresh channel when freeze loses the race', async () => {
+  it('creates no channel and gives no frozen role when freeze loses the race', async () => {
     const session = pendingSession();
     SessionModel.findOneAndUpdate.mockResolvedValue(null);
     const guild: any = guildStub();
+    const member = memberStub();
+    guild.members.fetch.mockResolvedValue(member);
 
     const result = await ScreenshareService.freezeSession(guild, session as any, 'mod1');
 
     expect(result).toEqual({ success: false, error: 'Session is no longer pending' });
-    expect(guild.channels.create).toHaveBeenCalled();
-    expect(guild.channels.fetch).toHaveBeenCalledWith('chan1');
+    expect(guild.channels.create).not.toHaveBeenCalled();
+    expect(member.roles.add).not.toHaveBeenCalled();
   });
 
   it('refuses to close an already-settled session without touching Discord', async () => {

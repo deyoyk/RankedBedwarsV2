@@ -13,6 +13,9 @@ export interface IScreenshareSession extends Document {
   takenTime?: Date;
   waitingForGame?: boolean;
   threadId?: string;
+  requestMessageId?: string;
+  sessionMessageId?: string;
+  playerNote?: string;
   expireTime: Date;
   actions: Array<{
     action: 'freeze' | 'take' | 'admit' | 'deny' | 'close' | 'expire' | 'cancel';
@@ -38,6 +41,9 @@ const ScreenshareSessionSchema: Schema = new Schema({
   takenTime: { type: Date },
   waitingForGame: { type: Boolean },
   threadId: { type: String },
+  requestMessageId: { type: String },
+  sessionMessageId: { type: String },
+  playerNote: { type: String },
   expireTime: { type: Date, required: true },
   actions: [
     {

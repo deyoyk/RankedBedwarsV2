@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, CategoryChannel, EmbedBuilder, Guild, GuildMember, OverwriteResolvable, TextChannel } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Guild, GuildMember, TextChannel } from 'discord.js';
 import { SCREENSHARE_OFF_MESSAGE, ScreenshareSwitch } from './ScreenshareSwitch';
 import ScreenshareSession, { IScreenshareSession } from '../models/ScreenshareSession';
 import User from '../models/User';
@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { embedsFor } from '../utils/betterembed';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 import { isTargetThreadAccess, screenshareThreadPing, TARGET_THREAD_ACCESS } from './screenshareAccess';
-import { ScreenshareChannelConfig, ScreenshareCloseResult, ScreenshareCreateOptions, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreensharePostOptions, ScreensharePostResult, ScreenshareSessionResult, ScreenshareTakeResult, ScreenshareValidationResult } from '../types/screenshare';
+import { ScreenshareCloseResult, ScreenshareCreateOptions, ScreenshareFreezeResult, ScreensharePermissionCheck, ScreensharePostOptions, ScreensharePostResult, ScreenshareSessionResult, ScreenshareTakeResult, ScreenshareValidationResult } from '../types/screenshare';
 import { recordAudit } from './AuditService';
 
 const { themedEmbed } = embedsFor('Screenshare');
@@ -104,13 +104,11 @@ export class ScreenshareService {
   }
 
   static validateChannelConfiguration(): ScreenshareValidationResult {
-    const channelConfig = this.getChannelConfiguration();
-    
-    if (!channelConfig.requestsChannelId) {
+    if (!config.channels.screensharerequestsChannel) {
       return { isValid: false, error: 'Screenshare requests channel not configured' };
     }
 
-    if (!channelConfig.screensharerRoleId) {
+    if (!config.roles.screensharer) {
       return { isValid: false, error: 'Screensharer role not configured' };
     }
 
@@ -243,18 +241,16 @@ export class ScreenshareService {
   }
 
   static async freezeSession(
-    guild: Guild, 
-    session: IScreenshareSession, 
+    guild: Guild,
+    session: IScreenshareSession,
     moderatorId: string
   ): Promise<ScreenshareFreezeResult> {
     try {
-      
       if (session.status !== 'pending') {
         return { success: false, error: `Session is ${session.status}, cannot freeze` };
       }
 
-      
-      if (new Date() > session.expireTime) {
+      if (new Date(Date.now()) > session.expireTime) {
         await ScreenshareSession.updateOne(
           { sessionId: session.sessionId, status: 'pending' },
           {
@@ -265,83 +261,76 @@ export class ScreenshareService {
         return { success: false, error: 'Session has expired' };
       }
 
-      
-      const permissionCheck = await this.checkScreensharePermissions(guild, moderatorId);
-      if (!permissionCheck.hasPermission) {
-        return { success: false, error: permissionCheck.error };
-      }
-
-      
-      const member: GuildMember | null = guild.members.cache?.get(session.targetId) ?? await guild.members.fetch(session.targetId).catch(() => null);
-      if (!member) {
-        console.error('[ScreenshareService] Target user not found in server');
-        return { success: false, error: 'Target user not found in server' };
-      }
-
-      
-      const channel = await this.createScreenshareChannel(guild, session);
-      if (!channel) {
-        return { success: false, error: 'Failed to create screenshare channel' };
-      }
-
-      
-      const frozenRoleId = config.roles.frozen;
-      if (frozenRoleId) {
-        try {
-          await member.roles.add(frozenRoleId, 'Screenshare session frozen');
-          console.log(`[ScreenshareService] Added frozen role to ${member.user.tag}`);
-        } catch (error) {
-          console.warn('[ScreenshareService] Failed to add frozen role:', error);
-          
+      if (moderatorId !== 'system') {
+        const permissionCheck = await this.checkScreensharePermissions(guild, moderatorId);
+        if (!permissionCheck.hasPermission) {
+          return { success: false, error: permissionCheck.error };
         }
       }
 
-      
+      const member: GuildMember | null = guild.members.cache?.get(session.targetId) ?? await guild.members.fetch(session.targetId).catch(() => null);
+      if (!member) {
+        return { success: false, error: 'Target user not found in server' };
+      }
+
       const frozen = await ScreenshareSession.findOneAndUpdate(
         { sessionId: session.sessionId, status: 'pending' },
         {
           $set: {
             status: 'frozen',
-            freezeTime: new Date(),
-            channelId: channel.id,
-            expireTime: session.waitingForGame ? session.expireTime : new Date(Date.now() + this.FREEZE_TIMEOUT)
+            freezeTime: new Date(Date.now()),
+            expireTime: new Date(Date.now() + this.FREEZE_TIMEOUT)
           },
+          $unset: { waitingForGame: '' },
           $push: {
             actions: {
               action: 'freeze',
               userId: moderatorId,
               timestamp: new Date(),
-              context: `Frozen by moderator, channel created: ${channel.name}`
+              context: moderatorId === 'system' ? 'Frozen when the game ended' : 'Frozen by a screensharer'
             }
           }
         },
         { new: true }
       );
-
       if (!frozen) {
-        await this.cleanupSession(guild, {
-          sessionId: session.sessionId,
-          targetId: session.targetId,
-          targetIgn: session.targetIgn,
-          channelId: channel.id
-        } as IScreenshareSession);
         return { success: false, error: 'Session is no longer pending' };
       }
 
-      console.log(`[ScreenshareService] Frozen session ${session.sessionId}, created channel ${channel.name}`);
+      const frozenRoleId = config.roles.frozen;
+      if (frozenRoleId) {
+        await member.roles.add(frozenRoleId, 'Screenshare session frozen').catch(error => {
+          console.warn('[ScreenshareService] Failed to add frozen role:', error);
+        });
+      }
+
+      const thread = await this.fetchText(guild, frozen.threadId);
+      if (thread) {
+        const pingTeam = session.waitingForGame === true && !!config.roles.screensharer;
+        await thread.send({
+          content: `${pingTeam ? `<@&${config.roles.screensharer}> ` : ''}<@${frozen.targetId}>`,
+          embeds: [this.createFreezeEmbed(frozen.targetId)],
+          allowedMentions: { users: [frozen.targetId], roles: pingTeam ? [config.roles.screensharer] : [] }
+        }).catch(error => {
+          console.warn(`[ScreenshareService] Could not post the freeze message for ${frozen.sessionId}:`, error);
+        });
+      }
+      await this.refreshTicket(guild, frozen);
+      this.registerThread(frozen);
+
       await recordAudit({
         action: 'screenshare.freeze',
         category: 'screenshare',
-        source: 'discord',
+        source: moderatorId === 'system' ? 'system' : 'discord',
         success: true,
         actorId: moderatorId,
         guildId: guild.id,
         targetType: 'user',
-        targetId: session.targetId,
-        targetName: session.targetIgn,
-        metadata: { sessionId: session.sessionId, channelId: channel.id },
+        targetId: frozen.targetId,
+        targetName: frozen.targetIgn,
+        metadata: { sessionId: frozen.sessionId, threadId: frozen.threadId },
       });
-      return { success: true, channel };
+      return { success: true, session: frozen };
     } catch (error) {
       console.error('[ScreenshareService] Error freezing session:', error);
       return { success: false, error: 'Failed to freeze session' };
@@ -399,51 +388,23 @@ export class ScreenshareService {
     if (igns.length === 0) return 0;
     try {
       const sessions = await ScreenshareSession.find({
-        status: { $in: ['pending', 'frozen'] },
+        status: 'pending',
         waitingForGame: true,
         targetIgn: { $in: igns }
       }).collation({ locale: 'en', strength: 2 });
 
       let started = 0;
       for (const session of sessions) {
-        if (session.takenBy) {
-          await ScreenshareSession.updateOne({ sessionId: session.sessionId }, { $unset: { waitingForGame: '' } });
-          continue;
-        }
-        const expireTime = new Date(Date.now() + this.GAME_END_TIMEOUT);
-        const updated = await ScreenshareSession.findOneAndUpdate(
-          { sessionId: session.sessionId, status: { $in: ['pending', 'frozen'] }, waitingForGame: true, takenBy: { $exists: false } },
-          { $set: { expireTime }, $unset: { waitingForGame: '' } },
-          { new: true }
-        );
-        if (!updated) continue;
-        started++;
-
-        const wsManager = global._wsManager;
-        if (updated.threadId && wsManager && typeof wsManager.registerScreenshareThread === 'function') {
-          wsManager.registerScreenshareThread({
-            ign: updated.targetIgn,
-            sessionId: updated.sessionId,
-            threadId: updated.threadId,
-            expiresAt: expireTime.getTime()
-          });
-        }
-
-        const closes = Math.floor(expireTime.getTime() / 1000);
-        const notice = `The game is over. This screenshare closes <t:${closes}:R> unless a screensharer takes it.`;
-        for (const channelId of [updated.threadId, updated.channelId]) {
-          if (!channelId) continue;
-          const channel = guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
-          if (channel && channel.isTextBased()) {
-            await channel.send(notice).catch(error => {
-              console.warn(`[ScreenshareService] Could not post the game-end notice in ${channelId}:`, error);
-            });
-          }
+        const result = await this.freezeSession(guild, session, 'system');
+        if (result.success) {
+          started++;
+        } else {
+          console.warn(`[ScreenshareService] Could not freeze ${session.targetIgn} after the game: ${result.error}`);
         }
       }
       return started;
     } catch (error) {
-      console.error('[ScreenshareService] Error starting screenshare timers after the game:', error);
+      console.error('[ScreenshareService] Error freezing players after the game:', error);
       return 0;
     }
   }
@@ -498,9 +459,12 @@ export class ScreenshareService {
     }
   }
 
-  static async getSessionByChannelId(channelId: string): Promise<IScreenshareSession | null> {
+  static async getSessionByChannelId(channelId: string, channelName?: string): Promise<IScreenshareSession | null> {
     try {
-      return await ScreenshareSession.findOne({ channelId });
+      const found = await ScreenshareSession.findOne({ $or: [{ channelId }, { threadId: channelId }] });
+      if (found) return found;
+      const fromName = channelName?.match(/\|\s*(SS[A-Z0-9]+)\s*$/)?.[1];
+      return fromName ? await ScreenshareSession.findOne({ sessionId: fromName }) : null;
     } catch (error) {
       console.error('[ScreenshareService] Error getting session by channel ID:', error);
       return null;
@@ -527,7 +491,7 @@ export class ScreenshareService {
     }
   }
 
-  static createFreezeEmbed(_targetId: string, waitingForGame = false): EmbedBuilder {
+  static createFreezeEmbed(_targetId: string): EmbedBuilder {
     return themedEmbed('error')
       .setTitle('Screenshare Freeze')
       .setDescription(
@@ -539,33 +503,92 @@ export class ScreenshareService {
         `- Admitting to cheating results in a 14 day ban.\n` +
         `- If broken rules are found during screenshare, you will be punished.\n\n` +
         `**AnyDesk:** https://anydesk.com/en\n\n` +
-        (waitingForGame
-          ? `-# The game is still going. The ticket closes ${this.GAME_END_TIMEOUT / 60000} minutes after it ends unless a screensharer takes it.`
-          : `-# The ticket closes in ${this.FREEZE_TIMEOUT / 60000} minutes unless a screensharer takes it.`)
+        `-# The ticket closes in ${this.FREEZE_TIMEOUT / 60000} minutes unless a screensharer claims it.`
       );
   }
 
-  static createTakeButton(sessionId: string): ActionRowBuilder<ButtonBuilder> {
+  static ticketStatus(session: Pick<IScreenshareSession, 'status' | 'takenBy'>): string {
+    if (session.status === 'frozen') return session.takenBy ? 'ACTIVE' : 'FROZEN';
+    return session.status.toUpperCase();
+  }
+
+  static ticketOutcome(session: Pick<IScreenshareSession, 'status' | 'actions'>): string | null {
+    if (session.status === 'expired') return 'Session expired automatically';
+    if (session.status !== 'closed' && session.status !== 'cancelled') return null;
+    const last = [...(session.actions ?? [])].reverse().find(a => a.action === 'close' || a.action === 'cancel');
+    if (!last) return 'Closed';
+    const by = last.userId && last.userId !== 'system' ? `\nClosed by <@${last.userId}>` : '';
+    return `${last.context || 'Closed'}${by}`;
+  }
+
+  static createRequestEmbed(session: IScreenshareSession): EmbedBuilder {
+    const status = this.ticketStatus(session);
+    const open = status === 'PENDING' || status === 'FROZEN' || status === 'ACTIVE';
+    const embed = themedEmbed(open ? 'warning' : 'info')
+      .setTitle('Screenshare Request')
+      .setDescription(`<@${session.targetId}> has been requested to screenshare.`)
+      .addFields({ name: 'Status', value: `\`${status}\`` });
+    const outcome = this.ticketOutcome(session);
+    if (outcome) embed.addFields({ name: 'Outcome', value: outcome });
+    if (session.threadId) embed.addFields({ name: 'Channel', value: `<#${session.threadId}>` });
+    return embed.setTimestamp(new Date(Date.now()));
+  }
+
+  static createSessionEmbed(session: IScreenshareSession, imageUrl?: string): EmbedBuilder {
+    const status = this.ticketStatus(session);
+    const active = status === 'ACTIVE';
+    const open = status === 'PENDING' || status === 'FROZEN' || active;
+    const expires = session.waitingForGame && status === 'PENDING'
+      ? 'When the game ends, the player is frozen'
+      : open ? `<t:${Math.floor(session.expireTime.getTime() / 1000)}:R>` : 'Ended';
+    const embed = themedEmbed(active ? 'success' : open ? 'warning' : 'info')
+      .setTitle(active ? 'Screenshare Active Session' : 'Screenshare Session')
+      .setDescription(active ? 'This request is now actively being screenshared.' : 'Use the buttons below to manage this screenshare request.')
+      .addFields(
+        { name: 'Status', value: `\`${status}\`` },
+        { name: 'Target', value: `<@${session.targetId}>` },
+        { name: 'Requester', value: `<@${session.requesterId}>` }
+      );
+    if (session.takenBy) embed.addFields({ name: 'Claimed By', value: `<@${session.takenBy}>` });
+    embed.addFields(
+      { name: 'Expires', value: expires },
+      { name: 'Reason', value: session.reason || 'No reason given' }
+    );
+    const outcome = this.ticketOutcome(session);
+    if (outcome) embed.addFields({ name: 'Outcome', value: outcome });
+    if (session.playerNote) embed.addFields({ name: 'Player', value: session.playerNote });
+    const image = imageUrl ?? session.imageUrl;
+    if (image) embed.setImage(image);
+    return embed.setFooter({ text: `Session ID: ${session.sessionId}` });
+  }
+
+  static ticketButtons(session: IScreenshareSession): ActionRowBuilder<ButtonBuilder>[] {
+    const status = this.ticketStatus(session);
+    if (status === 'PENDING') {
+      return [this.createFreezeButton(session.sessionId, !session.waitingForGame)];
+    }
+    if (status === 'FROZEN') {
+      return [this.createClaimButton(session.sessionId)];
+    }
+    return [];
+  }
+
+  static createClaimButton(sessionId: string): ActionRowBuilder<ButtonBuilder> {
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`ss_take_${sessionId}`)
-        .setLabel('Take screenshare')
+        .setCustomId(`ss_claim_${sessionId}`)
+        .setLabel('Claim')
         .setStyle(ButtonStyle.Success)
     );
   }
 
-  static createTakenEmbed(session: IScreenshareSession, screensharerId: string, expireTime: Date): EmbedBuilder {
+  static createClaimedMessage(screensharerId: string, targetId: string, expireTime: Date): string {
     const closes = Math.floor(expireTime.getTime() / 1000);
-    return themedEmbed('success')
-      .setTitle('Screenshare Taken')
-      .setDescription(
-        `<@${screensharerId}> is screensharing <@${session.targetId}>.\n` +
-        `**Ticket closes:** <t:${closes}:R> (<t:${closes}:t>)\n\n` +
-        `-# Close it earlier with /ssclose when the screenshare is done.`
-      );
+    return `<@${screensharerId}> claimed this screenshare. <@${targetId}>, follow their instructions.\n` +
+      `-# The ticket closes <t:${closes}:R> unless it's closed earlier with /ssclose.`;
   }
 
-  static async takeSession(guild: Guild, sessionId: string, screensharerId: string): Promise<ScreenshareTakeResult> {
+  static async claimSession(guild: Guild, sessionId: string, screensharerId: string): Promise<ScreenshareTakeResult> {
     try {
       const permissionCheck = await this.checkScreensharePermissions(guild, screensharerId);
       if (!permissionCheck.hasPermission) {
@@ -574,57 +597,96 @@ export class ScreenshareService {
 
       const now = new Date(Date.now());
       const expireTime = new Date(now.getTime() + this.TAKEN_TIMEOUT);
-      const taken = await ScreenshareSession.findOneAndUpdate(
+      const claimed = await ScreenshareSession.findOneAndUpdate(
         { sessionId, status: 'frozen', takenBy: { $exists: false }, expireTime: { $gt: now } },
         {
           $set: { takenBy: screensharerId, takenTime: now, expireTime },
-          $push: { actions: { action: 'take', userId: screensharerId, timestamp: now, context: 'Screenshare taken' } }
+          $push: { actions: { action: 'take', userId: screensharerId, timestamp: now, context: 'Screenshare claimed' } }
         },
         { new: true }
       );
-      if (!taken) {
+      if (!claimed) {
         const existing = await ScreenshareSession.findOne({ sessionId });
         if (!existing) return { success: false, error: 'Session not found' };
-        if (existing.takenBy) return { success: false, error: `<@${existing.takenBy}> already took this screenshare` };
+        if (existing.takenBy) return { success: false, error: `<@${existing.takenBy}> already claimed this screenshare` };
+        if (existing.status === 'pending') return { success: false, error: 'Freeze the player before claiming' };
         if (existing.status !== 'frozen') return { success: false, error: `This screenshare session is ${existing.status}` };
         return { success: false, error: 'This screenshare session has expired' };
       }
 
+      const thread = await this.fetchText(guild, claimed.threadId);
+      if (thread) {
+        await thread.send({
+          content: this.createClaimedMessage(screensharerId, claimed.targetId, expireTime),
+          allowedMentions: { users: [claimed.targetId] }
+        }).catch(error => {
+          console.warn(`[ScreenshareService] Could not post the claim message for ${sessionId}:`, error);
+        });
+      }
+      await this.refreshTicket(guild, claimed);
+      this.registerThread(claimed);
+
       await recordAudit({
-        action: 'screenshare.take',
+        action: 'screenshare.claim',
         category: 'screenshare',
         source: 'discord',
         success: true,
         actorId: screensharerId,
         guildId: guild.id,
         targetType: 'user',
-        targetId: taken.targetId,
-        targetName: taken.targetIgn,
+        targetId: claimed.targetId,
+        targetName: claimed.targetIgn,
         metadata: { sessionId, expires: expireTime.toISOString() },
       });
       return { success: true, expireTime };
     } catch (error) {
-      console.error('[ScreenshareService] Error taking session:', error);
-      return { success: false, error: 'Failed to take screenshare session' };
+      console.error('[ScreenshareService] Error claiming session:', error);
+      return { success: false, error: 'Failed to claim screenshare session' };
     }
   }
 
-  static createSessionEmbed(session: IScreenshareSession, imageUrl?: string): EmbedBuilder {
-    const embed = themedEmbed('info')
-      .setTitle('Screenshare Request')
-      .setDescription(
-        `A screenshare request has been created.\n\n` +
-        `**Target:** <@${session.targetId}>\n` +
-        `**Requester:** <@${session.requesterId}>\n` +
-        `**Reason:** ${session.reason}\n` +
-        (session.waitingForGame
-          ? `**Expires:** ${this.GAME_END_TIMEOUT / 60000} minutes after the game ends`
-          : `**Expires:** ${this.SESSION_TIMEOUT / 60000} minutes`)
-      );
-    if (imageUrl) {
-      embed.setImage(imageUrl);
+  static async refreshTicket(guild: Guild, session: IScreenshareSession): Promise<void> {
+    const edits: Promise<unknown>[] = [];
+    const requestsChannel = await this.fetchText(guild, config.channels.screensharerequestsChannel);
+    if (requestsChannel && session.requestMessageId) {
+      edits.push(requestsChannel.messages.edit(session.requestMessageId, { embeds: [this.createRequestEmbed(session)], components: [] }));
     }
-    return embed;
+    const thread = await this.fetchText(guild, session.threadId);
+    if (thread && session.sessionMessageId) {
+      edits.push(thread.messages.edit(session.sessionMessageId, { embeds: [this.createSessionEmbed(session)], components: this.ticketButtons(session) }));
+    }
+    const results = await Promise.allSettled(edits);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        console.warn(`[ScreenshareService] Could not update the ticket for ${session.sessionId}:`, result.reason);
+      }
+    }
+  }
+
+  private static async fetchText(guild: Guild, channelId?: string): Promise<TextChannel | null> {
+    if (!channelId) return null;
+    const channel = guild.channels.cache?.get(channelId) ?? await guild.channels.fetch(channelId).catch(() => null);
+    return channel && channel.isTextBased() ? channel as unknown as TextChannel : null;
+  }
+
+  private static registerThread(session: IScreenshareSession): void {
+    const wsManager = global._wsManager;
+    if (!session.threadId || !wsManager || typeof wsManager.registerScreenshareThread !== 'function') return;
+    try {
+      wsManager.registerScreenshareThread({
+        ign: session.targetIgn,
+        sessionId: session.sessionId,
+        threadId: session.threadId,
+        expiresAt: session.expireTime.getTime()
+      });
+    } catch (error) {
+      console.warn('[ScreenshareService] Failed to register thread with websocket manager:', error);
+    }
+  }
+
+  static threadName(ign: string): string {
+    const clean = ign.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 32);
+    return `ss-${clean || 'player'}`;
   }
 
   static async postRequest(
@@ -632,7 +694,6 @@ export class ScreenshareService {
     session: IScreenshareSession,
     options: ScreensharePostOptions
   ): Promise<ScreensharePostResult> {
-    // An unposted session is invisible to screensharers but still blocks new requests for the target.
     const fail = async (error: string): Promise<ScreensharePostResult> => {
       await this.closeSession(guild, session.sessionId, 'system', error);
       return { success: false, error };
@@ -655,79 +716,66 @@ export class ScreenshareService {
       return fail('Failed to access screenshare requests channel.');
     }
 
-    const embed = this.createSessionEmbed(session, options.imageUrl);
-    const row = this.createFreezeButton(session.sessionId);
-
+    const notes: string[] = [];
     if (options.dontlogResult) {
-      embed.addFields({
-        name: 'Player Status',
-        value: `Online: ${options.dontlogResult.online ? 'Yes' : 'No'} | DontLog: ${options.dontlogResult.dontlog ? 'Yes' : 'No'}`,
-        inline: true
-      });
+      notes.push(`Online: ${options.dontlogResult.online ? 'Yes' : 'No'} | DontLog: ${options.dontlogResult.dontlog ? 'Yes' : 'No'}`);
     }
-
     if (options.loggedOff) {
-      embed.addFields({ name: 'Logged off', value: 'Yes — left the game after being requested', inline: true });
+      notes.push('Left the game after being requested');
+    }
+    if (notes.length > 0) {
+      session.playerNote = notes.join('\n');
     }
 
     const screensharerRoleId = config.roles.screensharer;
-    const mention = screensharerRoleId ? `<@&${screensharerRoleId}>` : '';
-
     let threadId: string;
     try {
-      const sentMsg = await channel.send({
-        content: mention,
-        embeds: [embed],
-        components: [row]
+      const requestMessage = await channel.send({
+        content: `<@${session.targetId}>`,
+        embeds: [this.createRequestEmbed(session)],
+        allowedMentions: { parse: [] }
       });
 
-      const thread = await sentMsg.startThread({
-        name: `SS: ${options.targetName} | ${session.sessionId}`,
-        autoArchiveDuration: 60,
+      const thread = await requestMessage.startThread({
+        name: this.threadName(session.targetIgn),
+        autoArchiveDuration: 1440,
         reason: `Screenshare session thread for ${session.sessionId}`
       });
-
-      if (screensharerRoleId) {
-        await thread.setLocked(false);
-      }
+      threadId = thread.id;
+      session.threadId = threadId;
+      session.requestMessageId = requestMessage.id;
 
       const people = [session.requesterId, session.targetId];
       for (const userId of people) {
         await this.letIntoThread(channel, userId, session.sessionId);
       }
-      await thread.send({ ...screenshareThreadPing(screensharerRoleId, session.targetId, session.requesterId), embeds: [embed] });
+      const sessionMessage = await thread.send({
+        ...screenshareThreadPing(session.waitingForGame ? undefined : screensharerRoleId, session.targetId, session.requesterId),
+        embeds: [this.createSessionEmbed(session, options.imageUrl)],
+        components: this.ticketButtons(session)
+      });
+      session.sessionMessageId = sessionMessage.id;
       for (const userId of people) {
         await thread.members.add(userId).catch(error => {
           console.warn(`[ScreenshareService] Could not add ${userId} to thread ${thread.id}:`, error);
         });
       }
-      // The server's "left" update came before this thread existed, so it couldn't be posted here.
       if (options.loggedOff) {
         await thread.send(`**${options.targetName}** left the server.`);
       }
-      threadId = thread.id;
-      await ScreenshareSession.updateOne({ sessionId: session.sessionId }, { $set: { threadId } }).catch(error => {
-        console.warn(`[ScreenshareService] Could not save thread ${threadId} for ${session.sessionId}:`, error);
+      await ScreenshareSession.updateOne(
+        { sessionId: session.sessionId },
+        { $set: { threadId, requestMessageId: requestMessage.id, sessionMessageId: sessionMessage.id, ...(session.playerNote ? { playerNote: session.playerNote } : {}) } }
+      ).catch(error => {
+        console.warn(`[ScreenshareService] Could not save the ticket messages for ${session.sessionId}:`, error);
       });
+      await requestMessage.edit({ embeds: [this.createRequestEmbed(session)] }).catch(() => undefined);
     } catch (error) {
       console.error('[ScreenshareService] Failed to create request thread:', error);
       return fail('Failed to create screenshare thread.');
     }
 
-    const wsManager = global._wsManager;
-    if (wsManager && typeof wsManager.registerScreenshareThread === 'function') {
-      try {
-        wsManager.registerScreenshareThread({
-          ign: session.targetIgn,
-          sessionId: session.sessionId,
-          threadId,
-          expiresAt: session.expireTime.getTime()
-        });
-      } catch (error) {
-        console.warn('[ScreenshareService] Failed to register thread with websocket manager:', error);
-      }
-    }
-
+    this.registerThread(session);
     return { success: true, threadId };
   }
 
@@ -762,21 +810,20 @@ export class ScreenshareService {
     }
   }
 
-  static createFreezeButton(sessionId: string): ActionRowBuilder<ButtonBuilder> {
-    const freezeBtn = new ButtonBuilder()
-      .setCustomId(`ss_freeze_${sessionId}`)
-      .setLabel('Freeze Player')
-      .setStyle(ButtonStyle.Danger);
-
-    const cancelBtn = new ButtonBuilder()
+  static createFreezeButton(sessionId: string, withFreeze = true): ActionRowBuilder<ButtonBuilder> {
+    const row = new ActionRowBuilder<ButtonBuilder>();
+    if (withFreeze) {
+      row.addComponents(new ButtonBuilder()
+        .setCustomId(`ss_freeze_${sessionId}`)
+        .setLabel('Freeze Player')
+        .setStyle(ButtonStyle.Danger));
+    }
+    return row.addComponents(new ButtonBuilder()
       .setCustomId(`ss_cancel_${sessionId}`)
       .setLabel('Cancel')
-      .setStyle(ButtonStyle.Secondary);
-
-    return new ActionRowBuilder<ButtonBuilder>().addComponents(freezeBtn, cancelBtn);
+      .setStyle(ButtonStyle.Secondary));
   }
 
-  
   private static isValidImageUrl(url: string): boolean {
     try {
       const parsedUrl = new URL(url);
@@ -787,112 +834,35 @@ export class ScreenshareService {
     }
   }
 
-  private static getChannelConfiguration(): ScreenshareChannelConfig {
-    return {
-      requestsChannelId: config.channels.screensharerequestsChannel,
-      categoryId: config.categories.screenshareCategory,
-      screensharerRoleId: config.roles.screensharer,
-      frozenRoleId: config.roles.frozen
-    };
-  }
-
   private static generateSessionId(): string {
     const timestamp = Date.now().toString(36).toUpperCase();
     const random = Math.random().toString(36).substr(2, 5).toUpperCase();
     return `SS${timestamp}${random}`;
   }
 
-  private static async createScreenshareChannel(guild: Guild, session: IScreenshareSession): Promise<TextChannel | null> {
-    try {
-      const channelConfig = this.getChannelConfiguration();
-      
-      
-      const sanitizedIgn = session.targetIgn.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 20);
-      const channelName = `ss-${sanitizedIgn}-${session.sessionId.slice(-4)}`.toLowerCase();
-      
-      
-      const existingChannel = guild.channels.cache.find(ch => ch.name === channelName);
-      if (existingChannel) {
-        console.warn(`[ScreenshareService] Channel ${channelName} already exists, using unique name`);
-        const uniqueName = `${channelName}-${Date.now().toString().slice(-4)}`;
-        return this.createChannelWithName(guild, session, uniqueName, channelConfig);
-      }
-
-      return this.createChannelWithName(guild, session, channelName, channelConfig);
-    } catch (error) {
-      console.error('[ScreenshareService] Error creating screenshare channel:', error);
-      return null;
-    }
-  }
-
-  private static async createChannelWithName(
-    guild: Guild, 
-    session: IScreenshareSession, 
-    channelName: string, 
-    channelConfig: ScreenshareChannelConfig
-  ): Promise<TextChannel | null> {
-    try {
-      const overwrites: OverwriteResolvable[] = [
-        { 
-          id: guild.roles.everyone, 
-          deny: ['ViewChannel', 'SendMessages'] 
-        },
-        { 
-          id: session.targetId, 
-          allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory', 'AttachFiles'] 
-        }
-      ];
-
-      
-      if (channelConfig.screensharerRoleId) {
-        overwrites.push({
-          id: channelConfig.screensharerRoleId,
-          allow: [
-            'ViewChannel', 
-            'SendMessages', 
-            'ReadMessageHistory', 
-            'ManageMessages', 
-            'AttachFiles',
-            'EmbedLinks'
-          ]
-        });
-      }
-
-      
-      let categoryChannel: CategoryChannel | null = null;
-      if (channelConfig.categoryId) {
-        try {
-          const category = guild.channels.cache.get(channelConfig.categoryId) ?? await guild.channels.fetch(channelConfig.categoryId);
-          if (category && category.type === 4) { 
-            categoryChannel = category as CategoryChannel;
-          }
-        } catch {
-          console.warn('[ScreenshareService] Category not found, creating channel without category');
-        }
-      }
-
-      const channel = await guild.channels.create({
-        name: channelName,
-        type: 0, 
-        parent: categoryChannel?.id,
-        permissionOverwrites: overwrites,
-        reason: `Screenshare session for ${session.targetIgn} (${session.sessionId})`,
-        topic: `Screenshare session for ${session.targetIgn} | Session ID: ${session.sessionId} | Expires: ${session.expireTime.toISOString()}`
-      });
-
-      console.log(`[ScreenshareService] Created channel ${channelName} for session ${session.sessionId}`);
-      return channel as TextChannel;
-    } catch (error) {
-      console.error('[ScreenshareService] Error creating channel with name:', error);
-      return null;
-    }
+  private static async finishTicket(guild: Guild, sessionId: string): Promise<void> {
+    const ended = await ScreenshareSession.findOne({ sessionId });
+    if (!ended) return;
+    await this.refreshTicket(guild, ended);
+    const thread = await this.fetchText(guild, ended.threadId) as unknown as { setLocked?: (locked: boolean, reason?: string) => Promise<unknown>; setArchived?: (archived: boolean, reason?: string) => Promise<unknown> } | null;
+    if (!thread) return;
+    const reason = `Screenshare session ${sessionId} ended`;
+    await thread.setLocked?.(true, reason).catch(error => {
+      console.warn(`[ScreenshareService] Could not lock the thread for ${sessionId}:`, error);
+    });
+    await thread.setArchived?.(true, reason).catch(error => {
+      console.warn(`[ScreenshareService] Could not close the thread for ${sessionId}:`, error);
+    });
   }
 
   private static async cleanupSession(guild: Guild, session: IScreenshareSession): Promise<void> {
     const cleanupTasks: Promise<void>[] = [];
 
     try {
-      
+      cleanupTasks.push(this.finishTicket(guild, session.sessionId).catch(error => {
+        console.warn(`[ScreenshareService] Could not finish the ticket for ${session.sessionId}:`, error);
+      }));
+
       if (session.channelId) {
         cleanupTasks.push(
           (async () => {

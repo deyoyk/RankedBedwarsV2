@@ -1,4 +1,3 @@
-import { TextChannel } from 'discord.js';
 import { IScreenshareSession } from '../models/ScreenshareSession';
 
 export interface ScreenshareSessionResult {
@@ -31,7 +30,7 @@ export interface ScreensharePostOptions {
 
 export interface ScreenshareFreezeResult {
   success: boolean;
-  channel?: TextChannel;
+  session?: IScreenshareSession;
   error?: string;
 }
 

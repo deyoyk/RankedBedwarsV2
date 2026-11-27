@@ -3,7 +3,7 @@ import { ScreenshareService } from '../services/ScreenshareService';
 import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
 
-const { errorEmbed, successEmbed, themedFrom } = embedsFor('Screenshare');
+const { errorEmbed, successEmbed } = embedsFor('Screenshare');
 
 export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
   const { guild, user } = interaction;
@@ -86,63 +86,13 @@ export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
       return;
     }
 
-    const channel = result.channel!;
-    
-    
-    try {
-      const targetMention = `<@${session.targetId}>`;
-      const freezeEmbed = ScreenshareService.createFreezeEmbed(session.targetId, session.waitingForGame === true);
-      
-      await channel.send({ 
-        content: targetMention, 
-        embeds: [freezeEmbed],
-        components: [ScreenshareService.createTakeButton(session.sessionId)]
-      });
-
-      
-      try {
-        const originalMessage = interaction.message;
-        if (originalMessage) {
-          const updatedEmbed = themedFrom(originalMessage.embeds[0].toJSON())
-            .setColor('error')
-            .setTitle('Screenshare Session - Frozen')
-            .addFields({ 
-              name: 'Status', 
-              value: `Frozen by <@${user.id}> at <t:${Math.floor(Date.now() / 1000)}:T>`, 
-              inline: false 
-            });
-
-          await originalMessage.edit({ 
-            embeds: [updatedEmbed], 
-            components: [] 
-          });
-        }
-      } catch (error) {
-        console.warn('[ScreenshareFreezeHandler] Failed to update original message:', error);
-        
-      }
-
-    } catch (error) {
-      console.error('[ScreenshareFreezeHandler] Failed to send freeze message:', error);
-      
-    }
-
-    
-    const successEmbedObj = successEmbed('Session frozen successfully!', 'Session Frozen');
+    const frozen = result.session!;
+    const successEmbedObj = successEmbed('Player frozen.', 'Session Frozen');
     successEmbedObj.builder.addFields(
-      { name: 'Session ID', value: session.sessionId, inline: true },
-      { name: 'Target', value: `<@${session.targetId}> (${session.targetIgn})`, inline: true },
-      { name: 'Channel', value: `<#${channel.id}>`, inline: true },
-      { name: 'Frozen At', value: `<t:${Math.floor(Date.now() / 1000)}:T>`, inline: true },
-      { name: 'Expires', value: `<t:${Math.floor(session.expireTime.getTime() / 1000)}:R>`, inline: true }
+      { name: 'Target', value: `<@${frozen.targetId}> (${frozen.targetIgn})`, inline: true },
+      { name: 'Expires', value: `<t:${Math.floor(frozen.expireTime.getTime() / 1000)}:R>`, inline: true }
     );
-
-    await interaction.editReply({ 
-      embeds: [successEmbedObj.builder]
-    });
-
-    console.log(`[ScreenshareFreezeHandler] Session ${sessionId} frozen by ${user.tag}, channel created: ${channel.name}`);
-
+    await interaction.editReply({ embeds: [successEmbedObj.builder] });
   } catch (error) {
     console.error('[ScreenshareFreezeHandler] Unexpected error:', error);
     

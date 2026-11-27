@@ -45,12 +45,15 @@ export async function ssclose(interaction: ChatInputCommandInteraction, _wsManag
       await safeReply(interaction, errorEmbed('Channel not available.', 'Screenshare Error'));
       return;
     }
-    const session = await ScreenshareService.getSessionByChannelId(channel.id);
+    const session = await ScreenshareService.getSessionByChannelId(channel.id, channel.name);
     if (!session) {
-      await safeReply(interaction, errorEmbed('This command can only be used in a screenshare session channel.', 'Screenshare Error'));
+      await safeReply(interaction, errorEmbed('Use this inside a screenshare ticket thread.', 'Screenshare Error'));
       return;
     }
 
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply();
+    }
     const closerId = interaction.user.id;
     const result = await ScreenshareService.closeSession(guild, session.sessionId, closerId, reason);
 

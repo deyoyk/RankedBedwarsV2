@@ -529,6 +529,13 @@ export class WebSocketManager {
       }
 
       this.send({ type: 'autoss_success', uuid });
+
+      if (!session.waitingForGame) {
+        const frozen = await ScreenshareService.freezeSession(guild, session, 'system');
+        if (!frozen.success) {
+          console.warn(`[WebSocketManager] Could not freeze ${session.targetIgn} for an in-game screenshare: ${frozen.error}`);
+        }
+      }
     } catch (e) {
       console.error('[WebSocketManager] autoss error:', e);
       fail('Internal error while creating the screenshare request');

@@ -18,6 +18,7 @@ import { ScreenshareService } from '../src/services/ScreenshareService';
 import { WebSocketManager } from '../src/websocket/WebSocketManager';
 
 const SessionModel = require('../src/models/ScreenshareSession').default;
+const created0 = () => SessionModel.create.mock.calls[0][0];
 const UserModel = require('../src/models/User').default;
 
 const FIFTEEN_MINUTES = 15 * 60 * 1000;
@@ -41,22 +42,26 @@ function mockUsers(registered: Record<string, { discordId: string; ign: string }
 function makeGuild({ requestsChannelPresent = true, hasScreensharerRole = true, targetSeesChannel = false } = {}) {
   const thread = {
     id: 'thread1',
+    isTextBased: () => true,
     setLocked: jest.fn().mockResolvedValue(undefined),
-    send: jest.fn().mockResolvedValue(undefined),
+    setArchived: jest.fn().mockResolvedValue(undefined),
+    send: jest.fn().mockResolvedValue({ id: 'sessmsg' }),
+    messages: { edit: jest.fn().mockResolvedValue(undefined) },
     members: { add: jest.fn().mockResolvedValue(undefined) }
   };
-  const message = { startThread: jest.fn().mockResolvedValue(thread) };
+  const message = { id: 'reqmsg', startThread: jest.fn().mockResolvedValue(thread), edit: jest.fn().mockResolvedValue(undefined) };
   const requestsChannel = {
     id: 'req1',
     isTextBased: () => true,
     send: jest.fn().mockResolvedValue(message),
+    messages: { edit: jest.fn().mockResolvedValue(undefined) },
     permissionsFor: jest.fn(() => ({ has: () => targetSeesChannel })),
     permissionOverwrites: { cache: new Map(), edit: jest.fn().mockResolvedValue(undefined), delete: jest.fn().mockResolvedValue(undefined) }
   };
-  const member = { roles: { cache: { has: (id: string) => hasScreensharerRole && id === 'ssrole' } }, user: { tag: 'member#1' } };
+  const member = { roles: { cache: { has: (id: string) => hasScreensharerRole && id === 'ssrole' }, add: jest.fn().mockResolvedValue(undefined), remove: jest.fn().mockResolvedValue(undefined) }, user: { tag: 'member#1' } };
   const guild = {
     channels: {
-      cache: { get: jest.fn((id: string) => (requestsChannelPresent && id === 'req1' ? requestsChannel : undefined)) },
+      cache: { get: jest.fn((id: string) => (requestsChannelPresent && id === 'req1' ? requestsChannel : id === 'thread1' ? thread : undefined)) },
       fetch: jest.fn().mockResolvedValue(null)
     },
     members: { cache: { get: jest.fn().mockReturnValue(undefined) }, fetch: jest.fn().mockResolvedValue(member) }
@@ -112,17 +117,26 @@ describe('in-game screenshare requests (autoss)', () => {
     }));
     expect(requestsChannel.send).toHaveBeenCalledTimes(1);
     const post = requestsChannel.send.mock.calls[0][0];
-    expect(post.content).toBe('<@&ssrole>');
-    expect(post.components).toHaveLength(1);
-    const embed = post.embeds[0].toJSON();
-    expect(embed.description).toContain('**Reason:** Suspicious reach on Quad');
-    expect(embed.image).toBeUndefined();
-    expect(embed.fields?.map((f: any) => f.name)).not.toContain('Logged off');
-    expect(message.startThread).toHaveBeenCalledWith(expect.objectContaining({ name: expect.stringContaining('SS: Steve |') }));
-    expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({
+    expect(post.content).toBe('<@target1>');
+    expect(post.allowedMentions).toEqual({ parse: [] });
+    const request = post.embeds[0].toJSON();
+    expect(request.description).toContain('Screenshare Request');
+    expect(request.description).toContain('<@target1> has been requested to screenshare.');
+    expect(request.fields).toContainEqual({ name: 'Status', value: '`PENDING`' });
+    expect(message.startThread).toHaveBeenCalledWith(expect.objectContaining({ name: 'ss-Steve', autoArchiveDuration: 1440 }));
+    const ticket = thread.send.mock.calls[0][0];
+    expect(ticket).toEqual(expect.objectContaining({
       content: '<@&ssrole> <@mod1> <@target1>',
       allowedMentions: { roles: ['ssrole'], users: ['mod1', 'target1'] }
     }));
+    const session = ticket.embeds[0].toJSON();
+    expect(session.description).toContain('Screenshare Session');
+    expect(session.fields).toContainEqual({ name: 'Reason', value: 'Suspicious reach on Quad' });
+    expect(session.image).toBeUndefined();
+    expect(SessionModel.updateOne).toHaveBeenCalledWith(
+      { sessionId: created0().sessionId },
+      { $set: expect.objectContaining({ threadId: 'thread1', requestMessageId: 'reqmsg', sessionMessageId: 'sessmsg' }) }
+    );
     expect(thread.members.add).toHaveBeenCalledWith('mod1');
     expect(thread.members.add).toHaveBeenCalledWith('target1');
     expect(thread.send).not.toHaveBeenCalledWith(expect.stringContaining('left the server'));
@@ -151,19 +165,31 @@ describe('in-game screenshare requests (autoss)', () => {
     expect(created.waitingForGame).toBe(true);
     expect(created.expireTime.getTime()).toBeGreaterThanOrEqual(before + 2 * 60 * 60 * 1000);
     expect(requestsChannel.send).toHaveBeenCalledTimes(1);
-    expect(requestsChannel.send.mock.calls[0][0].embeds[0].toJSON().description).toContain('10 minutes after the game ends');
-    expect(thread.send).toHaveBeenCalledWith(expect.objectContaining({ content: '<@&ssrole> <@mod1> <@target1>' }));
+    const ticket = thread.send.mock.calls[0][0];
+    expect(ticket.content).toBe('<@mod1> <@target1>');
+    expect(ticket.allowedMentions).toEqual({ roles: [], users: ['mod1', 'target1'] });
+    expect(ticket.embeds[0].toJSON().fields).toContainEqual({ name: 'Expires', value: 'When the game ends, the player is frozen' });
+    const buttons = ticket.components[0].toJSON().components.map((b: any) => b.custom_id);
+    expect(buttons).toEqual([expect.stringMatching(/^ss_cancel_/)]);
+    expect(SessionModel.findOneAndUpdate).not.toHaveBeenCalled();
     expect(sent(ws)).toEqual([{ type: 'autoss_success', uuid: 'u-2' }]);
   });
 
   it('starts the timer straight away for a request made after the game', async () => {
-    const { guild } = makeGuild();
+    const { guild, thread } = makeGuild();
     const ws = makeWs(guild);
 
     await ws.handleAutoSS({ type: 'autoss', targetign: 'Steve', requestign: 'Mod', uuid: 'u-3', reason: 'reach' });
 
     const created = SessionModel.create.mock.calls[0][0];
     expect(created.waitingForGame).toBeUndefined();
+    const pings = thread.send.mock.calls.map((call: any[]) => call[0].content).filter((c: any) => typeof c === 'string' && c.includes('<@&ssrole>'));
+    expect(pings).toEqual(['<@&ssrole> <@mod1> <@target1>']);
+    expect(SessionModel.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'pending' }),
+      expect.objectContaining({ $set: expect.objectContaining({ status: 'frozen' }) }),
+      { new: true }
+    );
   });
 
   it('leaves the request channel alone for a target who can already see it', async () => {
@@ -227,8 +253,9 @@ describe('in-game screenshare requests (autoss)', () => {
     await ws.handleAutoSS({ type: 'autoss', targetign: 'steve', requestign: 'mod', uuid: 'u-2', reason: '   ', loggedoff: true });
 
     expect(SessionModel.create).toHaveBeenCalledWith(expect.objectContaining({ reason: 'Requested in-game' }));
-    const embed = requestsChannel.send.mock.calls[0][0].embeds[0].toJSON();
-    expect(embed.fields).toContainEqual({ name: 'Logged off', value: 'Yes — left the game after being requested', inline: true });
+    expect(requestsChannel.send).toHaveBeenCalledTimes(1);
+    const session = thread.send.mock.calls[0][0].embeds[0].toJSON();
+    expect(session.fields).toContainEqual({ name: 'Player', value: expect.stringContaining('Left the game after being requested') });
     expect(thread.send).toHaveBeenCalledWith('**Steve** left the server.');
     expect(sent(ws)).toEqual([{ type: 'autoss_success', uuid: 'u-2' }]);
   });
@@ -389,15 +416,16 @@ describe('screenshare session expiry', () => {
     expect(ScreenshareService.SESSION_TIMEOUT).toBe(FIFTEEN_MINUTES);
   });
 
-  it('tells screensharers the request expires in 15 minutes and only shows an image when there is one', () => {
-    const session: any = { sessionId: 'S1', targetId: 'target1', requesterId: 'mod1', reason: 'Need to verify' };
+  it('shows when the request expires and only shows an image when there is one', () => {
+    const expireTime = new Date(Date.now() + FIFTEEN_MINUTES);
+    const session: any = { sessionId: 'S1', status: 'pending', targetId: 'target1', requesterId: 'mod1', reason: 'Need to verify', expireTime };
 
     const withImage = ScreenshareService.createSessionEmbed(session, 'https://cdn.example.com/proof.png').toJSON();
     const withoutImage = ScreenshareService.createSessionEmbed(session, '').toJSON();
 
-    expect(withImage.description).toContain('**Expires:** 15 minutes');
+    expect(withImage.fields).toContainEqual({ name: 'Expires', value: `<t:${Math.floor(expireTime.getTime() / 1000)}:R>` });
     expect(withImage.image).toEqual({ url: 'https://cdn.example.com/proof.png' });
-    expect(withoutImage.description).toContain('**Expires:** 15 minutes');
+    expect(withImage.footer?.text).toBe('Session ID: S1');
     expect(withoutImage.image).toBeUndefined();
   });
 
@@ -406,14 +434,14 @@ describe('screenshare session expiry', () => {
     const register = jest.fn();
     global._wsManager = { registerScreenshareThread: register } as any;
     const expireTime = new Date(Date.now() + FIFTEEN_MINUTES);
-    const session: any = { sessionId: 'S1', targetId: 'target1', targetIgn: 'Steve', requesterId: 'mod1', reason: 'Need to verify', expireTime };
+    const session: any = { sessionId: 'S1', status: 'pending', targetId: 'target1', targetIgn: 'Steve', requesterId: 'mod1', reason: 'Need to verify', expireTime };
 
     const posted = await ScreenshareService.postRequest(guild as any, session, { targetName: 'Steve', imageUrl: 'https://cdn.example.com/proof.png' });
 
     expect(posted).toEqual({ success: true, threadId: 'thread1' });
     expect(register).toHaveBeenCalledWith({ ign: 'Steve', sessionId: 'S1', threadId: 'thread1', expiresAt: expireTime.getTime() });
     expect(require('../src/models/ScreenshareSession').default.updateOne)
-      .toHaveBeenCalledWith({ sessionId: 'S1' }, { $set: { threadId: 'thread1' } });
+      .toHaveBeenCalledWith({ sessionId: 'S1' }, { $set: { threadId: 'thread1', requestMessageId: 'reqmsg', sessionMessageId: 'sessmsg' } });
     global._wsManager = undefined;
   });
 });

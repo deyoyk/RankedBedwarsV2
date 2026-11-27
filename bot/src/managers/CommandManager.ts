@@ -58,7 +58,7 @@ import { punishment } from '../commands/moderation/punishment';
 import { screenshare } from '../commands/moderation/screenshare';
 import { ssclose } from '../commands/moderation/ssclose';
 import { handleScreenshareFreeze } from '../interactions/screenshareFreezeHandler';
-import { handleScreenshareTake } from '../interactions/screenshareTakeHandler';
+import { handleScreenshareClaim } from '../interactions/screenshareClaimHandler';
 import { ScreenshareService } from '../services/ScreenshareService';
 import { fixall } from '../commands/account/fixall';
 import { startseason } from '../commands/season/startseason';
@@ -132,8 +132,8 @@ export class CommandManager {
           return;
         }
 
-        if (interaction.isButton() && interaction.customId.startsWith('ss_take_')) {
-          await handleScreenshareTake(interaction);
+        if (interaction.isButton() && (interaction.customId.startsWith('ss_claim_') || interaction.customId.startsWith('ss_take_'))) {
+          await handleScreenshareClaim(interaction);
           return;
         }
 
@@ -239,15 +239,6 @@ export class CommandManager {
       if (!result.success) {
         await interaction.reply(errorEmbed(result.error || 'Failed to cancel the screenshare request.', 'Screenshare Error', true));
         return;
-      }
-
-      try {
-        const originalMessage = interaction.message;
-        if (originalMessage && 'edit' in originalMessage) {
-          await originalMessage.edit({ components: [] });
-        }
-      } catch (editError) {
-        console.warn('[CommandManager] Failed to update cancelled screenshare message:', editError);
       }
 
       await interaction.reply(successEmbed('Screenshare request cancelled.', 'Screenshare Cancelled', true));
