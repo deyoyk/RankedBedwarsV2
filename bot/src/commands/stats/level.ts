@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import User from '../../models/User';
 import { EXPERIENCE_REWARDS, getLevelInfo } from '../../utils/levelSystem';
@@ -20,7 +20,7 @@ export async function level(interaction: ChatInputCommandInteraction, _wsManager
         if (!user) {
             await safeReply(interaction, {
                 embeds: [errorEmbed('This user is not registered in the system.', 'User Not Found').builder],
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
             return;
         }

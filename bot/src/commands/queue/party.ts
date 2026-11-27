@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, Guild, Message } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, Guild, Message, MessageFlags } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { embedsFor } from '../../utils/betterembed';
 import { commandErrorDetails, replyCommandError } from '../../utils/errorReporter';
@@ -157,7 +157,7 @@ async function handleInviteToParty(interaction: ChatInputCommandInteraction, use
     if (buttonInteraction.user.id !== targetUserId) {
       await buttonInteraction.reply({
         embeds: [errorEmbed('This invitation is not for you!', 'Party Error').builder],
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
       return;
     }
@@ -411,7 +411,7 @@ async function handleStartPrivateGame(
     if (buttonInteraction.user.id !== userId) {
       await buttonInteraction.reply({
         embeds: [errorEmbed('Only the party leader can confirm this game.', 'Private Game Error').builder],
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       }).catch(() => undefined);
       return;
     }

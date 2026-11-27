@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, ComponentType, EmbedBuilder, Guild, PermissionFlagsBits, StringSelectMenuBuilder, ThreadChannel, VoiceChannel } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, Client, ComponentType, EmbedBuilder, Guild, MessageFlags, PermissionFlagsBits, StringSelectMenuBuilder, ThreadChannel, VoiceChannel } from 'discord.js';
 import User from '../models/User';
 import Party from '../models/Party';
 import Game from '../models/Game';
@@ -982,14 +982,13 @@ export class PickingQueueManager {
           if (!this.isValidPick(session, pickedPlayer)) {
             await interaction.reply({
               content: `Invalid pick. <@${pickedPlayer}> is not available for selection.`,
-              ephemeral: true
+              flags: MessageFlags.Ephemeral
             });
             return;
           }
           
           await interaction.reply({
-            content: `<@${session.currentPicker}> picked <@${pickedPlayer}>!`,
-            ephemeral: false
+            content: `<@${session.currentPicker}> picked <@${pickedPlayer}>!`
           });
 
           collector.stop();

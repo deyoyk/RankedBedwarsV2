@@ -6,7 +6,7 @@ import { ranks } from '../commands/general/ranks';
 import { bonus } from '../commands/general/bonus';
 import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
-import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { type ApplicationCommandDataResolvable, type ApplicationCommandOptionData, ButtonInteraction, Client, Collection, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { link } from '../commands/account/link';
 import { addqueue } from '../commands/queue/addqueue';
 import { addelo } from '../commands/account/addelo';
@@ -203,7 +203,7 @@ export class CommandManager {
   private async handleScreenshareCancel(interaction: ButtonInteraction): Promise<void> {
     try {
       if (!interaction.guild) {
-        await interaction.reply({ content: 'This can only be used in a server.', ephemeral: true });
+        await interaction.reply({ content: 'This can only be used in a server.', flags: MessageFlags.Ephemeral });
         return;
       }
 

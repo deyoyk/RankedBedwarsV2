@@ -8,6 +8,11 @@ function errorCode(error: unknown): number | undefined {
   return undefined;
 }
 
+function isUndeliverable(error: unknown): boolean {
+  const code = errorCode(error);
+  return code === 10062 || code === 10008;
+}
+
 function toEditOptions(options: string | MessagePayload | InteractionReplyOptions): string | MessagePayload | InteractionEditReplyOptions {
   if (typeof options === 'string' || options instanceof MessagePayload) return options;
   return {
@@ -17,6 +22,20 @@ function toEditOptions(options: string | MessagePayload | InteractionReplyOption
     files: options.files,
     allowedMentions: options.allowedMentions
   } as InteractionEditReplyOptions;
+}
+
+async function sendFollowUp(
+  interaction: ChatInputCommandInteraction,
+  options: string | MessagePayload | InteractionReplyOptions
+): Promise<Message | null> {
+  try {
+    return await interaction.webhook.send(options);
+  } catch (error) {
+    if (!isUndeliverable(error)) {
+      console.error('Error in safeReply follow-up:', error);
+    }
+    return null;
+  }
 }
 
 export async function safeReply(
@@ -36,28 +55,14 @@ export async function safeReply(
 
     return await interaction.reply(options as string | MessagePayload);
   } catch (error) {
-    const code = errorCode(error);
+    if (isUndeliverable(error)) {
+      console.warn('safeReply: interaction response is no longer available; dropping response');
+      return null;
+    }
 
     if (interaction instanceof ChatInputCommandInteraction) {
-      if (code === 10062) {
-        console.warn('safeReply: interaction expired before a response could be sent; dropping response');
-        return null;
-      }
-      if (code === 40060) {
-        return await interaction.followUp(options).catch((followUpError) => {
-          if (errorCode(followUpError) !== 10062) {
-            console.error('Error in safeReply follow-up:', followUpError);
-          }
-          return null;
-        }) ?? null;
-      }
-      if (interaction.replied || interaction.deferred) {
-        return await interaction.followUp(options).catch((followUpError) => {
-          if (errorCode(followUpError) !== 10062) {
-            console.error('Error in safeReply follow-up:', followUpError);
-          }
-          return null;
-        }) ?? null;
+      if (errorCode(error) === 40060 || interaction.replied || interaction.deferred) {
+        return sendFollowUp(interaction, options);
       }
     }
 

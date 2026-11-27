@@ -3,6 +3,7 @@ import {
   Client,
   ComponentType,
   EmbedBuilder,
+  MessageFlags,
   StringSelectMenuBuilder,
 } from 'discord.js';
 import config from '../config/config';
@@ -15,7 +16,7 @@ const { themedEmbed } = embedsFor('Map voting');
 interface MapVoteInteraction {
   user: { id: string };
   values: string[];
-  reply(options: { content: string; ephemeral: boolean }): Promise<unknown>;
+  reply(options: { content: string; flags: number }): Promise<unknown>;
   update(options: {
     embeds: EmbedBuilder[];
     components: ActionRowBuilder<StringSelectMenuBuilder>[];
@@ -182,12 +183,12 @@ export class MapVoteService {
       collector.on('collect', interaction => {
         void (async () => {
           if (!players.includes(interaction.user.id)) {
-            await interaction.reply({ content: 'Only players in this game can vote.', ephemeral: true });
+            await interaction.reply({ content: 'Only players in this game can vote.', flags: MessageFlags.Ephemeral });
             return;
           }
           const selected = interaction.values[0];
           if (!candidates.includes(selected)) {
-            await interaction.reply({ content: 'That map is not part of this vote.', ephemeral: true });
+            await interaction.reply({ content: 'That map is not part of this vote.', flags: MessageFlags.Ephemeral });
             return;
           }
 

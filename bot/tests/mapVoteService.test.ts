@@ -176,7 +176,7 @@ describe('MapVoteService', () => {
 
     collector.emit('collect', outsider);
     await flush();
-    expect(outsider.reply).toHaveBeenCalledWith({ content: 'Only players in this game can vote.', ephemeral: true });
+    expect(outsider.reply).toHaveBeenCalledWith({ content: 'Only players in this game can vote.', flags: 64 });
     expect(outsider.update).not.toHaveBeenCalled();
 
     collector.emit('end');

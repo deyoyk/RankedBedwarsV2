@@ -1,4 +1,4 @@
-import { ButtonInteraction, Client, ComponentType, Guild, Message } from 'discord.js';
+import { ButtonInteraction, Client, ComponentType, Guild, Message, MessageFlags } from 'discord.js';
 import Party from '../models/Party';
 import User from '../models/User';
 import { PartyService, type PartyDocument, type PartyEvent } from './PartyService';
@@ -245,7 +245,7 @@ export class PartyBridge {
     let done = false;
     collector.on('collect', async (button: ButtonInteraction) => {
       if (button.user.id !== targetId) {
-        await button.reply({ embeds: [errorEmbed('This invitation is not for you!', 'Party Error').builder], ephemeral: true }).catch(() => undefined);
+        await button.reply({ embeds: [errorEmbed('This invitation is not for you!', 'Party Error').builder], flags: MessageFlags.Ephemeral }).catch(() => undefined);
         return;
       }
       done = true;

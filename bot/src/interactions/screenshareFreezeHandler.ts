@@ -1,4 +1,4 @@
-import { ButtonInteraction } from 'discord.js';
+import { ButtonInteraction, MessageFlags } from 'discord.js';
 import { ScreenshareService } from '../services/ScreenshareService';
 import { embedsFor } from '../utils/betterembed';
 import config from '../config/config';
@@ -11,13 +11,13 @@ export async function handleScreenshareFreeze(interaction: ButtonInteraction) {
   if (!guild) {
     await interaction.reply({ 
       embeds: [errorEmbed('Guild not found.', 'Screenshare Error').builder], 
-      ephemeral: true 
+      flags: MessageFlags.Ephemeral
     });
     return;
   }
 
   
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
     

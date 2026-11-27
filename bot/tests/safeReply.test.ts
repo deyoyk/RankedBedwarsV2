@@ -10,6 +10,7 @@ function interaction(overrides: Record<string, unknown> = {}) {
   value.reply = jest.fn().mockResolvedValue({});
   value.editReply = jest.fn().mockResolvedValue({});
   value.followUp = jest.fn().mockResolvedValue({});
+  value.webhook = { send: jest.fn().mockResolvedValue({}) };
   Object.assign(value, overrides);
   return value;
 }
@@ -39,13 +40,14 @@ describe('safeReply interaction recovery', () => {
     expect(target.followUp).toHaveBeenCalledWith('hello');
   });
 
-  it('recovers with followUp when reply returns 40060', async () => {
+  it('recovers through the interaction webhook when reply returns 40060', async () => {
     const target = interaction();
     target.reply.mockRejectedValue(Object.assign(new Error('Already acknowledged'), { code: 40060 }));
 
     await expect(safeReply(target, 'hello')).resolves.toBeDefined();
 
-    expect(target.followUp).toHaveBeenCalledWith('hello');
+    expect(target.followUp).not.toHaveBeenCalled();
+    expect(target.webhook.send).toHaveBeenCalledWith('hello');
   });
 
   it('drops the response when the interaction expired (10062)', async () => {
@@ -57,5 +59,47 @@ describe('safeReply interaction recovery', () => {
 
     expect(target.followUp).not.toHaveBeenCalled();
     warn.mockRestore();
+  });
+
+  it('drops the response when the deferred message no longer exists (10008)', async () => {
+    const target = interaction({ deferred: true });
+    target.editReply.mockRejectedValue(Object.assign(new Error('Unknown Message'), { code: 10008 }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(safeReply(target, 'hello')).resolves.toBeNull();
+
+    expect(target.followUp).not.toHaveBeenCalled();
+    expect(target.webhook.send).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
+  it('silently drops a follow-up that Discord can no longer deliver', async () => {
+    const target = interaction({ replied: true });
+    target.followUp.mockRejectedValue(Object.assign(new Error('Unknown Message'), { code: 10008 }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(safeReply(target, 'hello')).resolves.toBeNull();
+
+    expect(target.webhook.send).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    warn.mockRestore();
+    error.mockRestore();
+  });
+
+  it('drops a recovery follow-up that is no longer deliverable', async () => {
+    const target = interaction({ replied: true });
+    target.followUp.mockRejectedValue(new Error('network down'));
+    target.webhook.send.mockRejectedValue(Object.assign(new Error('Unknown Message'), { code: 10008 }));
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(safeReply(target, 'hello')).resolves.toBeNull();
+
+    expect(target.webhook.send).toHaveBeenCalledWith('hello');
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
   });
 });

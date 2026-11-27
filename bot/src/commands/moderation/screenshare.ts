@@ -1,4 +1,4 @@
-import { ChatInputCommandInteraction } from 'discord.js';
+import { ChatInputCommandInteraction, MessageFlags } from 'discord.js';
 import type { WebSocketManager } from '../../websocket/WebSocketManager';
 import { ScreenshareService } from '../../services/ScreenshareService';
 import { embedsFor } from '../../utils/betterembed';
@@ -29,7 +29,7 @@ export async function screenshare(interaction: ChatInputCommandInteraction, _wsM
   }
 
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   }
 
   try {

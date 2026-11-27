@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, EmbedBuilder, Message } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChatInputCommandInteraction, ComponentType, EmbedBuilder, Message, MessageFlags } from 'discord.js';
 import { safeReply } from './safeReply';
 import { embedsFor } from './betterembed';
 
@@ -70,7 +70,7 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
 
       collector.on('collect', async (buttonInteraction) => {
         if (buttonInteraction.user.id !== userId) {
-          await buttonInteraction.reply({ content: 'You can only use your own pagination buttons!', ephemeral: true });
+          await buttonInteraction.reply({ content: 'You can only use your own pagination buttons!', flags: MessageFlags.Ephemeral });
           return;
         }
         if (inFlight) {
@@ -95,7 +95,7 @@ export async function paginate<T>(interaction: Message | ChatInputCommandInterac
           result = await config.fetchPage(newSkip, config.perPage, total);
         } catch (err) {
           console.error(`Pagination fetch failed for ${config.commandName} page ${newPage}:`, err);
-          await buttonInteraction.reply({ content: 'Failed to load that page.', ephemeral: true }).catch(() => {});
+          await buttonInteraction.reply({ content: 'Failed to load that page.', flags: MessageFlags.Ephemeral }).catch(() => {});
           inFlight = false;
           return;
         }
