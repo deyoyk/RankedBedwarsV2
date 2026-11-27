@@ -786,6 +786,12 @@ export class WorkersManager {
     return (err.code ?? err.rawError?.code) === 10003;
   }
 
+  private isNotConnectedToVoiceError(error: unknown): boolean {
+    const err = this.asErrorRecord(error);
+    if (!err) return false;
+    return (err.code ?? err.rawError?.code) === 40032;
+  }
+
   private asErrorRecord(error: unknown): {
     code?: unknown;
     status?: unknown;
@@ -874,8 +880,12 @@ export class WorkersManager {
   private async executeMemberMove(client: Client, data: WorkerTaskData): Promise<void> {
     const guild = await this.resolveGuild(client);
     const member = await this.resolveMember(guild, data.memberId as string);
-    if (member?.voice?.channel) {
+    if (!member?.voice?.channel) return;
+
+    try {
       await member.voice.setChannel(data.channelId as string);
+    } catch (error) {
+      if (!this.isNotConnectedToVoiceError(error)) throw error;
     }
   }
 

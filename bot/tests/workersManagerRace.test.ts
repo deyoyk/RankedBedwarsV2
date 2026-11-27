@@ -115,6 +115,24 @@ describe('WorkersManager race conditions', () => {
     expect(setChannel).toHaveBeenCalledWith('new-channel');
   });
 
+  it('ignores a move when the member left voice before it ran', async () => {
+    const setChannel = jest.fn().mockRejectedValue(
+      Object.assign(new Error('Target user is not connected to voice.'), { code: 40032 })
+    );
+    const member: any = { voice: { channel: { id: 'old' }, setChannel } };
+    const guild: any = {
+      members: { cache: new Map(), fetch: jest.fn().mockResolvedValue(member) }
+    };
+    const client: any = { guilds: { cache: { get: () => guild, first: () => guild } } };
+    const manager = new (WorkersManager as any)(client) as WorkersManager;
+    managers.push(manager);
+    (manager as any).isEnabled = false;
+
+    await expect(manager.moveMembers(['member-1'], 'new-channel', 1))
+      .resolves.toEqual([{ status: 'fulfilled', value: undefined }]);
+    expect(setChannel).toHaveBeenCalledWith('new-channel');
+  });
+
   it('sets voice channel status through the REST API', async () => {
     const client: any = {
       guilds: { cache: { first: () => ({}) } },
