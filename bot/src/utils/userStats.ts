@@ -24,6 +24,7 @@ export interface UserStatsLike {
   level?: number;
   dailyElo?: Array<{ elo: number; date: Date | string }>;
   recentGames?: unknown[];
+  eloClaims?: unknown[];
 }
 
 export function ensureUserStats(user: UserStatsLike) {
@@ -63,6 +64,7 @@ export function resetUserStats(user: UserStatsLike) {
   user.peakElo = 0;
   user.recentGames = [];
   user.dailyElo = [];
+  user.eloClaims = [];
 }
 
 export function updateDailyElo(user: UserStatsLike, newElo: number) {
