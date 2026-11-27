@@ -442,6 +442,24 @@ describe('WebSocket queuefromingame guards', () => {
     expect(queuePlayers.get(Q1) || []).not.toContain(UID);
   });
 
+  it('fails an unregistered player without reporting a bot error', async () => {
+    const { ws } = await makeWs();
+    UserModel.findOne.mockImplementation(() => ({
+      collation: () => ({ select: () => ({ lean: async () => null }) }),
+    }));
+    const error = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await (ws as any).handleQueueFromInGame({ ign: 'Ghost', uuid: 'u0' });
+
+    const sent = (ws.send as jest.Mock).mock.calls.map(c => c[0]);
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: 'queuefromingame_fail',
+      reason: 'User not found in database'
+    }));
+    expect(error).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
   it('is a no-op success when already queued', async () => {
     const { ws } = await makeWs();
     mockDb(null);

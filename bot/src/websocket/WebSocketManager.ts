@@ -1586,7 +1586,7 @@ export class WebSocketManager {
         User.findOne({ ign: target }).collation({ locale: 'en', strength: 2 }).select('discordId').lean()
       ]);
       if (!requesterUser) {
-        console.error(`[WebSocketManager] Requester ${requester} not found in database`);
+        console.warn(`[WebSocketManager] Requester ${requester} is not registered`);
         this.send({
           type: 'callfailure',
           call_id: callId,
@@ -1597,7 +1597,7 @@ export class WebSocketManager {
 
       
       if (!targetUser) {
-        console.error(`[WebSocketManager] Target ${target} not found in database`);
+        console.warn(`[WebSocketManager] Target ${target} is not registered`);
         this.send({
           type: 'callfailure',
           call_id: callId,
@@ -1906,7 +1906,7 @@ export class WebSocketManager {
         .select('discordId elo ign partyId lastQueueChannelId lastQueueAt')
         .lean();
       if (!user) {
-        console.error(`[WebSocketManager] User ${ign} not found in database`);
+        console.warn(`[WebSocketManager] User ${ign} is not registered on the bot`);
         fail('User not found in database');
         return;
       }
