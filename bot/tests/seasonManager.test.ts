@@ -87,12 +87,7 @@ describe('SeasonManager.endSeason', () => {
       seasonNumber: 2, chapterNumber: 1, name: 'S2',
       isActive: true, save: jest.fn().mockResolvedValue(undefined)
     };
-    const session: any = {
-      withTransaction: async (fn: any) => fn(),
-      endSession: jest.fn().mockResolvedValue(undefined)
-    };
-    mongoose.startSession.mockResolvedValue(session);
-    SeasonModel.findOne.mockReturnValue({ session: async () => activeSeason });
+    SeasonModel.findOne.mockResolvedValue(activeSeason);
     UserModel.find.mockReturnValue({ session: async () => users });
     GameModel.find.mockReturnValue({ session: async () => games });
 
@@ -108,20 +103,18 @@ describe('SeasonManager.endSeason', () => {
     expect(createdGames[0]).toMatchObject({ seasonNumber: 2, chapterNumber: 1, gameId: 0 });
     expect(createdGames[0]).not.toHaveProperty('_id');
     expect(activeSeason.isActive).toBe(false);
+    expect(activeSeason.save).toHaveBeenCalled();
+    expect(UserModel.updateMany).toHaveBeenCalled();
+    expect(GameModel.deleteMany).toHaveBeenCalledWith({ state: { $ne: 'pending' } });
     expect(maxActiveSaves).toBeLessThanOrEqual(100);
-    expect(session.endSession).toHaveBeenCalled();
+    expect(mongoose.startSession).not.toHaveBeenCalled();
   });
 
   it('fails cleanly with no active season', async () => {
-    const session: any = {
-      withTransaction: async (fn: any) => fn(),
-      endSession: jest.fn().mockResolvedValue(undefined)
-    };
-    mongoose.startSession.mockResolvedValue(session);
-    SeasonModel.findOne.mockReturnValue({ session: async () => null });
+    SeasonModel.findOne.mockResolvedValue(null);
 
     await expect(SeasonManager.endSeason()).rejects.toThrow('No active season');
-    expect(session.endSession).toHaveBeenCalled();
+    expect(mongoose.startSession).not.toHaveBeenCalled();
   });
 });
 
@@ -130,12 +123,7 @@ describe('SeasonManager.startSeason', () => {
   const UserModel = require('../src/models/User').default;
   const GameModel = require('../src/models/Game').default;
 
-  it('stamps the season inside one transaction', async () => {
-    const session: any = {
-      withTransaction: async (fn: any) => fn(),
-      endSession: jest.fn().mockResolvedValue(undefined)
-    };
-    mongoose.startSession.mockResolvedValue(session);
+  it('stamps users and games before activating the season, without a transaction', async () => {
     SeasonModelCtor.findOne.mockResolvedValue(null);
 
     const result = await SeasonManager.startSeason({ seasonNumber: 3, chapterNumber: 1, name: 'S3' });
@@ -143,12 +131,14 @@ describe('SeasonManager.startSeason', () => {
     expect(result.success).toBe(true);
     const created = SeasonModelCtor.mock.results[0].value;
     expect(created.seasonNumber).toBe(3);
-    expect(created.save).toHaveBeenCalledWith({ session });
+    expect(created.save).toHaveBeenCalledWith();
     expect(UserModel.updateMany).toHaveBeenCalledWith(
-      {}, { seasonNumber: 3, chapterNumber: 1 }, { session });
+      {}, { seasonNumber: 3, chapterNumber: 1 });
     expect(GameModel.updateMany).toHaveBeenCalledWith(
-      {}, { seasonNumber: 3, chapterNumber: 1 }, { session });
-    expect(session.endSession).toHaveBeenCalled();
+      {}, { seasonNumber: 3, chapterNumber: 1 });
+    expect(UserModel.updateMany.mock.invocationCallOrder[0])
+      .toBeLessThan(created.save.mock.invocationCallOrder[0]);
+    expect(mongoose.startSession).not.toHaveBeenCalled();
   });
 
   it('refuses when a season is already active without touching the database writes', async () => {
@@ -162,18 +152,15 @@ describe('SeasonManager.startSeason', () => {
     expect(mongoose.startSession).not.toHaveBeenCalled();
   });
 
-  it('reports failure when stamping fails', async () => {
-    const session: any = {
-      withTransaction: async (fn: any) => fn(),
-      endSession: jest.fn().mockResolvedValue(undefined)
-    };
-    mongoose.startSession.mockResolvedValue(session);
+  it('reports failure without activating the season when stamping fails', async () => {
     SeasonModelCtor.findOne.mockResolvedValue(null);
     GameModel.updateMany.mockRejectedValueOnce(new Error('db down'));
 
     const result = await SeasonManager.startSeason({ seasonNumber: 3, chapterNumber: 1, name: 'S3' });
 
     expect(result.success).toBe(false);
-    expect(session.endSession).toHaveBeenCalled();
+    const created = SeasonModelCtor.mock.results[0].value;
+    expect(created.save).not.toHaveBeenCalled();
+    expect(mongoose.startSession).not.toHaveBeenCalled();
   });
 });

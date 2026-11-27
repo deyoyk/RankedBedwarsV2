@@ -1,4 +1,3 @@
-import mongoose from 'mongoose';
 import Season, { ISeason } from '../models/Season';
 import SeasonStats, { ISeasonStats } from '../models/SeasonStats';
 import SeasonGames, { ISeasonGames } from '../models/SeasonGames';
@@ -116,13 +115,6 @@ export class SeasonManager {
       const entry = (e ?? {}) as { code?: unknown; err?: { code?: unknown } };
       return (entry.code ?? entry.err?.code) === 11000;
     });
-  }
-
-  private static async resolveFirst<T>(query: unknown, session?: unknown): Promise<T | null> {
-    const q = query as { session?: (s: unknown) => Promise<T | null> };
-    const scoped = q.session;
-    if (session !== undefined && typeof scoped === 'function') return scoped(session);
-    return query as Promise<T | null>;
   }
 
   private static async insertManyIdempotent(targetModel: {
@@ -264,24 +256,17 @@ export class SeasonManager {
         isActive: true
       });
 
-      const session = await mongoose.startSession();
-      try {
-        await session.withTransaction(async () => {
-          await newSeason.save({ session });
+      await User.updateMany({}, {
+        seasonNumber: options.seasonNumber,
+        chapterNumber: options.chapterNumber
+      });
 
-          await User.updateMany({}, {
-            seasonNumber: options.seasonNumber,
-            chapterNumber: options.chapterNumber
-          }, { session });
+      await Game.updateMany({}, {
+        seasonNumber: options.seasonNumber,
+        chapterNumber: options.chapterNumber
+      });
 
-          await Game.updateMany({}, {
-            seasonNumber: options.seasonNumber,
-            chapterNumber: options.chapterNumber
-          }, { session });
-        });
-      } finally {
-        await session.endSession();
-      }
+      await newSeason.save();
 
       const embed = successEmbed(
         `**${options.name}** has been started as Season ${options.seasonNumber} Chapter ${options.chapterNumber}`,
@@ -323,26 +308,11 @@ export class SeasonManager {
   }
 
   public static async endSeason(): Promise<SeasonEndResult> {
-    const lookupSession = await mongoose.startSession();
-    const snapshot = await (async (): Promise<{ seasonNumber: number; chapterNumber: number; name: string } | null> => {
-      try {
-        const activeSeason = await SeasonManager.resolveFirst<{
-          seasonNumber: number; chapterNumber: number; name: string;
-        }>(Season.findOne({ isActive: true }), lookupSession);
-        if (!activeSeason) return null;
-        return {
-          seasonNumber: activeSeason.seasonNumber,
-          chapterNumber: activeSeason.chapterNumber,
-          name: activeSeason.name
-        };
-      } finally {
-        await lookupSession.endSession();
-      }
-    })();
-    if (!snapshot) {
+    const activeSeason = await Season.findOne({ isActive: true });
+    if (!activeSeason) {
       throw new Error('No active season found to end.');
     }
-    const { seasonNumber, chapterNumber } = snapshot;
+    const { seasonNumber, chapterNumber } = activeSeason;
 
     const usersMigrated = await SeasonManager.snapshotCollection(
       User,
@@ -360,57 +330,44 @@ export class SeasonManager {
       chapterNumber
     );
 
-    const session = await mongoose.startSession();
-    try {
-      await session.withTransaction(async () => {
-        await User.updateMany({}, {
-          $set: {
-            elo: 0,
-            level: 1,
-            experience: 0,
-            wins: 0,
-            losses: 0,
-            games: 0,
-            mvps: 0,
-            kills: 0,
-            deaths: 0,
-            bedBroken: 0,
-            finalKills: 0,
-            finalDeaths: 0,
-            diamonds: 0,
-            irons: 0,
-            gold: 0,
-            emeralds: 0,
-            blocksPlaced: 0,
-            winStreak: 0,
-            loseStreak: 0,
-            kdr: 0,
-            wlr: 0,
-            playtimeSeconds: 0,
-            peakElo: 0,
-            recentGames: [],
-            dailyElo: [],
-            lastPlayedAt: new Date(),
-            seasonNumber: null,
-            chapterNumber: null
-          }
-        }, { session });
+    await User.updateMany({}, {
+      $set: {
+        elo: 0,
+        level: 1,
+        experience: 0,
+        wins: 0,
+        losses: 0,
+        games: 0,
+        mvps: 0,
+        kills: 0,
+        deaths: 0,
+        bedBroken: 0,
+        finalKills: 0,
+        finalDeaths: 0,
+        diamonds: 0,
+        irons: 0,
+        gold: 0,
+        emeralds: 0,
+        blocksPlaced: 0,
+        winStreak: 0,
+        loseStreak: 0,
+        kdr: 0,
+        wlr: 0,
+        playtimeSeconds: 0,
+        peakElo: 0,
+        recentGames: [],
+        dailyElo: [],
+        lastPlayedAt: new Date(),
+        seasonNumber: null,
+        chapterNumber: null
+      }
+    });
 
-        await Game.deleteMany({ state: { $ne: 'pending' } }, { session });
+    await Game.deleteMany({ state: { $ne: 'pending' } });
 
-        const seasonInTx = await SeasonManager.resolveFirst<{
-          endDate?: Date; isActive?: boolean; save: (opts?: unknown) => Promise<unknown>;
-        }>(Season.findOne({ seasonNumber, chapterNumber }), session);
-        if (!seasonInTx) {
-          throw new Error('No active season found to end.');
-        }
-        seasonInTx.endDate = new Date();
-        seasonInTx.isActive = false;
-        await seasonInTx.save({ session });
-      });
-    } finally {
-      await session.endSession();
-    }
+    activeSeason.endDate = new Date();
+    activeSeason.isActive = false;
+    await activeSeason.save();
 
     return {
       success: true,
@@ -421,7 +378,7 @@ export class SeasonManager {
       seasonInfo: {
         seasonNumber,
         chapterNumber,
-        name: snapshot.name
+        name: activeSeason.name
       }
     };
   }
