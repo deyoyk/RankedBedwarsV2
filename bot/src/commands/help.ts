@@ -1,50 +1,30 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ChatInputCommandInteraction, StringSelectMenuBuilder, StringSelectMenuInteraction, StringSelectMenuOptionBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ChatInputCommandInteraction, GuildMember, StringSelectMenuBuilder, StringSelectMenuInteraction, StringSelectMenuOptionBuilder } from 'discord.js';
 import type { WebSocketManager } from '../websocket/WebSocketManager';
 import { commandErrorDetails, reportError, replyCommandError } from '../utils/errorReporter';
 import { safeReply } from '../utils/safeReply';
-import fs from 'fs';
-import path from 'path';
 import config from '../config/config';
 import { getReleaseVersion } from '../utils/releaseVersion';
 import { embedsFor } from '../utils/betterembed';
 import { PermissionService } from '../services/PermissionService';
+import { commandsIn } from '../config/commandCategories';
+import { canUseCommand } from '../utils/permissions';
 
 const { errorEmbed, themedEmbed } = embedsFor('Help');
 
-async function getCommandCategories() {
-  const candidates = [
-    path.join(__dirname),
-    path.resolve(process.cwd(), 'src', 'commands'),
-    path.resolve(process.cwd(), 'dist', 'commands')
-  ];
+function getCommandCategories(): Record<string, string[]> {
+  return {
+    admin: commandsIn('admin'),
+    staff: commandsIn('staff'),
+    player: commandsIn('player'),
+  };
+}
 
-  const baseDir = candidates.find((p) => {
-    try { return fs.existsSync(p); } catch { return false; }
-  });
-
-  if (!baseDir) {
-    return {};
-  }
-
-  const allEntries = fs.readdirSync(baseDir, { withFileTypes: true });
-  const categories = allEntries
-    .filter(e => e.isDirectory() && e.name !== '__tests__')
-    .map(e => e.name);
-
-  const result: Record<string, string[]> = {};
-  for (const cat of categories) {
-    const dir = path.join(baseDir, cat);
-    let files: string[] = [];
-    try {
-      files = fs
-        .readdirSync(dir)
-        .filter(f => f.endsWith('.ts'))
-        .map(f => f.replace(/\.(ts)$/i, ''))
-        .filter(f => f && f.length > 0);
-    } catch {}
-    result[cat] = files;
-  }
-  return result;
+function visibleCommands(member: GuildMember | null, commandCategories: Record<string, string[]>): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(commandCategories)
+      .map(([category, commands]) => [category, commands.filter((cmd) => canUseCommand(member, cmd))] as const)
+      .filter(([, commands]) => commands.length > 0)
+  );
 }
 
 function buildCategorySelectMenu(commandCategories: Record<string, string[]>): StringSelectMenuBuilder {
@@ -81,8 +61,7 @@ function getCommandRoles(cmd: string): string {
 export async function help(interaction: ChatInputCommandInteraction, _wsManager?: WebSocketManager): Promise<void> {
   void _wsManager;
   try {
-    const commandCategories = await getCommandCategories();
-    console.log('[Help] Command categories:', Object.keys(commandCategories));
+    const commandCategories = visibleCommands(interaction.member as GuildMember | null, getCommandCategories());
     const releaseVersion = await getReleaseVersion();
 
     const embed = themedEmbed('info')
@@ -110,7 +89,7 @@ export async function handleHelpMenu(interaction: StringSelectMenuInteraction | 
       await interaction.deferUpdate().catch(() => {});
     }
 
-    const commandCategories = await getCommandCategories();
+    const commandCategories = visibleCommands(interaction.member as GuildMember | null, getCommandCategories());
     let category: string | undefined;
     let page = 0;
     if ('values' in interaction && interaction.values && interaction.values.length > 0) {
