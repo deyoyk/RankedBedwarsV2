@@ -1,4 +1,4 @@
-import { loadSkinDataUrl } from '../assets';
+import { loadSkinDataUrl, staticImageDataUrl } from '../assets';
 import config from '../../config/config';
 import { renderPng } from '../renderer';
 import { defaultTemplate, MatchResult } from './default';
@@ -137,7 +137,7 @@ export async function generateThemeImage(
     const skin = await withTimeout(
       loadSkinDataUrl(playerData.ign || ''),
       SKIN_TIMEOUT_MS,
-      null,
+      staticImageDataUrl('fallbacks', 'steve-full.png'),
     );
 
     const tpl = defaultTemplate({

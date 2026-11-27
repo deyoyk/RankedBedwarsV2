@@ -66,6 +66,30 @@ describe('avatar download cache', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps skin loads queued instead of dropping them when many run at once', async () => {
+    jest.useFakeTimers();
+    try {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      fetchMock.mockImplementation(() => gate.then(() => ({
+        ok: false,
+        headers: { get: () => null },
+      })));
+
+      const loads = Array.from({ length: 13 }, (_, index) => loadSkinDataUrl(`QueueLoad${index}`));
+      jest.advanceTimersByTime(15000);
+      release();
+
+      const results = await Promise.all(loads);
+      expect(results.every(Boolean)).toBe(true);
+      expect(new Set(results).size).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('rejects oversized image responses and uses the fallback avatar', async () => {
     fetchMock.mockResolvedValue({
       ok: true,
