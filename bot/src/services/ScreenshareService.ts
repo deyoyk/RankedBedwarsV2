@@ -3,7 +3,7 @@ import { SCREENSHARE_OFF_MESSAGE, ScreenshareSwitch } from './ScreenshareSwitch'
 import ScreenshareSession, { IScreenshareSession } from '../models/ScreenshareSession';
 import User from '../models/User';
 import config from '../config/config';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { embedsFor } from '../utils/betterembed';
 import { deleteChannelIfEmpty } from '../utils/channelCleanup';
 import { isTargetThreadAccess, screenshareThreadPing, TARGET_THREAD_ACCESS } from './screenshareAccess';
@@ -205,7 +205,7 @@ export class ScreenshareService {
       
       let dontlogResult = { online: false, dontlog: false };
       if (global._wsManager && typeof global._wsManager.requestDontLog === 'function') {
-        const dontlogUuid = uuidv4();
+        const dontlogUuid = randomUUID();
         try {
           const dontlogPromise = global._wsManager.requestDontLog(targetUser.ign, dontlogUuid);
           const timeoutPromise = new Promise<{ online: boolean; dontlog: boolean }>((_, reject) => 

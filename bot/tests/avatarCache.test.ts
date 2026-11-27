@@ -1,8 +1,7 @@
 import { loadAvatarDataUrl, loadSkinDataUrl, staticImageDataUrl } from '../src/assets/assets';
 
 const fetchMock = jest.fn();
-
-jest.mock('node-fetch', () => (...args: unknown[]) => fetchMock(...args));
+global.fetch = fetchMock as unknown as typeof fetch;
 
 function okResponse(): unknown {
   return {

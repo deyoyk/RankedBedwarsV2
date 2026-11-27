@@ -1,6 +1,6 @@
 import { startTemplate } from '../src/assets/games/start';
 
-jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
+global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
 jest.mock('../src/models/User', () => ({
   __esModule: true,
   default: { findOne: jest.fn(), find: jest.fn() },

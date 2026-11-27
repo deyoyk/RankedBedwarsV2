@@ -13,7 +13,7 @@ jest.mock('../src/models/Queue', () => ({
   __esModule: true,
   default: { findOne: () => ({ select: () => ({ lean: () => mockQueue() }) }) },
 }));
-jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
+global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
 
 import { renderScoredGame } from '../src/utils/scoredGameImage';
 import { buildGameResultImage } from '../src/utils/gameResultImage';

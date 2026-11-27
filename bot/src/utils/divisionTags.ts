@@ -1,4 +1,3 @@
-import fetch from 'node-fetch';
 import type { DivisionTag } from '../assets/divisionTag';
 
 const DIVISION_PRIORITY: DivisionTag[] = ['premium', 'pugs', 'pups', 'pit'];

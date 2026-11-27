@@ -1,4 +1,4 @@
-jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
+global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
 const mockUsers = jest.fn();
 jest.mock('../src/models/User', () => ({
   __esModule: true,

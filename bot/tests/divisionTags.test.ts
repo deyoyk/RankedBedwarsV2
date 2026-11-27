@@ -1,9 +1,8 @@
-jest.mock('node-fetch', () => jest.fn());
-
-import fetch from 'node-fetch';
 import { getDivisionTag, pickDivisionTag } from '../src/utils/divisionTags';
 
-const mockedFetch = fetch as unknown as jest.Mock;
+const mockedFetch = jest.fn();
+const originalFetch = global.fetch;
+global.fetch = mockedFetch as unknown as typeof fetch;
 const ENV_KEYS = ['PPP_API_URL', 'PPP_API_KEY', 'PPP_API_TIMEOUT_MS', 'PPP_API_CACHE_MS'] as const;
 const savedEnv: Record<string, string | undefined> = {};
 
@@ -20,6 +19,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  global.fetch = originalFetch;
   for (const key of ENV_KEYS) {
     if (savedEnv[key] === undefined) delete process.env[key];
     else process.env[key] = savedEnv[key];

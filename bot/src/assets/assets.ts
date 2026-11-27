@@ -1,6 +1,5 @@
 import path from 'path';
 import fs from 'fs';
-import fetch from 'node-fetch';
 
 export type ImageFont = {
   name: string;
@@ -81,7 +80,7 @@ async function fetchImageDataUrl(url: string, timeoutMs: number): Promise<string
     const contentLength = Number.parseInt(res.headers.get('content-length') || '0', 10);
     if (Number.isFinite(contentLength) && contentLength > IMAGE_MAX_BYTES) return null;
 
-    const body = res.body as (NodeJS.ReadableStream & AsyncIterable<Uint8Array>) | null;
+    const body = res.body as AsyncIterable<Uint8Array> | null;
     let buf: Buffer;
     if (body && typeof body[Symbol.asyncIterator] === 'function') {
       const chunks: Buffer[] = [];

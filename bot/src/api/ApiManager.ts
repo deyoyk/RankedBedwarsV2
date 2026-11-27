@@ -358,8 +358,13 @@ export class ApiManager {
     return Number.isSafeInteger(id) && id > 0 ? id : null;
   }
 
+  private routeParam(value: string | string[] | undefined): string {
+    return Array.isArray(value) ? value[0] ?? '' : value ?? '';
+  }
+
   private validateSeasonChapter(req: Request, res: Response): { seasonNumber: number; chapterNumber: number } | null {
-    const { season, chapter } = req.params;
+    const season = this.routeParam(req.params.season);
+    const chapter = this.routeParam(req.params.chapter);
     const seasonNumber = parseInt(season);
     const chapterNumber = parseInt(chapter);
     if (isNaN(seasonNumber) || isNaN(chapterNumber)) {
@@ -672,8 +677,7 @@ export class ApiManager {
 
   private getGameById = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { gameid } = req.params;
-      const gameId = this.parseGameId(gameid);
+      const gameId = this.parseGameId(this.routeParam(req.params.gameid));
       if (gameId === null) {
         res.status(400).json({ error: 'gameid must be a positive integer' });
         return;
@@ -699,8 +703,7 @@ export class ApiManager {
 
   private getGameTimeline = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { gameid } = req.params;
-      const gameId = this.parseGameId(gameid);
+      const gameId = this.parseGameId(this.routeParam(req.params.gameid));
       if (gameId === null) {
         res.status(400).json({ error: 'gameid must be a positive integer' });
         return;
@@ -871,7 +874,7 @@ export class ApiManager {
 
   private getPunishments = async (req: Request, res: Response): Promise<void> => {
     try {
-      const type = req.params.type;
+      const type = this.routeParam(req.params.type);
       if (!['bans', 'mutes', 'strikes'].includes(type)) {
         res.status(400).json({ error: 'Invalid punishment type' });
         return;
@@ -1264,7 +1267,7 @@ export class ApiManager {
 
   private getUserGames = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid } = req.params;
+      const discordid = this.routeParam(req.params.discordid);
 
       const pagination = this.validatePagination(req, res, 20);
       if (!pagination) return;
@@ -1321,7 +1324,7 @@ export class ApiManager {
 
   private getUserRecentGames = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid } = req.params;
+      const discordid = this.routeParam(req.params.discordid);
       const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 5, 1), 100);
 
       const response = await this.getCached(`userRecentGames:${discordid}:${limit}`, 10000, async () => {
@@ -1481,7 +1484,7 @@ export class ApiManager {
 
   private getUserPunishmentHistory = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid } = req.params;
+      const discordid = this.routeParam(req.params.discordid);
 
       const response = await this.getCached(`punishmentHistory:${discordid}`, 10000, async () => {
         const user = await User.findOne({ discordId: discordid })
@@ -1541,7 +1544,7 @@ export class ApiManager {
 
   private getUserSeasonHistory = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid } = req.params;
+      const discordid = this.routeParam(req.params.discordid);
 
       const response = await this.getCached(`seasonHistory:${discordid}`, 10000, async () => {
         const user = await User.findOne({ discordId: discordid }).select('ign discordId').lean();
@@ -1724,7 +1727,8 @@ export class ApiManager {
 
   private compareUsers = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid, targetid } = req.params;
+      const discordid = this.routeParam(req.params.discordid);
+      const targetid = this.routeParam(req.params.targetid);
 
       const [user1, user2] = await Promise.all([
         User.findOne({ discordId: discordid }).lean(),
@@ -1815,7 +1819,7 @@ export class ApiManager {
 
   private getUserWinstreakHistory = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid } = req.params;
+      const discordid = this.routeParam(req.params.discordid);
       const response = await this.getCached(`userWinstreakHistory:${discordid}`, 10000, async () => {
         const data = await this.fetchUserWithGameHistory(discordid, 50);
         if (!data) return null;
@@ -1864,7 +1868,7 @@ export class ApiManager {
 
   private getUserEloHistory = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { discordid } = req.params;
+      const discordid = this.routeParam(req.params.discordid);
       const response = await this.getCached(`userEloHistory:${discordid}`, 10000, async () => {
         const user = await User.findOne({ discordId: discordid }).lean();
         if (!user) return null;
@@ -1906,7 +1910,7 @@ export class ApiManager {
 
   private getUserOverview = async (req: Request, res: Response): Promise<void> => {
     try {
-      let discordId = req.params.discordid;
+      let discordId = this.routeParam(req.params.discordid);
       if (!/^\d+$/.test(discordId)) {
         const idRow = await User.findOne({ ign: discordId }).collation({ locale: 'en', strength: 2 }).select('discordId').lean();
         if (!idRow) {

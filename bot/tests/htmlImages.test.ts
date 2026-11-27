@@ -2,7 +2,7 @@ import { generateThemeImage } from '../src/assets/stats-theme/base';
 import { defaultTemplate } from '../src/assets/stats-theme/default';
 import { themes, resolveTheme } from '../src/assets/stats-theme';
 
-jest.mock('node-fetch', () => jest.fn().mockRejectedValue(new Error('offline')));
+global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as unknown as typeof fetch;
 
 function pngSize(buf: Buffer): { width: number; height: number } {
   expect(buf[0]).toBe(0x89);
