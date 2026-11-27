@@ -12,8 +12,6 @@ const kind: TimedPunishmentKind = {
   statusField: 'isBanned',
   recordsField: 'bans',
   roleKey: 'banned',
-  maxDurationMs: 365 * 24 * 60 * 60 * 1000,
-  maxDurationLabel: '1 year',
   defaultUndoReason: 'Unbanned',
   expiryReason: 'Ban expired'
 };

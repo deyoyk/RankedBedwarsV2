@@ -321,13 +321,15 @@ describe('BanManager rank-only bans', () => {
     expect(user.isBanned).toBe(false);
   });
 
-  it('rejects durations over 1 year', async () => {
+  it('accepts durations over 1 year', async () => {
     const user = mockUser();
-    UserModel.findOne.mockResolvedValue(user);
+    UserModel.findOneAndUpdate.mockImplementation(mirrorUpdate(user));
 
-    await expect(BanManager.ban(guildMock() as any, '123', 'mod', '400d', 'test'))
-      .rejects.toThrow('Ban duration cannot exceed 1 year');
-    expect(user.bans).toHaveLength(0);
+    const expires = await BanManager.ban(guildMock() as any, '123', 'mod', '400d', 'test');
+
+    expect(expires).toBeInstanceOf(Date);
+    expect(expires!.getTime()).toBeGreaterThan(Date.now() + 399 * 24 * 60 * 60 * 1000);
+    expect(user.bans).toHaveLength(1);
   });
 });
 describe('StrikeManager.strike', () => {

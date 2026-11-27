@@ -16,8 +16,8 @@ export interface TimedPunishmentKind {
   statusField: 'isBanned' | 'isMuted';
   recordsField: 'bans' | 'mutes';
   roleKey: 'banned' | 'muted';
-  maxDurationMs: number;
-  maxDurationLabel: string;
+  maxDurationMs?: number;
+  maxDurationLabel?: string;
   defaultUndoReason: string;
   expiryReason: string;
 }
@@ -60,7 +60,7 @@ export abstract class TimedPunishmentManager {
       if (duration !== null && duration < 60000) {
         throw new Error(`${kind.type[0].toUpperCase() + kind.type.slice(1)} duration must be at least 1 minute`);
       }
-      if (duration !== null && duration > kind.maxDurationMs) {
+      if (duration !== null && kind.maxDurationMs !== undefined && duration > kind.maxDurationMs) {
         throw new Error(`${kind.type[0].toUpperCase() + kind.type.slice(1)} duration cannot exceed ${kind.maxDurationLabel}`);
       }
 
