@@ -34,7 +34,7 @@ export async function voidGame(interaction: ChatInputCommandInteraction, wsManag
     }
     
     const gameManager = getSharedGameManager(interaction.client, resolvedWs!);
-    await gameManager.voidGame(gameId, reason);
+    await gameManager.voidGame(gameId, reason, false, true);
     
     await recordAudit({
       ...auditInteractionContext(interaction),
